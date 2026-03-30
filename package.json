@@ -1,0 +1,28 @@
+{
+  "name": "equestrian-app",
+  "private": true,
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@equestrian/web",
+    "dev:mobile": "turbo run dev --filter=@equestrian/mobile",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "turbo run db:generate --filter=@equestrian/db",
+    "db:migrate": "turbo run db:migrate --filter=@equestrian/db",
+    "db:push": "turbo run db:push --filter=@equestrian/db",
+    "db:studio": "turbo run db:studio --filter=@equestrian/db",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.2"
+  }
+}

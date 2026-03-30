@@ -1,0 +1,11 @@
+{
+  "name": "@equestrian/prettier-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./index.js",
+  "dependencies": {
+    "prettier": "^3.5.3",
+    "prettier-plugin-tailwindcss": "^0.6.12"
+  }
+}

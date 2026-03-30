@@ -1,0 +1,20 @@
+{
+  "name": "@equestrian/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./base.js",
+  "exports": {
+    "./base": "./base.js",
+    "./nextjs": "./nextjs.js",
+    "./react-native": "./react-native.js"
+  },
+  "dependencies": {
+    "@eslint/js": "^9.24.0",
+    "eslint": "^9.24.0",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "typescript-eslint": "^8.30.1"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@equestrian/db",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./queries": "./src/queries/index.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@equestrian/shared": "workspace:*",
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.40.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@equestrian/typescript-config": "workspace:*",
+    "@types/ws": "^8.18.1",
+    "dotenv": "^16.5.0",
+    "drizzle-kit": "^0.30.5",
+    "typescript": "^5.8.2"
+  }
+}

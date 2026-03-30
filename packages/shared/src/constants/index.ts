@@ -1,0 +1,46 @@
+// Pagination
+export const DEFAULT_PAGE_SIZE = 25;
+export const MAX_PAGE_SIZE = 100;
+
+// File uploads
+export const MAX_FILE_SIZE_IMAGE = 15 * 1024 * 1024; // 15MB
+export const MAX_FILE_SIZE_DOCUMENT = 25 * 1024 * 1024; // 25MB
+export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+export const ALLOWED_DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+export const ALLOWED_FILE_EXTENSIONS = [
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'pdf',
+  'doc',
+  'docx',
+] as const;
+
+// Booking defaults
+export const DEFAULT_ADVANCE_BOOKING_DAYS = 30;
+export const DEFAULT_BOOKING_CUTOFF_HOURS = 2;
+export const DEFAULT_CANCELLATION_NOTICE_HOURS = 24;
+export const DEFAULT_LESSON_DURATION_MINUTES = 60;
+
+// Horse workload
+export const DEFAULT_MAX_LESSONS_PER_DAY = 3;
+export const DEFAULT_MANDATORY_REST_DAYS = 1;
+
+// Waitlist
+export const WAITLIST_ACCEPTANCE_WINDOW_MINUTES = 15;
+
+// Toast durations (ms)
+export const TOAST_DURATION_SUCCESS = 5000;
+export const TOAST_DURATION_ERROR = Infinity;
+export const TOAST_DURATION_WARNING = 8000;
+export const TOAST_DURATION_INFO = 5000;
+
+// TanStack Query cache times (ms)
+export const STALE_TIME_FREQUENT = 30 * 1000; // 30 seconds for frequently-changing data
+export const STALE_TIME_STABLE = 5 * 60 * 1000; // 5 minutes for stable data
