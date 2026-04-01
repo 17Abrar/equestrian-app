@@ -28,6 +28,8 @@ export interface ClubSettings {
   allowOverbooking: boolean;
   overbookingLimit: number;
   defaultCalendarView: string;
+  lateCancellationFeePercent: string;
+  noShowFeePercent: string;
   subscriptionTier: string;
   subscriptionStatus: string;
 }

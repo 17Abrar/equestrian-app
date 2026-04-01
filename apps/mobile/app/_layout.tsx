@@ -1,7 +1,7 @@
+import { Slot, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ClerkProvider, ClerkLoaded } from '@clerk/clerk-expo';
+import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/clerk-expo';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,6 +11,26 @@ import '../global.css';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
+function AuthGuard() {
+  const { isSignedIn, isLoaded } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!isSignedIn && !inAuthGroup) {
+      router.replace('/(auth)/sign-in');
+    } else if (isSignedIn && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [isSignedIn, isLoaded, segments, router]);
+
+  return <Slot />;
+}
+
 export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
@@ -18,11 +38,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <SafeAreaProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
-              </Stack>
+              <AuthGuard />
               <StatusBar style="auto" />
             </SafeAreaProvider>
           </GestureHandlerRootView>

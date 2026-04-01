@@ -28,7 +28,7 @@ import { useRiders } from '@/hooks/use-riders';
 import { useHorses } from '@/hooks/use-horses';
 import { COMPETITION_STATUS_COLORS, COMPETITION_ENTRY_STATUS_COLORS } from '@/lib/ui-constants';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -379,12 +379,12 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
 
 function ResultsSection({ competitionId, classId }: { competitionId: string; classId: string }) {
   const { data, isLoading, isError, refetch } = useCompetitionResults(competitionId, classId);
+  const entriesQuery = useCompetitionEntries(competitionId, classId);
 
   if (isLoading) return <Skeleton className="h-32" />;
   if (isError) return <ErrorState message="Failed to load results" onRetry={() => refetch()} />;
 
   const results = data?.data ?? [];
-  const entriesQuery = useCompetitionEntries(competitionId, classId);
   const entries = entriesQuery.data?.data ?? [];
 
   return (

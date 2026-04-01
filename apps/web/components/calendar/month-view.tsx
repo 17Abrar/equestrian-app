@@ -3,7 +3,6 @@
 import {
   format,
   startOfMonth,
-  endOfMonth,
   startOfWeek,
   addDays,
   isSameMonth,
@@ -13,7 +12,6 @@ import { CalendarSlotCard } from './calendar-slot-card';
 import { type BookingSlot } from '@/hooks/use-bookings';
 import { type CalendarCompetition } from '@/hooks/use-competitions';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -26,7 +24,6 @@ interface MonthViewProps {
 
 export function MonthView({ currentDate, slots, competitions, onDayClick }: MonthViewProps) {
   const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
 
   const today = new Date();

@@ -40,6 +40,37 @@ export function BookingConfirmation({
   currency = 'AED',
   addToCalendarUrl,
 }: BookingConfirmationProps) {
+  // Format date: "2026-03-31" → "Monday, March 31, 2026"
+  const formattedDate = (() => {
+    const parsed = new Date(`${date}T00:00:00`);
+    if (isNaN(parsed.getTime())) return date;
+    return parsed.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  })();
+
+  // Format time: "09:00:00" or "09:00" → "9:00 AM"
+  const formattedTime = (() => {
+    const parts = time.split(':');
+    const hours = parseInt(parts[0] ?? '', 10);
+    const minutes = parts[1] ?? '00';
+    if (isNaN(hours)) return time;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHour = hours % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+  })();
+
+  // Format amount: "18000" (fils) → "180.00" (major currency unit)
+  const formattedAmount = (() => {
+    if (!amount) return null;
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount)) return amount;
+    return (numericAmount / 100).toFixed(2);
+  })();
+
   return (
     <Html>
       <Head />
@@ -57,10 +88,10 @@ export function BookingConfirmation({
               <strong>Lesson:</strong> {lessonType}
             </Text>
             <Text style={styles.detailRow}>
-              <strong>Date:</strong> {date}
+              <strong>Date:</strong> {formattedDate}
             </Text>
             <Text style={styles.detailRow}>
-              <strong>Time:</strong> {time}
+              <strong>Time:</strong> {formattedTime}
             </Text>
             <Text style={styles.detailRow}>
               <strong>Horse:</strong> {horseName}
@@ -71,9 +102,9 @@ export function BookingConfirmation({
             <Text style={styles.detailRow}>
               <strong>Arena:</strong> {arena}
             </Text>
-            {amount && (
+            {formattedAmount && (
               <Text style={styles.detailRow}>
-                <strong>Amount:</strong> {amount} {currency}
+                <strong>Amount:</strong> {formattedAmount} {currency}
               </Text>
             )}
           </Section>

@@ -9,7 +9,6 @@ import { type z } from 'zod';
 import {
   createHealthRecordSchema,
   createMedicationSchema,
-  createMedicationLogSchema,
   type CreateHealthRecordFormValues,
   type CreateHealthRecordInput,
   type CreateMedicationInput,
@@ -22,7 +21,6 @@ import {
   useMedications,
   useCreateMedication,
   useCreateMedicationLog,
-  type HealthRecord,
   type Medication,
 } from '@/hooks/use-horse-health';
 import { Button } from '@/components/ui/button';
@@ -275,7 +273,6 @@ function AddHealthRecordDialog({ horseId }: { horseId: string }) {
 function MedicationsSection({ horseId }: { horseId: string }) {
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isError, error, refetch } = useMedications(horseId, !showAll);
-  const createLog = useCreateMedicationLog(horseId, '');
 
   if (isLoading) return <Skeleton className="h-48" />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load medications'} onRetry={() => refetch()} />;

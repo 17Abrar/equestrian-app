@@ -20,6 +20,7 @@ import {
   errorResponse,
   validateInput,
 } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 import { sendEmailAsync } from '@/lib/email';
 import { BookingConfirmation } from '@equestrian/email-templates/booking-confirmation';
@@ -30,11 +31,34 @@ export async function GET(request: NextRequest) {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
       const filters = validateInput(bookingFiltersSchema, searchParams);
 
-      const { data, total } = await getBookingsByClub(ctx.clubId, {
+      // Riders/parents can only see their own bookings
+      const canReadAll = hasPermission(ctx.orgRole, 'bookings:read');
+      const canReadOwn = hasPermission(ctx.orgRole, 'bookings:read_own') || hasPermission(ctx.orgRole, 'bookings:read_child');
+
+      if (!canReadAll && !canReadOwn) {
+        return errorResponse('FORBIDDEN', 'You do not have permission to view bookings', 403);
+      }
+
+      // Security: riders MUST be scoped to their own memberId — never allow them to query other riders
+      let riderMemberIdFilter = filters.riderMemberId;
+      if (!canReadAll) {
+        if (!ctx.memberId) {
+          return errorResponse('NO_MEMBER', 'Member profile not found. Contact your club admin.', 403);
+        }
+        if (filters.riderMemberId && filters.riderMemberId !== ctx.memberId) {
+          return errorResponse('FORBIDDEN', 'You can only view your own bookings', 403);
+        }
+        riderMemberIdFilter = ctx.memberId;
+      }
+
+      const effectiveFilters = {
         ...filters,
+        riderMemberId: riderMemberIdFilter,
         page: filters.page,
         pageSize: filters.pageSize,
-      });
+      };
+
+      const { data, total } = await getBookingsByClub(ctx.clubId, effectiveFilters);
 
       return paginatedResponse(data, {
         page: filters.page,
@@ -42,7 +66,6 @@ export async function GET(request: NextRequest) {
         total,
       });
     },
-    { requiredPermission: 'bookings:read' },
   );
 }
 
@@ -68,6 +91,12 @@ export async function POST(request: NextRequest) {
 
       if (!ctx.memberId) {
         return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
+      }
+
+      // Security: riders can only book for themselves
+      const canBookForOthers = hasPermission(ctx.orgRole, 'bookings:create') && hasPermission(ctx.orgRole, 'bookings:read');
+      if (!canBookForOthers && data.riderMemberId !== ctx.memberId) {
+        return errorResponse('FORBIDDEN', 'You can only create bookings for yourself', 403);
       }
 
       let assignedHorseId = data.horseId;
@@ -170,12 +199,19 @@ export async function POST(request: NextRequest) {
       }
 
       logger.info('booking_created', {
+        requestId: ctx.requestId,
         bookingId: booking.id,
         clubId: ctx.clubId,
         slotId: data.slotId,
         riderId: data.riderMemberId,
         horseId: assignedHorseId,
         autoMatched: wasAutoMatched,
+      });
+
+      void ctx.audit({
+        action: 'booking.create',
+        resourceType: 'booking',
+        resourceId: booking.id,
       });
 
       // Fire-and-forget confirmation email — does not block the response
@@ -193,8 +229,8 @@ export async function POST(request: NextRequest) {
             lessonType: fullBooking.lessonTypeName,
             date: String(fullBooking.slotDate),
             time: String(fullBooking.slotStartTime),
-            horseName: fullBooking.horseName ?? 'TBD',
-            coachName: 'Your Coach',
+            horseName: fullBooking.horseName ?? 'Not yet assigned',
+            coachName: slot.coachName ?? 'Not yet assigned',
             arena: fullBooking.arenaName ?? 'Arena',
             clubName: club?.name ?? '',
             clubLogo: '',

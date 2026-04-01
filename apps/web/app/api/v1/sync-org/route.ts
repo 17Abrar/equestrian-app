@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 
 /**
@@ -36,9 +36,30 @@ export async function POST() {
       .limit(1);
 
     if (existing[0]) {
+      // Club exists — ensure the current user is a member
+      const clubId = existing[0].id;
+      const existingMember = await db
+        .select({ id: clubMembers.id })
+        .from(clubMembers)
+        .where(and(eq(clubMembers.clubId, clubId), eq(clubMembers.clerkUserId, userId)))
+        .limit(1);
+
+      if (!existingMember[0]) {
+        await db.insert(clubMembers).values({
+          clubId,
+          clerkUserId: userId,
+          role: orgRole === 'org:admin' ? 'club_admin' : 'rider',
+        });
+        logger.info('member_synced_manually', { clerkOrgId: orgId, clubId, userId });
+        return NextResponse.json({
+          success: true,
+          data: { clubId, message: 'Member added to existing club' },
+        });
+      }
+
       return NextResponse.json({
         success: true,
-        data: { clubId: existing[0].id, message: 'Club already exists' },
+        data: { clubId, message: 'Club and member already exist' },
       });
     }
 

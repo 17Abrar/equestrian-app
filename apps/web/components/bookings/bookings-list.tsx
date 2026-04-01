@@ -1,8 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { Calendar, Clock } from 'lucide-react';
-import { useBookings } from '@/hooks/use-bookings';
+import { useState, useCallback } from 'react';
+import {
+  Calendar,
+  Clock,
+  MoreHorizontal,
+  XCircle,
+  CheckCircle2,
+  UserX,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  useBookings,
+  useCancelBooking,
+  useMarkNoShow,
+  useMarkComplete,
+  type Booking,
+} from '@/hooks/use-bookings';
 import { AddBookingDialog } from './add-booking-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,10 +30,58 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 
 import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
+
+// ─── Action Dialog Types ─────────────────────────────────────────────
+
+type ActionType = 'cancel' | 'no_show' | 'complete';
+
+interface ActionDialogState {
+  type: ActionType;
+  booking: Booking;
+}
+
+const ACTION_CONFIG: Record<ActionType, { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }> = {
+  cancel: {
+    title: 'Cancel Booking',
+    description: 'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
+    confirmLabel: 'Cancel Booking',
+    variant: 'destructive',
+  },
+  no_show: {
+    title: 'Mark as No-Show',
+    description: 'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
+    confirmLabel: 'Mark No-Show',
+    variant: 'destructive',
+  },
+  complete: {
+    title: 'Mark as Completed',
+    description: 'Mark this booking as completed?',
+    confirmLabel: 'Mark Completed',
+    variant: 'default',
+  },
+};
+
+// ─── Skeleton ────────────────────────────────────────────────────────
 
 function BookingListSkeleton() {
   return (
@@ -42,10 +104,115 @@ function BookingListSkeleton() {
   );
 }
 
+// ─── Action Confirmation Dialog ──────────────────────────────────────
+
+interface ActionDialogProps {
+  state: ActionDialogState | null;
+  onClose: () => void;
+}
+
+function BookingActionDialog({ state, onClose }: ActionDialogProps) {
+  const [reason, setReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const cancelBooking = useCancelBooking();
+  const markNoShow = useMarkNoShow();
+  const markComplete = useMarkComplete();
+
+  const handleConfirm = useCallback(async () => {
+    if (!state) return;
+    setIsSubmitting(true);
+
+    try {
+      if (state.type === 'cancel') {
+        await cancelBooking.mutateAsync({
+          bookingId: state.booking.id,
+          reason: reason || 'Cancelled by staff',
+        });
+        toast.success('Booking cancelled');
+      } else if (state.type === 'no_show') {
+        await markNoShow.mutateAsync(state.booking.id);
+        toast.success('Booking marked as no-show');
+      } else if (state.type === 'complete') {
+        await markComplete.mutateAsync(state.booking.id);
+        toast.success('Booking marked as completed');
+      }
+      setReason('');
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Action failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [state, reason, cancelBooking, markNoShow, markComplete, onClose]);
+
+  if (!state) return null;
+
+  const config = ACTION_CONFIG[state.type];
+
+  return (
+    <AlertDialog
+      open={!!state}
+      onOpenChange={(open) => {
+        if (!open) {
+          setReason('');
+          onClose();
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{config.title}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {config.description}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-2 text-sm">
+          <p><strong>Lesson:</strong> {state.booking.lessonTypeName}</p>
+          <p><strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}</p>
+          {state.booking.riderName && <p><strong>Rider:</strong> {state.booking.riderName}</p>}
+        </div>
+
+        {state.type === 'cancel' && (
+          <div className="space-y-2">
+            <label htmlFor="cancel-reason" className="text-sm font-medium">
+              Reason
+            </label>
+            <Textarea
+              id="cancel-reason"
+              placeholder="Reason for cancellation..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+            />
+          </div>
+        )}
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isSubmitting}>
+            Keep Booking
+          </AlertDialogCancel>
+          <Button
+            variant={config.variant}
+            onClick={handleConfirm}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Processing...' : config.confirmLabel}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────
+
 export function BookingsList() {
   const [status, setStatus] = useState<string | undefined>();
   const [date, setDate] = useState<string>('');
   const [page, setPage] = useState(1);
+  const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useBookings({
     status: status as 'pending' | 'confirmed' | undefined,
@@ -53,6 +220,18 @@ export function BookingsList() {
     page,
     pageSize: 25,
   });
+
+  function getAvailableActions(booking: Booking): ActionType[] {
+    const actions: ActionType[] = [];
+    if (booking.status === 'confirmed' || booking.status === 'pending') {
+      actions.push('cancel');
+    }
+    if (booking.status === 'confirmed') {
+      actions.push('complete');
+      actions.push('no_show');
+    }
+    return actions;
+  }
 
   return (
     <div className="space-y-6">
@@ -120,57 +299,100 @@ export function BookingsList() {
       {data && data.data.length > 0 && (
         <>
           <div className="space-y-3">
-            {data.data.map((booking) => (
-              <Card key={booking.id} className="transition-shadow hover:shadow-md">
-                <CardContent className="flex items-center gap-4 p-4">
-                  <div
-                    className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-white text-xs font-bold"
-                    style={{ backgroundColor: '#6366f1' }}
-                  >
-                    {booking.lessonTypeType.slice(0, 3).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate font-semibold">
-                        {booking.lessonTypeName}
-                      </h3>
-                      <Badge
-                        variant="secondary"
-                        className={BOOKING_STATUS_COLORS[booking.status] ?? ''}
-                      >
-                        {booking.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {booking.slotDate}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        {booking.slotStartTime} - {booking.slotEndTime}
-                      </span>
-                      {booking.riderName && <span>{booking.riderName}</span>}
-                      {booking.horseName && <span>{booking.horseName}</span>}
-                      {booking.arenaName && <span>{booking.arenaName}</span>}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {booking.amount !== null && (
-                      <span className="font-semibold">
-                        {(booking.amount / 100).toFixed(2)} {booking.currency}
-                      </span>
-                    )}
-                    <Badge
-                      variant="outline"
-                      className={PAYMENT_STATUS_COLORS[booking.paymentStatus] ?? ''}
+            {data.data.map((booking) => {
+              const actions = getAvailableActions(booking);
+
+              return (
+                <Card key={booking.id} className="transition-shadow hover:shadow-md">
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div
+                      className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-white text-xs font-bold"
+                      style={{ backgroundColor: '#6366f1' }}
                     >
-                      {booking.paymentStatus}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                      {booking.lessonTypeType.slice(0, 3).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate font-semibold">
+                          {booking.lessonTypeName}
+                        </h3>
+                        <Badge
+                          variant="secondary"
+                          className={BOOKING_STATUS_COLORS[booking.status] ?? ''}
+                        >
+                          {booking.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {booking.slotDate}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />
+                          {booking.slotStartTime} - {booking.slotEndTime}
+                        </span>
+                        {booking.riderName && <span>{booking.riderName}</span>}
+                        {booking.horseName && <span>{booking.horseName}</span>}
+                        {booking.arenaName && <span>{booking.arenaName}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col items-end gap-1">
+                        {booking.amount !== null && (
+                          <span className="font-semibold">
+                            {(booking.amount / 100).toFixed(2)} {booking.currency}
+                          </span>
+                        )}
+                        <Badge
+                          variant="outline"
+                          className={PAYMENT_STATUS_COLORS[booking.paymentStatus] ?? ''}
+                        >
+                          {booking.paymentStatus}
+                        </Badge>
+                      </div>
+                      {actions.length > 0 && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {actions.includes('complete') && (
+                              <DropdownMenuItem
+                                onClick={() => setActionDialog({ type: 'complete', booking })}
+                              >
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                Mark Completed
+                              </DropdownMenuItem>
+                            )}
+                            {actions.includes('no_show') && (
+                              <DropdownMenuItem
+                                onClick={() => setActionDialog({ type: 'no_show', booking })}
+                              >
+                                <UserX className="mr-2 h-4 w-4" />
+                                Mark No-Show
+                              </DropdownMenuItem>
+                            )}
+                            {actions.includes('cancel') && (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setActionDialog({ type: 'cancel', booking })}
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Cancel Booking
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           {/* Pagination */}
@@ -199,6 +421,12 @@ export function BookingsList() {
           )}
         </>
       )}
+
+      {/* Confirmation Dialog */}
+      <BookingActionDialog
+        state={actionDialog}
+        onClose={() => setActionDialog(null)}
+      />
     </div>
   );
 }

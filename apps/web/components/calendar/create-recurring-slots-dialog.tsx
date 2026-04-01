@@ -4,19 +4,18 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Plus, CalendarPlus } from 'lucide-react';
+import { CalendarPlus } from 'lucide-react';
 import { createRecurringSlotsSchema, type CreateRecurringSlotsFormValues, type CreateRecurringSlotsInput } from '@equestrian/shared/schemas';
 import { useLessonTypes, useCreateRecurringSlots } from '@/hooks/use-bookings';
 import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,

@@ -5,7 +5,6 @@ import { CalendarSlotCard } from './calendar-slot-card';
 import { type BookingSlot } from '@/hooks/use-bookings';
 import { type CalendarCompetition } from '@/hooks/use-competitions';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 
 interface WeekViewProps {
   weekDates: Date[];

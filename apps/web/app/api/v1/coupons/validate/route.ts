@@ -26,5 +26,6 @@ export async function POST(request: NextRequest) {
 
       return successResponse(result);
     },
+    { rateLimit: { maxRequests: 10, windowMs: 60_000 } },
   );
 }

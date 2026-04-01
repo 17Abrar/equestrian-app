@@ -144,6 +144,7 @@ export const bookings = pgTable('bookings', {
   horseMatchAuto: boolean('horse_match_auto').notNull().default(true),
 
   cancellationReason: text('cancellation_reason'),
+  cancellationFee: integer('cancellation_fee').default(0),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledByMemberId: uuid('cancelled_by_member_id').references(() => clubMembers.id),
 

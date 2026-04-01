@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Plus, DollarSign, TrendingUp, TrendingDown, AlertCircle, Trash2 } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import {
   createExpenseSchema, createCouponSchema,
   type CreateExpenseFormValues, type CreateExpenseInput,
   type CreateCouponFormValues, type CreateCouponInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney, toMinorUnits } from '@equestrian/shared/utils';
+import { formatMoney } from '@equestrian/shared/utils';
 import {
   useFinanceOverview, useExpenses, useCreateExpense,
   usePayments, useInvoices, useCoupons, useCreateCoupon,
@@ -128,7 +128,7 @@ function OverviewTab() {
 }
 
 function InvoicesTab() {
-  const [page, setPage] = useState(1);
+  const [page, _setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useInvoices({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -165,7 +165,7 @@ function InvoicesTab() {
 }
 
 function PaymentsTab() {
-  const [page, setPage] = useState(1);
+  const [page, _setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = usePayments({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -202,7 +202,7 @@ function PaymentsTab() {
 }
 
 function ExpensesTab() {
-  const [page, setPage] = useState(1);
+  const [page, _setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -316,7 +316,7 @@ function AddExpenseDialog() {
 }
 
 function CouponsTab() {
-  const [page, setPage] = useState(1);
+  const [page, _setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;

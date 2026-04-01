@@ -11,7 +11,7 @@ const ALLOWED_CONTENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+const _MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
 function getR2Client() {
   const endpoint = process.env.R2_ENDPOINT;

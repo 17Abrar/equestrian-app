@@ -225,6 +225,7 @@ export const bookingFiltersSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
   date: z.string().optional(),
   lessonTypeId: z.string().uuid().optional(),
+  riderMemberId: z.string().uuid().optional(),
   ...paginationSchema.shape,
 });
 
@@ -331,6 +332,8 @@ export const updateBookingRulesSchema = z.object({
   allowOverbooking: z.boolean().optional(),
   overbookingLimit: optionalNumeric(z.number().int().min(0)),
   defaultCalendarView: z.enum(['day', 'week', 'month', 'agenda']).optional(),
+  lateCancellationFeePercent: optionalNumeric(z.number().min(0).max(100)),
+  noShowFeePercent: optionalNumeric(z.number().min(0).max(100)),
 });
 
 export type UpdateBookingRulesInput = z.output<typeof updateBookingRulesSchema>;

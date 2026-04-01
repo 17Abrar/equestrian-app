@@ -264,6 +264,8 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
       allowOverbooking: settings.allowOverbooking ?? false,
       overbookingLimit: settings.overbookingLimit ?? 0,
       defaultCalendarView: (settings.defaultCalendarView as 'day' | 'week' | 'month' | 'agenda') ?? 'week',
+      lateCancellationFeePercent: Number(settings.lateCancellationFeePercent ?? '0'),
+      noShowFeePercent: Number(settings.noShowFeePercent ?? '0'),
     },
   });
 
@@ -314,6 +316,22 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
                 <FormItem>
                   <FormLabel>Default Lesson Duration (min)</FormLabel>
                   <FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="lateCancellationFeePercent" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Late Cancellation Fee (%)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" min="0" max="100" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormDescription>Percentage of lesson price charged for late cancellations (0 = no fee)</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="noShowFeePercent" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>No-Show Fee (%)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" min="0" max="100" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormDescription>Percentage of lesson price charged when a rider doesn&apos;t show up</FormDescription>
                   <FormMessage />
                 </FormItem>
               )} />

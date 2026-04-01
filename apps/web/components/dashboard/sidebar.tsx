@@ -4,6 +4,7 @@ import { OrganizationSwitcher, UserButton } from '@clerk/nextjs';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { type UserRole } from '@equestrian/shared/types';
 import {
   LayoutDashboard,
   Calendar,
@@ -18,9 +19,16 @@ import {
   BarChart3,
   Settings,
   Trophy,
+  type LucideIcon,
 } from 'lucide-react';
 
-const NAV_ITEMS = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Calendar', href: '/calendar', icon: Calendar },
   { label: 'Bookings', href: '/bookings', icon: BookOpen },
@@ -34,10 +42,32 @@ const NAV_ITEMS = [
   { label: 'Arenas', href: '/arenas', icon: Map },
   { label: 'Reports', href: '/reports', icon: BarChart3 },
   { label: 'Settings', href: '/settings', icon: Settings },
-] as const;
+];
 
-export function Sidebar() {
+/** Which nav items each role can see in the admin dashboard */
+const NAV_BY_ROLE: Record<string, string[]> = {
+  club_admin: ALL_NAV_ITEMS.map((item) => item.href),
+  club_manager: ['/', '/calendar', '/bookings', '/horses', '/riders', '/staff', '/owners', '/finances', '/emails', '/competitions', '/arenas', '/reports', '/settings'],
+  coach: ['/', '/calendar', '/bookings', '/horses', '/riders', '/competitions'],
+  horse_owner: ['/', '/horses', '/bookings', '/competitions'],
+  groom: ['/', '/horses', '/calendar'],
+  veterinarian: ['/', '/horses'],
+  rider: [],
+  parent: [],
+};
+
+function getNavItemsForRole(role: UserRole): NavItem[] {
+  const allowedHrefs = NAV_BY_ROLE[role] ?? [];
+  return ALL_NAV_ITEMS.filter((item) => allowedHrefs.includes(item.href));
+}
+
+interface SidebarProps {
+  role: UserRole;
+}
+
+export function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
+  const navItems = getNavItemsForRole(role);
 
   function isActive(href: string): boolean {
     if (href === '/') return pathname === '/';
@@ -63,7 +93,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}

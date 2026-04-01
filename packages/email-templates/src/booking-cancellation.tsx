@@ -11,6 +11,10 @@ interface BookingCancellationProps {
   clubName: string;
   clubLogo?: string;
   reason?: string;
+  cancellationFee?: string;
+  isLateCancellation?: boolean;
+  /** Controls the heading and body text. Defaults to "cancellation". */
+  type?: 'cancellation' | 'no_show';
 }
 
 export function BookingCancellation({
@@ -22,7 +26,16 @@ export function BookingCancellation({
   clubName,
   clubLogo,
   reason,
+  cancellationFee,
+  isLateCancellation,
+  type = 'cancellation',
 }: BookingCancellationProps) {
+  const isNoShow = type === 'no_show';
+  const heading = isNoShow ? 'No-Show Recorded' : 'Booking Cancelled';
+  const bodyText = isNoShow
+    ? 'You were marked as a no-show for the following lesson:'
+    : 'Unfortunately, your booking has been cancelled. Here are the details:';
+
   return (
     <Html>
       <Head />
@@ -30,12 +43,10 @@ export function BookingCancellation({
         <Container style={styles.container}>
           {clubLogo && <Img src={clubLogo} alt={clubName} width={120} style={styles.logo} />}
 
-          <Heading style={styles.heading}>Booking Cancelled</Heading>
+          <Heading style={styles.heading}>{heading}</Heading>
 
           <Text style={styles.greeting}>Hi {riderName},</Text>
-          <Text style={styles.text}>
-            Unfortunately, your booking has been cancelled. Here are the details:
-          </Text>
+          <Text style={styles.text}>{bodyText}</Text>
 
           <Section style={styles.detailsBox}>
             <Text style={styles.detailRow}><strong>Lesson:</strong> {lessonType}</Text>
@@ -47,14 +58,41 @@ export function BookingCancellation({
             )}
           </Section>
 
-          <Text style={styles.text}>
-            If you&apos;d like to rebook, please visit our booking page or contact the club directly.
-          </Text>
+          {cancellationFee && (
+            <Section style={styles.feeBox}>
+              <Text style={styles.feeHeading}>
+                {isNoShow ? 'No-Show Fee' : isLateCancellation ? 'Late Cancellation Fee' : 'Fee Applied'}
+              </Text>
+              <Text style={styles.feeAmount}>{cancellationFee}</Text>
+              {isLateCancellation && !isNoShow && (
+                <Text style={styles.feeNote}>
+                  This fee was applied because the booking was cancelled within the cancellation notice period.
+                </Text>
+              )}
+              {isNoShow && (
+                <Text style={styles.feeNote}>
+                  This fee was applied because you did not attend your scheduled lesson.
+                </Text>
+              )}
+            </Section>
+          )}
+
+          {!isNoShow && (
+            <Text style={styles.text}>
+              If you&apos;d like to rebook, please visit our booking page or contact the club directly.
+            </Text>
+          )}
+
+          {isNoShow && (
+            <Text style={styles.text}>
+              If you believe this was recorded in error, please contact the club directly.
+            </Text>
+          )}
 
           <Hr style={styles.hr} />
 
           <Text style={styles.footer}>
-            If you believe this was a mistake, please reach out to {clubName}.
+            If you have any questions, please reach out to {clubName}.
           </Text>
 
           <Text style={styles.clubName}>{clubName}</Text>
@@ -84,6 +122,30 @@ const styles = {
     marginBottom: '24px',
   },
   detailRow: { fontSize: '14px', color: '#374151', margin: '4px 0' },
+  feeBox: {
+    backgroundColor: '#fef3c7',
+    border: '1px solid #f59e0b',
+    borderRadius: '12px',
+    padding: '16px 20px',
+    marginBottom: '24px',
+  },
+  feeHeading: {
+    fontSize: '14px',
+    fontWeight: '600' as const,
+    color: '#92400e',
+    margin: '0 0 4px 0',
+  },
+  feeAmount: {
+    fontSize: '20px',
+    fontWeight: '700' as const,
+    color: '#92400e',
+    margin: '0 0 4px 0',
+  },
+  feeNote: {
+    fontSize: '12px',
+    color: '#a16207',
+    margin: '4px 0 0 0',
+  },
   hr: { borderColor: '#e5e7eb', margin: '24px 0' },
   footer: { fontSize: '12px', color: '#9ca3af', lineHeight: '20px' },
   clubName: { fontSize: '12px', color: '#9ca3af', fontWeight: '600' as const, marginTop: '16px' },

@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { type ZodError, type ZodTypeAny } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
 import { getTenantContext, TenantError } from './tenant';
 import { hasPermission, PermissionError } from './permissions';
 import { logger } from './logger';
+import { checkRateLimit, type RateLimitConfig } from './rate-limit';
+import { createAuditEntry } from '@equestrian/db/queries';
+
+interface AuditParams {
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  changes?: Record<string, { from: unknown; to: unknown }>;
+}
 
 interface ApiHandlerOptions {
   requiredPermission?: string;
+  rateLimit?: RateLimitConfig;
 }
 
 interface AuthenticatedContext {
@@ -15,6 +26,9 @@ interface AuthenticatedContext {
   userId: string;
   orgId: string;
   orgRole: UserRole;
+  onboardingCompleted: boolean;
+  requestId: string;
+  audit: (params: AuditParams) => Promise<void>;
 }
 
 export function successResponse<T>(data: T, status = 200) {
@@ -79,10 +93,37 @@ export async function withAuth(
   options?: ApiHandlerOptions,
 ): Promise<NextResponse> {
   try {
-    const ctx = await getTenantContext();
+    const headerStore = await headers();
+    const requestId = headerStore.get('x-request-id') ?? crypto.randomUUID();
+    const ip =
+      headerStore.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      headerStore.get('x-real-ip') ??
+      'unknown';
+    const userAgent = headerStore.get('user-agent') ?? 'unknown';
+
+    const tenantCtx = await getTenantContext();
+
+    // Rate limiting (per user, default 60 req/min)
+    const rateLimitConfig = options?.rateLimit ?? { maxRequests: 60, windowMs: 60_000 };
+    const rateLimitResult = checkRateLimit(tenantCtx.userId, rateLimitConfig);
+    if (!rateLimitResult.allowed) {
+      const retryAfter = Math.ceil((rateLimitResult.retryAfterMs ?? 1000) / 1000);
+      logger.warn('rate_limit_exceeded', {
+        requestId,
+        userId: tenantCtx.userId,
+        clubId: tenantCtx.clubId,
+        ip,
+        limit: rateLimitConfig.maxRequests,
+        windowMs: rateLimitConfig.windowMs,
+      });
+      return NextResponse.json(
+        { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' } },
+        { status: 429, headers: { 'Retry-After': String(retryAfter), 'x-request-id': requestId } },
+      );
+    }
 
     if (options?.requiredPermission) {
-      if (!hasPermission(ctx.orgRole, options.requiredPermission)) {
+      if (!hasPermission(tenantCtx.orgRole, options.requiredPermission)) {
         return errorResponse(
           'FORBIDDEN',
           'You do not have permission to perform this action',
@@ -90,6 +131,38 @@ export async function withAuth(
         );
       }
     }
+
+    const auditFn = async (params: AuditParams): Promise<void> => {
+      try {
+        await createAuditEntry({
+          clubId: tenantCtx.clubId,
+          actorMemberId: tenantCtx.memberId,
+          action: params.action,
+          resourceType: params.resourceType,
+          resourceId: params.resourceId,
+          changes: params.changes,
+          ipAddress: ip,
+          userAgent,
+        });
+      } catch (err) {
+        logger.error('audit_log_failed', {
+          requestId,
+          clubId: tenantCtx.clubId,
+          userId: tenantCtx.userId,
+          action: params.action,
+          resourceType: params.resourceType,
+          resourceId: params.resourceId,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        });
+      }
+    };
+
+    const ctx: AuthenticatedContext = {
+      ...tenantCtx,
+      requestId,
+      audit: auditFn,
+    };
 
     return await handler(ctx);
   } catch (error) {
@@ -110,7 +183,11 @@ export async function withAuth(
       return errorResponse('INVALID_JSON', 'Request body contains invalid JSON', 400);
     }
 
+    const headerStore = await headers().catch(() => null);
+    const fallbackRequestId = headerStore?.get('x-request-id') ?? 'unknown';
+
     logger.error('unhandled_api_error', {
+      requestId: fallbackRequestId,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });

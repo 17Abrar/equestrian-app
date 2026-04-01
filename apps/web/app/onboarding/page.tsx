@@ -1,0 +1,844 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import {
+  Building2,
+  MapPin,
+  BookOpen,
+  Users,
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  Plus,
+  Loader2,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  type CreateArenaInput,
+  type CreateLessonTypeInput,
+} from '@equestrian/shared/schemas';
+import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
+import { useUpdateSettings } from '@/hooks/use-settings';
+import {
+  useArenas,
+  useCreateArena,
+  useLessonTypes,
+  useCreateLessonType,
+  type Arena,
+  type LessonType,
+} from '@/hooks/use-bookings';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+// ─── Constants ───────────────────────────────────────────────────────
+
+const STEPS = [
+  { id: 'welcome', label: 'Club Setup', icon: Building2 },
+  { id: 'arenas', label: 'Arenas', icon: MapPin },
+  { id: 'lessons', label: 'Lesson Types', icon: BookOpen },
+  { id: 'staff', label: 'Staff', icon: Users },
+] as const;
+
+const TIMEZONES = [
+  { value: 'Asia/Dubai', label: 'Asia/Dubai (UTC+4)' },
+  { value: 'Asia/Riyadh', label: 'Asia/Riyadh (UTC+3)' },
+  { value: 'Asia/Kuwait', label: 'Asia/Kuwait (UTC+3)' },
+  { value: 'Asia/Bahrain', label: 'Asia/Bahrain (UTC+3)' },
+  { value: 'Asia/Qatar', label: 'Asia/Qatar (UTC+3)' },
+  { value: 'Asia/Muscat', label: 'Asia/Muscat (UTC+4)' },
+  { value: 'Europe/London', label: 'Europe/London (GMT)' },
+  { value: 'America/New_York', label: 'America/New York (EST)' },
+  { value: 'America/Los_Angeles', label: 'America/Los Angeles (PST)' },
+] as const;
+
+const CURRENCIES = [
+  { value: 'AED', label: 'AED (UAE Dirham)' },
+  { value: 'SAR', label: 'SAR (Saudi Riyal)' },
+  { value: 'KWD', label: 'KWD (Kuwaiti Dinar)' },
+  { value: 'BHD', label: 'BHD (Bahraini Dinar)' },
+  { value: 'QAR', label: 'QAR (Qatari Riyal)' },
+  { value: 'OMR', label: 'OMR (Omani Rial)' },
+  { value: 'USD', label: 'USD (US Dollar)' },
+  { value: 'GBP', label: 'GBP (British Pound)' },
+  { value: 'EUR', label: 'EUR (Euro)' },
+] as const;
+
+const LESSON_TYPE_COLORS: Record<string, string> = {
+  Group: '#3b82f6',
+  'Semi-Private': '#8b5cf6',
+  Private: '#f59e0b',
+  'Desert Ride': '#f97316',
+  'Beach Ride': '#06b6d4',
+  Endurance: '#ef4444',
+  Camp: '#10b981',
+  Clinic: '#ec4899',
+};
+
+// ─── Fetch helper ────────────────────────────────────────────────────
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, options);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
+  }
+  return data as T;
+}
+
+// ─── Step Indicator ──────────────────────────────────────────────────
+
+interface StepIndicatorProps {
+  currentStep: number;
+}
+
+function StepIndicator({ currentStep }: StepIndicatorProps) {
+  return (
+    <nav className="flex items-center justify-center gap-2" aria-label="Onboarding progress">
+      {STEPS.map((step, index) => {
+        const Icon = step.icon;
+        const isActive = index === currentStep;
+        const isCompleted = index < currentStep;
+
+        return (
+          <div key={step.id} className="flex items-center">
+            <div
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : isCompleted
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {isCompleted ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Icon className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">{step.label}</span>
+            </div>
+            {index < STEPS.length - 1 && (
+              <ChevronRight className="mx-1 h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ─── Step 1: Welcome + Club Basics ───────────────────────────────────
+
+const clubBasicsSchema = z.object({
+  timezone: z.string().min(1),
+  currency: z.string().length(3),
+});
+
+type ClubBasicsInput = z.input<typeof clubBasicsSchema>;
+type ClubBasicsOutput = z.output<typeof clubBasicsSchema>;
+
+interface WelcomeStepProps {
+  onNext: () => void;
+}
+
+function WelcomeStep({ onNext }: WelcomeStepProps) {
+  const updateSettings = useUpdateSettings();
+
+  const form = useForm<ClubBasicsInput, unknown, ClubBasicsOutput>({
+    resolver: zodResolver(clubBasicsSchema),
+    defaultValues: {
+      timezone: 'Asia/Dubai',
+      currency: 'AED',
+    },
+  });
+
+  async function onSubmit(data: ClubBasicsOutput) {
+    try {
+      await updateSettings.mutateAsync(data);
+      toast.success('Club settings saved');
+      onNext();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save settings');
+    }
+  }
+
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Welcome to Cavaliq</CardTitle>
+        <CardDescription>
+          Let&apos;s set up your club in a few quick steps. You can always change these later in Settings.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="timezone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Timezone</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {TIMEZONES.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="currency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Currency</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {CURRENCIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={updateSettings.isPending}
+            >
+              {updateSettings.isPending ? 'Saving...' : 'Continue'}
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Step 2: Arenas ──────────────────────────────────────────────────
+
+const quickArenaSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  isIndoor: z.boolean().default(false),
+  hasLighting: z.boolean().default(false),
+});
+
+type QuickArenaInput = z.input<typeof quickArenaSchema>;
+type QuickArenaOutput = z.output<typeof quickArenaSchema>;
+
+interface ArenasStepProps {
+  onNext: () => void;
+  onBack: () => void;
+}
+
+function ArenasStep({ onNext, onBack }: ArenasStepProps) {
+  const { data: arenasData, refetch } = useArenas();
+  const createArena = useCreateArena();
+  const arenas: Arena[] = arenasData?.data ?? [];
+
+  const form = useForm<QuickArenaInput, unknown, QuickArenaOutput>({
+    resolver: zodResolver(quickArenaSchema),
+    defaultValues: { name: '', isIndoor: false, hasLighting: false },
+  });
+
+  async function onSubmit(data: QuickArenaOutput) {
+    try {
+      await createArena.mutateAsync(data as CreateArenaInput);
+      toast.success(`Arena "${data.name}" added`);
+      form.reset();
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add arena');
+    }
+  }
+
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Add Your Arenas</CardTitle>
+        <CardDescription>
+          Where do your lessons take place? Add at least one arena.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Existing arenas */}
+        {arenas.length > 0 && (
+          <div className="space-y-2">
+            {arenas.map((arena) => (
+              <div
+                key={arena.id}
+                className="flex items-center justify-between rounded-lg border px-4 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{arena.name}</span>
+                </div>
+                <div className="flex gap-1">
+                  {arena.isIndoor && <Badge variant="secondary">Indoor</Badge>}
+                  {arena.hasLighting && <Badge variant="secondary">Lighting</Badge>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick add form */}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Arena Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Main Arena, Indoor Hall" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="flex gap-6">
+              <FormField
+                control={form.control}
+                name="isIndoor"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel className="!mt-0">Indoor</FormLabel>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="hasLighting"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel className="!mt-0">Has Lighting</FormLabel>
+                  </FormItem>
+                )}
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              disabled={createArena.isPending}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {createArena.isPending ? 'Adding...' : 'Add Arena'}
+            </Button>
+          </form>
+        </Form>
+
+        {/* Navigation */}
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onBack} className="flex-1">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Button
+            onClick={onNext}
+            className="flex-1"
+            disabled={arenas.length === 0}
+          >
+            Continue
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+        {arenas.length === 0 && (
+          <p className="text-center text-xs text-muted-foreground">
+            Add at least one arena to continue
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Step 3: Lesson Types ────────────────────────────────────────────
+
+interface QuickLessonValues {
+  name: string;
+  type: string;
+  durationMinutes: number;
+  price: number;
+  currency: string;
+  maxRiders: number;
+  minRiders: number;
+  color: string;
+}
+
+interface LessonsStepProps {
+  onNext: () => void;
+  onBack: () => void;
+}
+
+function LessonsStep({ onNext, onBack }: LessonsStepProps) {
+  const { data: ltData, refetch } = useLessonTypes();
+  const createLessonType = useCreateLessonType();
+  const lessonTypes: LessonType[] = ltData?.data ?? [];
+
+  const form = useForm<QuickLessonValues>({
+    defaultValues: {
+      name: '',
+      type: '',
+      durationMinutes: 60,
+      price: 0,
+      currency: 'AED',
+      maxRiders: 6,
+      minRiders: 1,
+      color: '#3b82f6',
+    },
+  });
+
+  function selectSuggestion(suggestion: string) {
+    const slug = suggestion.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    form.setValue('type', slug);
+    form.setValue('name', suggestion);
+    form.setValue('color', LESSON_TYPE_COLORS[suggestion] ?? '#6366f1');
+  }
+
+  async function onSubmit(data: QuickLessonValues) {
+    if (!data.name.trim() || !data.type.trim()) {
+      toast.error('Name and type are required');
+      return;
+    }
+    try {
+      await createLessonType.mutateAsync({
+        ...data,
+        durationMinutes: Number(data.durationMinutes),
+        price: Number(data.price),
+        maxRiders: Number(data.maxRiders),
+        minRiders: Number(data.minRiders),
+      } as CreateLessonTypeInput);
+      toast.success(`Lesson type "${data.name}" added`);
+      form.reset();
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add lesson type');
+    }
+  }
+
+  // Filter out already-added suggestions
+  const addedTypes = new Set(lessonTypes.map((lt) => lt.name));
+  const availableSuggestions = DEFAULT_LESSON_TYPES.filter((s) => !addedTypes.has(s));
+
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Add Lesson Types</CardTitle>
+        <CardDescription>
+          What kinds of lessons does your club offer? Add at least one.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Existing lesson types */}
+        {lessonTypes.length > 0 && (
+          <div className="space-y-2">
+            {lessonTypes.map((lt) => (
+              <div
+                key={lt.id}
+                className="flex items-center justify-between rounded-lg border px-4 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: lt.color ?? '#6366f1' }}
+                  />
+                  <span className="font-medium">{lt.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{lt.durationMinutes}min</span>
+                  <span>{(lt.price / 100).toFixed(0)} {lt.currency}</span>
+                  <span>max {lt.maxRiders}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick-start suggestions */}
+        {availableSuggestions.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-medium text-muted-foreground">Quick start:</p>
+            <div className="flex flex-wrap gap-2">
+              {availableSuggestions.map((s) => (
+                <Badge
+                  key={s}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-primary/10"
+                  onClick={() => selectSuggestion(s)}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  {s}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick add form */}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Private Lesson" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type ID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. private" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (min)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={15} step={15} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price (minor units)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={0} placeholder="e.g. 15000 = 150.00" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Riders</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              disabled={createLessonType.isPending}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {createLessonType.isPending ? 'Adding...' : 'Add Lesson Type'}
+            </Button>
+          </form>
+        </Form>
+
+        {/* Navigation */}
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onBack} className="flex-1">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Button
+            onClick={onNext}
+            className="flex-1"
+            disabled={lessonTypes.length === 0}
+          >
+            Continue
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+        {lessonTypes.length === 0 && (
+          <p className="text-center text-xs text-muted-foreground">
+            Add at least one lesson type to continue
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Step 4: Staff ───────────────────────────────────────────────────
+
+const quickStaffSchema = z.object({
+  displayName: z.string().min(1, 'Name is required'),
+  email: z.string().email('Valid email required'),
+  role: z.enum(['club_manager', 'coach', 'groom']),
+});
+
+type QuickStaffInput = z.input<typeof quickStaffSchema>;
+type QuickStaffOutput = z.output<typeof quickStaffSchema>;
+
+interface StaffMember {
+  id: string;
+  displayName: string;
+  email: string;
+  role: string;
+}
+
+interface StaffStepProps {
+  onComplete: () => void;
+  onBack: () => void;
+}
+
+function StaffStep({ onComplete, onBack }: StaffStepProps) {
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const form = useForm<QuickStaffInput, unknown, QuickStaffOutput>({
+    resolver: zodResolver(quickStaffSchema),
+    defaultValues: { displayName: '', email: '', role: 'coach' },
+  });
+
+  async function addStaff(data: QuickStaffOutput) {
+    setIsSubmitting(true);
+    try {
+      const res = await fetchJson<{ data: StaffMember }>('/api/v1/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      setStaffList((prev) => [...prev, res.data]);
+      toast.success(`${data.displayName} added as ${data.role.replace('_', ' ')}`);
+      form.reset();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add staff');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Invite Staff</CardTitle>
+        <CardDescription>
+          Add your coaches, managers, and grooms. You can skip this and add them later.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Staff list */}
+        {staffList.length > 0 && (
+          <div className="space-y-2">
+            {staffList.map((member) => (
+              <div
+                key={member.id}
+                className="flex items-center justify-between rounded-lg border px-4 py-2"
+              >
+                <div>
+                  <span className="font-medium">{member.displayName}</span>
+                  <span className="ml-2 text-sm text-muted-foreground">{member.email}</span>
+                </div>
+                <Badge variant="secondary">{member.role.replace('_', ' ')}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick add form */}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(addStaff)} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="email@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Role</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="coach">Coach</SelectItem>
+                      <SelectItem value="club_manager">Manager</SelectItem>
+                      <SelectItem value="groom">Groom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              disabled={isSubmitting}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {isSubmitting ? 'Adding...' : 'Add Staff Member'}
+            </Button>
+          </form>
+        </Form>
+
+        {/* Navigation */}
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onBack} className="flex-1">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Button onClick={onComplete} className="flex-1">
+            {staffList.length === 0 ? 'Skip & Finish' : 'Finish Setup'}
+            <Check className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Main Onboarding Page ────────────────────────────────────────────
+
+export default function OnboardingPage() {
+  const router = useRouter();
+  const [step, setStep] = useState(0);
+  const [completing, setCompleting] = useState(false);
+
+  const handleComplete = useCallback(async () => {
+    setCompleting(true);
+    try {
+      await fetchJson('/api/v1/onboarding', { method: 'POST' });
+      toast.success('Setup complete! Welcome to your dashboard.');
+      router.push('/');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to complete onboarding');
+    } finally {
+      setCompleting(false);
+    }
+  }, [router]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
+      <div className="mx-auto max-w-3xl px-4 py-12">
+        {/* Step indicator */}
+        <div className="mb-10">
+          <StepIndicator currentStep={step} />
+        </div>
+
+        {/* Loading overlay for completion */}
+        {completing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Setting up your dashboard...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Steps */}
+        {step === 0 && <WelcomeStep onNext={() => setStep(1)} />}
+        {step === 1 && <ArenasStep onNext={() => setStep(2)} onBack={() => setStep(0)} />}
+        {step === 2 && <LessonsStep onNext={() => setStep(3)} onBack={() => setStep(1)} />}
+        {step === 3 && <StaffStep onComplete={handleComplete} onBack={() => setStep(2)} />}
+      </div>
+    </div>
+  );
+}

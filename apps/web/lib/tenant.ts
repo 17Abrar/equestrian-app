@@ -11,6 +11,7 @@ interface TenantContext {
   userId: string;
   orgId: string;
   orgRole: UserRole;
+  onboardingCompleted: boolean;
 }
 
 export async function getTenantContext(): Promise<TenantContext> {
@@ -30,7 +31,7 @@ export async function getTenantContext(): Promise<TenantContext> {
 
   // Resolve club from Clerk org ID
   const club = await db
-    .select({ id: clubs.id })
+    .select({ id: clubs.id, onboardingCompletedAt: clubs.onboardingCompletedAt })
     .from(clubs)
     .where(eq(clubs.clerkOrgId, orgId))
     .limit(1);
@@ -66,6 +67,7 @@ export async function getTenantContext(): Promise<TenantContext> {
     userId,
     orgId,
     orgRole: appRole,
+    onboardingCompleted: !!foundClub.onboardingCompletedAt,
   };
 }
 

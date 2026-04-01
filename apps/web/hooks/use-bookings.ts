@@ -297,6 +297,7 @@ export function useBookings(filters: Partial<BookingFiltersInput> = {}) {
   if (filters.status) params.set('status', filters.status);
   if (filters.date) params.set('date', filters.date);
   if (filters.lessonTypeId) params.set('lessonTypeId', filters.lessonTypeId);
+  if (filters.riderMemberId) params.set('riderMemberId', filters.riderMemberId);
   if (filters.page) params.set('page', String(filters.page));
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
@@ -331,6 +332,26 @@ export function useCreateBooking() {
   });
 }
 
+export interface CancelPreview {
+  bookingId: string;
+  isLate: boolean;
+  fee: number;
+  currency: string;
+  cutoffTime: string;
+  hoursUntilSlot: number;
+  cancellationNoticeHours: number;
+  lessonPrice: number;
+}
+
+export function useCancelPreview(bookingId: string | null) {
+  return useQuery({
+    queryKey: ['cancelPreview', bookingId],
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<CancelPreview>>(`/api/v1/bookings/${bookingId}/cancel-preview`),
+    enabled: !!bookingId,
+  });
+}
+
 export function useCancelBooking() {
   const queryClient = useQueryClient();
 
@@ -340,6 +361,37 @@ export function useCancelBooking() {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
+    },
+  });
+}
+
+export function useMarkNoShow() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (bookingId: string) =>
+      fetchJson<ApiResponse<Booking>>(`/api/v1/bookings/${bookingId}/no-show`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+    },
+  });
+}
+
+export function useMarkComplete() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (bookingId: string) =>
+      fetchJson<ApiResponse<Booking>>(`/api/v1/bookings/${bookingId}/complete`, {
+        method: 'POST',
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });

@@ -39,6 +39,12 @@ export async function POST(request: NextRequest) {
         return errorResponse('CREATE_FAILED', 'Failed to create horse', 500);
       }
 
+      void ctx.audit({
+        action: 'horse.create',
+        resourceType: 'horse',
+        resourceId: horse.id,
+      });
+
       return successResponse(horse, 201);
     },
     { requiredPermission: 'horses:create' },

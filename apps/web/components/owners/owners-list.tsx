@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus, Search, Trash2, Crown } from 'lucide-react';
 import { createOwnerSchema, type CreateOwnerInput } from '@equestrian/shared/schemas';
-import { useOwners, useCreateOwner, useDeactivateOwner, type ClubMember } from '@/hooks/use-staff';
+import { useOwners, useCreateOwner, useDeactivateOwner } from '@/hooks/use-staff';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';

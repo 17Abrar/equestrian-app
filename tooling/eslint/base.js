@@ -24,6 +24,15 @@ module.exports = [
     },
   },
   {
-    ignores: ['node_modules/', 'dist/', '.next/', '.expo/', '.turbo/', 'coverage/'],
+    ignores: [
+      'node_modules/',
+      'dist/',
+      '.next/',
+      '.expo/',
+      '.turbo/',
+      'coverage/',
+      '**/*.config.js',
+      '**/next-env.d.ts',
+    ],
   },
 ];

@@ -24,6 +24,7 @@ interface BookingFilters {
   status?: string;
   date?: string;
   lessonTypeId?: string;
+  riderMemberId?: string;
   page: number;
   pageSize: number;
 }
@@ -174,6 +175,10 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
     conditions.push(eq(bookingSlots.lessonTypeId, filters.lessonTypeId));
   }
 
+  if (filters.riderMemberId) {
+    conditions.push(eq(bookings.riderMemberId, filters.riderMemberId));
+  }
+
   const where = and(...conditions);
   const offset = (filters.page - 1) * filters.pageSize;
 
@@ -311,6 +316,7 @@ export async function cancelBooking(
   bookingId: string,
   reason: string,
   cancelledByMemberId: string,
+  cancellationFee?: number,
 ) {
   return dbPool.transaction(async (tx) => {
     const result = await tx
@@ -318,6 +324,7 @@ export async function cancelBooking(
       .set({
         status: 'cancelled',
         cancellationReason: reason,
+        cancellationFee: cancellationFee ?? 0,
         cancelledAt: new Date(),
         cancelledByMemberId,
         updatedAt: new Date(),
@@ -345,4 +352,58 @@ export async function cancelBooking(
 
     return cancelled ?? null;
   });
+}
+
+/**
+ * Marks a confirmed booking as no-show and records the fee.
+ * Does NOT decrement the slot rider count — the rider was expected to attend.
+ */
+export async function markBookingNoShow(
+  clubId: string,
+  bookingId: string,
+  noShowFee: number,
+) {
+  const result = await db
+    .update(bookings)
+    .set({
+      status: 'no_show',
+      cancellationFee: noShowFee,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        sql`${bookings.status} = 'confirmed'`,
+      ),
+    )
+    .returning();
+
+  return result[0] ?? null;
+}
+
+/**
+ * Marks a confirmed booking as completed.
+ * Typically used by staff after the lesson has taken place.
+ */
+export async function markBookingComplete(
+  clubId: string,
+  bookingId: string,
+) {
+  const result = await db
+    .update(bookings)
+    .set({
+      status: 'completed',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        sql`${bookings.status} = 'confirmed'`,
+      ),
+    )
+    .returning();
+
+  return result[0] ?? null;
 }

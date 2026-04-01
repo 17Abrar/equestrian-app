@@ -12,6 +12,7 @@ import {
   errorResponse,
   validateInput,
 } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -29,11 +30,19 @@ export async function GET(request: NextRequest) {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
       const filters = validateInput(bookingSlotFiltersSchema, searchParams);
 
+      // Riders can view available slots (needed to book), staff can view all
+      const canViewSlots = hasPermission(ctx.orgRole, 'bookings:read')
+        || hasPermission(ctx.orgRole, 'bookings:create')
+        || hasPermission(ctx.orgRole, 'bookings:read_own');
+
+      if (!canViewSlots) {
+        return errorResponse('FORBIDDEN', 'You do not have permission to view booking slots', 403);
+      }
+
       const data = await getBookingSlotsByClub(ctx.clubId, filters);
 
       return successResponse(data);
     },
-    { requiredPermission: 'bookings:read' },
   );
 }
 

@@ -50,6 +50,15 @@ export const clubs = pgTable('clubs', {
   allowOverbooking: boolean('allow_overbooking').notNull().default(false),
   overbookingLimit: integer('overbooking_limit').notNull().default(0),
   defaultCalendarView: varchar('default_calendar_view', { length: 20 }).notNull().default('week'),
+  lateCancellationFeePercent: numeric('late_cancellation_fee_percent', { precision: 5, scale: 2 })
+    .notNull()
+    .default('0'),
+  noShowFeePercent: numeric('no_show_fee_percent', { precision: 5, scale: 2 })
+    .notNull()
+    .default('0'),
+
+  // Onboarding
+  onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
 
   // Metadata
   clerkOrgId: varchar('clerk_org_id', { length: 255 }).unique(),

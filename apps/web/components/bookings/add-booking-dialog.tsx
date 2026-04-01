@@ -6,10 +6,8 @@ import { Plus } from 'lucide-react';
 import { useLessonTypes, useBookingSlots, useCreateBooking } from '@/hooks/use-bookings';
 import { useRiders } from '@/hooks/use-riders';
 import { useHorses } from '@/hooks/use-horses';
-import { toMinorUnits } from '@equestrian/shared/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
