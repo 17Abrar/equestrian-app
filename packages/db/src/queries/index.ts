@@ -13,3 +13,4 @@ export * from './dashboard';
 export * from './audit-log';
 export * from './payment-accounts';
 export * from './audiences';
+export * from './discovery';

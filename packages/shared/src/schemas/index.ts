@@ -357,6 +357,14 @@ export const updateNotificationsSchema = z.object({
 
 export type UpdateNotificationsInput = z.output<typeof updateNotificationsSchema>;
 
+export const updateDiscoverySchema = z.object({
+  isPublicListing: z.boolean().optional(),
+  joinPolicy: z.enum(['open', 'approval', 'invite_only']).optional(),
+  shortDescription: z.string().max(280).nullable().optional(),
+});
+
+export type UpdateDiscoveryInput = z.output<typeof updateDiscoverySchema>;
+
 export const updateBookingRulesSchema = z.object({
   advanceBookingDays: optionalNumeric(z.number().int().min(1).max(365)),
   bookingCutoffHours: optionalNumeric(z.number().int().min(0)),

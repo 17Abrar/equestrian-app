@@ -10,3 +10,4 @@ export * from './competitions';
 export * from './finances';
 export * from './operations';
 export * from './audiences';
+export * from './club-join-requests';

@@ -35,6 +35,7 @@ import { PaymentsPanel } from '@/components/payments/payments-panel';
 import { NotificationsForm } from '@/components/settings/notifications-form';
 import { PermissionsMatrix } from '@/components/settings/permissions-matrix';
 import { BrandingForm } from '@/components/settings/branding-form';
+import { DiscoveryForm } from '@/components/settings/discovery-form';
 
 function SettingsSkeleton() {
   return (
@@ -73,6 +74,7 @@ export function SettingsPage() {
         <TabsList>
           <TabsTrigger value="profile">Club Profile</TabsTrigger>
           <TabsTrigger value="booking">Booking Rules</TabsTrigger>
+          <TabsTrigger value="discovery">Discovery</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="payment">Payment</TabsTrigger>
@@ -85,6 +87,10 @@ export function SettingsPage() {
 
         <TabsContent value="booking" className="mt-6">
           <BookingRulesForm settings={settings} />
+        </TabsContent>
+
+        <TabsContent value="discovery" className="mt-6">
+          <DiscoveryForm settings={settings} />
         </TabsContent>
 
         <TabsContent value="notifications" className="mt-6">

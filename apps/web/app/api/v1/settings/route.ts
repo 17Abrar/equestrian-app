@@ -4,6 +4,7 @@ import {
   updateBookingRulesSchema,
   updateBrandingSchema,
   updateNotificationsSchema,
+  updateDiscoverySchema,
 } from '@equestrian/shared/schemas';
 import { getClubById, updateClubSettings } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
@@ -35,12 +36,14 @@ export async function PATCH(request: NextRequest) {
       const rulesResult = updateBookingRulesSchema.safeParse(body);
       const brandingResult = updateBrandingSchema.safeParse(body);
       const notificationsResult = updateNotificationsSchema.safeParse(body);
+      const discoveryResult = updateDiscoverySchema.safeParse(body);
 
       const data: Record<string, unknown> = {
         ...(profileResult.success ? profileResult.data : {}),
         ...(rulesResult.success ? rulesResult.data : {}),
         ...(brandingResult.success ? brandingResult.data : {}),
         ...(notificationsResult.success ? notificationsResult.data : {}),
+        ...(discoveryResult.success ? discoveryResult.data : {}),
       };
 
       if (Object.keys(data).length === 0) {

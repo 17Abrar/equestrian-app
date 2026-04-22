@@ -48,6 +48,9 @@ export interface ClubSettings {
   brandSecondaryColor: string | null;
   faviconUrl: string | null;
   notificationPreferences: NotificationPreferences;
+  isPublicListing: boolean;
+  joinPolicy: string;
+  shortDescription: string | null;
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {

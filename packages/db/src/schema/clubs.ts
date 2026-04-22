@@ -94,6 +94,11 @@ export const clubs = pgTable('clubs', {
   // Onboarding
   onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
 
+  // Public discovery (Round 7 — rider self-signup funnel)
+  isPublicListing: boolean('is_public_listing').notNull().default(false),
+  joinPolicy: varchar('join_policy', { length: 20 }).notNull().default('invite_only'),
+  shortDescription: varchar('short_description', { length: 280 }),
+
   // Metadata
   clerkOrgId: varchar('clerk_org_id', { length: 255 }).unique(),
   isActive: boolean('is_active').notNull().default(true),
@@ -101,3 +106,5 @@ export const clubs = pgTable('clubs', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
+
+export type JoinPolicy = 'open' | 'approval' | 'invite_only';
