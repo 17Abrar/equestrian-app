@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AudiencesTab } from '@/components/emails/audiences-tab';
 
 async function sendEmail(data: { to: string; subject: string; body: string }) {
   const res = await fetch('/api/v1/emails/send', {
@@ -59,11 +60,7 @@ export function EmailsPage() {
         </TabsContent>
 
         <TabsContent value="audiences" className="mt-6">
-          <PlaceholderTab
-            title="Audiences"
-            description="Create rider segments based on skill level, activity, packages, and more."
-            icon={Mail}
-          />
+          <AudiencesTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -7,8 +7,21 @@ import {
   integer,
   timestamp,
   numeric,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { subscriptionStatusEnum } from './enums';
+
+export interface NotificationPreferences {
+  booking_confirmation?: { email: boolean };
+  booking_reminder_24h?: { email: boolean };
+  booking_cancellation?: { email: boolean };
+  payment_receipt?: { email: boolean };
+  payment_failed?: { email: boolean };
+  feed_alert?: { email: boolean };
+  waitlist_promotion?: { email: boolean };
+  rider_welcome?: { email: boolean };
+  invoice_issued?: { email: boolean };
+}
 
 export const clubs = pgTable('clubs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -56,6 +69,27 @@ export const clubs = pgTable('clubs', {
   noShowFeePercent: numeric('no_show_fee_percent', { precision: 5, scale: 2 })
     .notNull()
     .default('0'),
+
+  // Branding (white-label)
+  brandPrimaryColor: varchar('brand_primary_color', { length: 7 }).default('#6366f1'),
+  brandSecondaryColor: varchar('brand_secondary_color', { length: 7 }).default('#ec4899'),
+  faviconUrl: text('favicon_url'),
+
+  // Notification preferences (per-event on/off flags, stored as jsonb)
+  notificationPreferences: jsonb('notification_preferences')
+    .$type<NotificationPreferences>()
+    .notNull()
+    .default({
+      booking_confirmation: { email: true },
+      booking_reminder_24h: { email: true },
+      booking_cancellation: { email: true },
+      payment_receipt: { email: true },
+      payment_failed: { email: true },
+      feed_alert: { email: true },
+      waitlist_promotion: { email: true },
+      rider_welcome: { email: true },
+      invoice_issued: { email: true },
+    }),
 
   // Onboarding
   onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),

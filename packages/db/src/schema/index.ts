@@ -9,3 +9,4 @@ export * from './packages';
 export * from './competitions';
 export * from './finances';
 export * from './operations';
+export * from './audiences';

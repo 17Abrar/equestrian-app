@@ -1,5 +1,10 @@
 import { type NextRequest } from 'next/server';
-import { updateClubProfileSchema, updateBookingRulesSchema } from '@equestrian/shared/schemas';
+import {
+  updateClubProfileSchema,
+  updateBookingRulesSchema,
+  updateBrandingSchema,
+  updateNotificationsSchema,
+} from '@equestrian/shared/schemas';
 import { getClubById, updateClubSettings } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
 
@@ -23,13 +28,19 @@ export async function PATCH(request: NextRequest) {
     async (ctx) => {
       const body = await request.json();
 
-      // Accept either profile or booking rules update
+      // Accept any combination of profile, booking rules, branding, or
+      // notification updates in a single PATCH. Unknown keys are ignored
+      // silently by each schema's strict-by-default behavior.
       const profileResult = updateClubProfileSchema.safeParse(body);
       const rulesResult = updateBookingRulesSchema.safeParse(body);
+      const brandingResult = updateBrandingSchema.safeParse(body);
+      const notificationsResult = updateNotificationsSchema.safeParse(body);
 
       const data: Record<string, unknown> = {
         ...(profileResult.success ? profileResult.data : {}),
         ...(rulesResult.success ? rulesResult.data : {}),
+        ...(brandingResult.success ? brandingResult.data : {}),
+        ...(notificationsResult.success ? notificationsResult.data : {}),
       };
 
       if (Object.keys(data).length === 0) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type CreateExpenseInput, type CreateCouponInput } from '@equestrian/shared/schemas';
+import { type CreateExpenseInput, type UpdateExpenseInput, type CreateCouponInput } from '@equestrian/shared/schemas';
 import { type ApiSuccessResponse, type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
 
 interface FinanceOverview {
@@ -101,6 +101,34 @@ export function useCreateExpense() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finances'] });
+    },
+  });
+}
+
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateExpenseInput }) =>
+      fetchJson<ApiResponse<Expense>>(`/api/v1/finances/expenses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finances'] });
+    },
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/finances/expenses/${id}`, {
+        method: 'DELETE',
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finances'] });

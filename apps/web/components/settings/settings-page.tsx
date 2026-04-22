@@ -31,6 +31,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ErrorState } from '@/components/shared/error-state';
+import { PaymentsPanel } from '@/components/payments/payments-panel';
+import { NotificationsForm } from '@/components/settings/notifications-form';
+import { PermissionsMatrix } from '@/components/settings/permissions-matrix';
+import { BrandingForm } from '@/components/settings/branding-form';
 
 function SettingsSkeleton() {
   return (
@@ -84,36 +88,32 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="notifications" className="mt-6">
-          <PlaceholderTab title="Notification Templates" description="Configure email and push notification templates for booking confirmations, reminders, and alerts." />
+          <NotificationsForm settings={settings} />
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-6">
-          <PlaceholderTab title="Staff Permissions" description="View and customize role-based access control for your staff members." />
+          <PermissionsMatrix />
         </TabsContent>
 
         <TabsContent value="payment" className="mt-6">
-          <PlaceholderTab title="Payment Configuration" description="Connect Stripe, configure payment methods, and manage your payment settings." />
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Providers</CardTitle>
+              <CardDescription>
+                Connect a payment processor so riders can pay for lessons online. Only one provider can be active at a time — the active one is used for all new bookings.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PaymentsPanel />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="branding" className="mt-6">
-          <PlaceholderTab title="Branding" description="Customize your club's appearance with custom colors, logos, and white-label options." />
+          <BrandingForm settings={settings} />
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function PlaceholderTab({ title, description }: { title: string; description: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">This feature is coming soon.</p>
-      </CardContent>
-    </Card>
   );
 }
 

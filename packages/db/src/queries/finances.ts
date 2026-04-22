@@ -87,6 +87,19 @@ export async function createExpense(clubId: string, data: ExpenseCreate, memberI
   return result[0];
 }
 
+export async function updateExpense(
+  clubId: string,
+  expenseId: string,
+  data: Partial<ExpenseCreate>,
+) {
+  const result = await db
+    .update(expenses)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId)))
+    .returning();
+  return result[0] ?? null;
+}
+
 export async function deleteExpense(clubId: string, expenseId: string) {
   const result = await db.delete(expenses).where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId))).returning({ id: expenses.id });
   return result[0] ?? null;

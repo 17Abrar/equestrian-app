@@ -1,19 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Plus, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, AlertCircle, Pencil, Trash2 } from 'lucide-react';
 import {
-  createExpenseSchema, createCouponSchema,
+  createExpenseSchema, updateExpenseSchema, createCouponSchema,
   type CreateExpenseFormValues, type CreateExpenseInput,
+  type UpdateExpenseFormValues, type UpdateExpenseInput,
   type CreateCouponFormValues, type CreateCouponInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney } from '@equestrian/shared/utils';
+import { formatMoney, toMajorUnits } from '@equestrian/shared/utils';
 import {
-  useFinanceOverview, useExpenses, useCreateExpense,
+  useFinanceOverview, useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense,
   usePayments, useInvoices, useCoupons, useCreateCoupon,
+  type Expense,
 } from '@/hooks/use-finances';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +29,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -227,6 +233,7 @@ function ExpensesTab() {
               <TableHead>Description</TableHead>
               <TableHead>Vendor</TableHead>
               <TableHead>Amount</TableHead>
+              <TableHead className="w-[100px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -237,12 +244,163 @@ function ExpensesTab() {
                 <TableCell className="max-w-[200px] truncate">{e.description}</TableCell>
                 <TableCell className="text-muted-foreground">{e.vendorName ?? '—'}</TableCell>
                 <TableCell className="font-medium">{formatMoney(e.amount, e.currency)}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <EditExpenseDialog expense={e} />
+                    <DeleteExpenseButton expense={e} />
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
     </div>
+  );
+}
+
+function EditExpenseDialog({ expense }: { expense: Expense }) {
+  const [open, setOpen] = useState(false);
+  const updateExpense = useUpdateExpense();
+
+  const form = useForm<UpdateExpenseFormValues, unknown, UpdateExpenseInput>({
+    resolver: zodResolver(updateExpenseSchema),
+    defaultValues: {
+      category: expense.category,
+      description: expense.description,
+      amount: toMajorUnits(expense.amount),
+      currency: expense.currency,
+      date: expense.date,
+      vendorName: expense.vendorName ?? undefined,
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        category: expense.category,
+        description: expense.description,
+        amount: toMajorUnits(expense.amount),
+        currency: expense.currency,
+        date: expense.date,
+        vendorName: expense.vendorName ?? undefined,
+      });
+    }
+  }, [open, expense, form]);
+
+  async function onSubmit(data: UpdateExpenseInput) {
+    try {
+      await updateExpense.mutateAsync({ id: expense.id, data });
+      toast.success('Expense updated');
+      setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update expense');
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="icon" variant="ghost" aria-label="Edit expense">
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="category" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="feed">Feed</SelectItem>
+                    <SelectItem value="vet">Vet</SelectItem>
+                    <SelectItem value="farrier">Farrier</SelectItem>
+                    <SelectItem value="equipment">Equipment</SelectItem>
+                    <SelectItem value="utilities">Utilities</SelectItem>
+                    <SelectItem value="wages">Wages</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="amount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Amount (AED)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...field}
+                      value={(field.value as number | undefined) ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="date" render={({ field }) => (
+                <FormItem><FormLabel>Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+            </div>
+            <FormField control={form.control} name="vendorName" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Vendor</FormLabel>
+                <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <Button type="submit" className="w-full" disabled={updateExpense.isPending}>
+              {updateExpense.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteExpenseButton({ expense }: { expense: Expense }) {
+  const deleteExpense = useDeleteExpense();
+
+  async function onConfirm() {
+    try {
+      await deleteExpense.mutateAsync(expense.id);
+      toast.success('Expense deleted');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete expense');
+    }
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="icon" variant="ghost" aria-label="Delete expense">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {formatMoney(expense.amount, expense.currency)} — {expense.description}
+            <br />This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={deleteExpense.isPending}>
+            {deleteExpense.isPending ? 'Deleting...' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
