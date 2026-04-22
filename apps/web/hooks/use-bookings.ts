@@ -75,6 +75,7 @@ export interface Booking {
   horseId: string | null;
   status: string;
   paymentStatus: string;
+  paymentMethod: string | null;
   amount: number | null;
   currency: string;
   horseMatchScore: number | null;
@@ -84,6 +85,8 @@ export interface Booking {
   slotEndTime: string;
   lessonTypeName: string;
   lessonTypeType: string;
+  lessonTypePrice: number;
+  lessonTypeCurrency: string;
   arenaName: string | null;
   riderName: string | null;
   horseName: string | null;

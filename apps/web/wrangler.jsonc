@@ -1,0 +1,57 @@
+// Cloudflare Workers deploy configuration for the Cavaliq web app.
+// Docs: https://developers.cloudflare.com/workers/configuration/
+//
+// - `nodejs_compat` turns on the Node.js APIs our stack relies on
+//   (AsyncLocalStorage from `node:async_hooks`, node:crypto for field-level
+//   encryption, etc.).
+// - The compatibility date is pinned at 2025-11-01 — past Sentry's 2025-08-16
+//   requirement and OpenNext's 2024-09-23 baseline.
+// - `placement: smart` lets Cloudflare run the Worker near Neon for lower
+//   DB-round-trip latency.
+// - `observability` forwards `console.*` output + exceptions to the Cloudflare
+//   dashboard so we have a fallback if Sentry is misconfigured.
+//
+// Secrets (DATABASE_URL, CLERK_SECRET_KEY, etc.) are NOT set here — use
+// `wrangler secret put <NAME>` so they're encrypted at rest.
+// See DEPLOY.md for the full list.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cavaliq",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  "placement": {
+    "mode": "smart"
+  },
+
+  // Custom domain binding. Cavaliq's root domain is served from this Worker.
+  // Add `app.cavaliq.com` or `api.cavaliq.com` entries later if you split the
+  // dashboard onto a subdomain — OpenNext handles subpaths out of the box.
+  "routes": [
+    { "pattern": "cavaliq.com", "custom_domain": true },
+    { "pattern": "www.cavaliq.com", "custom_domain": true }
+  ],
+
+  // Non-sensitive runtime values. `NEXT_PUBLIC_*` keys are technically
+  // consumed at build time by Next (baked into the client bundle), but also
+  // need to be readable from the server at runtime — listing here satisfies
+  // both when opennextjs-cloudflare runs the build.
+  "vars": {
+    "NODE_ENV": "production",
+    "NEXT_PUBLIC_APP_URL": "https://cavaliq.com",
+    "CORS_ALLOWED_ORIGINS": "",
+    "N_GENIUS_API_BASE_URL": "https://api-gateway.ngenius-payments.com",
+    "ZIINA_API_BASE_URL": "https://api-v2.ziina.com/api"
+  }
+}

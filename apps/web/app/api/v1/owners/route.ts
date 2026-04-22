@@ -44,6 +44,12 @@ export async function POST(request: NextRequest) {
         clubId: ctx.clubId,
       });
 
+      void ctx.audit({
+        action: 'owner.create',
+        resourceType: 'owner',
+        resourceId: member.id,
+      });
+
       return successResponse(member, 201);
     },
     { requiredPermission: 'owners:create' },

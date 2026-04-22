@@ -47,6 +47,15 @@ export async function POST(request: NextRequest) {
         role: data.role,
       });
 
+      void ctx.audit({
+        action: 'staff.create',
+        resourceType: 'staff',
+        resourceId: member.id,
+        changes: {
+          role: { from: null, to: data.role },
+        },
+      });
+
       return successResponse(member, 201);
     },
     { requiredPermission: 'staff:create' },

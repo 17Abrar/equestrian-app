@@ -1,5 +1,5 @@
 import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
-import { db } from '../index';
+import { db, rawDb } from '../index';
 import { auditLog } from '../schema/operations';
 
 export interface CreateAuditEntryParams {
@@ -30,8 +30,15 @@ function sanitizeIp(ip: string | undefined): string | null {
   return IP_PATTERN.test(ip) ? ip : null;
 }
 
+/**
+ * Writes an audit entry using the HTTP driver on a separate connection —
+ * intentionally bypassing any active tenant transaction. Callers use
+ * fire-and-forget (`void ctx.audit(...)`), so the insert must not race the
+ * outer transaction's commit, and audits must persist even if the main
+ * operation rolls back.
+ */
 export async function createAuditEntry(params: CreateAuditEntryParams) {
-  const [entry] = await db
+  const [entry] = await rawDb
     .insert(auditLog)
     .values({
       clubId: params.clubId,

@@ -10,11 +10,13 @@ import {
   MapPin,
   BookOpen,
   Users,
+  CreditCard,
   Check,
   ChevronRight,
   ChevronLeft,
   Plus,
   Loader2,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -58,6 +60,7 @@ const STEPS = [
   { id: 'welcome', label: 'Club Setup', icon: Building2 },
   { id: 'arenas', label: 'Arenas', icon: MapPin },
   { id: 'lessons', label: 'Lesson Types', icon: BookOpen },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'staff', label: 'Staff', icon: Users },
 ] as const;
 
@@ -458,7 +461,8 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
       await createLessonType.mutateAsync({
         ...data,
         durationMinutes: Number(data.durationMinutes),
-        price: Number(data.price),
+        // User enters AED (major units); DB stores fils (minor units).
+        price: Math.round(Number(data.price) * 100),
         maxRiders: Number(data.maxRiders),
         minRiders: Number(data.minRiders),
       } as CreateLessonTypeInput);
@@ -500,7 +504,7 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>{lt.durationMinutes}min</span>
-                  <span>{(lt.price / 100).toFixed(0)} {lt.currency}</span>
+                  <span>{(lt.price / 100).toFixed(2)} {lt.currency}</span>
                   <span>max {lt.maxRiders}</span>
                 </div>
               </div>
@@ -578,9 +582,15 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
                 name="price"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Price (minor units)</FormLabel>
+                    <FormLabel>Price (AED)</FormLabel>
                     <FormControl>
-                      <Input type="number" min={0} placeholder="e.g. 15000 = 150.00" {...field} />
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="e.g. 150.00"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -637,7 +647,57 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
   );
 }
 
-// ─── Step 4: Staff ───────────────────────────────────────────────────
+// ─── Step 4: Payments (optional) ─────────────────────────────────────
+
+import { PaymentsPanel } from '@/components/payments/payments-panel';
+
+interface PaymentsStepProps {
+  onNext: () => void;
+  onBack: () => void;
+}
+
+function PaymentsStep({ onNext, onBack }: PaymentsStepProps) {
+  return (
+    <Card className="mx-auto max-w-3xl">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Accept Payments</CardTitle>
+        <CardDescription>
+          Connect a payment processor so riders can pay for lessons online. You can finish
+          setup without this and add it later.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p>
+            Stripe uses an OAuth redirect — clicking &ldquo;Connect Stripe&rdquo; will leave
+            the wizard. If you&apos;d rather finish onboarding first, pick Stripe from{' '}
+            <span className="font-medium">Settings &rarr; Payments</span> after setup. N-Genius
+            and Ziina connect inline here without leaving.
+          </p>
+        </div>
+
+        <PaymentsPanel />
+
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onBack} className="flex-1">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Button onClick={onNext} className="flex-1">
+            Continue
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Payments are optional at setup — you can connect a processor any time.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Step 5: Staff ───────────────────────────────────────────────────
 
 const quickStaffSchema = z.object({
   displayName: z.string().min(1, 'Name is required'),
@@ -837,7 +897,8 @@ export default function OnboardingPage() {
         {step === 0 && <WelcomeStep onNext={() => setStep(1)} />}
         {step === 1 && <ArenasStep onNext={() => setStep(2)} onBack={() => setStep(0)} />}
         {step === 2 && <LessonsStep onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-        {step === 3 && <StaffStep onComplete={handleComplete} onBack={() => setStep(2)} />}
+        {step === 3 && <PaymentsStep onNext={() => setStep(4)} onBack={() => setStep(2)} />}
+        {step === 4 && <StaffStep onComplete={handleComplete} onBack={() => setStep(3)} />}
       </div>
     </div>
   );

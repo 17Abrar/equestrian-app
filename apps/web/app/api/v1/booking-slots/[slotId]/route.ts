@@ -52,6 +52,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       logger.info('slot_updated', { slotId, clubId: ctx.clubId });
 
+      void ctx.audit({
+        action: 'booking_slot.update',
+        resourceType: 'booking_slot',
+        resourceId: slotId,
+      });
+
       return successResponse(slot);
     },
     { requiredPermission: 'bookings:update' },
@@ -79,6 +85,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
 
       logger.info('slot_cancelled', { slotId, clubId: ctx.clubId, reason });
+
+      void ctx.audit({
+        action: 'booking_slot.cancel',
+        resourceType: 'booking_slot',
+        resourceId: slotId,
+        changes: reason ? { reason: { from: null, to: reason } } : undefined,
+      });
 
       return successResponse({ id: slot.id, message: 'Slot cancelled' });
     },

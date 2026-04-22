@@ -56,6 +56,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Competition not found', 404);
       }
 
+      void ctx.audit({
+        action: 'competition.update',
+        resourceType: 'competition',
+        resourceId: competitionId,
+      });
+
       return successResponse(competition);
     },
     { requiredPermission: 'competitions:update' },
@@ -71,6 +77,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse('NOT_FOUND', 'Competition not found', 404);
       }
+
+      void ctx.audit({
+        action: 'competition.delete',
+        resourceType: 'competition',
+        resourceId: competitionId,
+      });
 
       return successResponse({ id: deleted.id, message: 'Competition archived' });
     },

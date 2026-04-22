@@ -25,19 +25,34 @@ interface RouteParams {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
-  return withAuth(
-    async (ctx) => {
-      const { bookingId } = await params;
-      const booking = await getBookingById(ctx.clubId, bookingId);
+  return withAuth(async (ctx) => {
+    const { bookingId } = await params;
 
-      if (!booking) {
-        return errorResponse('NOT_FOUND', 'Booking not found', 404);
-      }
+    // Staff (bookings:read / bookings:*) see any booking; riders and parents
+    // (bookings:read_own / bookings:read_child) see only their own. Inline
+    // check rather than `requiredPermission` so we can enforce the
+    // own-booking constraint after loading the row.
+    const canReadAny = hasPermission(ctx.orgRole, 'bookings:read');
+    const canReadOwn =
+      hasPermission(ctx.orgRole, 'bookings:read_own') ||
+      hasPermission(ctx.orgRole, 'bookings:read_child');
 
-      return successResponse(booking);
-    },
-    { requiredPermission: 'bookings:read' },
-  );
+    if (!canReadAny && !canReadOwn) {
+      return errorResponse('FORBIDDEN', 'You do not have permission to view bookings', 403);
+    }
+
+    const booking = await getBookingById(ctx.clubId, bookingId);
+
+    if (!booking) {
+      return errorResponse('NOT_FOUND', 'Booking not found', 404);
+    }
+
+    if (!canReadAny && booking.riderMemberId !== ctx.memberId) {
+      return errorResponse('FORBIDDEN', 'You can only view your own bookings', 403);
+    }
+
+    return successResponse(booking);
+  });
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {

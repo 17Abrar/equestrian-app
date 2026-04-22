@@ -32,6 +32,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         administeredByMemberId: data.administeredByMemberId ?? ctx.memberId,
       });
 
+      if (log) {
+        void ctx.audit({
+          action: 'medication_log.create',
+          resourceType: 'medication_log',
+          resourceId: log.id,
+          changes: {
+            horseId: { from: null, to: horseId },
+            medicationId: { from: null, to: medicationId },
+          },
+        });
+      }
+
       return successResponse(log, 201);
     },
     { requiredPermission: 'horses:update_care' },

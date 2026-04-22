@@ -324,6 +324,39 @@ export const updateClubProfileSchema = z.object({
 
 export type UpdateClubProfileInput = z.output<typeof updateClubProfileSchema>;
 
+const hexColor = z
+  .string()
+  .regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/, 'Must be a hex color like #6366f1')
+  .transform((v) => v.toLowerCase());
+
+export const updateBrandingSchema = z.object({
+  brandPrimaryColor: hexColor.optional(),
+  brandSecondaryColor: hexColor.optional(),
+  logoUrl: z.string().url().nullable().optional().or(z.literal('')),
+  coverPhotoUrl: z.string().url().nullable().optional().or(z.literal('')),
+  faviconUrl: z.string().url().nullable().optional().or(z.literal('')),
+});
+
+export type UpdateBrandingInput = z.output<typeof updateBrandingSchema>;
+
+const notificationChannel = z.object({ email: z.boolean() });
+
+export const updateNotificationsSchema = z.object({
+  notificationPreferences: z.object({
+    booking_confirmation: notificationChannel.optional(),
+    booking_reminder_24h: notificationChannel.optional(),
+    booking_cancellation: notificationChannel.optional(),
+    payment_receipt: notificationChannel.optional(),
+    payment_failed: notificationChannel.optional(),
+    feed_alert: notificationChannel.optional(),
+    waitlist_promotion: notificationChannel.optional(),
+    rider_welcome: notificationChannel.optional(),
+    invoice_issued: notificationChannel.optional(),
+  }),
+});
+
+export type UpdateNotificationsInput = z.output<typeof updateNotificationsSchema>;
+
 export const updateBookingRulesSchema = z.object({
   advanceBookingDays: optionalNumeric(z.number().int().min(1).max(365)),
   bookingCutoffHours: optionalNumeric(z.number().int().min(0)),
@@ -382,6 +415,15 @@ export const createExpenseSchema = z.object({
 
 export type CreateExpenseFormValues = z.input<typeof createExpenseSchema>;
 export type CreateExpenseInput = z.output<typeof createExpenseSchema>;
+
+export const updateExpenseSchema = createExpenseSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided',
+  });
+
+export type UpdateExpenseFormValues = z.input<typeof updateExpenseSchema>;
+export type UpdateExpenseInput = z.output<typeof updateExpenseSchema>;
 
 export const expenseFiltersSchema = z.object({
   category: z.string().optional(),

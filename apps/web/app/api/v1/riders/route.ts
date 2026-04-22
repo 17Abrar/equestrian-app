@@ -49,6 +49,15 @@ export async function POST(request: NextRequest) {
         clubId: ctx.clubId,
       });
 
+      void ctx.audit({
+        action: 'rider.create',
+        resourceType: 'rider',
+        resourceId: result.member.id,
+        changes: {
+          profileId: { from: null, to: result.profile?.id ?? null },
+        },
+      });
+
       // Fire-and-forget welcome email — does not block the response
       const riderEmail = result.member.email;
       if (riderEmail) {

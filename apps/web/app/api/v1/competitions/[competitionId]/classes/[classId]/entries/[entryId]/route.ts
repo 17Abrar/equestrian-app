@@ -31,6 +31,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: data.reason,
       });
 
+      void ctx.audit({
+        action: 'competition_entry.withdraw',
+        resourceType: 'competition_entry',
+        resourceId: entryId,
+        changes: { reason: { from: null, to: data.reason } },
+      });
+
       return successResponse(entry);
     },
     { requiredPermission: 'competitions:update' },

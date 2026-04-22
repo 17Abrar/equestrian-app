@@ -15,6 +15,34 @@
       "when": 1774948907312,
       "tag": "0001_robust_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776796292617,
+      "tag": "0002_indexes_and_drift",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776796400000,
+      "tag": "0003_rls_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776820059583,
+      "tag": "0004_payment_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776822794554,
+      "tag": "0005_booking_provider_refs",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, unique, index } from 'drizzle-orm/pg-core';
 import { userRoleEnum } from './enums';
 import { clubs } from './clubs';
 
@@ -19,5 +19,9 @@ export const clubMembers = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [unique('club_members_club_user_unique').on(table.clubId, table.clerkUserId)],
+  (table) => [
+    unique('club_members_club_user_unique').on(table.clubId, table.clerkUserId),
+    index('idx_club_members_user').on(table.clerkUserId),
+    index('idx_club_members_role').on(table.clubId, table.role),
+  ],
 );

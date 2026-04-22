@@ -64,6 +64,12 @@ export async function POST(_request: NextRequest) {
         completedBy: ctx.memberId,
       });
 
+      void ctx.audit({
+        action: 'club.onboarding_complete',
+        resourceType: 'club',
+        resourceId: ctx.clubId,
+      });
+
       return successResponse({ completed: true });
     },
     { requiredPermission: 'settings:update' },

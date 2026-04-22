@@ -11,3 +11,5 @@ export * from './finances';
 export * from './reports';
 export * from './dashboard';
 export * from './audit-log';
+export * from './payment-accounts';
+export * from './audiences';

@@ -19,6 +19,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Exercise schedule not found', 404);
       }
 
+      void ctx.audit({
+        action: 'exercise_schedule.update',
+        resourceType: 'exercise_schedule',
+        resourceId: scheduleId,
+        changes: {
+          horseId: { from: null, to: horseId },
+        },
+      });
+
       return successResponse(schedule);
     },
     { requiredPermission: 'horses:update_care' },
@@ -34,6 +43,15 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!result) {
         return errorResponse('NOT_FOUND', 'Exercise schedule not found', 404);
       }
+
+      void ctx.audit({
+        action: 'exercise_schedule.delete',
+        resourceType: 'exercise_schedule',
+        resourceId: scheduleId,
+        changes: {
+          horseId: { from: null, to: horseId },
+        },
+      });
 
       return successResponse({ id: result.id });
     },

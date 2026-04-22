@@ -1,5 +1,5 @@
 import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
-import { db, dbPool } from '../index';
+import { db } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
@@ -275,12 +275,13 @@ export async function getBookingById(clubId: string, bookingId: string) {
 
 /**
  * Creates a booking and atomically increments the slot's rider count.
- * Uses the WebSocket pool driver because neon-http does not support
- * interactive transactions. The slot update includes a capacity guard
- * to prevent overbooking under concurrent requests.
+ * Must be called inside `runInTenantContext` so the transaction inherits
+ * the `app.current_club_id` session variable for RLS. The slot update
+ * includes a capacity guard that prevents overbooking under concurrent
+ * requests.
  */
 export async function createBooking(clubId: string, data: BookingCreate) {
-  return dbPool.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     // Atomically increment rider count only if capacity is not exceeded.
     // This prevents the race condition where two concurrent requests both
     // pass the API-level capacity check before either transaction commits.
@@ -309,7 +310,7 @@ export async function createBooking(clubId: string, data: BookingCreate) {
 
 /**
  * Cancels a booking and atomically decrements the slot's rider count.
- * Uses the WebSocket pool driver for transaction support.
+ * Must be called inside `runInTenantContext`.
  */
 export async function cancelBooking(
   clubId: string,
@@ -318,7 +319,7 @@ export async function cancelBooking(
   cancelledByMemberId: string,
   cancellationFee?: number,
 ) {
-  return dbPool.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const result = await tx
       .update(bookings)
       .set({
@@ -377,6 +378,34 @@ export async function markBookingNoShow(
         sql`${bookings.status} = 'confirmed'`,
       ),
     )
+    .returning();
+
+  return result[0] ?? null;
+}
+
+/**
+ * Attaches (or updates) the payment-provider reference on a booking. Called
+ * after the active provider returns a PaymentIntent / order / equivalent.
+ * Idempotent — calling again with the same values is a no-op.
+ */
+export async function setBookingPaymentRef(
+  clubId: string,
+  bookingId: string,
+  data: {
+    paymentProvider: 'stripe' | 'n_genius' | 'ziina';
+    providerPaymentId: string;
+    paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed' | 'overdue';
+  },
+) {
+  const result = await db
+    .update(bookings)
+    .set({
+      paymentProvider: data.paymentProvider,
+      providerPaymentId: data.providerPaymentId,
+      ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
     .returning();
 
   return result[0] ?? null;

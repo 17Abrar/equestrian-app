@@ -1,5 +1,5 @@
 import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
-import { db, dbPool } from '../index';
+import { db } from '../index';
 import {
   competitions,
   competitionClasses,
@@ -217,11 +217,14 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
  * Atomically creates a competition entry after verifying:
  * 1. Registration deadline has not passed
  * 2. Class is not full (max entries not exceeded)
- * Uses dbPool for transaction support.
+ * Must be called inside `runInTenantContext`.
  */
 export async function createCompetitionEntry(clubId: string, data: EntryCreate) {
-  return dbPool.transaction(async (tx) => {
-    // Load the class and its competition to check deadline + capacity
+  return db.transaction(async (tx) => {
+    // Acquire a row-level lock on the class so concurrent entry attempts for
+    // the same class serialize rather than racing past the capacity check.
+    // Without this, two parallel requests could both see `count < max` and
+    // both insert, blowing past `maxEntries`.
     const classRow = await tx
       .select({
         id: competitionClasses.id,
@@ -235,6 +238,7 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
           eq(competitionClasses.clubId, clubId),
         ),
       )
+      .for('update')
       .limit(1);
 
     const cls = classRow[0];

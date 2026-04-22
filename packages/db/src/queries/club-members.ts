@@ -1,5 +1,5 @@
 import { eq, and, asc, ilike, sql, SQL } from 'drizzle-orm';
-import { db, dbPool } from '../index';
+import { db } from '../index';
 import { clubMembers } from '../schema/club-members';
 import { escapeLikePattern } from '@equestrian/shared/utils';
 

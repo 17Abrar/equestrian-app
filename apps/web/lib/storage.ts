@@ -11,7 +11,26 @@ const ALLOWED_CONTENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
-const _MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+// Folder names: lowercase letters/numbers/underscores, slash-separated segments.
+// Prevents path traversal (`../`) and exotic characters from landing in R2 keys.
+const ALLOWED_FOLDER_PATTERN = /^[a-z][a-z0-9_]*(\/[a-z][a-z0-9_]*)*$/;
+
+// Permission required for the top-level folder segment.
+// Routes should validate this in addition to generic `withAuth` coverage.
+export const UPLOAD_FOLDER_PERMISSIONS: Record<string, string> = {
+  horses: 'horses:update',
+  profile: 'profile:*',
+  finances: 'finances:*',
+  expenses: 'finances:*',
+  competitions: 'competitions:*',
+  emails: 'emails:*',
+  invoices: 'finances:*',
+};
+
+export function getFolderRoot(folder: string): string | null {
+  const root = folder.split('/')[0];
+  return root && root in UPLOAD_FOLDER_PERMISSIONS ? root : null;
+}
 
 function getR2Client() {
   const endpoint = process.env.R2_ENDPOINT;
@@ -46,6 +65,14 @@ export async function getUploadUrl(params: {
 
   if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
     throw new Error(`File type "${contentType}" is not allowed. Allowed: ${ALLOWED_CONTENT_TYPES.join(', ')}`);
+  }
+
+  if (folder.length > 100 || !ALLOWED_FOLDER_PATTERN.test(folder)) {
+    throw new Error('Invalid folder path. Use lowercase segments separated by "/".');
+  }
+
+  if (!getFolderRoot(folder)) {
+    throw new Error(`Folder "${folder}" is not a known upload target.`);
   }
 
   const bucketName = process.env.R2_BUCKET_NAME;

@@ -31,6 +31,12 @@ export async function POST(request: NextRequest) {
         return errorResponse('CREATE_FAILED', 'Failed to create expense', 500);
       }
 
+      void ctx.audit({
+        action: 'expense.create',
+        resourceType: 'expense',
+        resourceId: expense.id,
+      });
+
       return successResponse(expense, 201);
     },
     { requiredPermission: 'finances:create' },

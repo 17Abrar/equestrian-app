@@ -9,6 +9,7 @@ import {
   timestamp,
   time,
   numeric,
+  index,
 } from 'drizzle-orm/pg-core';
 import { fileCategoryEnum } from './enums';
 import { clubs } from './clubs';
@@ -44,7 +45,12 @@ export const horseHealthRecords = pgTable('horse_health_records', {
   createdByMemberId: uuid('created_by_member_id').references(() => clubMembers.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_health_records_club').on(table.clubId),
+  index('idx_health_records_horse').on(table.horseId),
+  index('idx_health_records_type').on(table.horseId, table.recordType),
+  index('idx_health_records_next_due').on(table.nextDueDate),
+]);
 
 export const horseMedications = pgTable('horse_medications', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -67,7 +73,10 @@ export const horseMedications = pgTable('horse_medications', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_medications_horse').on(table.horseId),
+  index('idx_medications_active').on(table.horseId, table.isActive),
+]);
 
 export const horseMedicationLogs = pgTable('horse_medication_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -88,7 +97,10 @@ export const horseMedicationLogs = pgTable('horse_medication_logs', {
   notes: text('notes'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_med_logs_medication').on(table.medicationId),
+  index('idx_med_logs_date').on(table.administeredAt),
+]);
 
 export const horseFeedingPlans = pgTable('horse_feeding_plans', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -108,7 +120,9 @@ export const horseFeedingPlans = pgTable('horse_feeding_plans', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_feeding_plans_horse').on(table.horseId),
+]);
 
 export const horseFeedTracker = pgTable('horse_feed_tracker', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -127,7 +141,10 @@ export const horseFeedTracker = pgTable('horse_feed_tracker', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_feed_tracker_club').on(table.clubId),
+  index('idx_feed_tracker_empty').on(table.estimatedEmptyDate),
+]);
 
 export const horseExerciseSchedules = pgTable('horse_exercise_schedules', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -146,7 +163,9 @@ export const horseExerciseSchedules = pgTable('horse_exercise_schedules', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_exercise_horse').on(table.horseId),
+]);
 
 export const horseDocuments = pgTable('horse_documents', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -166,4 +185,7 @@ export const horseDocuments = pgTable('horse_documents', {
   uploadedByMemberId: uuid('uploaded_by_member_id').references(() => clubMembers.id),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_documents_horse').on(table.horseId),
+  index('idx_documents_category').on(table.horseId, table.category),
+]);

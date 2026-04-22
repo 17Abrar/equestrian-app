@@ -41,6 +41,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Rider not found', 404);
       }
 
+      void ctx.audit({
+        action: 'rider.update',
+        resourceType: 'rider',
+        resourceId: riderId,
+      });
+
       return successResponse(rider);
     },
     { requiredPermission: 'riders:update' },

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { type ZodError, type ZodTypeAny } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
+import { runInTenantContext } from '@equestrian/db';
 import { getTenantContext, TenantError } from './tenant';
 import { hasPermission, PermissionError } from './permissions';
 import { logger } from './logger';
@@ -105,7 +106,7 @@ export async function withAuth(
 
     // Rate limiting (per user, default 60 req/min)
     const rateLimitConfig = options?.rateLimit ?? { maxRequests: 60, windowMs: 60_000 };
-    const rateLimitResult = checkRateLimit(tenantCtx.userId, rateLimitConfig);
+    const rateLimitResult = await checkRateLimit(tenantCtx.userId, rateLimitConfig);
     if (!rateLimitResult.allowed) {
       const retryAfter = Math.ceil((rateLimitResult.retryAfterMs ?? 1000) / 1000);
       logger.warn('rate_limit_exceeded', {
@@ -164,7 +165,11 @@ export async function withAuth(
       audit: auditFn,
     };
 
-    return await handler(ctx);
+    // Wrap the handler in a pooled transaction with `app.current_club_id`
+    // pre-set, so every query via `db` inside the handler is RLS-isolated
+    // to this club. Queries on tables exempt from RLS (clubs, club_members,
+    // audit_log, community_*) remain accessible regardless.
+    return await runInTenantContext(tenantCtx.clubId, () => handler(ctx));
   } catch (error) {
     if (error instanceof TenantError) {
       const status = error.code === 'UNAUTHORIZED' ? 401 : 400;

@@ -9,12 +9,14 @@ import {
   boolean,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import {
   bookingStatusEnum,
   paymentStatusEnum,
   paymentMethodEnum,
   skillLevelEnum,
+  paymentProviderEnum,
 } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -36,7 +38,9 @@ export const arenas = pgTable('arenas', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_arenas_club').on(table.clubId),
+]);
 
 export const arenaSchedules = pgTable('arena_schedules', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -55,7 +59,9 @@ export const arenaSchedules = pgTable('arena_schedules', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_arena_schedules').on(table.arenaId, table.dayOfWeek),
+]);
 
 export const lessonTypes = pgTable('lesson_types', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -78,7 +84,9 @@ export const lessonTypes = pgTable('lesson_types', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_lesson_types_club').on(table.clubId),
+]);
 
 export const bookingSlots = pgTable('booking_slots', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -101,7 +109,11 @@ export const bookingSlots = pgTable('booking_slots', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_slots_club_date').on(table.clubId, table.date),
+  index('idx_slots_coach').on(table.coachMemberId, table.date),
+  index('idx_slots_arena').on(table.arenaId, table.date),
+]);
 
 export const bookings = pgTable('bookings', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -128,8 +140,15 @@ export const bookings = pgTable('bookings', {
   couponId: uuid('coupon_id').references(() => coupons.id),
   packageId: uuid('package_id').references(() => riderPackages.id),
 
-  // Stripe
+  // Stripe (legacy — retained while older rows still reference it directly).
+  // New code uses `paymentProvider` + `providerPaymentId` below.
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
+
+  // Generic payment-provider reference. `paymentProvider` disambiguates which
+  // adapter owns `providerPaymentId` (a Stripe PaymentIntent id, N-Genius
+  // order reference, or Ziina payment-intent id).
+  paymentProvider: paymentProviderEnum('payment_provider'),
+  providerPaymentId: varchar('provider_payment_id', { length: 255 }),
 
   // Check-in
   checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
@@ -150,7 +169,15 @@ export const bookings = pgTable('bookings', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_bookings_club').on(table.clubId),
+  index('idx_bookings_rider').on(table.riderMemberId),
+  index('idx_bookings_slot').on(table.slotId),
+  index('idx_bookings_horse').on(table.horseId),
+  index('idx_bookings_status').on(table.clubId, table.status),
+  index('idx_bookings_date').on(table.clubId, table.createdAt),
+  index('idx_bookings_stripe').on(table.stripePaymentIntentId),
+]);
 
 export const horsePairingHistory = pgTable('horse_pairing_history', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -171,7 +198,9 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
   notes: text('notes'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_pairing_horse_rider').on(table.horseId, table.riderMemberId),
+]);
 
 export const waitlist = pgTable(
   'waitlist',
@@ -194,5 +223,8 @@ export const waitlist = pgTable(
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [unique('waitlist_slot_rider_unique').on(table.slotId, table.riderMemberId)],
+  (table) => [
+    unique('waitlist_slot_rider_unique').on(table.slotId, table.riderMemberId),
+    index('idx_waitlist_slot').on(table.slotId, table.position),
+  ],
 );

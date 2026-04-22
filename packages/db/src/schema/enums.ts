@@ -118,3 +118,16 @@ export const horseSaleStatusEnum = pgEnum('horse_sale_status', [
   'for_sale',
   'sold',
 ]);
+
+export const paymentProviderEnum = pgEnum('payment_provider', [
+  'stripe',
+  'n_genius',
+  'ziina',
+]);
+
+export const paymentAccountStatusEnum = pgEnum('payment_account_status', [
+  'pending',
+  'connected',
+  'disabled',
+  'error',
+]);

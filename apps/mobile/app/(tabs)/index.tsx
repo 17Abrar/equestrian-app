@@ -95,10 +95,16 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [refetch]);
 
-  const bookings = useMemo(() => {
-    if (!data?.success) return [];
-    const allBookings = 'data' in data ? (data.data as Booking[]) : [];
-    return allBookings;
+  // The API client wraps every response into `{ success, data } | { success, error }`
+  // so react-query never sees a rejection — we must split success/error ourselves.
+  const errorMessage =
+    data && 'success' in data && !data.success
+      ? data.error?.message ?? 'Unable to load your bookings'
+      : null;
+
+  const bookings = useMemo<Booking[]>(() => {
+    if (!data || !('success' in data) || !data.success) return [];
+    return ('data' in data ? (data.data as Booking[]) : []);
   }, [data]);
 
   const upcomingBookings = useMemo(() => {
@@ -151,21 +157,37 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Next Lesson */}
+        {/* Loading */}
         {isLoading && (
           <View className="items-center py-8">
             <ActivityIndicator size="large" color="#374151" />
           </View>
         )}
 
-        {!isLoading && nextBooking && (
+        {/* Error */}
+        {!isLoading && errorMessage && (
+          <View className="mx-6 items-center rounded-2xl border border-red-200 bg-red-50 px-6 py-8">
+            <Text className="text-lg font-semibold text-red-700">Couldn&apos;t load bookings</Text>
+            <Text className="mt-1 text-center text-sm text-red-500">{errorMessage}</Text>
+            <TouchableOpacity
+              className="mt-4 rounded-xl bg-red-600 px-6 py-2.5"
+              onPress={() => refetch()}
+              activeOpacity={0.8}
+            >
+              <Text className="font-semibold text-white">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Next Lesson */}
+        {!isLoading && !errorMessage && nextBooking && (
           <View className="px-6 pb-2">
             <BookingCard booking={nextBooking} isNext />
           </View>
         )}
 
         {/* Upcoming List */}
-        {!isLoading && upcomingBookings.length > 1 && (
+        {!isLoading && !errorMessage && upcomingBookings.length > 1 && (
           <View className="px-6 pt-4">
             <Text className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
               Upcoming
@@ -179,7 +201,7 @@ export default function HomeScreen() {
         )}
 
         {/* Empty State */}
-        {!isLoading && upcomingBookings.length === 0 && (
+        {!isLoading && !errorMessage && upcomingBookings.length === 0 && (
           <View className="items-center px-6 py-12">
             <Text className="text-lg font-semibold text-gray-700">No upcoming lessons</Text>
             <Text className="mt-1 text-center text-sm text-gray-400">

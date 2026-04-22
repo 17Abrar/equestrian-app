@@ -25,6 +25,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(createFeedingPlanSchema, body);
       const plan = await createFeedingPlan(ctx.clubId, horseId, data);
+
+      if (plan) {
+        void ctx.audit({
+          action: 'feeding_plan.create',
+          resourceType: 'feeding_plan',
+          resourceId: plan.id,
+          changes: {
+            horseId: { from: null, to: horseId },
+          },
+        });
+      }
+
       return successResponse(plan, 201);
     },
     { requiredPermission: 'horses:update_care' },

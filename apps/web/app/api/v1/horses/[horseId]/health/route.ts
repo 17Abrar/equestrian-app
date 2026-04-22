@@ -41,6 +41,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         type: data.recordType,
       });
 
+      if (record) {
+        void ctx.audit({
+          action: 'health_record.create',
+          resourceType: 'health_record',
+          resourceId: record.id,
+          changes: {
+            horseId: { from: null, to: horseId },
+            recordType: { from: null, to: data.recordType },
+          },
+        });
+      }
+
       return successResponse(record, 201);
     },
     { requiredPermission: 'horses:update' },

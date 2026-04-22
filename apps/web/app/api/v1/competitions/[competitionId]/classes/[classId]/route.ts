@@ -20,6 +20,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Class not found', 404);
       }
 
+      void ctx.audit({
+        action: 'competition_class.update',
+        resourceType: 'competition_class',
+        resourceId: classId,
+      });
+
       return successResponse(cls);
     },
     { requiredPermission: 'competitions:update' },
@@ -35,6 +41,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse('NOT_FOUND', 'Class not found', 404);
       }
+
+      void ctx.audit({
+        action: 'competition_class.delete',
+        resourceType: 'competition_class',
+        resourceId: classId,
+      });
 
       return successResponse({ id: deleted.id });
     },

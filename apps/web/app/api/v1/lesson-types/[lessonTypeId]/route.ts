@@ -41,6 +41,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Lesson type not found', 404);
       }
 
+      void ctx.audit({
+        action: 'lesson_type.update',
+        resourceType: 'lesson_type',
+        resourceId: lessonTypeId,
+      });
+
       return successResponse(lessonType);
     },
     { requiredPermission: 'bookings:update' },
@@ -56,6 +62,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!lessonType) {
         return errorResponse('NOT_FOUND', 'Lesson type not found', 404);
       }
+
+      void ctx.audit({
+        action: 'lesson_type.delete',
+        resourceType: 'lesson_type',
+        resourceId: lessonTypeId,
+      });
 
       return successResponse(lessonType);
     },

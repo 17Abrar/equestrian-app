@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import {
   couponStatusEnum,
@@ -34,7 +35,9 @@ export const packages = pgTable('packages', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_packages_club').on(table.clubId),
+]);
 
 export const riderPackages = pgTable('rider_packages', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -57,7 +60,10 @@ export const riderPackages = pgTable('rider_packages', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_rider_packages_rider').on(table.riderMemberId),
+  index('idx_rider_packages_expiry').on(table.expiresAt),
+]);
 
 export const coupons = pgTable(
   'coupons',
@@ -86,7 +92,10 @@ export const coupons = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [unique('coupons_club_code_unique').on(table.clubId, table.code)],
+  (table) => [
+    unique('coupons_club_code_unique').on(table.clubId, table.code),
+    index('idx_coupons_status').on(table.clubId, table.status),
+  ],
 );
 
 export const couponUsages = pgTable('coupon_usages', {
@@ -108,4 +117,7 @@ export const couponUsages = pgTable('coupon_usages', {
   bookingType: varchar('booking_type', { length: 50 }),
 
   usedAt: timestamp('used_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_coupon_usages_coupon').on(table.couponId),
+  index('idx_coupon_usages_rider').on(table.couponId, table.riderMemberId),
+]);

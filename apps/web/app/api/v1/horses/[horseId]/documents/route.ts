@@ -31,6 +31,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         uploadedByMemberId: ctx.memberId,
       });
 
+      if (document) {
+        void ctx.audit({
+          action: 'horse_document.create',
+          resourceType: 'horse_document',
+          resourceId: document.id,
+          changes: {
+            horseId: { from: null, to: horseId },
+          },
+        });
+      }
+
       return successResponse(document, 201);
     },
     { requiredPermission: 'horses:update' },

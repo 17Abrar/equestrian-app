@@ -19,6 +19,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Feeding plan not found', 404);
       }
 
+      void ctx.audit({
+        action: 'feeding_plan.update',
+        resourceType: 'feeding_plan',
+        resourceId: planId,
+        changes: {
+          horseId: { from: null, to: horseId },
+        },
+      });
+
       return successResponse(plan);
     },
     { requiredPermission: 'horses:update_care' },
@@ -34,6 +43,15 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!result) {
         return errorResponse('NOT_FOUND', 'Feeding plan not found', 404);
       }
+
+      void ctx.audit({
+        action: 'feeding_plan.delete',
+        resourceType: 'feeding_plan',
+        resourceId: planId,
+        changes: {
+          horseId: { from: null, to: horseId },
+        },
+      });
 
       return successResponse({ id: result.id });
     },

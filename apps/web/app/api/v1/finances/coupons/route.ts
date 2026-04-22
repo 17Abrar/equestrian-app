@@ -38,6 +38,12 @@ export async function POST(request: NextRequest) {
         return errorResponse('CREATE_FAILED', 'Failed to create coupon', 500);
       }
 
+      void ctx.audit({
+        action: 'coupon.create',
+        resourceType: 'coupon',
+        resourceId: coupon.id,
+      });
+
       return successResponse(coupon, 201);
     },
     { requiredPermission: 'coupons:create' },

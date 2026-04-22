@@ -30,6 +30,12 @@ export async function POST(request: NextRequest) {
         return errorResponse('CREATE_FAILED', 'Failed to create lesson type', 500);
       }
 
+      void ctx.audit({
+        action: 'lesson_type.create',
+        resourceType: 'lesson_type',
+        resourceId: lessonType.id,
+      });
+
       return successResponse(lessonType, 201);
     },
     { requiredPermission: 'bookings:create' },

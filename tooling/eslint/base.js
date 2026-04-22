@@ -28,11 +28,13 @@ module.exports = [
       'node_modules/',
       'dist/',
       '.next/',
+      '.open-next/',
       '.expo/',
       '.turbo/',
       'coverage/',
       '**/*.config.js',
       '**/next-env.d.ts',
+      '**/cloudflare-env.d.ts',
     ],
   },
 ];

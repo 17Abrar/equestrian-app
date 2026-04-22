@@ -75,6 +75,12 @@ export async function POST(request: NextRequest) {
         return errorResponse('CREATE_FAILED', 'Failed to create booking slot', 500);
       }
 
+      void ctx.audit({
+        action: 'booking_slot.create',
+        resourceType: 'booking_slot',
+        resourceId: slot.id,
+      });
+
       return successResponse(slot, 201);
     },
     { requiredPermission: 'bookings:create' },

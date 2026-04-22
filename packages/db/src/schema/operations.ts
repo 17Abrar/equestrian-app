@@ -12,6 +12,7 @@ import {
   inet,
   unique,
   check,
+  index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { taskStatusEnum, postTypeEnum } from './enums';
@@ -40,7 +41,11 @@ export const groomTasks = pgTable('groom_tasks', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_groom_tasks_date').on(table.clubId, table.scheduledDate),
+  index('idx_groom_tasks_assigned').on(table.assignedToMemberId, table.scheduledDate),
+  index('idx_groom_tasks_horse').on(table.horseId, table.scheduledDate),
+]);
 
 export const riderAchievements = pgTable('rider_achievements', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -58,7 +63,9 @@ export const riderAchievements = pgTable('rider_achievements', {
   notified: boolean('notified').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_achievements_rider').on(table.riderMemberId),
+]);
 
 export const communityTopics = pgTable('community_topics', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -72,7 +79,9 @@ export const communityTopics = pgTable('community_topics', {
   isActive: boolean('is_active').notNull().default(true),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_topics_club').on(table.clubId),
+]);
 
 export const communityPosts = pgTable('community_posts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -103,7 +112,10 @@ export const communityPosts = pgTable('community_posts', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_posts_topic_created').on(table.topicId, table.createdAt),
+  index('idx_posts_author').on(table.authorMemberId),
+]);
 
 export const communityComments = pgTable('community_comments', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -125,7 +137,10 @@ export const communityComments = pgTable('community_comments', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_comments_post').on(table.postId),
+  index('idx_comments_parent').on(table.parentCommentId),
+]);
 
 export const communityVotes = pgTable(
   'community_votes',
@@ -166,7 +181,10 @@ export const notifications = pgTable('notifications', {
   smsSent: boolean('sms_sent').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_notifications_recipient').on(table.recipientMemberId, table.isRead),
+  index('idx_notifications_date').on(table.recipientMemberId, table.createdAt),
+]);
 
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -181,4 +199,8 @@ export const auditLog = pgTable('audit_log', {
   userAgent: text('user_agent'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_audit_club').on(table.clubId, table.createdAt),
+  index('idx_audit_actor').on(table.actorMemberId, table.createdAt),
+  index('idx_audit_resource').on(table.resourceType, table.resourceId),
+]);

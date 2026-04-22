@@ -16,6 +16,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Health record not found', 404);
       }
 
+      void ctx.audit({
+        action: 'health_record.delete',
+        resourceType: 'health_record',
+        resourceId: recordId,
+      });
+
       return successResponse({ id: result.id });
     },
     { requiredPermission: 'horses:update' },

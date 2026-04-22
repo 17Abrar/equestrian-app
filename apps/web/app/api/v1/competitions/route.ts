@@ -66,6 +66,12 @@ export async function POST(request: NextRequest) {
         name: data.name,
       });
 
+      void ctx.audit({
+        action: 'competition.create',
+        resourceType: 'competition',
+        resourceId: competition.id,
+      });
+
       return successResponse(competition, 201);
     },
     { requiredPermission: 'competitions:create' },

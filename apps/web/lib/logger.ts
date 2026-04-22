@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/nextjs';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
@@ -51,11 +53,12 @@ function sanitize(data: unknown, depth = 0): unknown {
 }
 
 function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
+  const sanitized = data ? (sanitize(data) as Record<string, unknown>) : {};
   const entry: LogEntry = {
     level,
     event,
     timestamp: new Date().toISOString(),
-    ...(data ? (sanitize(data) as Record<string, unknown>) : {}),
+    ...sanitized,
   };
 
   const output = JSON.stringify(entry);
@@ -63,15 +66,53 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
   switch (level) {
     case 'error':
       console.error(output);
+      forwardToSentry('error', event, sanitized);
       break;
     case 'warn':
       console.warn(output);
+      forwardToSentry('warning', event, sanitized);
       break;
     default:
       // Using console methods intentionally for structured logging
       // eslint-disable-next-line no-console
       console.log(output);
   }
+}
+
+function forwardToSentry(
+  level: 'error' | 'warning',
+  event: string,
+  data: Record<string, unknown>,
+) {
+  // Skip when Sentry isn't configured — avoids meaningless traffic in dev.
+  if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) return;
+
+  // Pull the error object out if present so Sentry renders a real stack
+  // trace instead of a one-line message.
+  const errorValue = data.error;
+  const errorInstance =
+    errorValue instanceof Error
+      ? errorValue
+      : typeof errorValue === 'string'
+        ? new Error(errorValue)
+        : null;
+
+  Sentry.withScope((scope) => {
+    scope.setLevel(level);
+    scope.setTag('logger.event', event);
+    if (typeof data.clubId === 'string') scope.setTag('club_id', data.clubId);
+    if (typeof data.userId === 'string') scope.setUser({ id: data.userId });
+    if (typeof data.requestId === 'string') scope.setTag('request_id', data.requestId);
+    // Full sanitized payload goes in extras so it's visible on the event page
+    // without being promoted to searchable tags.
+    scope.setContext('log_data', data);
+
+    if (errorInstance) {
+      Sentry.captureException(errorInstance);
+    } else {
+      Sentry.captureMessage(event, level);
+    }
+  });
 }
 
 export const logger = {

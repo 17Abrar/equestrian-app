@@ -3,9 +3,14 @@ node_modules/
 
 # Build outputs
 .next/
+.open-next/
+.wrangler/
 dist/
 .turbo/
 *.tsbuildinfo
+
+# Cloudflare Workers generated types
+**/cloudflare-env.d.ts
 
 # Expo
 .expo/

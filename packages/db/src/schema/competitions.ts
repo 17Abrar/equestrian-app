@@ -9,6 +9,7 @@ import {
   numeric,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { paymentStatusEnum, paymentMethodEnum } from './enums';
 import { clubs } from './clubs';
@@ -38,7 +39,10 @@ export const competitions = pgTable('competitions', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_competitions_club').on(table.clubId),
+  index('idx_competitions_date').on(table.clubId, table.startDate),
+]);
 
 export const competitionClasses = pgTable('competition_classes', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -59,7 +63,9 @@ export const competitionClasses = pgTable('competition_classes', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_competition_classes_competition').on(table.competitionId),
+]);
 
 export const competitionEntries = pgTable(
   'competition_entries',
@@ -92,6 +98,7 @@ export const competitionEntries = pgTable(
   },
   (table) => [
     unique('competition_entries_class_rider_unique').on(table.classId, table.riderMemberId),
+    index('idx_competition_entries_rider').on(table.riderMemberId),
   ],
 );
 
@@ -111,4 +118,6 @@ export const competitionResults = pgTable('competition_results', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_competition_results_entry').on(table.entryId),
+]);

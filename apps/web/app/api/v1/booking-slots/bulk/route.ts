@@ -83,6 +83,17 @@ export async function POST(request: NextRequest) {
         daysOfWeek: data.daysOfWeek,
       });
 
+      void ctx.audit({
+        action: 'booking_slot.bulk_create',
+        resourceType: 'booking_slot',
+        changes: {
+          count: { from: null, to: created },
+          lessonTypeId: { from: null, to: data.lessonTypeId },
+          dateFrom: { from: null, to: data.dateFrom },
+          dateTo: { from: null, to: data.dateTo },
+        },
+      });
+
       return successResponse({ created }, 201);
     },
     { requiredPermission: 'bookings:create' },

@@ -26,6 +26,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(createMedicationSchema, body);
       const medication = await createMedication(ctx.clubId, horseId, data);
+
+      if (medication) {
+        void ctx.audit({
+          action: 'medication.create',
+          resourceType: 'medication',
+          resourceId: medication.id,
+          changes: {
+            horseId: { from: null, to: horseId },
+          },
+        });
+      }
+
       return successResponse(medication, 201);
     },
     { requiredPermission: 'horses:update' },

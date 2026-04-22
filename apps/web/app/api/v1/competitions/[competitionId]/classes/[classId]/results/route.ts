@@ -51,6 +51,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('CREATE_FAILED', 'Failed to create result', 500);
       }
 
+      void ctx.audit({
+        action: 'competition_result.create',
+        resourceType: 'competition_result',
+        resourceId: result.id,
+        changes: {
+          classId: { from: null, to: classId },
+          entryId: { from: null, to: data.entryId },
+        },
+      });
+
       return successResponse(result, 201);
     },
     { requiredPermission: 'competitions:update' },

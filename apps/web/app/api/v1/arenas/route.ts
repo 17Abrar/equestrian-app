@@ -30,6 +30,12 @@ export async function POST(request: NextRequest) {
         return errorResponse('CREATE_FAILED', 'Failed to create arena', 500);
       }
 
+      void ctx.audit({
+        action: 'arena.create',
+        resourceType: 'arena',
+        resourceId: arena.id,
+      });
+
       return successResponse(arena, 201);
     },
     { requiredPermission: 'arenas:create' },

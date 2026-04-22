@@ -25,6 +25,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(createExerciseScheduleSchema, body);
       const schedule = await createExerciseSchedule(ctx.clubId, horseId, data);
+
+      if (schedule) {
+        void ctx.audit({
+          action: 'exercise_schedule.create',
+          resourceType: 'exercise_schedule',
+          resourceId: schedule.id,
+          changes: {
+            horseId: { from: null, to: horseId },
+          },
+        });
+      }
+
       return successResponse(schedule, 201);
     },
     { requiredPermission: 'horses:update_care' },

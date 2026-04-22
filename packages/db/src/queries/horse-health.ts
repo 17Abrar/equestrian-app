@@ -8,6 +8,14 @@ import {
   horseExerciseSchedules,
   horseDocuments,
 } from '../schema/horse-health';
+import { decryptFields, encryptFields } from '../crypto';
+
+// Columns on horse_health_records that contain regulated medical content.
+// Stored encrypted at rest; decrypted only in the query layer.
+const HEALTH_ENCRYPTED_FIELDS = ['description', 'diagnosis', 'treatment'] as const;
+
+// Free-form clinical notes on medications are also PHI-sensitive.
+const MEDICATION_ENCRYPTED_FIELDS = ['notes'] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -46,19 +54,23 @@ export async function getHealthRecords(clubId: string, horseId: string, recordTy
     conditions.push(sql`${horseHealthRecords.recordType} = ${recordType}`);
   }
 
-  return db
+  const rows = await db
     .select()
     .from(horseHealthRecords)
     .where(and(...conditions))
     .orderBy(desc(horseHealthRecords.date));
+
+  return rows.map((row) => decryptFields(row, HEALTH_ENCRYPTED_FIELDS));
 }
 
 export async function createHealthRecord(clubId: string, horseId: string, data: HealthRecordCreate) {
+  const encrypted = encryptFields(data, HEALTH_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseHealthRecords)
-    .values({ ...data, clubId, horseId })
+    .values({ ...encrypted, clubId, horseId })
     .returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, HEALTH_ENCRYPTED_FIELDS) : row;
 }
 
 export async function deleteHealthRecord(clubId: string, horseId: string, recordId: string) {
@@ -87,19 +99,23 @@ export async function getMedications(clubId: string, horseId: string, activeOnly
     conditions.push(eq(horseMedications.isActive, true));
   }
 
-  return db
+  const rows = await db
     .select()
     .from(horseMedications)
     .where(and(...conditions))
     .orderBy(desc(horseMedications.createdAt));
+
+  return rows.map((row) => decryptFields(row, MEDICATION_ENCRYPTED_FIELDS));
 }
 
 export async function createMedication(clubId: string, horseId: string, data: MedicationCreate) {
+  const encrypted = encryptFields(data, MEDICATION_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseMedications)
-    .values({ ...data, clubId, horseId })
+    .values({ ...encrypted, clubId, horseId })
     .returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, MEDICATION_ENCRYPTED_FIELDS) : row;
 }
 
 export async function updateMedication(
@@ -108,9 +124,10 @@ export async function updateMedication(
   medicationId: string,
   data: Partial<MedicationCreate>,
 ) {
+  const encrypted = encryptFields(data, MEDICATION_ENCRYPTED_FIELDS);
   const result = await db
     .update(horseMedications)
-    .set({ ...data, updatedAt: new Date() })
+    .set({ ...encrypted, updatedAt: new Date() })
     .where(
       and(
         eq(horseMedications.id, medicationId),
@@ -119,7 +136,8 @@ export async function updateMedication(
       ),
     )
     .returning();
-  return result[0] ?? null;
+  const row = result[0];
+  return row ? decryptFields(row, MEDICATION_ENCRYPTED_FIELDS) : null;
 }
 
 // ─── Medication Logs ──────────────────────────────────────────────────

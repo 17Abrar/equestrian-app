@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useBookingSlots, useCreateBooking, useMe, type BookingSlot } from '@/hooks/use-bookings';
+import { usePayBooking } from '@/hooks/use-booking-payment';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -121,6 +122,7 @@ export default function BookScreen() {
 
   const { data: slotsData, isLoading } = useBookingSlots({ dateFrom, dateTo });
   const createBooking = useCreateBooking();
+  const { pay, isPaying } = usePayBooking();
 
   const slots: BookingSlot[] = useMemo(() => {
     if (!slotsData?.success) return [];
@@ -138,15 +140,48 @@ export default function BookScreen() {
       autoMatchHorse: true,
     });
 
-    if (result.success) {
+    if (!result.success) {
+      const errorData = result as { error?: { message?: string } };
+      Alert.alert('Booking Failed', errorData.error?.message ?? 'Please try again.');
+      return;
+    }
+
+    const booking = result.data as { id: string; paymentStatus: string };
+
+    // Offline payment methods (cash, package credit, etc.) don't need the
+    // hosted-checkout roundtrip — server returns `paid` or leaves it as
+    // `pending` with a non-online method, either way we're done here.
+    if (booking.paymentStatus === 'paid') {
       Alert.alert('Booking Confirmed', 'Your lesson has been booked!', [
         { text: 'OK', onPress: () => router.push('/(tabs)') },
       ]);
-    } else {
-      const errorData = result as { error?: { message?: string } };
-      Alert.alert('Booking Failed', errorData.error?.message ?? 'Please try again.');
+      return;
     }
-  }, [selectedSlot, memberId, createBooking, router]);
+
+    // Kick the rider through the hosted payment page. We don't block on the
+    // webhook here — it'll land while the user is looking at their bookings
+    // list, and the list auto-refreshes via the queryClient invalidation.
+    const payResult = await pay(booking.id);
+
+    if (payResult.ok) {
+      Alert.alert(
+        'Booking Confirmed',
+        'Thanks! We&apos;ll confirm the payment in a moment.',
+        [{ text: 'OK', onPress: () => router.push('/(tabs)') }],
+      );
+    } else if (payResult.dismissed) {
+      Alert.alert(
+        'Payment Incomplete',
+        'Your booking is reserved but not paid. You can finish payment from the Home tab.',
+        [{ text: 'OK', onPress: () => router.push('/(tabs)') }],
+      );
+    } else {
+      Alert.alert(
+        'Payment Failed',
+        payResult.errorMessage ?? 'We couldn&apos;t start the payment flow. Try again from Home.',
+      );
+    }
+  }, [selectedSlot, memberId, createBooking, pay, router]);
 
   // ─── Confirm Step ──────────────────────────────────────────────────
 
@@ -200,16 +235,16 @@ export default function BookScreen() {
         {/* Bottom action */}
         <View className="absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-6 pb-10 pt-4">
           <TouchableOpacity
-            className={`rounded-2xl py-4 ${createBooking.isPending ? 'bg-gray-400' : 'bg-gray-900'}`}
+            className={`rounded-2xl py-4 ${createBooking.isPending || isPaying ? 'bg-gray-400' : 'bg-gray-900'}`}
             onPress={handleConfirmBooking}
-            disabled={createBooking.isPending || !memberId}
+            disabled={createBooking.isPending || isPaying || !memberId}
             activeOpacity={0.8}
           >
-            {createBooking.isPending ? (
+            {createBooking.isPending || isPaying ? (
               <ActivityIndicator color="white" />
             ) : (
               <Text className="text-center text-base font-semibold text-white">
-                Confirm Booking
+                Confirm &amp; Pay
               </Text>
             )}
           </TouchableOpacity>

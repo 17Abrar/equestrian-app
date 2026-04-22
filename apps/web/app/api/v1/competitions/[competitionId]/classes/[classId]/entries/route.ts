@@ -59,6 +59,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         riderId: data.riderMemberId,
       });
 
+      void ctx.audit({
+        action: 'competition_entry.create',
+        resourceType: 'competition_entry',
+        resourceId: entry.id,
+        changes: {
+          classId: { from: null, to: classId },
+          riderMemberId: { from: null, to: data.riderMemberId },
+        },
+      });
+
       return successResponse(entry, 201);
     },
     { requiredPermission: 'competitions:register' },

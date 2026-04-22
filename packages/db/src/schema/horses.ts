@@ -8,6 +8,7 @@ import {
   integer,
   boolean,
   timestamp,
+  index,
 } from 'drizzle-orm/pg-core';
 import { horseStatusEnum, skillLevelEnum, horseSaleStatusEnum } from './enums';
 import { clubs } from './clubs';
@@ -76,4 +77,10 @@ export const horses = pgTable('horses', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  index('idx_horses_club').on(table.clubId),
+  index('idx_horses_status').on(table.clubId, table.status),
+  index('idx_horses_skill').on(table.clubId, table.skillLevel),
+  index('idx_horses_owner').on(table.ownerMemberId),
+  index('idx_horses_deleted').on(table.deletedAt),
+]);

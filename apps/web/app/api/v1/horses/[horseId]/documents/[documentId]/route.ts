@@ -16,6 +16,15 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Document not found', 404);
       }
 
+      void ctx.audit({
+        action: 'horse_document.delete',
+        resourceType: 'horse_document',
+        resourceId: documentId,
+        changes: {
+          horseId: { from: null, to: horseId },
+        },
+      });
+
       return successResponse({ id: result.id });
     },
     { requiredPermission: 'horses:update' },
