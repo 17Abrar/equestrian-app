@@ -10,7 +10,12 @@ import {
   timestamp,
   index,
 } from 'drizzle-orm/pg-core';
-import { horseStatusEnum, skillLevelEnum, horseSaleStatusEnum } from './enums';
+import {
+  horseStatusEnum,
+  skillLevelEnum,
+  horseSaleStatusEnum,
+  ownershipStatusEnum,
+} from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 
@@ -71,6 +76,16 @@ export const horses = pgTable('horses', {
   // Photos
   primaryPhotoUrl: text('primary_photo_url'),
   photoUrls: text('photo_urls').array(),
+
+  // Ownership (Round 8). Separate from operational `status` — a pending
+  // registration isn't available for lessons yet; an active ownership can
+  // still have the horse "resting" or "injured".
+  ownershipStatus: ownershipStatusEnum('ownership_status').notNull().default('active'),
+  monthlyLiveryFeeMinor: integer('monthly_livery_fee_minor'),
+  liveryStartDate: date('livery_start_date'),
+  liveryEndDate: date('livery_end_date'),
+  ownershipDeclineReason: text('ownership_decline_reason'),
+  ownershipSubmittedAt: timestamp('ownership_submitted_at', { withTimezone: true }),
 
   // Metadata
   notes: text('notes'),

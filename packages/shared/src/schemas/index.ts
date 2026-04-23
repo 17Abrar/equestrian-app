@@ -90,10 +90,61 @@ export const horseFiltersSchema = z.object({
   search: z.string().optional(),
   status: z.enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold']).optional(),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+  ownershipStatus: z.enum(['pending', 'active', 'retired', 'declined']).optional(),
   ...paginationSchema.shape,
 });
 
 export type HorseFiltersInput = z.infer<typeof horseFiltersSchema>;
+
+// ─── Horse Ownership (Round 8 — rider self-registration) ───────────────
+
+/**
+ * Rider-facing horse registration. A deliberately shorter form than the
+ * admin `createHorseSchema` — riders submit just enough to describe their
+ * horse; the admin fills in the rest (gear sizes, insurance, etc.) after
+ * approval. `clubId` is required because a rider can be a member of multiple
+ * stables and needs to pick which one will stable the horse.
+ */
+export const registerHorseOwnershipSchema = z.object({
+  clubId: z.string().uuid('Select a stable'),
+  name: z.string().min(1, 'Name is required').max(255),
+  breed: z.string().max(100).optional(),
+  gender: z.string().max(20).optional(),
+  dateOfBirth: z.string().optional(),
+  color: z.string().max(100).optional(),
+  heightHands: optionalNumeric(z.number().positive()),
+  weightKg: optionalNumeric(z.number().positive()),
+  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+  primaryPhotoUrl: z.string().url().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export type RegisterHorseOwnershipFormValues = z.input<typeof registerHorseOwnershipSchema>;
+export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnershipSchema>;
+
+/**
+ * Admin approval. Fee is in minor units (AED fils). A zero fee is legal —
+ * it means the stable is housing the owner's horse gratis or billing
+ * off-platform — and still flips the record to `active`.
+ */
+export const approveHorseOwnershipSchema = z.object({
+  monthlyLiveryFeeMinor: numericField(z.number().int().min(0)),
+  liveryStartDate: z.string().min(1, 'Start date is required'),
+});
+
+export type ApproveHorseOwnershipInput = z.output<typeof approveHorseOwnershipSchema>;
+
+export const declineHorseOwnershipSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(1000),
+});
+
+export type DeclineHorseOwnershipInput = z.output<typeof declineHorseOwnershipSchema>;
+
+export const retireHorseOwnershipSchema = z.object({
+  liveryEndDate: z.string().optional(),
+});
+
+export type RetireHorseOwnershipInput = z.output<typeof retireHorseOwnershipSchema>;
 
 // ─── Riders ────────────────────────────────────────────────────────────
 
@@ -366,6 +417,13 @@ export const updateNotificationsSchema = z.object({
     waitlist_promotion: notificationChannel.optional(),
     rider_welcome: notificationChannel.optional(),
     invoice_issued: notificationChannel.optional(),
+    // Round 8 / 8.5 — horse ownership + livery billing
+    horse_registration_submitted: notificationChannel.optional(),
+    horse_registration_approved: notificationChannel.optional(),
+    horse_registration_declined: notificationChannel.optional(),
+    livery_invoice_issued: notificationChannel.optional(),
+    livery_payment_received: notificationChannel.optional(),
+    livery_invoice_overdue: notificationChannel.optional(),
   }),
 });
 

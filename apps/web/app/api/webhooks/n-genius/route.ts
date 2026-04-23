@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { findPaymentAccountByExternalId } from '@equestrian/db/queries';
 import { nGeniusAdapter } from '@/lib/payments/n-genius';
-import { applyPaymentWebhook } from '@/lib/payments/webhook-helpers';
+import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
@@ -102,12 +102,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await applyPaymentWebhook({
+    const bookingResult = await applyPaymentWebhook({
       provider: 'n_genius',
       event,
       overrideClubId: account.clubId,
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
+    if (!bookingResult) {
+      await applyLiveryInvoiceWebhook({ provider: 'n_genius', event });
+    }
   } catch (err) {
     logger.error('n_genius_webhook_processing_failed', {
       eventType: event.eventType,

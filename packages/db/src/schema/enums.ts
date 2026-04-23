@@ -119,6 +119,20 @@ export const horseSaleStatusEnum = pgEnum('horse_sale_status', [
   'sold',
 ]);
 
+export const ownershipStatusEnum = pgEnum('ownership_status', [
+  'pending',
+  'active',
+  'retired',
+  'declined',
+]);
+
+export const liveryInvoiceStatusEnum = pgEnum('livery_invoice_status', [
+  'pending',
+  'paid',
+  'overdue',
+  'cancelled',
+]);
+
 export const paymentProviderEnum = pgEnum('payment_provider', [
   'stripe',
   'n_genius',

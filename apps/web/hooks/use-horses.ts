@@ -45,9 +45,18 @@ export interface Horse {
   photoUrls: string[] | null;
   ownerMemberId: string | null;
   notes: string | null;
+  ownershipStatus: 'pending' | 'active' | 'retired' | 'declined';
+  monthlyLiveryFeeMinor: number | null;
+  liveryStartDate: string | null;
+  liveryEndDate: string | null;
+  ownershipDeclineReason: string | null;
+  ownershipSubmittedAt: string | null;
   createdAt: string;
   updatedAt: string;
   ownerName: string | null;
+  ownerEmail?: string | null;
+  ownerClerkUserId?: string | null;
+  clubCurrency?: string;
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -64,12 +73,68 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
   if (filters.search) params.set('search', filters.search);
   if (filters.status) params.set('status', filters.status);
   if (filters.skillLevel) params.set('skillLevel', filters.skillLevel);
+  if (filters.ownershipStatus) params.set('ownershipStatus', filters.ownershipStatus);
   if (filters.page) params.set('page', String(filters.page));
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
   return useQuery({
     queryKey: ['horses', filters],
     queryFn: () => fetchJson<PaginatedResponse<Horse>>(`/api/v1/horses?${params.toString()}`),
+    // 30s is enough to dedupe back-to-back fetches (tab switches, nav badges)
+    // while still feeling live. Mutations explicitly invalidate so approvals
+    // reflect immediately without waiting on this window.
+    staleTime: 30_000,
+  });
+}
+
+interface ApproveInput {
+  monthlyLiveryFeeMinor: number;
+  liveryStartDate: string;
+}
+
+export function useApproveHorseOwnership(horseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ApproveInput) =>
+      fetchJson<ApiResponse<Horse>>(`/api/v1/horses/${horseId}/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['horses'] });
+    },
+  });
+}
+
+export function useDeclineHorseOwnership(horseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) =>
+      fetchJson<ApiResponse<Horse>>(`/api/v1/horses/${horseId}/decline`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['horses'] });
+    },
+  });
+}
+
+export function useRetireHorseOwnership(horseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (liveryEndDate?: string) =>
+      fetchJson<ApiResponse<Horse>>(`/api/v1/horses/${horseId}/retire`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ liveryEndDate }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['horses'] });
+      queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
+    },
   });
 }
 

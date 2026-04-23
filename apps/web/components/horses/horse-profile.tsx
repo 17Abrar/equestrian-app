@@ -19,6 +19,7 @@ import { HealthTab } from './health-tab';
 import { FeedingTab } from './feeding-tab';
 import { ExerciseTab } from './exercise-tab';
 import { DocumentsTab } from './documents-tab';
+import { LiveryTab } from './livery-tab';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -196,6 +197,7 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="livery">Livery</TabsTrigger>
               <TabsTrigger value="health">Health</TabsTrigger>
               <TabsTrigger value="feeding">Feeding</TabsTrigger>
               <TabsTrigger value="exercise">Exercise</TabsTrigger>
@@ -252,6 +254,10 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
                   </CardContent>
                 </Card>
               )}
+            </TabsContent>
+
+            <TabsContent value="livery" className="mt-4">
+              <LiveryTab horse={horse} />
             </TabsContent>
 
             <TabsContent value="health" className="mt-4">

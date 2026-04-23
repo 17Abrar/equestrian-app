@@ -1,5 +1,8 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { db } from '@equestrian/db';
+import { clubMembers } from '@equestrian/db/schema';
+import { and, eq } from 'drizzle-orm';
 import { getUploadUrl, getFolderRoot, UPLOAD_FOLDER_PERMISSIONS } from '@/lib/storage';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
@@ -9,6 +12,11 @@ const uploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
   contentType: z.string().min(1),
   folder: z.string().min(1).max(100),
+  // Optional override: upload under a different club the user belongs to.
+  // Used by the rider horse-registration flow — the rider's active tenant
+  // may not be the target stable, and we want the photo to live under the
+  // target stable's R2 prefix. Membership re-check prevents abuse.
+  targetClubId: z.string().uuid().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -38,16 +46,43 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      let uploadClubId = ctx.clubId;
+      if (data.targetClubId && data.targetClubId !== ctx.clubId) {
+        // User wants to upload against a different club than their active
+        // tenant. Allowed only if they're an active member of that club
+        // (prevents a forged clubId from putting files into arbitrary buckets).
+        const membership = await db
+          .select({ id: clubMembers.id })
+          .from(clubMembers)
+          .where(
+            and(
+              eq(clubMembers.clubId, data.targetClubId),
+              eq(clubMembers.clerkUserId, ctx.userId),
+              eq(clubMembers.isActive, true),
+            ),
+          )
+          .limit(1);
+
+        if (!membership[0]) {
+          return errorResponse(
+            'NOT_A_MEMBER',
+            'You are not a member of the target stable',
+            403,
+          );
+        }
+        uploadClubId = data.targetClubId;
+      }
+
       try {
         const result = await getUploadUrl({
-          clubId: ctx.clubId,
+          clubId: uploadClubId,
           folder: data.folder,
           fileName: data.fileName,
           contentType: data.contentType,
         });
 
         logger.info('upload_url_generated', {
-          clubId: ctx.clubId,
+          clubId: uploadClubId,
           folder: data.folder,
           fileName: data.fileName,
           key: result.key,
@@ -60,6 +95,7 @@ export async function POST(request: NextRequest) {
             folder: { from: null, to: data.folder },
             fileName: { from: null, to: data.fileName },
             key: { from: null, to: result.key },
+            targetClubId: { from: null, to: uploadClubId },
           },
         });
 

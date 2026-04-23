@@ -310,6 +310,28 @@ export async function adminGetPaymentAccountByProvider(
 }
 
 /**
+ * Cron-time equivalent of getActivePaymentAccount: returns the club's active
+ * provider (if any) using rawDb so it works outside a tenant transaction.
+ */
+export async function adminGetActivePaymentAccount(
+  clubId: string,
+): Promise<PaymentAccountWithCredentials | null> {
+  const rows = await rawDb
+    .select()
+    .from(clubPaymentAccounts)
+    .where(
+      and(
+        eq(clubPaymentAccounts.clubId, clubId),
+        eq(clubPaymentAccounts.isActive, true),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  return row ? toWithCredentials(row) : null;
+}
+
+/**
  * Webhook-time lookup: resolve `{ clubId, bookingId }` from a provider's
  * payment id. Used when the webhook payload doesn't carry the club id in a
  * header/URL and we must trace back through the booking row. Uses `rawDb`.

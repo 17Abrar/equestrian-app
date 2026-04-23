@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { adminGetPaymentAccountByProvider } from '@equestrian/db/queries';
 import { ziinaAdapter } from '@/lib/payments/ziina';
-import { applyPaymentWebhook } from '@/lib/payments/webhook-helpers';
+import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
@@ -85,12 +85,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    await applyPaymentWebhook({
+    const bookingResult = await applyPaymentWebhook({
       provider: 'ziina',
       event,
       overrideClubId: clubId,
       isRefundEvent: REFUND_EVENTS.has(event.eventType) && event.status === 'succeeded',
     });
+
+    // Didn't match a booking? Try a livery invoice. A payment intent is for
+    // one OR the other, never both, so we only run the second lookup when
+    // the first comes up empty.
+    if (!bookingResult) {
+      await applyLiveryInvoiceWebhook({ provider: 'ziina', event });
+    }
   } catch (err) {
     logger.error('ziina_webhook_processing_failed', {
       eventType: event.eventType,

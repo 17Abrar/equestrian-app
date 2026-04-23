@@ -79,6 +79,44 @@ const TRIGGERS: TriggerInfo[] = [
     description: 'Notifies club staff when a horse is running low on feed.',
     recipient: 'admin',
   },
+  // Round 8 — horse ownership flow
+  {
+    key: 'horse_registration_submitted',
+    title: 'Horse registration submitted',
+    description: 'Alerts admins when a rider submits a horse for approval.',
+    recipient: 'admin',
+  },
+  {
+    key: 'horse_registration_approved',
+    title: 'Horse registration approved',
+    description: 'Confirms to the owner that their horse was approved, with the livery fee.',
+    recipient: 'rider',
+  },
+  {
+    key: 'horse_registration_declined',
+    title: 'Horse registration declined',
+    description: 'Lets the owner know their registration was declined, with the reason.',
+    recipient: 'rider',
+  },
+  // Round 8.5 — livery billing
+  {
+    key: 'livery_invoice_issued',
+    title: 'Livery invoice issued',
+    description: 'Monthly livery invoice with a pay link, sent to the horse owner.',
+    recipient: 'rider',
+  },
+  {
+    key: 'livery_payment_received',
+    title: 'Livery payment received',
+    description: 'Receipt sent after a successful livery payment.',
+    recipient: 'rider',
+  },
+  {
+    key: 'livery_invoice_overdue',
+    title: 'Livery invoice overdue',
+    description: 'Reminder when a livery invoice is past due. Sent at 7, 14, and 30 days.',
+    recipient: 'rider',
+  },
 ];
 
 export function NotificationsForm({ settings }: { settings: ClubSettings }) {

@@ -14,13 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
-
+import { PendingApprovalCard } from './pending-approval-card';
 import { HORSE_STATUS_COLORS } from '@/lib/ui-constants';
+
+type Tab = 'active' | 'pending';
 
 function HorseListSkeleton() {
   return (
@@ -38,19 +41,39 @@ function HorseListSkeleton() {
   );
 }
 
+// Cheap badge fetch — one row of pagination.total, no data rendered. 30s
+// staleTime keeps it fresh without chatter; it also auto-invalidates via
+// the shared `['horses']` key after approve/decline mutations.
+function usePendingCount() {
+  return useHorses({ ownershipStatus: 'pending', page: 1, pageSize: 1 });
+}
+
 export function HorsesList() {
+  const [tab, setTab] = useState<Tab>('active');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string | undefined>();
   const [skillLevel, setSkillLevel] = useState<string | undefined>();
   const [page, setPage] = useState(1);
 
+  const pendingBadge = usePendingCount();
+  const pendingCount = pendingBadge.data?.pagination.total ?? 0;
+
   const { data, isLoading, isError, error, refetch } = useHorses({
     search: search || undefined,
     status: status as 'available' | 'resting' | undefined,
     skillLevel: skillLevel as 'beginner' | 'intermediate' | 'advanced' | undefined,
+    ownershipStatus: tab === 'pending' ? 'pending' : 'active',
     page,
     pageSize: 25,
   });
+
+  function switchTab(next: Tab) {
+    setTab(next);
+    setPage(1);
+    // Clear operational-status filter when jumping to pending — it's
+    // orthogonal and would yield confusing empty results.
+    if (next === 'pending') setStatus(undefined);
+  }
 
   return (
     <div className="space-y-6">
@@ -68,58 +91,77 @@ export function HorsesList() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search horses..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
+      <Tabs value={tab} onValueChange={(v) => switchTab(v as Tab)}>
+        <TabsList>
+          <TabsTrigger value="active">Active</TabsTrigger>
+          <TabsTrigger value="pending" className="gap-2">
+            Pending approvals
+            {pendingCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100"
+              >
+                {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* Filters — only show on Active tab */}
+      {tab === 'active' && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search horses..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="pl-9"
+            />
+          </div>
+          <Select
+            value={status ?? 'all'}
+            onValueChange={(v) => {
+              setStatus(v === 'all' ? undefined : v);
               setPage(1);
             }}
-            className="pl-9"
-          />
+          >
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="resting">Resting</SelectItem>
+              <SelectItem value="injured">Injured</SelectItem>
+              <SelectItem value="retired">Retired</SelectItem>
+              <SelectItem value="off_site">Off Site</SelectItem>
+              <SelectItem value="sold">Sold</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={skillLevel ?? 'all'}
+            onValueChange={(v) => {
+              setSkillLevel(v === 'all' ? undefined : v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Skill Level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Levels</SelectItem>
+              <SelectItem value="beginner">Beginner</SelectItem>
+              <SelectItem value="intermediate">Intermediate</SelectItem>
+              <SelectItem value="advanced">Advanced</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select
-          value={status ?? 'all'}
-          onValueChange={(v) => {
-            setStatus(v === 'all' ? undefined : v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="available">Available</SelectItem>
-            <SelectItem value="resting">Resting</SelectItem>
-            <SelectItem value="injured">Injured</SelectItem>
-            <SelectItem value="retired">Retired</SelectItem>
-            <SelectItem value="off_site">Off Site</SelectItem>
-            <SelectItem value="sold">Sold</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={skillLevel ?? 'all'}
-          onValueChange={(v) => {
-            setSkillLevel(v === 'all' ? undefined : v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Skill Level" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Levels</SelectItem>
-            <SelectItem value="beginner">Beginner</SelectItem>
-            <SelectItem value="intermediate">Intermediate</SelectItem>
-            <SelectItem value="advanced">Advanced</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      )}
 
       {/* Content */}
       {isLoading && <HorseListSkeleton />}
@@ -131,7 +173,7 @@ export function HorsesList() {
         />
       )}
 
-      {data && !data.data.length && (
+      {data && !data.data.length && tab === 'active' && (
         <EmptyState
           title="No horses yet"
           description="Add your first horse to get started"
@@ -139,7 +181,22 @@ export function HorsesList() {
         />
       )}
 
-      {data && data.data.length > 0 && (
+      {data && !data.data.length && tab === 'pending' && (
+        <EmptyState
+          title="No pending registrations"
+          description="When a rider registers a horse they own, it'll show up here for you to review."
+        />
+      )}
+
+      {data && data.data.length > 0 && tab === 'pending' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {data.data.map((horse) => (
+            <PendingApprovalCard key={horse.id} horse={horse} />
+          ))}
+        </div>
+      )}
+
+      {data && data.data.length > 0 && tab === 'active' && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.data.map((horse) => (

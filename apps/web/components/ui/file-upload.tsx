@@ -22,6 +22,12 @@ interface FileUploadProps {
   label?: string;
   /** CSS class for the container */
   className?: string;
+  /**
+   * Override the R2 club prefix. Useful when the active tenant differs from
+   * the destination — e.g. a rider uploading a horse photo for a stable
+   * that's not their active club. Server re-validates membership.
+   */
+  targetClubId?: string;
 }
 
 export function FileUpload({
@@ -33,6 +39,7 @@ export function FileUpload({
   preview = false,
   label,
   className,
+  targetClubId,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +84,7 @@ export function FileUpload({
           fileName: file.name,
           contentType: file.type,
           folder,
+          ...(targetClubId ? { targetClubId } : {}),
         }),
       });
 
@@ -107,7 +115,7 @@ export function FileUpload({
     } finally {
       setUploading(false);
     }
-  }, [accept, folder, maxSizeBytes, maxSizeMB, onChange]);
+  }, [accept, folder, maxSizeBytes, maxSizeMB, onChange, targetClubId]);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();

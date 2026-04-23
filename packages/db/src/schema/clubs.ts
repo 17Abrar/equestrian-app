@@ -21,6 +21,12 @@ export interface NotificationPreferences {
   waitlist_promotion?: { email: boolean };
   rider_welcome?: { email: boolean };
   invoice_issued?: { email: boolean };
+  horse_registration_submitted?: { email: boolean };
+  horse_registration_approved?: { email: boolean };
+  horse_registration_declined?: { email: boolean };
+  livery_invoice_issued?: { email: boolean };
+  livery_payment_received?: { email: boolean };
+  livery_invoice_overdue?: { email: boolean };
 }
 
 export const clubs = pgTable('clubs', {
@@ -89,6 +95,12 @@ export const clubs = pgTable('clubs', {
       waitlist_promotion: { email: true },
       rider_welcome: { email: true },
       invoice_issued: { email: true },
+      horse_registration_submitted: { email: true },
+      horse_registration_approved: { email: true },
+      horse_registration_declined: { email: true },
+      livery_invoice_issued: { email: true },
+      livery_payment_received: { email: true },
+      livery_invoice_overdue: { email: true },
     }),
 
   // Onboarding

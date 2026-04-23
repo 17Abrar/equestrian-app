@@ -13,6 +13,14 @@ export interface NotificationPreferences {
   waitlist_promotion?: { email: boolean };
   rider_welcome?: { email: boolean };
   invoice_issued?: { email: boolean };
+  // Round 8 — horse ownership flow
+  horse_registration_submitted?: { email: boolean };
+  horse_registration_approved?: { email: boolean };
+  horse_registration_declined?: { email: boolean };
+  // Round 8.5 — livery billing
+  livery_invoice_issued?: { email: boolean };
+  livery_payment_received?: { email: boolean };
+  livery_invoice_overdue?: { email: boolean };
 }
 
 export interface ClubSettings {

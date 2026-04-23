@@ -4,7 +4,14 @@ import {
   findPaymentAccountByExternalId,
   recordPaymentAccountError,
   setBookingPaymentRef,
+  findLiveryInvoiceByProviderPayment,
+  markLiveryInvoicePaid,
 } from '@equestrian/db/queries';
+import { sendTriggeredEmailAsync } from '@/lib/email';
+import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
+import { rawDb } from '@equestrian/db';
+import { clubs, clubMembers, horses } from '@equestrian/db/schema';
+import { eq } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import type { PaymentIntentStatus, WebhookEvent } from './types';
 import type { ProviderName } from './types';
@@ -131,6 +138,97 @@ export async function applyPaymentWebhook({
   });
 
   return { clubId, bookingId: bookingRef.bookingId };
+}
+
+/**
+ * Livery invoice webhook application — mirrors applyPaymentWebhook but for
+ * livery_invoices rather than bookings. Returns the invoice if matched, or
+ * null if this event doesn't correspond to any livery invoice (in which
+ * case the payment is probably a booking — caller should fall back).
+ *
+ * Only acts on succeeded payments. Other statuses (pending, failed) leave
+ * the invoice alone — we can't reliably tell "intent failed so mark
+ * overdue" from a single event; the billing cron handles that cadence.
+ */
+export async function applyLiveryInvoiceWebhook({
+  provider,
+  event,
+}: {
+  provider: ProviderName;
+  event: WebhookEvent;
+}): Promise<{ invoiceId: string; clubId: string } | null> {
+  if (!event.providerPaymentId) return null;
+
+  const invoice = await findLiveryInvoiceByProviderPayment(
+    event.providerPaymentId,
+    provider,
+  );
+  if (!invoice) return null;
+
+  // Only "succeeded" transitions the invoice to paid. A pending/failed event
+  // shouldn't downgrade a paid invoice, and marking overdue from here would
+  // conflict with the billing cron's day-count logic.
+  if (event.status !== 'succeeded') {
+    return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+
+  if (invoice.status === 'paid' || invoice.status === 'cancelled') {
+    // Already terminal — webhook replay, idempotent no-op.
+    return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+
+  const paidAt = new Date();
+  const updated = await markLiveryInvoicePaid(invoice.id, {
+    paidAt,
+    paymentProvider: provider,
+    providerPaymentId: event.providerPaymentId,
+  });
+
+  if (!updated) {
+    return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+
+  // Fetch what we need for the email — owner contact, club name, horse name.
+  // One round-trip, rawDb because we're outside any tenant transaction.
+  const detail = await rawDb
+    .select({
+      clubName: clubs.name,
+      ownerEmail: clubMembers.email,
+      ownerName: clubMembers.displayName,
+      horseName: horses.name,
+    })
+    .from(clubs)
+    .innerJoin(clubMembers, eq(clubMembers.id, invoice.ownerMemberId))
+    .innerJoin(horses, eq(horses.id, invoice.horseId))
+    .where(eq(clubs.id, invoice.clubId))
+    .limit(1);
+
+  const d = detail[0];
+  if (d?.ownerEmail) {
+    sendTriggeredEmailAsync({
+      clubId: invoice.clubId,
+      trigger: 'livery_payment_received',
+      to: d.ownerEmail,
+      subject: `Payment received — ${d.horseName}`,
+      template: LiveryPaymentReceived({
+        ownerName: d.ownerName ?? 'there',
+        horseName: d.horseName,
+        clubName: d.clubName,
+        invoiceNumber: invoice.invoiceNumber,
+        amountMinorUnits: invoice.amountMinorUnits,
+        currency: invoice.currency,
+        paidDate: paidAt.toISOString().slice(0, 10),
+      }),
+    });
+  }
+
+  logger.info('livery_invoice_marked_paid_from_webhook', {
+    clubId: invoice.clubId,
+    invoiceId: invoice.id,
+    provider,
+  });
+
+  return { invoiceId: invoice.id, clubId: invoice.clubId };
 }
 
 /**

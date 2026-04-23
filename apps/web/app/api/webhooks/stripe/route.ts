@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { stripeAdapter } from '@/lib/payments/stripe';
-import { applyPaymentWebhook } from '@/lib/payments/webhook-helpers';
+import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
@@ -66,11 +66,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await applyPaymentWebhook({
+    const bookingResult = await applyPaymentWebhook({
       provider: 'stripe',
       event,
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
+    if (!bookingResult) {
+      await applyLiveryInvoiceWebhook({ provider: 'stripe', event });
+    }
   } catch (err) {
     // Log but still return 200 — Stripe retries on non-2xx, and a DB blip
     // shouldn't cause duplicate processing storms. The next event will

@@ -14,3 +14,4 @@ export * from './audit-log';
 export * from './payment-accounts';
 export * from './audiences';
 export * from './discovery';
+export * from './livery-invoices';

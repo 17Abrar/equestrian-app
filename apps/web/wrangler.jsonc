@@ -17,7 +17,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cavaliq",
-  "main": ".open-next/worker.js",
+  // `worker-entry.mjs` wraps `.open-next/worker.js` and adds a `scheduled()`
+  // export for the livery billing cron trigger. See that file for details.
+  "main": "worker-entry.mjs",
   "compatibility_date": "2025-11-01",
   "compatibility_flags": ["nodejs_compat"],
 
@@ -33,6 +35,14 @@
 
   "placement": {
     "mode": "smart"
+  },
+
+  // Cron triggers. 02:00 UTC daily = 06:00 Dubai / 05:00 Riyadh — before the
+  // workday but after midnight rolls over, so "due today" means the current
+  // Dubai date. Hits `/api/cron/livery-billing` via scheduled() → fetch().
+  // Secured by CRON_SECRET comparison server-side.
+  "triggers": {
+    "crons": ["0 2 * * *"]
   },
 
   // Custom domain binding. Cavaliq's root domain is served from this Worker.
