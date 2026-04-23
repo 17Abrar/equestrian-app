@@ -10,7 +10,7 @@ import {
   validateInput,
 } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
-import { sendTriggeredEmailAsync } from '@/lib/email';
+import { sendTriggeredEmail } from '@/lib/email';
 import { WelcomeRider } from '@equestrian/email-templates/welcome-rider';
 
 export async function GET(request: NextRequest) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         after(async () => {
           try {
             const club = await getClubById(ctx.clubId);
-            sendTriggeredEmailAsync({
+            await sendTriggeredEmail({
               clubId: ctx.clubId,
               trigger: 'rider_welcome',
               to: riderEmail,

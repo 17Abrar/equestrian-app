@@ -1,5 +1,5 @@
 import React from 'react';
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse, after } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import {
   getPublicClubBySlug,
@@ -7,7 +7,7 @@ import {
   joinClubInstantly,
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
-import { sendTriggeredEmailAsync } from '@/lib/email';
+import { sendTriggeredEmail } from '@/lib/email';
 import { WelcomeRider } from '@equestrian/email-templates/welcome-rider';
 
 interface RouteParams {
@@ -104,16 +104,23 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     });
 
     // Welcome email — respects the club's notification_preferences.
+    // Wrapped in `after()` so the send survives response flush on Workers.
     if (email) {
-      sendTriggeredEmailAsync({
-        clubId: club.id,
-        trigger: 'rider_welcome',
-        to: email,
-        subject: `Welcome to ${club.name}`,
-        template: React.createElement(WelcomeRider, {
-          riderName: displayName ?? '',
-          clubName: club.name,
-        }),
+      after(async () => {
+        try {
+          await sendTriggeredEmail({
+            clubId: club.id,
+            trigger: 'rider_welcome',
+            to: email,
+            subject: `Welcome to ${club.name}`,
+            template: React.createElement(WelcomeRider, {
+              riderName: displayName ?? '',
+              clubName: club.name,
+            }),
+          });
+        } catch {
+          // Email failure is non-fatal — already logged inside sendEmail
+        }
       });
     }
 

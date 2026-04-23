@@ -17,7 +17,7 @@ import {
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
-import { sendTriggeredEmailAsync } from '@/lib/email';
+import { sendTriggeredEmail } from '@/lib/email';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
 
 interface RouteParams {
@@ -157,7 +157,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             ? `${(feeResult.fee / 100).toFixed(2)} ${existing.currency}`
             : undefined;
 
-          sendTriggeredEmailAsync({
+          await sendTriggeredEmail({
             clubId: ctx.clubId,
             trigger: 'booking_cancellation',
             to: riderMember.email,
