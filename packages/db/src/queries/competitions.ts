@@ -1,5 +1,5 @@
 import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
-import { db } from '../index';
+import { db, writeTransaction } from '../index';
 import {
   competitions,
   competitionClasses,
@@ -220,7 +220,7 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
  * Must be called inside `runInTenantContext`.
  */
 export async function createCompetitionEntry(clubId: string, data: EntryCreate) {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     // Acquire a row-level lock on the class so concurrent entry attempts for
     // the same class serialize rather than racing past the capacity check.
     // Without this, two parallel requests could both see `count < max` and

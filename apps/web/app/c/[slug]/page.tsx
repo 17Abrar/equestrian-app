@@ -2,6 +2,11 @@ import { notFound } from 'next/navigation';
 import { getPublicClubBySlug } from '@equestrian/db/queries';
 import { ClubProfileClient } from './club-profile-client';
 
+// Edge-cache public club profile for 60s — clubs rarely change their logo,
+// description, or join policy more than once a minute, and the join button
+// flow is client-side anyway.
+export const revalidate = 60;
+
 interface PageProps {
   params: Promise<{ slug: string }>;
 }

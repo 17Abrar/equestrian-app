@@ -1,5 +1,5 @@
 import { eq, and, ilike, asc, sql, SQL } from 'drizzle-orm';
-import { db } from '../index';
+import { db, writeTransaction } from '../index';
 import { riderProfiles } from '../schema/rider-profiles';
 import { clubMembers } from '../schema/club-members';
 import { escapeLikePattern } from '@equestrian/shared/utils';
@@ -157,7 +157,7 @@ interface CreateRiderData {
  * they sign up. Must be called inside `runInTenantContext`.
  */
 export async function createRider(clubId: string, data: CreateRiderData) {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     const [member] = await tx
       .insert(clubMembers)
       .values({

@@ -2,7 +2,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { neon, neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle as drizzleHttp, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import { drizzle as drizzleWs, type NeonDatabase } from 'drizzle-orm/neon-serverless';
-import { sql } from 'drizzle-orm';
 
 import * as schema from './schema/index';
 
@@ -10,11 +9,10 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL environment variable is required');
 }
 
-// Polyfill the WebSocket constructor only on Node < 22 in environments where it
-// is missing. On Cloudflare Workers `globalThis.WebSocket` is native and works
-// for outbound connections; setting `neonConfig.webSocketConstructor` is not
-// needed and `require('ws')` must not be evaluated (it pulls in node:net/tls
-// which the Workers bundler cannot satisfy).
+// Only polyfill WebSocket for Node < 22 where it's not global. On Cloudflare
+// Workers the native `globalThis.WebSocket` is used by `@neondatabase/
+// serverless`; `require('ws')` must not be evaluated there (it pulls in
+// node:net/tls which the Workers bundler cannot satisfy).
 if (
   typeof globalThis.WebSocket === 'undefined' &&
   typeof process !== 'undefined' &&
@@ -27,82 +25,46 @@ if (
   neonConfig.webSocketConstructor = ctor;
 }
 
-// HTTP driver — fast single-statement queries, no transaction support. Used as
-// the fallback outside a tenant context (webhooks, tenant resolution lookups,
-// migrations). Safe to instantiate at module scope because the underlying
-// `neon()` client is stateless and uses one-shot HTTP requests.
+// ─── HTTP driver (the default path) ───────────────────────────────────
+//
+// One-shot HTTP queries. Stateless, no TCP handshake per request, no
+// transaction support but fast enough that most routes can just use this.
+//
+// Used for: every tenant-scoped read, every single-statement write, every
+// cross-tenant lookup (clubs, club_members, audit_log). When you call
+// `db.select().from(...).where(eq(table.clubId, X))` you get HTTP speed.
+
 const sqlClient = neon(process.env.DATABASE_URL);
-const rawDb = drizzleHttp(sqlClient, { schema });
+const httpDb = drizzleHttp(sqlClient, { schema });
 
 type SchemaType = typeof schema;
 type HttpDb = NeonHttpDatabase<SchemaType>;
 type WsDb = NeonDatabase<SchemaType>;
 type WsTx = Parameters<Parameters<WsDb['transaction']>[0]>[0];
-
-// The runtime executor can be any of these, but TypeScript sees a single type
-// via the Proxy so method signatures resolve cleanly at call sites. The
-// Drizzle query-builder surface (select/insert/update/delete/execute/transaction)
-// is identical across HttpDb / WsDb / WsTx, so typing as HttpDb is accurate
-// enough for every existing caller.
 type AnyExecutor = HttpDb | WsDb | WsTx;
 
-// AsyncLocalStorage propagates the active executor through every `await` chain
-// so queries automatically participate in the tenant-scoped transaction that
-// set `app.current_club_id`. Without this, a second call to `db.select()` after
-// an `await` would get a fresh HTTP connection with no session variable, and
-// RLS would silently drop every row.
+/**
+ * `db` is the HTTP-driver executor. Single-statement queries over Neon's
+ * HTTP endpoint — no WebSocket handshake per request. Tenant isolation is
+ * enforced purely at the application level via explicit
+ * `.where(eq(table.clubId, X))` clauses on every query.
+ *
+ * Do NOT call `.transaction()` on this — HTTP mode supports only the
+ * non-interactive array-transaction form. If you need an interactive
+ * multi-statement transaction (capacity checks, row locks, counter
+ * increments), use `writeTransaction(fn)` which opens a WebSocket pool.
+ *
+ * We still expose `db` as a Proxy so any in-flight transaction's
+ * executor (pushed via `executorStore.run`) takes over automatically —
+ * callers inside a `writeTransaction(fn)` callback that use plain `db`
+ * still participate in the surrounding transaction.
+ */
 const executorStore = new AsyncLocalStorage<AnyExecutor>();
 
 export function getCurrentExecutor(): AnyExecutor {
-  return executorStore.getStore() ?? rawDb;
+  return executorStore.getStore() ?? httpDb;
 }
 
-/**
- * Runs `fn` inside a pooled transaction that has `app.current_club_id` set
- * for the given club. All queries issued via the exported `db` Proxy inside
- * the callback are RLS-filtered to that club.
- *
- * On Cloudflare Workers a WebSocket cannot outlive a single request, so we
- * open a fresh Pool per call and tear it down in `finally`. This costs one
- * TCP+TLS handshake (~50-150ms to Neon) per tenant-scoped request. With
- * `placement: smart` the Worker is co-located near Neon after the first few
- * invocations, minimizing the overhead. Keeping the Pool at module scope (the
- * previous pattern) works on Node but fails on the second request on Workers
- * because the isolate reuses the frozen socket.
- *
- * `set_config(..., is_local=true)` scopes the variable to the current
- * transaction, so it is released when the transaction commits/rolls back and
- * cannot leak between requests even if a connection is somehow reused.
- *
- * See: https://neon.com/docs/guides/cloudflare-workers — Pool lifecycle rules.
- */
-export async function runInTenantContext<T>(
-  clubId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const tenantDb = drizzleWs(pool, { schema });
-  try {
-    return await tenantDb.transaction(async (tx) => {
-      await tx.execute(sql`SELECT set_config('app.current_club_id', ${clubId}, true)`);
-      return executorStore.run(tx, fn);
-    });
-  } finally {
-    // Must await — backgrounding with queueMicrotask may run after the isolate
-    // freezes, leaking the socket on Cloudflare's runtime.
-    await pool.end();
-  }
-}
-
-/**
- * Proxy that forwards every property access to the active executor.
- * Existing call sites that do `db.select()`, `db.insert()`, `db.transaction()`,
- * etc., keep working; they now transparently use the tenant-scoped transaction
- * when one is active, and fall back to the HTTP driver outside that scope.
- *
- * Drizzle query builders bind to the executor they're created from, so the
- * chained `.from().where()` calls all run on the right connection.
- */
 export const db = new Proxy({} as HttpDb, {
   get(_target, prop) {
     const executor = getCurrentExecutor() as unknown as Record<string | symbol, unknown>;
@@ -115,12 +77,55 @@ export const db = new Proxy({} as HttpDb, {
 });
 
 /**
- * Escape hatch for code that must bypass tenant context — webhook handlers,
- * Clerk org resolution, admin maintenance. Use sparingly and only on tables
- * that are intentionally exempt from RLS (clubs, club_members, audit_log,
- * community_*).
+ * Runs `fn` inside a Postgres transaction opened over a fresh WebSocket
+ * Pool. Use this only for true multi-statement atomic writes:
+ *   - capacity checks + inserts (e.g., booking creation against slot)
+ *   - row-level locks (`.for('update')`)
+ *   - counter increments that must observe the parent write
+ *
+ * Inside the callback, every `db.*` call routes to the transaction via
+ * the AsyncLocalStorage executor, so existing code that uses `db`
+ * automatically joins the transaction.
+ *
+ * Each call pays a ~100–200ms WebSocket handshake cost. That's why we
+ * keep this path narrow — most routes don't need it and use `db` over
+ * HTTP instead.
  */
-export { rawDb };
+export async function writeTransaction<T>(
+  fn: (tx: WsTx) => Promise<T>,
+): Promise<T> {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const wsDb = drizzleWs(pool, { schema });
+  try {
+    return await wsDb.transaction(async (tx) => {
+      return executorStore.run(tx, () => fn(tx));
+    });
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
+ * Legacy alias — earlier routes wrapped their entire handler in
+ * `runInTenantContext(clubId, fn)` to set `app.current_club_id` for RLS.
+ * RLS was removed in favor of application-level clubId scoping because
+ * it forced a WebSocket + transaction on every request, which cost ~150ms
+ * per click. This now just runs `fn` directly. Kept for call-site
+ * compatibility; new code should not use it.
+ */
+export async function runInTenantContext<T>(
+  _clubId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return fn();
+}
+
+/**
+ * Direct access to the HTTP driver — use for operations that must bypass
+ * any ambient transaction (webhooks, Clerk org resolution, audit writes
+ * that survive a tenant transaction rollback).
+ */
+export { httpDb as rawDb };
 
 export type Database = HttpDb;
 export type PoolDatabase = WsDb;

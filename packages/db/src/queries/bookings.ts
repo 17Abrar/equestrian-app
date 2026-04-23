@@ -1,5 +1,5 @@
 import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
-import { db } from '../index';
+import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
@@ -283,7 +283,7 @@ export async function getBookingById(clubId: string, bookingId: string) {
  * requests.
  */
 export async function createBooking(clubId: string, data: BookingCreate) {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     // Atomically increment rider count only if capacity is not exceeded.
     // This prevents the race condition where two concurrent requests both
     // pass the API-level capacity check before either transaction commits.
@@ -321,7 +321,7 @@ export async function cancelBooking(
   cancelledByMemberId: string,
   cancellationFee?: number,
 ) {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     const result = await tx
       .update(bookings)
       .set({
@@ -427,7 +427,7 @@ export async function markBookingComplete(
   clubId: string,
   bookingId: string,
 ) {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     const result = await tx
       .update(bookings)
       .set({

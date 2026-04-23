@@ -1,5 +1,5 @@
 import { eq, and, asc } from 'drizzle-orm';
-import { db, rawDb } from '../index';
+import { db, rawDb, writeTransaction } from '../index';
 import { clubPaymentAccounts } from '../schema/finances';
 import { bookings } from '../schema/bookings';
 import { encryptField, decryptField } from '../crypto';
@@ -128,7 +128,7 @@ export async function upsertPaymentAccount(
   clubId: string,
   input: UpsertInput,
 ): Promise<PaymentAccountSummary> {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     if (input.makeActive) {
       await tx
         .update(clubPaymentAccounts)
@@ -187,7 +187,7 @@ export async function setActiveProvider(
   clubId: string,
   provider: PaymentProvider,
 ): Promise<PaymentAccountSummary | null> {
-  return db.transaction(async (tx) => {
+  return writeTransaction(async (tx) => {
     await tx
       .update(clubPaymentAccounts)
       .set({ isActive: false, updatedAt: new Date() })

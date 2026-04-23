@@ -5,13 +5,17 @@ import * as Sentry from '@sentry/nextjs';
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   sendDefaultPii: true,
+  // Trace 10% of requests in prod — lower would be quieter but loses coverage
+  // of slow requests. Tweak if sampling volume gets expensive.
   tracesSampleRate: process.env.NODE_ENV === 'development' ? 1.0 : 0.1,
-  replaysSessionSampleRate: 0.1,
+  // Session replay disabled in prod: it was adding ~40 KB of client JS plus
+  // continuous DOM recording overhead on every page. Replay still fires on
+  // thrown errors via `replaysOnErrorSampleRate` so crash reports keep their
+  // video context.
+  replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1.0,
   enableLogs: true,
-  integrations: [
-    Sentry.replayIntegration(),
-  ],
+  integrations: [Sentry.replayIntegration()],
   enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
 
   // Scrub sensitive OAuth query params from the captured URL before the
