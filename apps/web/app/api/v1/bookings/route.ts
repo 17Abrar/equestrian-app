@@ -93,18 +93,26 @@ export async function POST(request: NextRequest) {
         return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
       }
 
-      // Security: riders can only book for themselves
+      // Security: riders can only book for themselves (or for guests under
+      // their own account — guest bookings still attach `riderMemberId` to
+      // the booker as the payer of record).
       const canBookForOthers = hasPermission(ctx.orgRole, 'bookings:create') && hasPermission(ctx.orgRole, 'bookings:read');
       if (!canBookForOthers && data.riderMemberId !== ctx.memberId) {
         return errorResponse('FORBIDDEN', 'You can only create bookings for yourself', 403);
       }
 
+      const isGuestBooking = !!data.guest;
+
       let assignedHorseId = data.horseId;
       let matchScore: number | undefined;
       let wasAutoMatched = false;
 
-      // Run smart horse matching if no horse specified and auto-match is enabled
-      if (!assignedHorseId && data.autoMatchHorse) {
+      // Run smart horse matching if no horse specified and auto-match is
+      // enabled. Skipped for guest bookings — we only know their self-
+      // reported skill level, not weight/height, so automatic matching on
+      // physical criteria would be unreliable. Staff can assign a horse
+      // manually after the booking is confirmed.
+      if (!assignedHorseId && data.autoMatchHorse && !isGuestBooking) {
         const rider = await getRiderByMemberId(ctx.clubId, data.riderMemberId);
 
         if (rider && rider.weightKg && rider.heightCm) {
@@ -186,10 +194,33 @@ export async function POST(request: NextRequest) {
           status: 'confirmed',
           horseMatchAuto: wasAutoMatched,
           horseMatchScore: matchScore,
+          isGuestBooking,
+          guestName: data.guest?.name ?? null,
+          guestEmail: data.guest?.email ?? null,
+          guestPhone: data.guest?.phone ?? null,
+          guestSkillLevel: data.guest?.skillLevel ?? null,
         });
       } catch (err) {
         if (err instanceof Error && err.message === 'SLOT_FULL') {
           return errorResponse('SLOT_FULL', 'This slot is now full', 409);
+        }
+        // Catch unique-index violations from idx_bookings_unique_rider_slot
+        // and idx_bookings_unique_guest_slot. Postgres raises 23505 for these.
+        const pgCode = (err as { code?: string } | null)?.code;
+        const msg = err instanceof Error ? err.message : '';
+        if (pgCode === '23505' || msg.includes('idx_bookings_unique')) {
+          if (isGuestBooking) {
+            return errorResponse(
+              'GUEST_ALREADY_BOOKED',
+              'This guest is already booked for that slot.',
+              409,
+            );
+          }
+          return errorResponse(
+            'ALREADY_BOOKED',
+            'You already have a booking for this lesson. To bring someone else, book them as a guest instead.',
+            409,
+          );
         }
         throw err;
       }

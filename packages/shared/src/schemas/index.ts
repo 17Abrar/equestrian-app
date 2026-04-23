@@ -202,6 +202,15 @@ export type CreateRecurringSlotsInput = z.output<typeof createRecurringSlotsSche
 
 // ─── Bookings ──────────────────────────────────────────────────────────
 
+export const guestRiderSchema = z.object({
+  name: z.string().min(1, 'Guest name is required').max(255),
+  email: z.string().email('Valid email required').max(255),
+  phone: z.string().min(1, 'Phone is required').max(50),
+  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']),
+});
+
+export type GuestRiderInput = z.infer<typeof guestRiderSchema>;
+
 export const createBookingSchema = z.object({
   slotId: z.string().uuid(),
   riderMemberId: z.string().uuid(),
@@ -213,6 +222,11 @@ export const createBookingSchema = z.object({
   amount: optionalNumeric(z.number().int()),
   couponCode: z.string().optional(),
   autoMatchHorse: z.boolean().default(true),
+  // When present, this booking is for a guest (non-member). `riderMemberId`
+  // still refers to the signed-in booker; the guest's contact info rides on
+  // the booking row itself. Riders can only book themselves once per slot,
+  // but they can book multiple guests on the same slot (each by unique email).
+  guest: guestRiderSchema.optional(),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;

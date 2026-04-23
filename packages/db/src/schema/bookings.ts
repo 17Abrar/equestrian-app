@@ -167,6 +167,19 @@ export const bookings = pgTable('bookings', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledByMemberId: uuid('cancelled_by_member_id').references(() => clubMembers.id),
 
+  // Guest bookings — the signed-in rider (riderMemberId) is booking on behalf
+  // of someone who isn't a member of the stable. Guest contact details are
+  // required when `isGuestBooking` is true; a CHECK constraint enforces that
+  // DB-side. A rider may book themselves AND multiple guests for the same
+  // slot, but each guest (by email) can only be booked once per slot — see
+  // the partial unique indexes `idx_bookings_unique_rider_slot` and
+  // `idx_bookings_unique_guest_slot` in migration 0009.
+  isGuestBooking: boolean('is_guest_booking').notNull().default(false),
+  guestName: varchar('guest_name', { length: 255 }),
+  guestEmail: varchar('guest_email', { length: 255 }),
+  guestPhone: varchar('guest_phone', { length: 50 }),
+  guestSkillLevel: varchar('guest_skill_level', { length: 20 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

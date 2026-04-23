@@ -23,7 +23,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 
@@ -161,6 +170,15 @@ export default function RiderBookPage() {
   const [couponValidating, setCouponValidating] = useState(false);
   const [step, setStep] = useState<'browse' | 'confirm'>('browse');
 
+  // Guest booking — booker signs up a non-member guest on the same slot.
+  // A rider can book themselves once AND bring guests; each guest identified
+  // uniquely by email per slot (DB partial unique index enforces it).
+  const [bookingForGuest, setBookingForGuest] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestSkillLevel, setGuestSkillLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
+
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
   const { data: user } = useCurrentUser();
@@ -207,26 +225,63 @@ export default function RiderBookPage() {
   // Group slots by date, filter to selected date
   const slotsForDate = slots.filter((s) => s.date === selectedDate);
 
+  function resetBookingState() {
+    setStep('browse');
+    setCouponCode('');
+    setCouponDiscount(0);
+    setCouponError('');
+    setBookingForGuest(false);
+    setGuestName('');
+    setGuestEmail('');
+    setGuestPhone('');
+    setGuestSkillLevel('beginner');
+  }
+
   function handleConfirmBooking() {
     if (!selectedSlot || !memberId) return;
 
-    createBooking.mutate(
-      {
-        slotId: selectedSlot.id,
-        riderMemberId: memberId,
-        autoMatchHorse: true,
-        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+    if (bookingForGuest) {
+      if (!guestName.trim() || !guestEmail.trim() || !guestPhone.trim()) {
+        toast.error('Please fill in the guest name, email, and phone.');
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
+        toast.error('Please enter a valid guest email address.');
+        return;
+      }
+    }
+
+    const payload = {
+      slotId: selectedSlot.id,
+      riderMemberId: memberId,
+      autoMatchHorse: !bookingForGuest, // Guest bookings skip auto-match
+      ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+      ...(bookingForGuest
+        ? {
+            guest: {
+              name: guestName.trim(),
+              email: guestEmail.trim(),
+              phone: guestPhone.trim(),
+              skillLevel: guestSkillLevel,
+            },
+          }
+        : {}),
+    };
+
+    createBooking.mutate(payload, {
+      onSuccess: () => {
+        toast.success(
+          bookingForGuest
+            ? `Guest booked — ${guestName.trim()} will receive lesson details.`
+            : 'Booking confirmed! Check your email for details.',
+        );
+        resetBookingState();
+        router.push('/rider');
       },
-      {
-        onSuccess: () => {
-          toast.success('Booking confirmed! Check your email for details.');
-          router.push('/rider');
-        },
-        onError: (err) => {
-          toast.error(err.message || 'Failed to create booking. Please try again.');
-        },
+      onError: (err) => {
+        toast.error(err.message || 'Failed to create booking. Please try again.');
       },
-    );
+    });
   }
 
   // ─── Confirm Step ──────────────────────────────────────────────────
@@ -234,12 +289,7 @@ export default function RiderBookPage() {
   if (step === 'confirm' && selectedSlot) {
     return (
       <div className="mx-auto max-w-lg space-y-6 pb-20 sm:pb-0">
-        <Button variant="ghost" size="sm" onClick={() => {
-          setStep('browse');
-          setCouponCode('');
-          setCouponDiscount(0);
-          setCouponError('');
-        }}>
+        <Button variant="ghost" size="sm" onClick={resetBookingState}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to slots
         </Button>
@@ -327,10 +377,95 @@ export default function RiderBookPage() {
           )}
         </div>
 
-        {/* Horse matching info */}
-        <p className="text-sm text-muted-foreground">
-          A horse will be automatically matched to your skill level and preferences.
-        </p>
+        {/* Guest booking — bring someone who isn't a club member */}
+        <div className="space-y-3 rounded-lg border p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="guest-toggle">Booking this for a guest?</Label>
+              <p className="text-xs text-muted-foreground">
+                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in
+                their name. You can book yourself once AND bring guests on the same slot.
+              </p>
+            </div>
+            <Switch
+              id="guest-toggle"
+              checked={bookingForGuest}
+              onCheckedChange={setBookingForGuest}
+            />
+          </div>
+
+          {bookingForGuest && (
+            <div className="space-y-3 border-t pt-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="guest-name" className="text-xs">
+                  Guest name *
+                </Label>
+                <Input
+                  id="guest-name"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  placeholder="Full name"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="guest-email" className="text-xs">
+                    Guest email *
+                  </Label>
+                  <Input
+                    id="guest-email"
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="guest@example.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="guest-phone" className="text-xs">
+                    Guest phone *
+                  </Label>
+                  <Input
+                    id="guest-phone"
+                    type="tel"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                    placeholder="+971 50 123 4567"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="guest-skill" className="text-xs">
+                  Guest skill level *
+                </Label>
+                <Select
+                  value={guestSkillLevel}
+                  onValueChange={(v) =>
+                    setGuestSkillLevel(v as 'beginner' | 'intermediate' | 'advanced')
+                  }
+                >
+                  <SelectTrigger id="guest-skill">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="beginner">Beginner</SelectItem>
+                    <SelectItem value="intermediate">Intermediate</SelectItem>
+                    <SelectItem value="advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A horse will be assigned manually by the stable after booking.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Horse matching info for self-bookings */}
+        {!bookingForGuest && (
+          <p className="text-sm text-muted-foreground">
+            A horse will be automatically matched to your skill level and preferences.
+          </p>
+        )}
 
         <Button
           className="w-full"
