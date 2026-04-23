@@ -417,24 +417,42 @@ export async function setBookingPaymentRef(
  * Marks a confirmed booking as completed.
  * Typically used by staff after the lesson has taken place.
  */
+/**
+ * Mark a confirmed booking completed and bump the rider's lifetime lesson
+ * counter so Progress / Profile stats reflect it. The counter only increments
+ * on the `confirmed → completed` transition (the WHERE on status), so
+ * double-clicks don't double-count.
+ */
 export async function markBookingComplete(
   clubId: string,
   bookingId: string,
 ) {
-  const result = await db
-    .update(bookings)
-    .set({
-      status: 'completed',
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(bookings.id, bookingId),
-        eq(bookings.clubId, clubId),
-        sql`${bookings.status} = 'confirmed'`,
-      ),
-    )
-    .returning();
+  return db.transaction(async (tx) => {
+    const result = await tx
+      .update(bookings)
+      .set({
+        status: 'completed',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.clubId, clubId),
+          sql`${bookings.status} = 'confirmed'`,
+        ),
+      )
+      .returning();
 
-  return result[0] ?? null;
+    const row = result[0];
+    if (row) {
+      await tx.execute(
+        sql`UPDATE rider_profiles
+            SET total_lessons_completed = total_lessons_completed + 1,
+                updated_at = now()
+            WHERE club_id = ${clubId} AND member_id = ${row.riderMemberId}`,
+      );
+    }
+
+    return row ?? null;
+  });
 }
