@@ -1,9 +1,18 @@
 import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
 import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { type UserRole } from '@equestrian/shared/types';
 import { mapClerkRoleToAppRole } from './clerk-roles';
+
+/**
+ * Cookie name for the rider's explicitly-chosen active club. When a rider
+ * belongs to multiple stables, they can switch via the nav dropdown; that
+ * writes this cookie and the next request resolves to the chosen club.
+ * Absent → fall back to most-recently-joined (current default behavior).
+ */
+export const ACTIVE_CLUB_COOKIE = 'cavaliq_active_club';
 
 interface TenantContext {
   clubId: string;
@@ -83,7 +92,10 @@ export async function getTenantContext(): Promise<TenantContext> {
     };
   }
 
-  // Path 2 — club_members fallback for riders who joined via /discover
+  // Path 2 — club_members fallback for riders who joined via /discover.
+  // Load all active memberships so we can honor the active-club cookie (if set)
+  // and fall back to most-recently-joined otherwise. The extra rows are a few
+  // hundred bytes at most.
   const memberships = await db
     .select({
       memberId: clubMembers.id,
@@ -100,13 +112,22 @@ export async function getTenantContext(): Promise<TenantContext> {
         eq(clubMembers.isActive, true),
       ),
     )
-    .orderBy(desc(clubMembers.joinedAt))
-    .limit(1);
+    .orderBy(desc(clubMembers.joinedAt));
 
-  const primary = memberships[0];
-  if (!primary) {
+  if (memberships.length === 0) {
     throw new TenantError('NO_ORGANIZATION', 'No organization selected. Please select a club.');
   }
+
+  const cookieStore = await cookies();
+  const activeClubCookie = cookieStore.get(ACTIVE_CLUB_COOKIE)?.value;
+
+  // Cookie wins if the user is actually a member of the chosen club; otherwise
+  // silently fall through to most-recent-joined. A stale cookie (user left a
+  // stable, membership deactivated, etc.) shouldn't lock them out.
+  const chosen = activeClubCookie
+    ? memberships.find((m) => m.clubId === activeClubCookie)
+    : undefined;
+  const primary = chosen ?? memberships[0]!;
 
   return {
     clubId: primary.clubId,

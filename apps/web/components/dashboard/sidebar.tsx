@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { type UserRole } from '@equestrian/shared/types';
+import { useHorses } from '@/hooks/use-horses';
+import { Badge } from '@/components/ui/badge';
+import { hasPermission } from '@/lib/permissions';
 import {
   LayoutDashboard,
   Calendar,
@@ -69,9 +72,24 @@ export function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const navItems = getNavItemsForRole(role);
 
+  // Only admins/managers can action pending registrations, so only they see the
+  // badge. Gated by permission to avoid an unnecessary fetch for coach/groom/vet.
+  const canReviewHorses = hasPermission(role, 'horses:update');
+  const pendingHorsesQuery = useHorses(
+    canReviewHorses ? { ownershipStatus: 'pending', page: 1, pageSize: 1 } : {},
+  );
+  const pendingHorsesCount = canReviewHorses
+    ? pendingHorsesQuery.data?.pagination.total ?? 0
+    : 0;
+
   function isActive(href: string): boolean {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
+  }
+
+  function badgeFor(href: string): number {
+    if (href === '/horses' && pendingHorsesCount > 0) return pendingHorsesCount;
+    return 0;
   }
 
   return (
@@ -93,22 +111,33 @@ export function Sidebar({ role }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={isActive(item.href) ? 'page' : undefined}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-              isActive(item.href)
-                ? 'bg-accent text-accent-foreground font-medium'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          const badgeCount = badgeFor(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={isActive(item.href) ? 'page' : undefined}
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                isActive(item.href)
+                  ? 'bg-accent text-accent-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="flex-1">{item.label}</span>
+              {badgeCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 bg-amber-100 px-1.5 text-[11px] text-amber-800 hover:bg-amber-100"
+                >
+                  {badgeCount}
+                </Badge>
+              )}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="border-t p-4">

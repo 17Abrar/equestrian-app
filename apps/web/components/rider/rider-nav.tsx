@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { UserButton } from '@clerk/nextjs';
 import { cn } from '@/lib/utils';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import {
   Home,
   CalendarPlus,
@@ -11,8 +15,21 @@ import {
   Users,
   User,
   Compass,
+  Rabbit,
+  ChevronDown,
+  Building2,
+  Check,
   type LucideIcon,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface NavItem {
   label: string;
@@ -26,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/rider', icon: Home },
   { label: 'Book', href: '/rider/book', icon: CalendarPlus },
   { label: 'Stables', href: '/discover', icon: Compass },
+  { label: 'Horses', href: '/rider/horses', icon: Rabbit },
   { label: 'Progress', href: '/rider/progress', icon: TrendingUp },
   { label: 'Community', href: '/rider/community', icon: Users },
   { label: 'Profile', href: '/rider/profile', icon: User },
@@ -42,9 +60,13 @@ export function RiderNav() {
   return (
     <header className="sticky top-0 z-50 border-b bg-card">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/rider" className="text-lg font-bold">
-          Cavaliq
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/rider" className="text-lg font-bold">
+            Cavaliq
+          </Link>
+          <span className="hidden h-6 w-px bg-border sm:block" aria-hidden="true" />
+          <ActiveStableSwitcher />
+        </div>
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 sm:flex" aria-label="Rider navigation">
@@ -100,5 +122,111 @@ export function RiderNav() {
         </div>
       </nav>
     </header>
+  );
+}
+
+/**
+ * Shows the current active stable + lets the rider switch between any stable
+ * they're a member of. Gated by Clerk org: if the user has an active Clerk
+ * org (admin path), the Clerk UserButton's org switcher handles it — we
+ * don't render this component in that case.
+ *
+ * The switch writes a cookie that getTenantContext reads on subsequent
+ * requests. We then invalidate all queries and soft-navigate so data reloads
+ * under the new tenant without a hard page reload.
+ */
+function ActiveStableSwitcher() {
+  const { data, isLoading } = useCurrentUser();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [switching, setSwitching] = useState(false);
+
+  if (isLoading) {
+    return <Skeleton className="h-8 w-40" />;
+  }
+
+  const user = data?.data;
+  if (!user?.activeClub) return null;
+
+  const memberships = user.memberships ?? [];
+  const activeClubId = user.activeClub.id;
+
+  // Single-membership riders: show the name as a passive indicator (no
+  // dropdown affordance) — there's nowhere to switch to.
+  if (memberships.length <= 1) {
+    return (
+      <div
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground"
+        aria-label={`Booking from ${user.activeClub.name}`}
+      >
+        <Building2 className="h-4 w-4" aria-hidden="true" />
+        <span className="max-w-[12rem] truncate font-medium text-foreground">
+          {user.activeClub.name}
+        </span>
+      </div>
+    );
+  }
+
+  async function switchTo(clubId: string) {
+    if (clubId === activeClubId) return;
+    setSwitching(true);
+    try {
+      const res = await fetch('/api/v1/me/active-club', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clubId }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          (body as { error?: { message?: string } }).error?.message ??
+            'Failed to switch stable',
+        );
+      }
+      // Throw away every cached query since all data was tenant-scoped to
+      // the previous club. Refresh to re-run server components (rider
+      // layout's tenant check, home page's data loads).
+      queryClient.clear();
+      toast.success('Switched stable');
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to switch');
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={switching}
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+        aria-label={`Booking from ${user.activeClub.name} — click to switch`}
+      >
+        <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <span className="max-w-[12rem] truncate font-medium">
+          {user.activeClub.name}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          Booking from
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {memberships.map((m) => (
+          <DropdownMenuItem
+            key={m.clubId}
+            onSelect={() => switchTo(m.clubId)}
+            className="flex items-center justify-between gap-2"
+          >
+            <span className="truncate">{m.clubName}</span>
+            {m.clubId === activeClubId && (
+              <Check className="h-4 w-4 text-primary" aria-hidden="true" />
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
