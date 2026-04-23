@@ -27,13 +27,10 @@ export default async function ClubProfilePage({ params }: PageProps) {
   const club = await getPublicClubBySlug(slug);
   if (!club) notFound();
 
-  // `joinPolicy` comes from DB as a varchar. Narrow it to the union the
-  // client component expects — anything else (shouldn't happen because of the
-  // DB CHECK constraint) falls back to invite_only as the safe default.
-  const joinPolicy =
-    club.joinPolicy === 'open' || club.joinPolicy === 'approval'
-      ? club.joinPolicy
-      : 'invite_only';
+  // `joinPolicy` comes from DB as a varchar. Only "open" is a valid public
+  // join state — legacy "approval" rows and "invite_only" are both treated
+  // as private.
+  const joinPolicy: 'open' | 'invite_only' = club.joinPolicy === 'open' ? 'open' : 'invite_only';
 
   return <ClubProfileClient club={{ ...club, joinPolicy }} />;
 }

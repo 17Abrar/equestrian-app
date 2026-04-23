@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
+import { UserButton } from '@clerk/nextjs';
 import { cn } from '@/lib/utils';
 import {
   Home,
@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Users,
   User,
+  Compass,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -19,9 +20,12 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+// "Stables" is the rider-facing term for /discover — riders think in stables,
+// the admin side uses "club" to match the DB schema.
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/rider', icon: Home },
   { label: 'Book', href: '/rider/book', icon: CalendarPlus },
+  { label: 'Stables', href: '/discover', icon: Compass },
   { label: 'Progress', href: '/rider/progress', icon: TrendingUp },
   { label: 'Community', href: '/rider/community', icon: Users },
   { label: 'Profile', href: '/rider/profile', icon: User },
@@ -38,20 +42,9 @@ export function RiderNav() {
   return (
     <header className="sticky top-0 z-50 border-b bg-card">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-4">
-          <Link href="/rider" className="text-lg font-bold">
-            Equestrian
-          </Link>
-          <OrganizationSwitcher
-            hidePersonal
-            appearance={{
-              elements: {
-                rootBox: 'hidden sm:block',
-                organizationSwitcherTrigger: 'text-sm',
-              },
-            }}
-          />
-        </div>
+        <Link href="/rider" className="text-lg font-bold">
+          Cavaliq
+        </Link>
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 sm:flex" aria-label="Rider navigation">
@@ -94,7 +87,7 @@ export function RiderNav() {
               href={item.href}
               aria-current={isActive(item.href) ? 'page' : undefined}
               className={cn(
-                'flex flex-col items-center gap-1 rounded-lg px-3 py-1 text-xs transition-colors',
+                'flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors',
                 isActive(item.href)
                   ? 'text-foreground font-medium'
                   : 'text-muted-foreground',

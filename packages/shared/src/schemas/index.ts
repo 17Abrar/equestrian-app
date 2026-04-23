@@ -359,7 +359,10 @@ export type UpdateNotificationsInput = z.output<typeof updateNotificationsSchema
 
 export const updateDiscoverySchema = z.object({
   isPublicListing: z.boolean().optional(),
-  joinPolicy: z.enum(['open', 'approval', 'invite_only']).optional(),
+  // Only two modes: open (public, instant join) or invite_only (private).
+  // Legacy 'approval' values coming from old records are accepted for
+  // backwards compatibility — the join endpoint treats them as invite_only.
+  joinPolicy: z.enum(['open', 'invite_only', 'approval']).optional(),
   shortDescription: z.string().max(280).nullable().optional(),
 });
 

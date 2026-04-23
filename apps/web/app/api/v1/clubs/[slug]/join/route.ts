@@ -1,18 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import {
   getPublicClubBySlug,
   isUserMember,
-  hasPendingJoinRequest,
   joinClubInstantly,
-  createJoinRequest,
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
-
-const bodySchema = z.object({
-  message: z.string().max(1000).optional(),
-});
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -24,12 +17,11 @@ interface RouteParams {
  * to already have a tenant context (a club_members row), which is exactly
  * what this endpoint creates.
  *
- * Behavior depends on the target club's `join_policy`:
- *   - open:        instant membership (insert club_members row)
- *   - approval:    creates a club_join_requests row for admin review
- *   - invite_only: 403, must be invited
+ * Behavior: if the club's join_policy is "open", the rider is instantly added
+ * as a member (role=rider). Any other policy → 403. The old "approval" flow
+ * was removed to eliminate gatekeeping friction.
  */
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(_request: NextRequest, { params }: RouteParams) {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -51,25 +43,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (club.joinPolicy === 'invite_only') {
+    // Only two join states now: open (instant) or not-open (403). The old
+    // "approval" policy was removed — the user explicitly wanted zero
+    // gatekeeping. Any legacy 'approval' value in the DB is treated as
+    // invite_only until the admin flips the toggle.
+    if (club.joinPolicy !== 'open') {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'INVITE_ONLY',
-            message: 'This club joins by invitation only. Contact the club directly.',
+            message:
+              'This stable is private and joins by invitation only. Contact them directly.',
           },
         },
         { status: 403 },
       );
-    }
-
-    let parsedBody: z.infer<typeof bodySchema> = {};
-    try {
-      const raw = await request.json();
-      parsedBody = bodySchema.parse(raw);
-    } catch {
-      // Empty body is fine on an open-policy join.
     }
 
     if (await isUserMember(club.id, userId)) {
@@ -82,7 +71,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Pull name + email from Clerk so admins see who the request is from.
     const clerkUser = await currentUser();
     const email = clerkUser?.primaryEmailAddress?.emailAddress ?? null;
     const displayName =
@@ -90,87 +78,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       clerkUser?.username ||
       null;
 
-    if (club.joinPolicy === 'open') {
-      const member = await joinClubInstantly({
-        clubId: club.id,
-        clerkUserId: userId,
-        email,
-        displayName,
-      });
-      if (!member) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: { code: 'JOIN_FAILED', message: 'Could not add you to the club.' },
-          },
-          { status: 500 },
-        );
-      }
-
-      logger.info('rider_joined_club_instantly', {
-        clubId: club.id,
-        slug: club.slug,
-        memberId: member.id,
-      });
-
-      return NextResponse.json(
-        {
-          success: true,
-          data: { status: 'joined', clubId: club.id, slug: club.slug, memberId: member.id },
-        },
-        { status: 201 },
-      );
-    }
-
-    // joinPolicy === 'approval'
-    if (await hasPendingJoinRequest(club.id, userId)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'REQUEST_ALREADY_PENDING',
-            message:
-              'You already have a pending request to join this club. Please wait for a response.',
-          },
-        },
-        { status: 409 },
-      );
-    }
-
-    const req = await createJoinRequest({
+    const member = await joinClubInstantly({
       clubId: club.id,
       clerkUserId: userId,
       email,
       displayName,
-      message: parsedBody.message ?? null,
     });
-    if (!req) {
+    if (!member) {
       return NextResponse.json(
         {
           success: false,
-          error: { code: 'REQUEST_FAILED', message: 'Could not send the join request.' },
+          error: { code: 'JOIN_FAILED', message: 'Could not add you to the stable.' },
         },
         { status: 500 },
       );
     }
 
-    logger.info('rider_join_request_created', {
+    logger.info('rider_joined_club_instantly', {
       clubId: club.id,
       slug: club.slug,
-      requestId: req.id,
+      memberId: member.id,
     });
 
     return NextResponse.json(
       {
         success: true,
-        data: {
-          status: 'pending',
-          clubId: club.id,
-          slug: club.slug,
-          requestId: req.id,
-        },
+        data: { status: 'joined', clubId: club.id, slug: club.slug, memberId: member.id },
       },
-      { status: 202 },
+      { status: 201 },
     );
   } catch (error) {
     logger.error('join_club_failed', {

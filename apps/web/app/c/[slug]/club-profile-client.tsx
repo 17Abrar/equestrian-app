@@ -20,15 +20,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 interface PublicClub {
   id: string;
@@ -45,7 +36,7 @@ interface PublicClub {
   socialInstagram: string | null;
   socialFacebook: string | null;
   socialTiktok: string | null;
-  joinPolicy: 'open' | 'approval' | 'invite_only';
+  joinPolicy: 'open' | 'invite_only';
   brandPrimaryColor: string | null;
   brandSecondaryColor: string | null;
 }
@@ -55,35 +46,25 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
   const router = useRouter();
   const primary = club.brandPrimaryColor ?? '#6366f1';
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [message, setMessage] = useState('');
   const [joining, setJoining] = useState(false);
 
   function openJoinFlow() {
     if (!isLoaded) return;
+    if (club.joinPolicy !== 'open') return; // button is disabled already
     if (!isSignedIn) {
-      // Clerk handles the return-to redirect automatically when we pass
-      // a redirect_url via the sign-up URL.
+      // After sign-up, bounce back here with ?join=1 so we can auto-submit.
       const redirectUrl = `/c/${club.slug}?join=1`;
       router.push(`/sign-up?redirect_url=${encodeURIComponent(redirectUrl)}`);
       return;
     }
-
-    if (club.joinPolicy === 'open') {
-      void submitJoin(null);
-      return;
-    }
-    // approval — prompt for an optional message
-    setDialogOpen(true);
+    void submitJoin();
   }
 
-  async function submitJoin(msg: string | null) {
+  async function submitJoin() {
     setJoining(true);
     try {
       const res = await fetch(`/api/v1/clubs/${club.slug}/join`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(msg ? { message: msg } : {}),
       });
       const json = await res.json();
 
@@ -94,14 +75,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
 
       if (json.data.status === 'joined' || json.data.status === 'already_member') {
         toast.success(`You're in. Welcome to ${club.name}.`);
-        setDialogOpen(false);
-        // Send them to the rider dashboard — the layout will route based on role.
         router.push('/rider');
-      } else if (json.data.status === 'pending') {
-        toast.success(
-          'Request sent. The club will review it and email you when they respond.',
-        );
-        setDialogOpen(false);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network error');
@@ -110,12 +84,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
     }
   }
 
-  const joinCta =
-    club.joinPolicy === 'open'
-      ? 'Join instantly'
-      : club.joinPolicy === 'approval'
-        ? 'Request to join'
-        : 'Invite only';
+  const joinCta = club.joinPolicy === 'open' ? 'Join stable' : 'Invite only';
 
   return (
     <div className="min-h-screen bg-background">
@@ -229,12 +198,12 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
               <CardContent className="space-y-3 pt-6 text-sm">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Joining policy
+                    Joining
                   </p>
                   <p className="mt-1 font-medium">
-                    {club.joinPolicy === 'open' && 'Anyone can join instantly'}
-                    {club.joinPolicy === 'approval' && 'Membership requires approval'}
-                    {club.joinPolicy === 'invite_only' && 'By invitation only'}
+                    {club.joinPolicy === 'open'
+                      ? 'Open — anyone can join'
+                      : 'Invitation only'}
                   </p>
                 </div>
                 <div>
@@ -310,39 +279,6 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
         </div>
       </footer>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request to join {club.name}</DialogTitle>
-            <DialogDescription>
-              A club admin will review your request. You&apos;ll get an email when they
-              approve or decline.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Message (optional)</label>
-            <Textarea
-              placeholder="Tell them a bit about yourself — experience, goals, why you want to join"
-              rows={4}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              maxLength={1000}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => submitJoin(message.trim() || null)}
-              disabled={joining}
-              style={{ backgroundColor: primary }}
-            >
-              {joining ? 'Sending…' : 'Send request'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

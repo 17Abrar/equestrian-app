@@ -21,7 +21,7 @@ interface PublicClub {
   coverPhotoUrl: string | null;
   shortDescription: string | null;
   description: string | null;
-  joinPolicy: 'open' | 'approval' | 'invite_only';
+  joinPolicy: string;
   brandPrimaryColor: string | null;
 }
 
@@ -185,12 +185,7 @@ function ClubCard({ club }: { club: PublicClub }) {
           <h3 className="line-clamp-1 text-base font-semibold">{club.name}</h3>
           {club.joinPolicy === 'open' && (
             <Badge className="shrink-0 text-xs" style={{ backgroundColor: accent }}>
-              Open
-            </Badge>
-          )}
-          {club.joinPolicy === 'approval' && (
-            <Badge variant="secondary" className="shrink-0 text-xs">
-              Approval
+              Open to join
             </Badge>
           )}
         </div>

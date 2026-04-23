@@ -9,22 +9,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 
 export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
   const [isPublicListing, setIsPublicListing] = useState(settings.isPublicListing ?? false);
-  const [joinPolicy, setJoinPolicy] = useState<'open' | 'approval' | 'invite_only'>(
-    (settings.joinPolicy as 'open' | 'approval' | 'invite_only' | undefined) ?? 'invite_only',
+  // Only two modes now: public-listed = open to everyone, private = invite-only.
+  // The "approval" policy was removed — the user wants zero gatekeeping on joins.
+  const [joinPolicy, setJoinPolicy] = useState<'open' | 'invite_only'>(
+    settings.joinPolicy === 'open' ? 'open' : 'invite_only',
   );
   const [shortDescription, setShortDescription] = useState(settings.shortDescription ?? '');
+
+  function handlePublicToggle(next: boolean) {
+    setIsPublicListing(next);
+    // Turning the public listing on defaults to "open" so riders can join
+    // without friction. Turning it off assumes "invite only" (the club isn't
+    // advertised anywhere).
+    setJoinPolicy(next ? 'open' : 'invite_only');
+  }
 
   async function onSave() {
     try {
@@ -60,42 +63,19 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
         <CardContent className="space-y-6">
           <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
             <div className="space-y-0.5">
-              <Label htmlFor="is-public">List on the public directory</Label>
+              <Label htmlFor="is-public">Let riders discover and join instantly</Label>
               <p className="text-xs text-muted-foreground">
-                Shows your club on the /discover page, visible to everyone (including non-members).
+                Your club appears on the public stable directory at{' '}
+                <code className="rounded bg-muted px-1">/discover</code>, and any signed-in
+                rider can join with one tap — no approval step. Turn this off to keep the club
+                invite-only.
               </p>
             </div>
             <Switch
               id="is-public"
               checked={isPublicListing}
-              onCheckedChange={setIsPublicListing}
+              onCheckedChange={handlePublicToggle}
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Join policy</Label>
-            <p className="text-xs text-muted-foreground">
-              How riders become members when they tap &ldquo;Join&rdquo; on your public profile.
-            </p>
-            <Select
-              value={joinPolicy}
-              onValueChange={(v) => setJoinPolicy(v as typeof joinPolicy)}
-            >
-              <SelectTrigger className="w-full sm:w-80">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="open">
-                  Open — riders join instantly
-                </SelectItem>
-                <SelectItem value="approval">
-                  Approval — you review requests before admitting
-                </SelectItem>
-                <SelectItem value="invite_only">
-                  Invite only — only club-sent invites can join
-                </SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">

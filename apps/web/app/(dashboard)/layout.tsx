@@ -24,7 +24,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         redirect('/sign-in');
       }
       if (error.code === 'NO_ORGANIZATION') {
-        redirect('/select-org');
+        // Riders without a club land on /rider to see the "find a stable"
+        // empty state. Admins who want to start a club click through from
+        // there into /onboarding.
+        redirect('/rider');
       }
     }
     throw error;
