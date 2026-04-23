@@ -1,3 +1,4 @@
+import React from 'react';
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import {
@@ -6,6 +7,8 @@ import {
   joinClubInstantly,
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
+import { sendTriggeredEmailAsync } from '@/lib/email';
+import { WelcomeRider } from '@equestrian/email-templates/welcome-rider';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -99,6 +102,20 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       slug: club.slug,
       memberId: member.id,
     });
+
+    // Welcome email — respects the club's notification_preferences.
+    if (email) {
+      sendTriggeredEmailAsync({
+        clubId: club.id,
+        trigger: 'rider_welcome',
+        to: email,
+        subject: `Welcome to ${club.name}`,
+        template: React.createElement(WelcomeRider, {
+          riderName: displayName ?? '',
+          clubName: club.name,
+        }),
+      });
+    }
 
     return NextResponse.json(
       {

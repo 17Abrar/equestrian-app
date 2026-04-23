@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { render } from '@react-email/components';
+import { after } from 'next/server';
 import { rawDb } from '@equestrian/db';
 import { clubs, type NotificationPreferences } from '@equestrian/db/schema';
 import { eq } from 'drizzle-orm';
@@ -71,13 +72,23 @@ export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolea
 }
 
 /**
- * Sends an email in the background — does not block the caller.
- * Use this in API routes so the response isn't delayed by email delivery.
+ * Sends an email after the response is flushed. Uses Next.js `after()` so
+ * the task completes even on Cloudflare Workers, which otherwise freezes
+ * the isolate after the response returns and kills any unawaited promises.
+ *
+ * Safe to call from any request handler; falls back to bare fire-and-forget
+ * if called outside a request context (e.g. from a script).
  */
 export function sendEmailAsync(params: SendEmailParams): void {
-  sendEmail(params).catch(() => {
-    // Already logged inside sendEmail — swallow here
-  });
+  const task = () =>
+    sendEmail(params).catch(() => {
+      // Already logged inside sendEmail — swallow here
+    });
+  try {
+    after(task);
+  } catch {
+    void task();
+  }
 }
 
 // ─── Trigger-gated sends (respect club notification_preferences) ──────
@@ -128,12 +139,16 @@ interface TriggeredEmailParams extends SendEmailParams {
  * If the trigger's `email` flag is `false`, the send is skipped silently and
  * a log line is emitted so the audit trail shows it was intentional.
  *
+ * Uses Next.js `after()` so the send completes even on Cloudflare Workers,
+ * which terminates unawaited promises once the response is flushed. Falls
+ * back to a bare promise if called outside a request context.
+ *
  * Use this for every automated / transactional email. Manual sends from the
  * Emails → Compose tab skip the check because the admin explicitly opted in.
  */
 export function sendTriggeredEmailAsync(params: TriggeredEmailParams): void {
   const { clubId, trigger, ...emailParams } = params;
-  void (async () => {
+  const task = async () => {
     const enabled = await isNotificationEnabled(clubId, trigger);
     if (!enabled) {
       logger.info('email_skipped_by_preference', {
@@ -149,5 +164,10 @@ export function sendTriggeredEmailAsync(params: TriggeredEmailParams): void {
     } catch {
       // sendEmail never throws but guard anyway
     }
-  })();
+  };
+  try {
+    after(task);
+  } catch {
+    void task();
+  }
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { type NextRequest } from 'next/server';
+import { type NextRequest, after } from 'next/server';
 import { cancelBookingSchema } from '@equestrian/shared/schemas';
 import { calculateCancellationFee } from '@equestrian/shared/utils';
 import {
@@ -146,33 +146,37 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         resourceId: bookingId,
       });
 
-      // Fire-and-forget cancellation email — does not block the response
-      void getMemberById(ctx.clubId, existing.riderMemberId).then((riderMember) => {
-        if (!riderMember?.email) return;
+      // Post-response cancellation email — `after()` keeps the task alive
+      // past response flush on Cloudflare Workers.
+      after(async () => {
+        try {
+          const riderMember = await getMemberById(ctx.clubId, existing.riderMemberId);
+          if (!riderMember?.email) return;
 
-        const feeDisplay = feeResult.fee > 0
-          ? `${(feeResult.fee / 100).toFixed(2)} ${existing.currency}`
-          : undefined;
+          const feeDisplay = feeResult.fee > 0
+            ? `${(feeResult.fee / 100).toFixed(2)} ${existing.currency}`
+            : undefined;
 
-        sendTriggeredEmailAsync({
-          clubId: ctx.clubId,
-          trigger: 'booking_cancellation',
-          to: riderMember.email,
-          subject: `Booking Cancelled — ${existing.lessonTypeName}`,
-          template: React.createElement(BookingCancellation, {
-            riderName: existing.riderName ?? riderMember.displayName ?? '',
-            lessonType: existing.lessonTypeName,
-            date: String(existing.slotDate),
-            time: String(existing.slotStartTime),
-            arena: existing.arenaName ?? 'Arena',
-            clubName: club.name,
-            reason: data.reason,
-            cancellationFee: feeDisplay,
-            isLateCancellation: feeResult.isLate,
-          }),
-        });
-      }).catch(() => {
-        // Email failure is non-fatal — already logged inside sendEmailAsync
+          sendTriggeredEmailAsync({
+            clubId: ctx.clubId,
+            trigger: 'booking_cancellation',
+            to: riderMember.email,
+            subject: `Booking Cancelled — ${existing.lessonTypeName}`,
+            template: React.createElement(BookingCancellation, {
+              riderName: existing.riderName ?? riderMember.displayName ?? '',
+              lessonType: existing.lessonTypeName,
+              date: String(existing.slotDate),
+              time: String(existing.slotStartTime),
+              arena: existing.arenaName ?? 'Arena',
+              clubName: club.name,
+              reason: data.reason,
+              cancellationFee: feeDisplay,
+              isLateCancellation: feeResult.isLate,
+            }),
+          });
+        } catch {
+          // Email failure is non-fatal
+        }
       });
 
       return successResponse(cancelled);

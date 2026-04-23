@@ -1,5 +1,5 @@
 import React from 'react';
-import { type NextRequest } from 'next/server';
+import { type NextRequest, after } from 'next/server';
 import { riderFiltersSchema, createRiderSchema } from '@equestrian/shared/schemas';
 import { getRidersByClub, createRider, getClubById } from '@equestrian/db/queries';
 import {
@@ -58,22 +58,26 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Fire-and-forget welcome email — does not block the response
+      // Post-response welcome email — `after()` keeps the task alive past
+      // response flush on Cloudflare Workers.
       const riderEmail = result.member.email;
       if (riderEmail) {
-        void getClubById(ctx.clubId).then((club) => {
-          sendTriggeredEmailAsync({
-            clubId: ctx.clubId,
-            trigger: 'rider_welcome',
-            to: riderEmail,
-            subject: `Welcome to ${club?.name ?? 'the club'}`,
-            template: React.createElement(WelcomeRider, {
-              riderName: result.member.displayName ?? '',
-              clubName: club?.name ?? '',
-            }),
-          });
-        }).catch(() => {
-          // Email failure is non-fatal — already logged inside sendEmailAsync
+        after(async () => {
+          try {
+            const club = await getClubById(ctx.clubId);
+            sendTriggeredEmailAsync({
+              clubId: ctx.clubId,
+              trigger: 'rider_welcome',
+              to: riderEmail,
+              subject: `Welcome to ${club?.name ?? 'the club'}`,
+              template: React.createElement(WelcomeRider, {
+                riderName: result.member.displayName ?? '',
+                clubName: club?.name ?? '',
+              }),
+            });
+          } catch {
+            // Email failure is non-fatal
+          }
         });
       }
 

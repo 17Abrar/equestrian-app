@@ -1,5 +1,5 @@
 import React from 'react';
-import { type NextRequest } from 'next/server';
+import { type NextRequest, after } from 'next/server';
 import { bookingFiltersSchema, createBookingSchema } from '@equestrian/shared/schemas';
 import {
   getBookingsByClub,
@@ -214,35 +214,40 @@ export async function POST(request: NextRequest) {
         resourceId: booking.id,
       });
 
-      // Fire-and-forget confirmation email — does not block the response
-      void Promise.all([
-        getBookingById(ctx.clubId, booking.id),
-        getMemberById(ctx.clubId, booking.riderMemberId),
-        getClubById(ctx.clubId),
-      ]).then(([fullBooking, riderMember, club]) => {
-        if (!fullBooking || !riderMember?.email) return;
-        sendTriggeredEmailAsync({
-          clubId: ctx.clubId,
-          trigger: 'booking_confirmation',
-          to: riderMember.email,
-          subject: `Booking Confirmed — ${fullBooking.lessonTypeName}`,
-          template: React.createElement(BookingConfirmation, {
-            riderName: fullBooking.riderName ?? riderMember.displayName ?? '',
-            lessonType: fullBooking.lessonTypeName,
-            date: String(fullBooking.slotDate),
-            time: String(fullBooking.slotStartTime),
-            horseName: fullBooking.horseName ?? 'Not yet assigned',
-            coachName: slot.coachName ?? 'Not yet assigned',
-            arena: fullBooking.arenaName ?? 'Arena',
-            clubName: club?.name ?? '',
-            clubLogo: '',
-            amount: fullBooking.amount ? String(fullBooking.amount) : undefined,
-            currency: fullBooking.currency ?? 'AED',
-            addToCalendarUrl: '#',
-          }),
-        });
-      }).catch(() => {
-        // Email failure is non-fatal — already logged inside sendEmailAsync
+      // Post-response confirmation email — `after()` keeps the task alive
+      // past response flush on Cloudflare Workers, where bare fire-and-forget
+      // promises get killed when the isolate freezes.
+      after(async () => {
+        try {
+          const [fullBooking, riderMember, club] = await Promise.all([
+            getBookingById(ctx.clubId, booking.id),
+            getMemberById(ctx.clubId, booking.riderMemberId),
+            getClubById(ctx.clubId),
+          ]);
+          if (!fullBooking || !riderMember?.email) return;
+          sendTriggeredEmailAsync({
+            clubId: ctx.clubId,
+            trigger: 'booking_confirmation',
+            to: riderMember.email,
+            subject: `Booking Confirmed — ${fullBooking.lessonTypeName}`,
+            template: React.createElement(BookingConfirmation, {
+              riderName: fullBooking.riderName ?? riderMember.displayName ?? '',
+              lessonType: fullBooking.lessonTypeName,
+              date: String(fullBooking.slotDate),
+              time: String(fullBooking.slotStartTime),
+              horseName: fullBooking.horseName ?? 'Not yet assigned',
+              coachName: slot.coachName ?? 'Not yet assigned',
+              arena: fullBooking.arenaName ?? 'Arena',
+              clubName: club?.name ?? '',
+              clubLogo: '',
+              amount: fullBooking.amount ? String(fullBooking.amount) : undefined,
+              currency: fullBooking.currency ?? 'AED',
+              addToCalendarUrl: '#',
+            }),
+          });
+        } catch {
+          // Email failure is non-fatal
+        }
       });
 
       return successResponse(booking, 201);

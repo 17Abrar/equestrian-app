@@ -1,5 +1,5 @@
 import React from 'react';
-import { type NextRequest } from 'next/server';
+import { type NextRequest, after } from 'next/server';
 import {
   getBookingById,
   getBookingSlotById,
@@ -74,28 +74,32 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         resourceId: bookingId,
       });
 
-      // Fire-and-forget notification email
-      void getMemberById(ctx.clubId, booking.riderMemberId).then((riderMember) => {
-        if (!riderMember?.email) return;
+      // Post-response no-show email — `after()` keeps the task alive past
+      // response flush on Cloudflare Workers.
+      after(async () => {
+        try {
+          const riderMember = await getMemberById(ctx.clubId, booking.riderMemberId);
+          if (!riderMember?.email) return;
 
-        sendTriggeredEmailAsync({
-          clubId: ctx.clubId,
-          trigger: 'booking_cancellation',
-          to: riderMember.email,
-          subject: `No-Show Recorded — ${booking.lessonTypeName}`,
-          template: React.createElement(BookingCancellation, {
-            riderName: booking.riderName ?? riderMember.displayName ?? '',
-            lessonType: booking.lessonTypeName,
-            date: String(booking.slotDate),
-            time: String(booking.slotStartTime),
-            arena: booking.arenaName ?? 'Arena',
-            clubName: club.name,
-            cancellationFee: noShowFee > 0 ? `${(noShowFee / 100).toFixed(2)} ${booking.currency}` : undefined,
-            type: 'no_show',
-          }),
-        });
-      }).catch(() => {
-        // Email failure is non-fatal
+          sendTriggeredEmailAsync({
+            clubId: ctx.clubId,
+            trigger: 'booking_cancellation',
+            to: riderMember.email,
+            subject: `No-Show Recorded — ${booking.lessonTypeName}`,
+            template: React.createElement(BookingCancellation, {
+              riderName: booking.riderName ?? riderMember.displayName ?? '',
+              lessonType: booking.lessonTypeName,
+              date: String(booking.slotDate),
+              time: String(booking.slotStartTime),
+              arena: booking.arenaName ?? 'Arena',
+              clubName: club.name,
+              cancellationFee: noShowFee > 0 ? `${(noShowFee / 100).toFixed(2)} ${booking.currency}` : undefined,
+              type: 'no_show',
+            }),
+          });
+        } catch {
+          // Email failure is non-fatal
+        }
       });
 
       return successResponse(updated);
