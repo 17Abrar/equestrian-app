@@ -4,7 +4,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, MapPin, ArrowRight, Compass } from 'lucide-react';
+import { useUser, UserButton } from '@clerk/nextjs';
+import { Search, MapPin, ArrowRight, Compass, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,6 +33,7 @@ interface DiscoverResponse {
 }
 
 export function DiscoverClient() {
+  const { isSignedIn, isLoaded } = useUser();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -47,28 +49,45 @@ export function DiscoverClient() {
       const params = new URLSearchParams({ pageSize: '24' });
       if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await fetch(`/api/v1/discover/clubs?${params}`);
-      if (!res.ok) throw new Error('Failed to load clubs');
+      if (!res.ok) throw new Error('Failed to load stables');
       return res.json();
     },
   });
 
-  const clubs = data?.data ?? [];
+  const stables = data?.data ?? [];
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
+          <Link
+            href={isSignedIn ? '/rider' : '/'}
+            className="flex items-center gap-2 font-semibold"
+          >
             <Compass className="h-5 w-5" />
             <span>Cavaliq</span>
           </Link>
           <nav className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/sign-in">Sign in</Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link href="/sign-up">Sign up</Link>
-            </Button>
+            {!isLoaded ? null : isSignedIn ? (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/rider">
+                    <Home className="mr-2 h-4 w-4" />
+                    My rider home
+                  </Link>
+                </Button>
+                <UserButton appearance={{ elements: { userButtonTrigger: 'rounded-full' } }} />
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/sign-in">Sign in</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="/sign-up">Sign up</Link>
+                </Button>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -76,11 +95,11 @@ export function DiscoverClient() {
       <section className="border-b bg-gradient-to-b from-background to-muted/30">
         <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Find a riding club.
+            Find a stable.
           </h1>
           <p className="mt-3 max-w-2xl text-lg text-muted-foreground">
-            Browse equestrian clubs, see what they offer, and join the ones that fit you.
-            Ride at multiple clubs — your progress follows you.
+            Browse stables near you, see what they offer, and join the ones that fit. Ride at
+            multiple stables — your progress follows you.
           </p>
 
           <div className="mt-6 max-w-xl">
@@ -88,11 +107,11 @@ export function DiscoverClient() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search by club name or city..."
+                placeholder="Search by stable name or city..."
                 className="h-11 pl-10 text-base"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                aria-label="Search clubs"
+                aria-label="Search stables"
               />
             </div>
           </div>
@@ -109,28 +128,28 @@ export function DiscoverClient() {
         ) : isError ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Couldn&apos;t load clubs right now.</p>
+              <p className="text-muted-foreground">Couldn&apos;t load stables right now.</p>
               <Button variant="outline" className="mt-4" onClick={() => refetch()}>
                 Try again
               </Button>
             </CardContent>
           </Card>
-        ) : clubs.length === 0 ? (
+        ) : stables.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <h2 className="text-lg font-semibold">No clubs yet</h2>
+              <h2 className="text-lg font-semibold">No stables yet</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Check back soon — more clubs are joining every week.
+                Check back soon — more stables are joining every week.
               </p>
             </CardContent>
           </Card>
         ) : (
           <>
             <p className="mb-4 text-sm text-muted-foreground">
-              {data?.pagination.total} {data?.pagination.total === 1 ? 'club' : 'clubs'} available
+              {data?.pagination.total} {data?.pagination.total === 1 ? 'stable' : 'stables'} available
             </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {clubs.map((club) => (
+              {stables.map((club) => (
                 <ClubCard key={club.id} club={club} />
               ))}
             </div>
@@ -140,9 +159,12 @@ export function DiscoverClient() {
 
       <footer className="mt-20 border-t">
         <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted-foreground sm:px-6">
-          Run your own club on Cavaliq.{' '}
-          <Link href="/sign-up" className="text-foreground underline-offset-4 hover:underline">
-            Start your club →
+          Run your own stable on Cavaliq.{' '}
+          <Link
+            href="/sign-up?as=stable"
+            className="text-foreground underline-offset-4 hover:underline"
+          >
+            Start your stable →
           </Link>
         </div>
       </footer>

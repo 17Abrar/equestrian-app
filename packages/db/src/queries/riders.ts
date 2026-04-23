@@ -202,3 +202,74 @@ export async function updateRiderProfile(clubId: string, riderId: string, data: 
 
   return result[0] ?? null;
 }
+
+/**
+ * Upsert a rider_profiles row keyed by (clubId, memberId). Used by the
+ * rider-facing /rider/profile page so riders who joined via /discover can
+ * fill in their own details without needing an admin to create the row
+ * first.
+ *
+ * On first call → inserts a fresh profile at the default skill level.
+ * On subsequent calls → updates the existing row, leaving
+ * `totalLessonsCompleted` untouched (that's owned by the bookings flow).
+ */
+export async function upsertRiderProfileByMember(
+  clubId: string,
+  memberId: string,
+  data: RiderProfileUpdate,
+) {
+  const existing = await db
+    .select({ id: riderProfiles.id })
+    .from(riderProfiles)
+    .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, memberId)))
+    .limit(1);
+
+  const weightKg = data.weightKg != null ? String(data.weightKg) : null;
+  const heightCm = data.heightCm != null ? String(data.heightCm) : null;
+
+  if (existing[0]) {
+    const setValues: Partial<NewRiderProfile> = {
+      updatedAt: new Date(),
+      ...(data.skillLevel !== undefined
+        ? { skillLevel: data.skillLevel as 'beginner' | 'intermediate' | 'advanced' }
+        : {}),
+      ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth } : {}),
+      ...(data.weightKg !== undefined ? { weightKg } : {}),
+      ...(data.heightCm !== undefined ? { heightCm } : {}),
+      ...(data.emergencyContactName !== undefined
+        ? { emergencyContactName: data.emergencyContactName }
+        : {}),
+      ...(data.emergencyContactPhone !== undefined
+        ? { emergencyContactPhone: data.emergencyContactPhone }
+        : {}),
+      ...(data.emergencyContactRelation !== undefined
+        ? { emergencyContactRelation: data.emergencyContactRelation }
+        : {}),
+      ...(data.medicalNotes !== undefined ? { medicalNotes: data.medicalNotes } : {}),
+    };
+    const result = await db
+      .update(riderProfiles)
+      .set(setValues)
+      .where(eq(riderProfiles.id, existing[0].id))
+      .returning();
+    return result[0] ?? null;
+  }
+
+  const result = await db
+    .insert(riderProfiles)
+    .values({
+      clubId,
+      memberId,
+      skillLevel:
+        (data.skillLevel as 'beginner' | 'intermediate' | 'advanced' | undefined) ?? 'beginner',
+      dateOfBirth: data.dateOfBirth ?? null,
+      weightKg,
+      heightCm,
+      emergencyContactName: data.emergencyContactName ?? null,
+      emergencyContactPhone: data.emergencyContactPhone ?? null,
+      emergencyContactRelation: data.emergencyContactRelation ?? null,
+      medicalNotes: data.medicalNotes ?? null,
+    })
+    .returning();
+  return result[0] ?? null;
+}

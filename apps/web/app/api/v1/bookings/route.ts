@@ -22,7 +22,7 @@ import {
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
-import { sendEmailAsync } from '@/lib/email';
+import { sendTriggeredEmailAsync } from '@/lib/email';
 import { BookingConfirmation } from '@equestrian/email-templates/booking-confirmation';
 
 export async function GET(request: NextRequest) {
@@ -221,7 +221,9 @@ export async function POST(request: NextRequest) {
         getClubById(ctx.clubId),
       ]).then(([fullBooking, riderMember, club]) => {
         if (!fullBooking || !riderMember?.email) return;
-        sendEmailAsync({
+        sendTriggeredEmailAsync({
+          clubId: ctx.clubId,
+          trigger: 'booking_confirmation',
           to: riderMember.email,
           subject: `Booking Confirmed — ${fullBooking.lessonTypeName}`,
           template: React.createElement(BookingConfirmation, {

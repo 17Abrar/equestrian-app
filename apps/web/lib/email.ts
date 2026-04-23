@@ -1,5 +1,8 @@
 import { Resend } from 'resend';
 import { render } from '@react-email/components';
+import { rawDb } from '@equestrian/db';
+import { clubs, type NotificationPreferences } from '@equestrian/db/schema';
+import { eq } from 'drizzle-orm';
 import { logger } from './logger';
 import type { ReactElement } from 'react';
 
@@ -75,4 +78,76 @@ export function sendEmailAsync(params: SendEmailParams): void {
   sendEmail(params).catch(() => {
     // Already logged inside sendEmail — swallow here
   });
+}
+
+// ─── Trigger-gated sends (respect club notification_preferences) ──────
+
+export type NotificationTrigger = keyof NotificationPreferences;
+
+/**
+ * Returns true if the given notification trigger is enabled (via email) for
+ * the club. Missing preferences default to `true` so clubs that haven't
+ * touched Settings → Notifications still get the transactional emails.
+ *
+ * Uses `rawDb` on purpose — this is called from many places, often outside an
+ * active tenant context. The clubs row is exempt from RLS.
+ */
+export async function isNotificationEnabled(
+  clubId: string,
+  trigger: NotificationTrigger,
+): Promise<boolean> {
+  try {
+    const rows = await rawDb
+      .select({ prefs: clubs.notificationPreferences })
+      .from(clubs)
+      .where(eq(clubs.id, clubId))
+      .limit(1);
+    const prefs = rows[0]?.prefs as NotificationPreferences | null | undefined;
+    if (!prefs) return true;
+    const flag = prefs[trigger];
+    if (!flag) return true;
+    return flag.email !== false;
+  } catch (err) {
+    // Failing open — we don't want a DB blip to suppress customer receipts.
+    logger.warn('notification_preference_lookup_failed', {
+      clubId,
+      trigger,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+    return true;
+  }
+}
+
+interface TriggeredEmailParams extends SendEmailParams {
+  clubId: string;
+  trigger: NotificationTrigger;
+}
+
+/**
+ * Fire-and-forget send that first checks the club's notification_preferences.
+ * If the trigger's `email` flag is `false`, the send is skipped silently and
+ * a log line is emitted so the audit trail shows it was intentional.
+ *
+ * Use this for every automated / transactional email. Manual sends from the
+ * Emails → Compose tab skip the check because the admin explicitly opted in.
+ */
+export function sendTriggeredEmailAsync(params: TriggeredEmailParams): void {
+  const { clubId, trigger, ...emailParams } = params;
+  void (async () => {
+    const enabled = await isNotificationEnabled(clubId, trigger);
+    if (!enabled) {
+      logger.info('email_skipped_by_preference', {
+        clubId,
+        trigger,
+        to: emailParams.to,
+        subject: emailParams.subject,
+      });
+      return;
+    }
+    try {
+      await sendEmail(emailParams);
+    } catch {
+      // sendEmail never throws but guard anyway
+    }
+  })();
 }

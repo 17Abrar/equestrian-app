@@ -8,7 +8,9 @@ import {
   XCircle,
   CheckCircle2,
   UserX,
+  Undo2,
 } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   useBookings,
@@ -53,7 +55,7 @@ import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants
 
 // ─── Action Dialog Types ─────────────────────────────────────────────
 
-type ActionType = 'cancel' | 'no_show' | 'complete';
+type ActionType = 'cancel' | 'no_show' | 'complete' | 'refund';
 
 interface ActionDialogState {
   type: ActionType;
@@ -78,6 +80,12 @@ const ACTION_CONFIG: Record<ActionType, { title: string; description: string; co
     description: 'Mark this booking as completed?',
     confirmLabel: 'Mark Completed',
     variant: 'default',
+  },
+  refund: {
+    title: 'Refund Payment',
+    description: 'Issue a full refund through the payment provider that captured this booking. The booking payment status will flip to "refunded" and a webhook will confirm once the provider processes it.',
+    confirmLabel: 'Issue Refund',
+    variant: 'destructive',
   },
 };
 
@@ -111,6 +119,27 @@ interface ActionDialogProps {
   onClose: () => void;
 }
 
+function useRefundBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ bookingId, reason }: { bookingId: string; reason?: string }) => {
+      const res = await fetch(`/api/v1/bookings/${bookingId}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reason ? { reason } : {}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error?.message ?? 'Refund failed');
+      }
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bookings'] });
+    },
+  });
+}
+
 function BookingActionDialog({ state, onClose }: ActionDialogProps) {
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -118,6 +147,7 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
   const cancelBooking = useCancelBooking();
   const markNoShow = useMarkNoShow();
   const markComplete = useMarkComplete();
+  const refundBooking = useRefundBooking();
 
   const handleConfirm = useCallback(async () => {
     if (!state) return;
@@ -136,6 +166,12 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       } else if (state.type === 'complete') {
         await markComplete.mutateAsync(state.booking.id);
         toast.success('Booking marked as completed');
+      } else if (state.type === 'refund') {
+        await refundBooking.mutateAsync({
+          bookingId: state.booking.id,
+          reason: reason || undefined,
+        });
+        toast.success('Refund issued');
       }
       setReason('');
       onClose();
@@ -144,7 +180,7 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [state, reason, cancelBooking, markNoShow, markComplete, onClose]);
+  }, [state, reason, cancelBooking, markNoShow, markComplete, refundBooking, onClose]);
 
   if (!state) return null;
 
@@ -182,6 +218,21 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
             <Textarea
               id="cancel-reason"
               placeholder="Reason for cancellation..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+            />
+          </div>
+        )}
+
+        {state.type === 'refund' && (
+          <div className="space-y-2">
+            <label htmlFor="refund-reason" className="text-sm font-medium">
+              Reason (optional)
+            </label>
+            <Textarea
+              id="refund-reason"
+              placeholder="Why are you refunding?"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
@@ -229,6 +280,12 @@ export function BookingsList() {
     if (booking.status === 'confirmed') {
       actions.push('complete');
       actions.push('no_show');
+    }
+    // Refund is available whenever the booking has been paid and isn't
+    // already refunded. The API enforces this too, but the menu item should
+    // only surface when meaningful.
+    if (booking.paymentStatus === 'paid') {
+      actions.push('refund');
     }
     return actions;
   }
@@ -383,6 +440,15 @@ export function BookingsList() {
                               >
                                 <XCircle className="mr-2 h-4 w-4" />
                                 Cancel Booking
+                              </DropdownMenuItem>
+                            )}
+                            {actions.includes('refund') && (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setActionDialog({ type: 'refund', booking })}
+                              >
+                                <Undo2 className="mr-2 h-4 w-4" />
+                                Issue Refund
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>

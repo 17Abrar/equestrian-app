@@ -1,5 +1,7 @@
-import { getRiderByMemberId } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
+import { type NextRequest } from 'next/server';
+import { z } from 'zod';
+import { getRiderByMemberId, upsertRiderProfileByMember } from '@equestrian/db/queries';
+import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
 export async function GET() {
   return withAuth(async (ctx) => {
@@ -9,5 +11,47 @@ export async function GET() {
 
     const rider = await getRiderByMemberId(ctx.clubId, ctx.memberId);
     return successResponse(rider);
+  });
+}
+
+// Fields a rider is allowed to edit on their own profile. Skill level is
+// present — admins will often override it from the staff side, but the
+// rider's self-reported level is a sensible default.
+const updateMyProfileSchema = z
+  .object({
+    dateOfBirth: z.string().optional().nullable(),
+    weightKg: z.number().positive().max(500).optional().nullable(),
+    heightCm: z.number().positive().max(300).optional().nullable(),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+    emergencyContactName: z.string().max(255).optional().nullable(),
+    emergencyContactPhone: z.string().max(50).optional().nullable(),
+    emergencyContactRelation: z.string().max(100).optional().nullable(),
+    medicalNotes: z.string().max(5000).optional().nullable(),
+  })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'At least one field must be provided',
+  });
+
+export async function PATCH(request: NextRequest) {
+  return withAuth(async (ctx) => {
+    if (!ctx.memberId) {
+      return errorResponse('NO_MEMBER', 'Member profile not found', 404);
+    }
+
+    const body = await request.json();
+    const data = validateInput(updateMyProfileSchema, body);
+
+    const profile = await upsertRiderProfileByMember(ctx.clubId, ctx.memberId, data);
+    if (!profile) {
+      return errorResponse('UPDATE_FAILED', 'Could not save profile', 500);
+    }
+
+    void ctx.audit({
+      action: 'rider_profile.self_update',
+      resourceType: 'rider_profile',
+      resourceId: profile.id,
+    });
+
+    return successResponse(profile);
   });
 }

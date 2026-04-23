@@ -14,7 +14,7 @@ import {
   errorResponse,
 } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
-import { sendEmailAsync } from '@/lib/email';
+import { sendTriggeredEmailAsync } from '@/lib/email';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
 
 interface RouteParams {
@@ -78,7 +78,9 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       void getMemberById(ctx.clubId, booking.riderMemberId).then((riderMember) => {
         if (!riderMember?.email) return;
 
-        sendEmailAsync({
+        sendTriggeredEmailAsync({
+          clubId: ctx.clubId,
+          trigger: 'booking_cancellation',
           to: riderMember.email,
           subject: `No-Show Recorded — ${booking.lessonTypeName}`,
           template: React.createElement(BookingCancellation, {

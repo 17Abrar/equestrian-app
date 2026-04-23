@@ -250,6 +250,8 @@ export async function getBookingById(clubId: string, bookingId: string) {
       cancelledAt: bookings.cancelledAt,
       checkedInAt: bookings.checkedInAt,
       createdAt: bookings.createdAt,
+      paymentProvider: bookings.paymentProvider,
+      providerPaymentId: bookings.providerPaymentId,
       slotDate: bookingSlots.date,
       slotStartTime: bookingSlots.startTime,
       slotEndTime: bookingSlots.endTime,
@@ -392,16 +394,16 @@ export async function setBookingPaymentRef(
   clubId: string,
   bookingId: string,
   data: {
-    paymentProvider: 'stripe' | 'n_genius' | 'ziina';
-    providerPaymentId: string;
+    paymentProvider?: 'stripe' | 'n_genius' | 'ziina';
+    providerPaymentId?: string;
     paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed' | 'overdue';
   },
 ) {
   const result = await db
     .update(bookings)
     .set({
-      paymentProvider: data.paymentProvider,
-      providerPaymentId: data.providerPaymentId,
+      ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
+      ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
       ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
       updatedAt: new Date(),
     })
