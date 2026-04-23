@@ -115,11 +115,16 @@ export default function RiderProfilePage() {
   // who joined via /discover land here and need to fill their own details.
   const [editing, setEditing] = useState(false);
   useEffect(() => {
-    if (!profileLoading && !profile && !editing) setEditing(true);
-  }, [profileLoading, profile, editing]);
+    if (!profileLoading && !profile) setEditing(true);
+  }, [profileLoading, profile]);
 
   if (meLoading || profileLoading) return <ProfileSkeleton />;
   if (isError) return <ErrorState message={error?.message} onRetry={refetch} />;
+
+  // View-mode card derefs `profile.*`; force the editor whenever profile is
+  // null so a transient initial render doesn't null-deref before the effect
+  // above flips `editing` to true.
+  const showEditor = editing || !profile;
 
   return (
     <div className="space-y-6 pb-20 sm:pb-0">
@@ -147,7 +152,7 @@ export default function RiderProfilePage() {
         </CardContent>
       </Card>
 
-      {editing ? (
+      {showEditor ? (
         <RiderProfileEditor
           profile={profile}
           onCancel={() => {
@@ -170,29 +175,29 @@ export default function RiderProfilePage() {
               <div>
                 <p className="text-xs text-muted-foreground">Skill level</p>
                 <Badge
-                  className={SKILL_LEVEL_COLORS[profile!.skillLevel] ?? ''}
+                  className={SKILL_LEVEL_COLORS[profile.skillLevel] ?? ''}
                   variant="secondary"
                 >
-                  {profile!.skillLevel}
+                  {profile.skillLevel}
                 </Badge>
               </div>
             </div>
             <InfoRow
               icon={Scale}
               label="Weight"
-              value={profile!.weightKg ? `${profile!.weightKg} kg` : null}
+              value={profile.weightKg ? `${profile.weightKg} kg` : null}
             />
             <InfoRow
               icon={Ruler}
               label="Height"
-              value={profile!.heightCm ? `${profile!.heightCm} cm` : null}
+              value={profile.heightCm ? `${profile.heightCm} cm` : null}
             />
             <InfoRow
               icon={User}
               label="Date of birth"
               value={
-                profile!.dateOfBirth
-                  ? new Date(profile!.dateOfBirth).toLocaleDateString('en-US', {
+                profile.dateOfBirth
+                  ? new Date(profile.dateOfBirth).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
@@ -204,15 +209,15 @@ export default function RiderProfilePage() {
               icon={User}
               label="Emergency contact"
               value={
-                profile!.emergencyContactName
-                  ? `${profile!.emergencyContactName}${profile!.emergencyContactPhone ? ` · ${profile!.emergencyContactPhone}` : ''}${profile!.emergencyContactRelation ? ` (${profile!.emergencyContactRelation})` : ''}`
+                profile.emergencyContactName
+                  ? `${profile.emergencyContactName}${profile.emergencyContactPhone ? ` · ${profile.emergencyContactPhone}` : ''}${profile.emergencyContactRelation ? ` (${profile.emergencyContactRelation})` : ''}`
                   : null
               }
             />
-            {profile!.medicalNotes && (
+            {profile.medicalNotes && (
               <div className="py-2">
                 <p className="text-xs text-muted-foreground">Medical notes</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm">{profile!.medicalNotes}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm">{profile.medicalNotes}</p>
               </div>
             )}
           </CardContent>
