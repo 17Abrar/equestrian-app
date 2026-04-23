@@ -3,12 +3,29 @@ import { SignUp } from '@clerk/nextjs';
 import { Compass } from 'lucide-react';
 
 interface PageProps {
-  searchParams: Promise<{ as?: string }>;
+  searchParams: Promise<{ as?: string; redirect_url?: string }>;
 }
 
+/**
+ * Two sign-up paths that differ by what they do AFTER Clerk authentication:
+ *
+ *   /sign-up            → rider. Redirects to /rider. The rider portal
+ *                         shows "Find a stable" empty state + pushes them
+ *                         into /discover to join one.
+ *
+ *   /sign-up?as=stable  → stable owner. Redirects to /onboarding, the
+ *                         existing club-setup wizard that creates the
+ *                         stable's clubs row and clerk org.
+ *
+ * An explicit `?redirect_url=` (set by /c/[slug] after tapping Join) always
+ * wins — that path bounces riders back to the club profile so they can
+ * auto-join right after sign-up.
+ */
 export default async function SignUpPage({ searchParams }: PageProps) {
-  const { as } = await searchParams;
+  const { as, redirect_url } = await searchParams;
   const isStable = as === 'stable';
+
+  const postSignUpUrl = redirect_url ?? (isStable ? '/onboarding' : '/rider');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">
@@ -25,11 +42,11 @@ export default async function SignUpPage({ searchParams }: PageProps) {
       </h1>
       <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
         {isStable
-          ? 'Create your stable account. You can onboard horses, staff, and pricing right after.'
-          : 'Create an account to book lessons and join stables.'}
+          ? 'Create your account — the next step is the stable setup wizard (horses, staff, pricing).'
+          : 'Create your account — the next step is browsing stables to join.'}
       </p>
 
-      <SignUp />
+      <SignUp forceRedirectUrl={postSignUpUrl} signInUrl={isStable ? '/sign-in?as=stable' : '/sign-in'} />
 
       <div className="mt-6 flex flex-col items-center gap-2">
         {isStable ? (
