@@ -217,13 +217,28 @@ export async function POST(request: NextRequest) {
       // Post-response confirmation email — `after()` keeps the task alive
       // past response flush on Cloudflare Workers, where bare fire-and-forget
       // promises get killed when the isolate freezes.
+      logger.info('email_flow_marker', {
+        step: 'before_after_registered',
+        bookingId: booking.id,
+        clubId: ctx.clubId,
+      });
       after(async () => {
+        logger.info('email_flow_marker', {
+          step: 'inside_after_callback',
+          bookingId: booking.id,
+        });
         try {
           const [fullBooking, riderMember, club] = await Promise.all([
             getBookingById(ctx.clubId, booking.id),
             getMemberById(ctx.clubId, booking.riderMemberId),
             getClubById(ctx.clubId),
           ]);
+          logger.info('email_flow_marker', {
+            step: 'data_loaded',
+            bookingId: booking.id,
+            hasBooking: !!fullBooking,
+            hasRiderEmail: !!riderMember?.email,
+          });
           if (!fullBooking || !riderMember?.email) return;
           await sendTriggeredEmail({
             clubId: ctx.clubId,
@@ -245,7 +260,16 @@ export async function POST(request: NextRequest) {
               addToCalendarUrl: '#',
             }),
           });
-        } catch {
+          logger.info('email_flow_marker', {
+            step: 'send_completed',
+            bookingId: booking.id,
+          });
+        } catch (emailErr) {
+          logger.error('email_flow_error', {
+            bookingId: booking.id,
+            error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+            stack: emailErr instanceof Error ? emailErr.stack : undefined,
+          });
           // Email failure is non-fatal
         }
       });
