@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   findHorsesDueForBilling,
@@ -48,7 +49,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (headerSecret !== expected) {
+  // Constant-time compare so an attacker can't learn the secret
+  // byte-by-byte via response timing. Length check first — timingSafeEqual
+  // throws on length mismatch.
+  const provided = Buffer.from(headerSecret ?? '', 'utf8');
+  const target = Buffer.from(expected, 'utf8');
+  const secretOk =
+    provided.length === target.length && timingSafeEqual(provided, target);
+  if (!secretOk) {
     logger.warn('livery_cron_bad_secret');
     return NextResponse.json(
       { success: false, error: { code: 'UNAUTHORIZED', message: 'Bad cron secret' } },

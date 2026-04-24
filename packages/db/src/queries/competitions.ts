@@ -217,7 +217,6 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
  * Atomically creates a competition entry after verifying:
  * 1. Registration deadline has not passed
  * 2. Class is not full (max entries not exceeded)
- * Must be called inside `runInTenantContext`.
  */
 export async function createCompetitionEntry(clubId: string, data: EntryCreate) {
   return writeTransaction(async (tx) => {

@@ -1,6 +1,9 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { adminGetPaymentAccountByProvider } from '@equestrian/db/queries';
+import {
+  adminGetPaymentAccountByProvider,
+  recordWebhookEventOrSkip,
+} from '@equestrian/db/queries';
 import { ziinaAdapter } from '@/lib/payments/ziina';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -81,6 +84,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (!HANDLED_EVENTS.has(event.eventType)) {
     logger.info('ziina_webhook_unhandled', { event: event.eventType, clubId });
+    return new Response('OK', { status: 200 });
+  }
+
+  const fresh = await recordWebhookEventOrSkip('ziina', event.eventId);
+  if (!fresh) {
+    logger.info('ziina_webhook_duplicate', {
+      eventId: event.eventId,
+      type: event.eventType,
+      clubId,
+    });
     return new Response('OK', { status: 200 });
   }
 

@@ -1,6 +1,5 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
 import {
   adminGetPaymentAccountByProvider,
   getBookingById,
@@ -93,8 +92,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           providerPaymentId: booking.providerPaymentId,
           amountMinorUnits: data.amountMinorUnits,
           reason: data.reason,
-          // Idempotent — replays with the same key return the same refund.
-          idempotencyKey: `refund_${bookingId}_${randomUUID()}`,
+          // Stable key: dropped-response retries must resolve to the same
+          // provider refund. Varying the key (e.g., randomUUID) would let
+          // a partial-refund retry double-charge the club. The amount is
+          // part of the key so an admin can later issue a DIFFERENT partial
+          // refund against the same booking.
+          idempotencyKey: `refund_${bookingId}_${data.amountMinorUnits ?? 'full'}`,
         });
 
         // Flip the booking to refunded immediately — the webhook that lands

@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { runInTenantContext } from '@equestrian/db';
 import { upsertPaymentAccount } from '@equestrian/db/queries';
 import { getTenantContext, TenantError } from '@/lib/tenant';
 import { hasPermission } from '@/lib/permissions';
@@ -74,16 +73,13 @@ export async function GET(request: NextRequest) {
   try {
     const callbackResult = await stripeAdapter.completeOAuthCallback!({ code });
 
-    // Persist inside the tenant tx so the insert is covered by RLS.
-    await runInTenantContext(ctx.clubId, async () => {
-      await upsertPaymentAccount(ctx.clubId, {
-        provider: 'stripe',
-        status: 'connected',
-        externalAccountId: callbackResult.externalAccountId,
-        credentials: null,
-        metadata: callbackResult.metadata,
-        makeActive: true,
-      });
+    await upsertPaymentAccount(ctx.clubId, {
+      provider: 'stripe',
+      status: 'connected',
+      externalAccountId: callbackResult.externalAccountId,
+      credentials: null,
+      metadata: callbackResult.metadata,
+      makeActive: true,
     });
 
     logger.info('stripe_oauth_completed', {

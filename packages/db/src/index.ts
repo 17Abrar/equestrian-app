@@ -106,21 +106,6 @@ export async function writeTransaction<T>(
 }
 
 /**
- * Legacy alias — earlier routes wrapped their entire handler in
- * `runInTenantContext(clubId, fn)` to set `app.current_club_id` for RLS.
- * RLS was removed in favor of application-level clubId scoping because
- * it forced a WebSocket + transaction on every request, which cost ~150ms
- * per click. This now just runs `fn` directly. Kept for call-site
- * compatibility; new code should not use it.
- */
-export async function runInTenantContext<T>(
-  _clubId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  return fn();
-}
-
-/**
  * Direct access to the HTTP driver — use for operations that must bypass
  * any ambient transaction (webhooks, Clerk org resolution, audit writes
  * that survive a tenant transaction rollback).

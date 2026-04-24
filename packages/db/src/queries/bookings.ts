@@ -145,17 +145,60 @@ export async function updateBookingSlot(
   return result[0] ?? null;
 }
 
+/**
+ * Cancels a booking slot AND every non-terminal booking attached to it,
+ * atomically. Without the cascade the slot flips to isCancelled=true but
+ * the bookings stay in `confirmed` — riders get no cancellation email,
+ * no refund, and their dashboard still advertises the lesson.
+ *
+ * Returns the cancelled slot plus the minimal booking info the caller
+ * needs to fire per-rider notifications/refunds via `after()`.
+ */
 export async function cancelBookingSlot(clubId: string, slotId: string, reason?: string) {
-  const result = await db
-    .update(bookingSlots)
-    .set({
-      isCancelled: true,
-      cancellationReason: reason ?? null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(bookingSlots.id, slotId), eq(bookingSlots.clubId, clubId)))
-    .returning();
-  return result[0] ?? null;
+  return writeTransaction(async (tx) => {
+    const [slot] = await tx
+      .update(bookingSlots)
+      .set({
+        isCancelled: true,
+        cancellationReason: reason ?? null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(bookingSlots.id, slotId), eq(bookingSlots.clubId, clubId)))
+      .returning();
+
+    if (!slot) return null;
+
+    const cancelledBookings = await tx
+      .update(bookings)
+      .set({
+        status: 'cancelled',
+        cancellationReason: reason
+          ? `Slot cancelled: ${reason}`
+          : 'Slot cancelled',
+        cancelledAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.slotId, slotId),
+          eq(bookings.clubId, clubId),
+          sql`${bookings.status} NOT IN ('cancelled', 'completed', 'no_show')`,
+        ),
+      )
+      .returning({
+        id: bookings.id,
+        riderMemberId: bookings.riderMemberId,
+        paymentStatus: bookings.paymentStatus,
+        paymentProvider: bookings.paymentProvider,
+        providerPaymentId: bookings.providerPaymentId,
+        amount: bookings.amount,
+        currency: bookings.currency,
+        guestEmail: bookings.guestEmail,
+        guestName: bookings.guestName,
+      });
+
+    return { slot, cancelledBookings };
+  });
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────
@@ -277,10 +320,8 @@ export async function getBookingById(clubId: string, bookingId: string) {
 
 /**
  * Creates a booking and atomically increments the slot's rider count.
- * Must be called inside `runInTenantContext` so the transaction inherits
- * the `app.current_club_id` session variable for RLS. The slot update
- * includes a capacity guard that prevents overbooking under concurrent
- * requests.
+ * The slot update includes a capacity guard that prevents overbooking
+ * under concurrent requests.
  */
 export async function createBooking(clubId: string, data: BookingCreate) {
   return writeTransaction(async (tx) => {
@@ -312,7 +353,6 @@ export async function createBooking(clubId: string, data: BookingCreate) {
 
 /**
  * Cancels a booking and atomically decrements the slot's rider count.
- * Must be called inside `runInTenantContext`.
  */
 export async function cancelBooking(
   clubId: string,

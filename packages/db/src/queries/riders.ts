@@ -154,7 +154,7 @@ interface CreateRiderData {
 /**
  * Creates a rider: inserts a club_member (role: rider) + rider_profile in one
  * transaction. Manually-created riders get a placeholder clerkUserId until
- * they sign up. Must be called inside `runInTenantContext`.
+ * they sign up.
  */
 export async function createRider(clubId: string, data: CreateRiderData) {
   return writeTransaction(async (tx) => {

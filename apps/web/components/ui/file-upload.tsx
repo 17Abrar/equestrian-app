@@ -84,6 +84,7 @@ export function FileUpload({
           fileName: file.name,
           contentType: file.type,
           folder,
+          fileSizeBytes: file.size,
           ...(targetClubId ? { targetClubId } : {}),
         }),
       });

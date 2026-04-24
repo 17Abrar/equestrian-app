@@ -130,10 +130,17 @@ function scoreSkillMatch(
     return SKILL_MATCH_CLOSE_SCORE;
   }
 
-  // Horse is advanced but rider is beginner — dangerous
-  if (horseSkill === 'advanced' && riderSkill === 'beginner') {
-    warnings.push('Horse may be too advanced for this rider');
-    return SKILL_MATCH_BAD_SCORE;
+  // Horse above rider's level — worth a warning. Two-level gap
+  // (advanced vs beginner) is the worst; the one-level gap is still
+  // risky enough to block auto-assignment without staff review.
+  if (horseLevelIdx > riderLevelIdx) {
+    const gap = horseLevelIdx - riderLevelIdx;
+    warnings.push(
+      gap >= 2
+        ? 'Horse may be too advanced for this rider'
+        : `Horse is a ${horseSkill} level — above rider's ${riderSkill}`,
+    );
+    return gap >= 2 ? SKILL_MATCH_BAD_SCORE : SKILL_MATCH_BAD_SCORE / 2;
   }
 
   return 0;

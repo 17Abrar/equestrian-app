@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const filters = staffFiltersSchema.parse(searchParams);
+      const filters = validateInput(staffFiltersSchema, searchParams);
 
       const { data, total } = await getStaffByClub(ctx.clubId, filters);
 

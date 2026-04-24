@@ -101,6 +101,17 @@ export async function POST(request: NextRequest) {
         return errorResponse('FORBIDDEN', 'You can only create bookings for yourself', 403);
       }
 
+      // Staff booking for someone else — verify the named rider is a
+      // member of *this* club. The bookings.rider_member_id FK only points
+      // at club_members.id (no compound (id, club_id) constraint), so a
+      // forged UUID from Club B would otherwise insert cleanly.
+      if (canBookForOthers && data.riderMemberId !== ctx.memberId) {
+        const targetRider = await getMemberById(ctx.clubId, data.riderMemberId);
+        if (!targetRider) {
+          return errorResponse('RIDER_NOT_FOUND', 'Rider is not a member of this club', 404);
+        }
+      }
+
       const isGuestBooking = !!data.guest;
 
       let assignedHorseId = data.horseId;
@@ -142,7 +153,12 @@ export async function POST(request: NextRequest) {
           });
 
           const topMatch = matches[0];
-          if (topMatch) {
+          // Only auto-assign when the top match carries no warnings.
+          // Skill-above-rider, weight-near-limit, past-pairing-issues etc.
+          // leave `horseId` null and fall through to manual assignment by
+          // staff — the alternative is silently putting a beginner on an
+          // advanced horse because the algorithm still ranked it first.
+          if (topMatch && topMatch.warnings.length === 0) {
             assignedHorseId = topMatch.horse.id;
             matchScore = topMatch.score;
             wasAutoMatched = true;
@@ -153,6 +169,14 @@ export async function POST(request: NextRequest) {
               horseId: assignedHorseId,
               score: matchScore,
               reasons: topMatch.reasons,
+            });
+          } else if (topMatch) {
+            logger.info('horse_auto_match_skipped_with_warnings', {
+              clubId: ctx.clubId,
+              riderId: data.riderMemberId,
+              candidateHorseId: topMatch.horse.id,
+              score: topMatch.score,
+              warnings: topMatch.warnings,
             });
           }
         }
@@ -248,28 +272,13 @@ export async function POST(request: NextRequest) {
       // Post-response confirmation email — `after()` keeps the task alive
       // past response flush on Cloudflare Workers, where bare fire-and-forget
       // promises get killed when the isolate freezes.
-      logger.info('email_flow_marker', {
-        step: 'before_after_registered',
-        bookingId: booking.id,
-        clubId: ctx.clubId,
-      });
       after(async () => {
-        logger.info('email_flow_marker', {
-          step: 'inside_after_callback',
-          bookingId: booking.id,
-        });
         try {
           const [fullBooking, riderMember, club] = await Promise.all([
             getBookingById(ctx.clubId, booking.id),
             getMemberById(ctx.clubId, booking.riderMemberId),
             getClubById(ctx.clubId),
           ]);
-          logger.info('email_flow_marker', {
-            step: 'data_loaded',
-            bookingId: booking.id,
-            hasBooking: !!fullBooking,
-            hasRiderEmail: !!riderMember?.email,
-          });
           if (!fullBooking || !riderMember?.email) return;
           await sendTriggeredEmail({
             clubId: ctx.clubId,
@@ -291,17 +300,12 @@ export async function POST(request: NextRequest) {
               addToCalendarUrl: '#',
             }),
           });
-          logger.info('email_flow_marker', {
-            step: 'send_completed',
-            bookingId: booking.id,
-          });
         } catch (emailErr) {
-          logger.error('email_flow_error', {
+          logger.error('booking_confirmation_email_failed', {
             bookingId: booking.id,
             error: emailErr instanceof Error ? emailErr.message : String(emailErr),
             stack: emailErr instanceof Error ? emailErr.stack : undefined,
           });
-          // Email failure is non-fatal
         }
       });
 

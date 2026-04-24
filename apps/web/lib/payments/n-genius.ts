@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import {
   type CreatePaymentInput,
@@ -414,8 +414,22 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
 
     const fields = extractOrderFields(payload.order);
 
+    // Deterministic fallback when payload.eventId is absent. Using
+    // `ng_${Date.now()}` would give every redelivery a unique key, defeating
+    // the webhook_events dedup table. Hash the stable triple (outlet, order
+    // reference, event name) so replays resolve to the same id.
+    const derivedEventId =
+      payload.eventId ??
+      'ng_' +
+        createHash('sha256')
+          .update(
+            `${payload.outletId ?? ''}|${fields.reference ?? ''}|${payload.eventName ?? ''}`,
+          )
+          .digest('hex')
+          .slice(0, 24);
+
     return {
-      eventId: payload.eventId ?? `ng_${Date.now()}`,
+      eventId: derivedEventId,
       eventType: payload.eventName ?? 'order.update',
       providerPaymentId: fields.reference,
       // `outletId` scopes the event to a specific merchant outlet — that's

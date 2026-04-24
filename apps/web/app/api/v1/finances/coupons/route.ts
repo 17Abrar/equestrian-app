@@ -1,22 +1,26 @@
 import { type NextRequest } from 'next/server';
-import { createCouponSchema } from '@equestrian/shared/schemas';
+import { z } from 'zod';
+import { createCouponSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getCouponsByClub, createCoupon } from '@equestrian/db/queries';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
+
+const couponFiltersSchema = paginationSchema.extend({
+  status: z.enum(['active', 'inactive', 'expired']).optional(),
+});
 
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const page = Number(searchParams.page) || 1;
-      const pageSize = Number(searchParams.pageSize) || 25;
+      const filters = validateInput(couponFiltersSchema, searchParams);
 
-      const { data, total } = await getCouponsByClub(ctx.clubId, {
-        status: searchParams.status,
-        page,
-        pageSize,
+      const { data, total } = await getCouponsByClub(ctx.clubId, filters);
+
+      return paginatedResponse(data, {
+        page: filters.page,
+        pageSize: filters.pageSize,
+        total,
       });
-
-      return paginatedResponse(data, { page, pageSize, total });
     },
     { requiredPermission: 'coupons:read' },
   );

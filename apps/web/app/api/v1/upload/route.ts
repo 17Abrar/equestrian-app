@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { getUploadUrl, getFolderRoot, UPLOAD_FOLDER_PERMISSIONS } from '@/lib/storage';
+import {
+  getUploadUrl,
+  getFolderRoot,
+  UPLOAD_FOLDER_PERMISSIONS,
+  MAX_UPLOAD_SIZE_BYTES,
+} from '@/lib/storage';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
@@ -12,6 +17,10 @@ const uploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
   contentType: z.string().min(1),
   folder: z.string().min(1).max(100),
+  // Declared size is bound into the R2 signature via ContentLength — a PUT
+  // that doesn't match fails with a signature error, closing the previous
+  // unbounded-upload hole. Max is enforced here as well.
+  fileSizeBytes: z.number().int().positive().max(MAX_UPLOAD_SIZE_BYTES),
   // Optional override: upload under a different club the user belongs to.
   // Used by the rider horse-registration flow — the rider's active tenant
   // may not be the target stable, and we want the photo to live under the
@@ -79,6 +88,7 @@ export async function POST(request: NextRequest) {
           folder: data.folder,
           fileName: data.fileName,
           contentType: data.contentType,
+          fileSizeBytes: data.fileSizeBytes,
         });
 
         logger.info('upload_url_generated', {

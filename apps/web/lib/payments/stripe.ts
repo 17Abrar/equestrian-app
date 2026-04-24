@@ -378,13 +378,29 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let amountReceivedMinorUnits: number | undefined;
 
     if (event.data.object && typeof event.data.object === 'object') {
-      const obj = event.data.object as { id?: string; object?: string; status?: string; amount_received?: number };
+      const obj = event.data.object as {
+        id?: string;
+        object?: string;
+        status?: string;
+        amount_received?: number;
+        payment_intent?: string | { id?: string } | null;
+        amount_refunded?: number;
+      };
       if (obj.object === 'payment_intent' && obj.id) {
         providerPaymentId = obj.id;
         if (obj.status) {
           status = mapIntentStatus(obj.status as Stripe.PaymentIntent.Status);
         }
         amountReceivedMinorUnits = obj.amount_received;
+      } else if (obj.object === 'charge') {
+        // Charge-level events (charge.refunded, charge.refund.updated) carry
+        // the PaymentIntent id on the Charge, not on `obj.id`. That's how we
+        // find the booking downstream.
+        providerPaymentId =
+          typeof obj.payment_intent === 'string'
+            ? obj.payment_intent
+            : obj.payment_intent?.id;
+        amountReceivedMinorUnits = obj.amount_refunded;
       }
     }
 

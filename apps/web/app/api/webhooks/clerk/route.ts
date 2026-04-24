@@ -42,27 +42,12 @@ function generateSlug(name: string): string {
     .slice(0, 90);
 }
 
-async function ensureUniqueSlug(baseSlug: string): Promise<string> {
-  let slug = baseSlug;
-  let attempt = 0;
-
-  while (attempt < 10) {
-    const existing = await db
-      .select({ id: clubs.id })
-      .from(clubs)
-      .where(eq(clubs.slug, slug))
-      .limit(1);
-
-    if (existing.length === 0) {
-      return slug;
-    }
-
-    attempt++;
-    const suffix = Math.random().toString(36).slice(2, 6);
-    slug = `${baseSlug}-${suffix}`;
+function slugVariants(baseSlug: string): string[] {
+  const variants = [baseSlug];
+  for (let i = 0; i < 6; i++) {
+    variants.push(`${baseSlug}-${Math.random().toString(36).slice(2, 6)}`);
   }
-
-  throw new Error(`Could not generate unique slug for "${baseSlug}"`);
+  return variants;
 }
 
 export async function POST(request: Request) {
@@ -107,21 +92,60 @@ export async function POST(request: Request) {
     switch (eventType) {
       case 'organization.created': {
         const orgData = (event as OrganizationEvent).data;
-        const slug = await ensureUniqueSlug(generateSlug(orgData.name));
         const trialEndsAt = new Date();
         trialEndsAt.setDate(trialEndsAt.getDate() + 30);
 
-        await db.insert(clubs).values({
-          name: orgData.name,
-          slug,
-          clerkOrgId: orgData.id,
-          logoUrl: orgData.image_url ?? null,
-          subscriptionTier: 'trial',
-          subscriptionStatus: 'trialing',
-          trialEndsAt,
-        });
+        // Retry-safe against both Svix redeliveries (same clerk_org_id) and
+        // concurrent org.created for the same name (same slug). Each INSERT
+        // returns the row on conflict-miss and [] on conflict-hit; we walk
+        // a short list of slug variants until one commits, then break.
+        const baseSlug = generateSlug(orgData.name);
+        let inserted: { id: string; slug: string } | undefined;
+        for (const candidate of slugVariants(baseSlug)) {
+          const rows = await db
+            .insert(clubs)
+            .values({
+              name: orgData.name,
+              slug: candidate,
+              clerkOrgId: orgData.id,
+              logoUrl: orgData.image_url ?? null,
+              subscriptionTier: 'trial',
+              subscriptionStatus: 'trialing',
+              trialEndsAt,
+            })
+            .onConflictDoNothing()
+            .returning({ id: clubs.id, slug: clubs.slug });
 
-        logger.info('club_created_from_webhook', { clerkOrgId: orgData.id, slug });
+          if (rows.length > 0) {
+            inserted = rows[0];
+            break;
+          }
+
+          // Conflict. Distinguish clerk_org_id collision (Svix redelivery —
+          // stop, we're done) from slug collision (try the next variant).
+          const existingForOrg = await db
+            .select({ id: clubs.id, slug: clubs.slug })
+            .from(clubs)
+            .where(eq(clubs.clerkOrgId, orgData.id))
+            .limit(1);
+          if (existingForOrg[0]) {
+            inserted = existingForOrg[0];
+            break;
+          }
+        }
+
+        if (!inserted) {
+          logger.error('club_slug_allocation_exhausted', {
+            clerkOrgId: orgData.id,
+            baseSlug,
+          });
+          return new Response('Could not allocate club slug', { status: 500 });
+        }
+
+        logger.info('club_created_from_webhook', {
+          clerkOrgId: orgData.id,
+          slug: inserted.slug,
+        });
         break;
       }
 

@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import { recordWebhookEventOrSkip } from '@equestrian/db/queries';
 import { stripeAdapter } from '@/lib/payments/stripe';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -62,6 +63,18 @@ export async function POST(request: NextRequest) {
 
   if (!HANDLED_EVENTS.has(event.eventType)) {
     logger.info('stripe_webhook_unhandled', { type: event.eventType });
+    return new Response('OK', { status: 200 });
+  }
+
+  // Exactly-once guard — Stripe's delivery is at-least-once, so a retried
+  // `charge.refunded` could otherwise fire a second receipt email or race
+  // on the livery-invoice TOCTOU.
+  const fresh = await recordWebhookEventOrSkip('stripe', event.eventId);
+  if (!fresh) {
+    logger.info('stripe_webhook_duplicate', {
+      eventId: event.eventId,
+      type: event.eventType,
+    });
     return new Response('OK', { status: 200 });
   }
 

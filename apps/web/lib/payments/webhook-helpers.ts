@@ -1,4 +1,3 @@
-import { runInTenantContext } from '@equestrian/db';
 import {
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
@@ -121,13 +120,11 @@ export async function applyPaymentWebhook({
     return { clubId, bookingId: bookingRef.bookingId };
   }
 
-  await runInTenantContext(clubId, () =>
-    setBookingPaymentRef(clubId!, bookingRef!.bookingId, {
-      paymentProvider: provider,
-      providerPaymentId: event.providerPaymentId!,
-      paymentStatus: nextStatus,
-    }),
-  );
+  await setBookingPaymentRef(clubId!, bookingRef!.bookingId, {
+    paymentProvider: provider,
+    providerPaymentId: event.providerPaymentId!,
+    paymentStatus: nextStatus,
+  });
 
   logger.info('booking_payment_status_updated_from_webhook', {
     clubId,
@@ -242,9 +239,7 @@ export async function safeRecordAccountError(
   message: string,
 ): Promise<void> {
   try {
-    await runInTenantContext(clubId, () =>
-      recordPaymentAccountError(clubId, provider, message),
-    );
+    await recordPaymentAccountError(clubId, provider, message);
   } catch (err) {
     logger.error('record_payment_account_error_failed', {
       clubId,

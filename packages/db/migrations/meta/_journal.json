@@ -43,6 +43,20 @@
       "when": 1776822794554,
       "tag": "0005_booking_provider_refs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777248000000,
+      "tag": "0011_drop_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777248000001,
+      "tag": "0012_webhook_events",
+      "breakpoints": true
     }
   ]
 }

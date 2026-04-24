@@ -1,5 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { findPaymentAccountByExternalId } from '@equestrian/db/queries';
+import {
+  findPaymentAccountByExternalId,
+  recordWebhookEventOrSkip,
+} from '@equestrian/db/queries';
 import { nGeniusAdapter } from '@/lib/payments/n-genius';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -98,6 +101,15 @@ export async function POST(request: NextRequest) {
 
   if (!HANDLED_EVENTS.has(event.eventType)) {
     logger.info('n_genius_webhook_unhandled', { event: event.eventType });
+    return new Response('OK', { status: 200 });
+  }
+
+  const fresh = await recordWebhookEventOrSkip('n_genius', event.eventId);
+  if (!fresh) {
+    logger.info('n_genius_webhook_duplicate', {
+      eventId: event.eventId,
+      type: event.eventType,
+    });
     return new Response('OK', { status: 200 });
   }
 

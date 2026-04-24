@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const filters = riderFiltersSchema.parse(searchParams);
+      const filters = validateInput(riderFiltersSchema, searchParams);
 
       const { data, total } = await getRidersByClub(ctx.clubId, filters);
 

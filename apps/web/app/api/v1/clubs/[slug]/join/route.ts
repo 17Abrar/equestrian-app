@@ -7,6 +7,7 @@ import {
   joinClubInstantly,
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { sendTriggeredEmail } from '@/lib/email';
 import { WelcomeRider } from '@equestrian/email-templates/welcome-rider';
 
@@ -34,6 +35,24 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           error: { code: 'UNAUTHORIZED', message: 'Please sign in to join a club' },
         },
         { status: 401 },
+      );
+    }
+
+    // Rate-limit join attempts per user — without this, a signed-in attacker
+    // can enumerate slugs (probing 404 vs 200/403) and auto-join every open
+    // stable. The route doesn't use `withAuth` so we call checkRateLimit directly.
+    const rl = await checkRateLimit(`join:${userId}`, {
+      maxRequests: 10,
+      windowMs: 60_000,
+    });
+    if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: 'RATE_LIMITED', message: 'Too many join attempts. Try again shortly.' },
+        },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
       );
     }
 
