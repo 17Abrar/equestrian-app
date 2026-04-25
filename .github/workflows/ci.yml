@@ -112,6 +112,11 @@ jobs:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
           api_key: ${{ secrets.NEON_API_KEY }}
+          # Neon Auth adds `authenticator` / `anonymous` / `authenticated`
+          # roles alongside `neondb_owner`. The action errors out when it
+          # sees multiple roles unless we pin one — pick the project owner
+          # since that's what the app uses at runtime.
+          username: neondb_owner
 
       - name: Apply migrations
         env:
