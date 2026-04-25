@@ -11,6 +11,7 @@ import {
 import { useSignIn } from '@clerk/clerk-expo';
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CavaliqLogo } from '../../components/cavaliq-logo';
 
 export default function SignInScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -57,6 +58,7 @@ export default function SignInScreen() {
         <View className="flex-1 justify-center px-6">
           {/* Header */}
           <View className="mb-10">
+            <CavaliqLogo height={36} style={{ marginBottom: 24 }} />
             <Text className="text-3xl font-bold text-gray-900">Welcome back</Text>
             <Text className="mt-2 text-base text-gray-500">
               Sign in to your account

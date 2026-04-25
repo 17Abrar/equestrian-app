@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { Compass, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 
 /**
  * Landing for signed-in users with no club membership. The dashboard layout
@@ -16,9 +17,8 @@ export default function SelectOrgPage() {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Compass className="h-5 w-5" />
-            Cavaliq
+          <Link href="/" aria-label="Cavaliq home">
+            <CavaliqLogo height={32} priority />
           </Link>
         </div>
       </header>

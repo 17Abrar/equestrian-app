@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 
 interface NavItem {
   label: string;
@@ -62,8 +63,8 @@ export function RiderNav() {
     <header className="sticky top-0 z-50 border-b bg-card">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <Link href="/rider" className="text-lg font-bold">
-            Cavaliq
+          <Link href="/rider" aria-label="Cavaliq home">
+            <CavaliqLogo height={28} priority />
           </Link>
           <span className="hidden h-6 w-px bg-border sm:block" aria-hidden="true" />
           <ActiveStableSwitcher />

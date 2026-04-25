@@ -11,6 +11,7 @@ import {
 import { useSignUp } from '@clerk/clerk-expo';
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CavaliqLogo } from '../../components/cavaliq-logo';
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
@@ -141,9 +142,10 @@ export default function SignUpScreen() {
       >
         <View className="flex-1 justify-center px-6">
           <View className="mb-10">
+            <CavaliqLogo height={36} style={{ marginBottom: 24 }} />
             <Text className="text-3xl font-bold text-gray-900">Create account</Text>
             <Text className="mt-2 text-base text-gray-500">
-              Join your equestrian club
+              Join your stable on Cavaliq
             </Text>
           </View>
 

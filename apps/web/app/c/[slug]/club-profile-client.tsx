@@ -12,7 +12,6 @@ import {
   Globe,
   Instagram,
   Facebook,
-  Compass,
   Users,
   LogIn,
   Loader2,
@@ -20,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 
 interface PublicClub {
   id: string;
@@ -94,9 +94,8 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
             <ArrowLeft className="h-4 w-4" />
             All clubs
           </Link>
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
-            <Compass className="h-4 w-4" />
-            Cavaliq
+          <Link href="/" aria-label="Cavaliq home">
+            <CavaliqLogo height={28} />
           </Link>
         </div>
       </header>

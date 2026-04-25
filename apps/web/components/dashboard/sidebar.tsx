@@ -4,6 +4,7 @@ import { OrganizationSwitcher, UserButton } from '@clerk/nextjs';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 import { type UserRole } from '@equestrian/shared/types';
 import { useHorses } from '@/hooks/use-horses';
 import { Badge } from '@/components/ui/badge';
@@ -95,7 +96,9 @@ export function Sidebar({ role }: SidebarProps) {
   return (
     <aside className="flex w-64 flex-col border-r bg-card">
       <div className="flex h-16 items-center border-b px-6">
-        <span className="text-lg font-bold">Equestrian</span>
+        <Link href="/" aria-label="Cavaliq home">
+          <CavaliqLogo height={28} priority />
+        </Link>
       </div>
 
       <div className="border-b px-4 py-3">

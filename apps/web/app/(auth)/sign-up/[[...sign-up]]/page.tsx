@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { SignUp } from '@clerk/nextjs';
-import { Compass } from 'lucide-react';
+import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 
 interface PageProps {
   searchParams: Promise<{ as?: string; redirect_url?: string }>;
@@ -29,12 +29,8 @@ export default async function SignUpPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">
-      <Link
-        href="/"
-        className="mb-6 flex items-center gap-2 text-base font-semibold text-muted-foreground hover:text-foreground"
-      >
-        <Compass className="h-4 w-4" />
-        Cavaliq
+      <Link href="/" className="mb-6" aria-label="Cavaliq home">
+        <CavaliqLogo height={32} priority />
       </Link>
 
       <h1 className="mb-1 text-2xl font-bold">

@@ -5,12 +5,13 @@ import Image from 'next/image';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUser, UserButton } from '@clerk/nextjs';
-import { Search, MapPin, ArrowRight, Compass, Home } from 'lucide-react';
+import { Search, MapPin, ArrowRight, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 
 interface PublicClub {
   id: string;
@@ -62,10 +63,9 @@ export function DiscoverClient() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <Link
             href={isSignedIn ? '/rider' : '/'}
-            className="flex items-center gap-2 font-semibold"
+            aria-label="Cavaliq home"
           >
-            <Compass className="h-5 w-5" />
-            <span>Cavaliq</span>
+            <CavaliqLogo height={32} priority />
           </Link>
           <nav className="flex items-center gap-2">
             {!isLoaded ? null : isSignedIn ? (
