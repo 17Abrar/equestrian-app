@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type CreateExpenseInput, type UpdateExpenseInput, type CreateCouponInput } from '@equestrian/shared/schemas';
 import { type ApiSuccessResponse, type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 interface FinanceOverview {
   totalRevenue: number;
@@ -61,15 +62,6 @@ export interface Coupon {
   status: string;
   startsAt: string | null;
   expiresAt: string | null;
-}
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 export function useFinanceOverview() {

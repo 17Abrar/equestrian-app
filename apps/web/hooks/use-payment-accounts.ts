@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 export type PaymentProviderName = 'stripe' | 'n_genius' | 'ziina';
 export type PaymentAccountStatus = 'pending' | 'connected' | 'disabled' | 'error';
@@ -19,17 +20,6 @@ export interface PaymentAccount {
   disconnectedAt: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(
-      (data as { error?: { message?: string } }).error?.message ?? 'Request failed',
-    );
-  }
-  return data as T;
 }
 
 export function usePaymentAccounts() {

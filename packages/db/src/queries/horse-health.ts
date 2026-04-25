@@ -285,7 +285,6 @@ export async function getDocuments(clubId: string, horseId: string, category?: s
   ];
 
   if (category) {
-    sql`${horseDocuments.category} = ${category}`;
     conditions.push(sql`${horseDocuments.category} = ${category}`);
   }
 

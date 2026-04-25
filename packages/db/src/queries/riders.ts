@@ -209,51 +209,46 @@ export async function updateRiderProfile(clubId: string, riderId: string, data: 
  * fill in their own details without needing an admin to create the row
  * first.
  *
- * On first call → inserts a fresh profile at the default skill level.
- * On subsequent calls → updates the existing row, leaving
- * `totalLessonsCompleted` untouched (that's owned by the bookings flow).
+ * Implemented as a single atomic INSERT ... ON CONFLICT DO UPDATE keyed
+ * on the `rider_profiles_club_member_unique` index. The previous
+ * SELECT-then-INSERT path raced under concurrent first-time saves
+ * (two requests both saw `existing = []` and both inserted, leaving
+ * the rider with two profile rows). The ON CONFLICT path serializes
+ * at the index, so the second writer falls through to UPDATE.
+ *
+ * `totalLessonsCompleted` is intentionally never written here — it's
+ * owned by the bookings completion flow.
  */
 export async function upsertRiderProfileByMember(
   clubId: string,
   memberId: string,
   data: RiderProfileUpdate,
 ) {
-  const existing = await db
-    .select({ id: riderProfiles.id })
-    .from(riderProfiles)
-    .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, memberId)))
-    .limit(1);
-
   const weightKg = data.weightKg != null ? String(data.weightKg) : null;
   const heightCm = data.heightCm != null ? String(data.heightCm) : null;
 
-  if (existing[0]) {
-    const setValues: Partial<NewRiderProfile> = {
-      updatedAt: new Date(),
-      ...(data.skillLevel !== undefined
-        ? { skillLevel: data.skillLevel as 'beginner' | 'intermediate' | 'advanced' }
-        : {}),
-      ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth } : {}),
-      ...(data.weightKg !== undefined ? { weightKg } : {}),
-      ...(data.heightCm !== undefined ? { heightCm } : {}),
-      ...(data.emergencyContactName !== undefined
-        ? { emergencyContactName: data.emergencyContactName }
-        : {}),
-      ...(data.emergencyContactPhone !== undefined
-        ? { emergencyContactPhone: data.emergencyContactPhone }
-        : {}),
-      ...(data.emergencyContactRelation !== undefined
-        ? { emergencyContactRelation: data.emergencyContactRelation }
-        : {}),
-      ...(data.medicalNotes !== undefined ? { medicalNotes: data.medicalNotes } : {}),
-    };
-    const result = await db
-      .update(riderProfiles)
-      .set(setValues)
-      .where(eq(riderProfiles.id, existing[0].id))
-      .returning();
-    return result[0] ?? null;
-  }
+  // For the UPDATE half, only set fields the caller actually supplied.
+  // PATCH semantics: omitted ≠ null. Omitted leaves the existing column
+  // alone; `null` would explicitly clear it.
+  const updateValues: Partial<NewRiderProfile> = {
+    updatedAt: new Date(),
+    ...(data.skillLevel !== undefined
+      ? { skillLevel: data.skillLevel as 'beginner' | 'intermediate' | 'advanced' }
+      : {}),
+    ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth } : {}),
+    ...(data.weightKg !== undefined ? { weightKg } : {}),
+    ...(data.heightCm !== undefined ? { heightCm } : {}),
+    ...(data.emergencyContactName !== undefined
+      ? { emergencyContactName: data.emergencyContactName }
+      : {}),
+    ...(data.emergencyContactPhone !== undefined
+      ? { emergencyContactPhone: data.emergencyContactPhone }
+      : {}),
+    ...(data.emergencyContactRelation !== undefined
+      ? { emergencyContactRelation: data.emergencyContactRelation }
+      : {}),
+    ...(data.medicalNotes !== undefined ? { medicalNotes: data.medicalNotes } : {}),
+  };
 
   const result = await db
     .insert(riderProfiles)
@@ -269,6 +264,10 @@ export async function upsertRiderProfileByMember(
       emergencyContactPhone: data.emergencyContactPhone ?? null,
       emergencyContactRelation: data.emergencyContactRelation ?? null,
       medicalNotes: data.medicalNotes ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [riderProfiles.clubId, riderProfiles.memberId],
+      set: updateValues,
     })
     .returning();
   return result[0] ?? null;

@@ -142,3 +142,22 @@ export async function deactivateMember(clubId: string, memberId: string) {
     .returning({ id: clubMembers.id });
   return result[0] ?? null;
 }
+
+/**
+ * Count of active `club_admin` members in a club. Used by the staff routes
+ * to refuse the deactivation or demotion that would drop the count to zero
+ * — locking everyone out of admin operations with no in-app recovery path.
+ */
+export async function countActiveAdmins(clubId: string): Promise<number> {
+  const result = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(clubMembers)
+    .where(
+      and(
+        eq(clubMembers.clubId, clubId),
+        eq(clubMembers.isActive, true),
+        sql`${clubMembers.role} = 'club_admin'`,
+      ),
+    );
+  return result[0]?.count ?? 0;
+}

@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import { createCompetitionEntrySchema } from '@equestrian/shared/schemas';
 import { getCompetitionEntries, createCompetitionEntry } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -25,6 +26,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const { classId } = await params;
       const body = await request.json();
       const data = validateInput(createCompetitionEntrySchema, body);
+
+      // Riders/parents may only register themselves; only staff with
+      // `competitions:create` (admin/manager via wildcard) may register
+      // another rider. Without this, any caller with the `competitions:register`
+      // grant could submit an arbitrary `riderMemberId` and enroll someone
+      // else. Mirrors the bookings/route.ts:99-113 pattern.
+      const canRegisterOthers = hasPermission(ctx.orgRole, 'competitions:create');
+      if (!canRegisterOthers) {
+        if (!ctx.memberId) {
+          return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
+        }
+        if (data.riderMemberId !== ctx.memberId) {
+          return errorResponse('FORBIDDEN', 'You can only register yourself for competitions', 403);
+        }
+      }
 
       let entry;
       try {

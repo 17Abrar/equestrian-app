@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type HorseFiltersInput, type CreateHorseInput, type UpdateHorseInput } from '@equestrian/shared/schemas';
 import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 export interface Horse {
   id: string;
@@ -57,15 +58,6 @@ export interface Horse {
   ownerEmail?: string | null;
   ownerClerkUserId?: string | null;
   clubCurrency?: string;
-}
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 export function useHorses(filters: Partial<HorseFiltersInput> = {}) {

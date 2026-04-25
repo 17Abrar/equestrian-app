@@ -1,10 +1,13 @@
-import { type NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { listPublicClubs } from '@equestrian/db/queries';
 import { errorResponse, paginatedResponse } from '@/lib/api-utils';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // Public endpoint — no auth required. Allows sign-out riders to browse clubs
-// before committing to a sign-up.
+// before committing to a sign-up. Rate-limited per source IP because there
+// is no userId to key on, and unauthenticated discovery is the obvious
+// scrape target.
 
 const queryShape = z.object({
   search: z.string().optional(),
@@ -14,6 +17,23 @@ const queryShape = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  const ip =
+    request.headers.get('cf-connecting-ip') ??
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
+  const rl = await checkRateLimit(`discover:list:${ip}`, {
+    maxRequests: 60,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) {
+    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
+    return NextResponse.json(
+      { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
+  }
+
   const sp = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = queryShape.safeParse(sp);
   if (!parsed.success) {

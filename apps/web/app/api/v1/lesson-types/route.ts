@@ -38,6 +38,10 @@ export async function POST(request: NextRequest) {
 
       return successResponse(lessonType, 201);
     },
-    { requiredPermission: 'bookings:create' },
+    // Lesson-type creation sets prices used at booking time; gating on
+    // `bookings:create` (which riders hold for self-service booking) would
+    // let any rider mint a price-1 lesson type and book against it. Match
+    // the PATCH/DELETE handlers below — admin/manager only.
+    { requiredPermission: 'bookings:update' },
   );
 }

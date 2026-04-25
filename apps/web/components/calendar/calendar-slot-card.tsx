@@ -91,11 +91,16 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
 
   const capacity = getCapacityInfo(slot.currentRiders, slot.maxRiders);
 
+  const trimmedReason = cancelReason.trim();
+  const canCancel = trimmedReason.length > 0;
+
   async function handleCancel() {
+    if (!canCancel) return;
     try {
-      await cancelSlot.mutateAsync({ slotId: slot.id, reason: cancelReason || undefined });
+      await cancelSlot.mutateAsync({ slotId: slot.id, reason: trimmedReason });
       toast.success('Slot cancelled');
       setCancelOpen(false);
+      setCancelReason('');
     } catch (err) {
       reportMutationError('slot.cancel', err, { slotId: slot.id });
       toast.error('Failed to cancel slot');
@@ -149,13 +154,18 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Input
-            placeholder="Reason for cancellation (optional)"
+            placeholder="Reason for cancellation (required)"
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}
+            required
           />
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Slot</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={handleCancel}
+              disabled={!canCancel}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               Cancel Slot
             </AlertDialogAction>
           </AlertDialogFooter>

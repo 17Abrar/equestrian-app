@@ -11,7 +11,11 @@ export type PaymentIntentStatus =
   | 'requires_action'
   | 'succeeded'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  // Post-settlement refund. Adapters that surface refund events through the
+  // webhook stream (N-Genius `REFUNDED`, Ziina `refund.status.updated`) map
+  // to this directly; Stripe handles refunds through a separate code path.
+  | 'refunded';
 
 export interface CreatePaymentInput {
   account: PaymentAccountWithCredentials;

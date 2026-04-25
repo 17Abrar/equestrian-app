@@ -5,6 +5,7 @@ import { clubs, clubMembers } from '@equestrian/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { type UserRole } from '@equestrian/shared/types';
 import { mapClerkRoleToAppRole } from './clerk-roles';
+import { logger } from './logger';
 
 /**
  * Cookie name for the rider's explicitly-chosen active club. When a rider
@@ -49,7 +50,7 @@ export async function getTenantContext(): Promise<TenantContext> {
     throw new TenantError('UNAUTHORIZED', 'Authentication required');
   }
 
-  // Path 1 — Clerk active org
+  // Path 1 — Clerk active org. If a club is paired with this orgId, use it.
   if (orgId) {
     const club = await db
       .select({ id: clubs.id, onboardingCompletedAt: clubs.onboardingCompletedAt })
@@ -58,38 +59,45 @@ export async function getTenantContext(): Promise<TenantContext> {
       .limit(1);
 
     const foundClub = club[0];
-    if (!foundClub) {
-      throw new TenantError('CLUB_NOT_FOUND', 'Club not found for this organization.');
+    if (foundClub) {
+      const member = await db
+        .select({ id: clubMembers.id, role: clubMembers.role })
+        .from(clubMembers)
+        .where(
+          and(
+            eq(clubMembers.clubId, foundClub.id),
+            eq(clubMembers.clerkUserId, userId),
+            eq(clubMembers.isActive, true),
+          ),
+        )
+        .limit(1);
+
+      const foundMember = member[0];
+
+      const appRole: UserRole = foundMember
+        ? foundMember.role
+        : orgRole
+          ? mapClerkRoleToAppRole(orgRole)
+          : 'rider';
+
+      return {
+        clubId: foundClub.id,
+        memberId: foundMember?.id ?? null,
+        userId,
+        orgId,
+        orgRole: appRole,
+        onboardingCompleted: !!foundClub.onboardingCompletedAt,
+      };
     }
 
-    const member = await db
-      .select({ id: clubMembers.id, role: clubMembers.role })
-      .from(clubMembers)
-      .where(
-        and(
-          eq(clubMembers.clubId, foundClub.id),
-          eq(clubMembers.clerkUserId, userId),
-          eq(clubMembers.isActive, true),
-        ),
-      )
-      .limit(1);
-
-    const foundMember = member[0];
-
-    const appRole: UserRole = foundMember
-      ? foundMember.role
-      : orgRole
-        ? mapClerkRoleToAppRole(orgRole)
-        : 'rider';
-
-    return {
-      clubId: foundClub.id,
-      memberId: foundMember?.id ?? null,
-      userId,
-      orgId,
-      orgRole: appRole,
-      onboardingCompleted: !!foundClub.onboardingCompletedAt,
-    };
+    // No club paired with this orgId. Don't 500 here — fall through to the
+    // club_members fallback. The user might be an active member of OTHER
+    // clubs (e.g. they joined a stable as a rider via /discover, while
+    // their Clerk session sits on a legacy/personal org with no paired
+    // club). Path 2 will resolve them via memberships, and if they have
+    // none, surface NO_ORGANIZATION (which the layouts already handle by
+    // redirecting to /rider's empty state).
+    logger.warn('tenant_org_no_club_falling_through', { userId, orgId });
   }
 
   // Path 2 — club_members fallback for riders who joined via /discover.

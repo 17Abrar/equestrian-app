@@ -62,8 +62,18 @@ export async function POST(request: NextRequest) {
   // Look up the club + its stored webhook header config.
   const account = await findPaymentAccountByExternalId(outletId, 'n_genius');
   if (!account) {
-    logger.warn('n_genius_webhook_outlet_not_recognized', { outletId });
-    // Return 200 so N-Genius stops retrying for an outlet we don't know.
+    // `error` (not `warn`) so the alert rule fires — an unknown outlet is
+    // almost always a misconfiguration (the merchant connected with one
+    // outlet and N-Genius is delivering for another, OR the payment_account
+    // row was deleted while N-Genius retains the URL). Without this signal,
+    // payments would silently fail post-checkout because no booking gets
+    // updated.
+    logger.error('n_genius_webhook_outlet_not_recognized', {
+      outletId,
+      eventName: parsed.eventName,
+    });
+    // Still 200 so N-Genius stops retrying — the config bug needs human
+    // intervention; retries won't fix it.
     return new Response('OK', { status: 200 });
   }
 

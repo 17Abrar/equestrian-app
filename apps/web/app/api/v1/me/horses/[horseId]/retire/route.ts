@@ -7,6 +7,7 @@ import {
   cancelPendingInvoicesForHorse,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
+import { logger } from '@/lib/logger';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -52,7 +53,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const cancelled = await cancelPendingInvoicesForHorse(
       ownership.clubId,
       horseId,
-    ).catch(() => 0);
+    ).catch((err) => {
+      logger.error('cancel_pending_invoices_failed', {
+        clubId: ownership.clubId,
+        horseId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      return 0;
+    });
 
     void createAuditEntry({
       clubId: ownership.clubId,
@@ -65,7 +74,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         liveryEndDate: { from: null, to: horse.liveryEndDate },
         invoicesCancelled: { from: null, to: cancelled },
       },
-    }).catch(() => void 0);
+    }).catch((err) => {
+      logger.error('audit_log_failed', {
+        clubId: ownership.clubId,
+        action: 'horse.retire_ownership_self',
+        resourceId: horseId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
 
     return successResponse(horse);
   });

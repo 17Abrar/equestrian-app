@@ -10,6 +10,7 @@ import {
   type CreateDocumentInput,
 } from '@equestrian/shared/schemas';
 import { type ApiSuccessResponse, type ApiResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -93,17 +94,6 @@ export interface HorseDocument {
   category: string;
   description: string | null;
   createdAt: string;
-}
-
-// ─── Fetch Helper ─────────────────────────────────────────────────────
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 // ─── Health Records ───────────────────────────────────────────────────

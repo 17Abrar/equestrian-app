@@ -23,10 +23,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
       if (error.code === 'UNAUTHORIZED') {
         redirect('/sign-in');
       }
-      if (error.code === 'NO_ORGANIZATION') {
-        // Riders without a club land on /rider to see the "find a stable"
-        // empty state. Admins who want to start a club click through from
-        // there into /onboarding.
+      if (error.code === 'NO_ORGANIZATION' || error.code === 'CLUB_NOT_FOUND') {
+        // NO_ORGANIZATION: signed-in user with no club memberships.
+        // CLUB_NOT_FOUND: defence-in-depth — `getTenantContext` no longer
+        // throws this since 2026-04-25 (it falls through to the membership
+        // lookup), but `rider/layout.tsx` and `rider/page.tsx` still handle
+        // it the same way; mirror that here so a regression in tenant.ts
+        // can't 500 the whole dashboard.
+        // Both land on /rider to see the "find a stable" empty state.
+        // Admins who want to start a club click through from there into
+        // /onboarding.
         redirect('/rider');
       }
     }

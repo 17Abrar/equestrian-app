@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 interface RevenueDataPoint {
   date: string;
@@ -24,15 +25,6 @@ interface CancellationStats {
   totalBookings: number;
   cancelledBookings: number;
   noShowBookings: number;
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 export function useRevenueReport(dateFrom: string, dateTo: string) {

@@ -25,25 +25,17 @@ import {
 } from '@/components/ui/alert-dialog';
 
 function formatDate(dateStr: string): string {
-  try {
-    const date = new Date(`${dateStr}T00:00:00`);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  } catch {
-    return dateStr;
-  }
+  const date = new Date(`${dateStr}T00:00:00`);
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatTime(timeStr: string): string {
-  try {
-    const parts = timeStr.split(':').map(Number);
-    const hours = parts[0] ?? 0;
-    const minutes = parts[1] ?? 0;
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHour = hours % 12 || 12;
-    return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
-  } catch {
-    return timeStr;
-  }
+  const parts = timeStr.split(':').map(Number);
+  const hours = parts[0] ?? 0;
+  const minutes = parts[1] ?? 0;
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
 }
 
 function formatAmount(amount: number | null, currency: string): string {

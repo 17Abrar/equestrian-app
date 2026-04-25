@@ -34,6 +34,7 @@ import {
   type Arena,
   type LessonType,
 } from '@/hooks/use-bookings';
+import { fetchJson } from '@/lib/fetch-json';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -99,17 +100,6 @@ const LESSON_TYPE_COLORS: Record<string, string> = {
   Camp: '#10b981',
   Clinic: '#ec4899',
 };
-
-// ─── Fetch helper ────────────────────────────────────────────────────
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
-}
 
 // ─── Step Indicator ──────────────────────────────────────────────────
 

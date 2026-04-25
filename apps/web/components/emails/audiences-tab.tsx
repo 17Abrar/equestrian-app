@@ -40,6 +40,7 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { fetchJson } from '@/lib/fetch-json';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -64,17 +65,6 @@ export interface Audience {
 interface ApiEnvelope<T> {
   success: true;
   data: T;
-}
-
-// ─── API helpers ──────────────────────────────────────────────────────
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json.error?.message ?? 'Request failed');
-  }
-  return json;
 }
 
 // ─── Tab root ─────────────────────────────────────────────────────────

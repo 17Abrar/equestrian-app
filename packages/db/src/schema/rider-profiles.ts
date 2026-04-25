@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, numeric, varchar, text, integer, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, date, numeric, varchar, text, integer, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { skillLevelEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -28,6 +28,10 @@ export const riderProfiles = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // (club_id, member_id) is logically unique — one profile per
+    // membership. Backed by migration 0016 and required by the
+    // INSERT ... ON CONFLICT path in upsertRiderProfileByMember.
+    uniqueIndex('rider_profiles_club_member_unique').on(table.clubId, table.memberId),
     index('idx_rider_profiles_club').on(table.clubId),
     index('idx_rider_profiles_member').on(table.memberId),
     index('idx_rider_profiles_skill').on(table.clubId, table.skillLevel),

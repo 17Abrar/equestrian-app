@@ -513,11 +513,11 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
 
   async function onSubmit(data: Record<string, unknown>) {
     try {
-      const apiData = {
-        ...data,
-        amount: data.amount != null ? toMinorUnits(data.amount as number) : undefined,
-      };
-      await createEntry.mutateAsync(apiData as Parameters<typeof createEntry.mutateAsync>[0]);
+      // `amount` no longer flows through this form — the server stamps the
+      // entry fee from competitionClasses.entryFee on create. The previous
+      // shape accepted `amount` from the body, which let a rider POST
+      // `{ amount: 1 }` for a full-price class (price-injection).
+      await createEntry.mutateAsync(data as Parameters<typeof createEntry.mutateAsync>[0]);
       toast.success('Entry added');
       form.reset();
       setOpen(false);

@@ -362,11 +362,15 @@ const PAYMENT_METHODS = [
   'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
 ] as const;
 
+// Entry fee is intentionally NOT accepted from the request — it's stamped
+// server-side from `competitionClasses.entryFee`. Accepting `amount` from
+// the body lets a rider POST `{ amount: 1 }` and pay 1 fil for a
+// full-price competition (same class of bug as the historical bookings
+// price-injection fix).
 export const createCompetitionEntrySchema = z.object({
   riderMemberId: z.string().uuid(),
   horseId: z.string().uuid().optional(),
   paymentMethod: z.enum(PAYMENT_METHODS).optional(),
-  amount: optionalNumeric(z.number().int()),
 });
 
 export type CreateCompetitionEntryInput = z.output<typeof createCompetitionEntrySchema>;

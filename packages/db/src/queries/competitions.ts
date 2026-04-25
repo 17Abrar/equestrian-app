@@ -234,6 +234,8 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
         id: competitionClasses.id,
         maxEntries: competitionClasses.maxEntries,
         competitionId: competitionClasses.competitionId,
+        entryFee: competitionClasses.entryFee,
+        currency: competitionClasses.currency,
       })
       .from(competitionClasses)
       .where(
@@ -333,9 +335,16 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
       }
     }
 
+    // Stamp amount/currency from the locked class row, never from the
+    // request body. See createCompetitionEntrySchema for the rationale.
     const result = await tx
       .insert(competitionEntries)
-      .values({ ...data, clubId })
+      .values({
+        ...data,
+        clubId,
+        amount: cls.entryFee ?? null,
+        currency: cls.currency,
+      })
       .returning();
 
     return result[0];

@@ -120,9 +120,12 @@ function mapState(state: string | undefined): PaymentIntentStatus {
       return 'requires_action';
     case 'REFUNDED':
     case 'PARTIALLY_REFUNDED':
-      // Post-settlement refund — from the rider's perspective the original
-      // payment still succeeded; refund events are tracked separately.
-      return 'succeeded';
+      // Post-settlement refund. Mapped directly to `refunded` so the
+      // type system enforces correct downstream handling — previously
+      // this returned `succeeded` and depended on the webhook route
+      // passing `isRefundEvent: true` to override, which silently broke
+      // if anyone refactored the override path.
+      return 'refunded';
     case 'STARTED':
     default:
       return 'pending';

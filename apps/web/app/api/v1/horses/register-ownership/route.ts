@@ -8,6 +8,7 @@ import {
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { sendTriggeredEmailAsync } from '@/lib/email';
+import { logger } from '@/lib/logger';
 import { HorseRegistrationSubmitted } from '@equestrian/email-templates/horse-registration-submitted';
 
 /**
@@ -64,7 +65,14 @@ export async function POST(request: NextRequest) {
           name: { from: null, to: horse.name },
           ownershipStatus: { from: null, to: 'pending' },
         },
-      }).catch(() => void 0);
+      }).catch((err) => {
+        logger.error('audit_log_failed', {
+          clubId: horse.clubId,
+          action: 'horse.register_ownership',
+          resourceId: horse.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
 
       // Notify admins of the target club so they can review.
       const [club, admins] = await Promise.all([

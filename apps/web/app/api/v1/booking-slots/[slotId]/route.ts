@@ -7,6 +7,7 @@ import {
   cancelBookingSlot,
   getMemberById,
   getClubById,
+  getArenaById,
 } from '@equestrian/db/queries';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
@@ -22,8 +23,12 @@ const updateSlotSchema = z.object({
   coachMemberId: z.string().uuid().optional(),
 });
 
+// Match `cancelBookingSchema` — cancelling a slot ripple-cancels every
+// booking on it, so the rider-facing emails need a meaningful reason.
+// The previous shape (`reason` optional, body optional) let staff cancel
+// silently while individual booking cancellation required a reason.
 const cancelSlotSchema = z.object({
-  reason: z.string().optional(),
+  reason: z.string().min(1, 'Cancellation reason is required'),
 });
 
 interface RouteParams {
@@ -53,6 +58,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(updateSlotSchema, body);
 
+      // Same cross-club guard as the POST routes — neither column has a
+      // compound (id, club_id) FK, so a forged UUID would otherwise
+      // attach a foreign club's arena/coach to this slot.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId);
+        if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);
+      }
+      if (data.coachMemberId) {
+        const coach = await getMemberById(ctx.clubId, data.coachMemberId);
+        if (!coach) return errorResponse('INVALID_COACH', 'Coach not found in this club', 400);
+      }
+
       const slot = await updateBookingSlot(ctx.clubId, slotId, data);
 
       if (!slot) {
@@ -78,17 +95,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { slotId } = await params;
 
-      let reason: string | undefined;
-      try {
-        const body = await request.json();
-        const data = validateInput(cancelSlotSchema, body);
-        reason = data.reason;
-      } catch (err) {
-        // Body is optional for DELETE — accept an empty/invalid-JSON request.
-        // Any other error (ValidationError with a bad `reason` shape, etc.)
-        // should propagate so the caller sees 400 instead of silent success.
-        if (!(err instanceof SyntaxError)) throw err;
-      }
+      // A reason is now required (matches cancelBookingSchema). Malformed
+      // or missing JSON is a 400 — propagate any error to the withAuth
+      // handler so the caller sees the right code instead of silent
+      // success with no reason recorded.
+      const body = await request.json();
+      const data = validateInput(cancelSlotSchema, body);
+      const reason = data.reason;
 
       // Load the slot's display fields BEFORE cancellation so the email
       // templates have coach/lesson/arena info — the cancellation flips

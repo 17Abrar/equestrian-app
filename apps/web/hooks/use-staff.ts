@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type CreateStaffInput, type UpdateStaffInput } from '@equestrian/shared/schemas';
 import { type ApiSuccessResponse, type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 export interface ClubMember {
   id: string;
@@ -12,15 +13,6 @@ export interface ClubMember {
   email: string | null;
   phone: string | null;
   isActive: boolean;
-}
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 // ─── Member Dropdowns ─────────────────────────────────────────────────

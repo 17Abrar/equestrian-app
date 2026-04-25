@@ -11,6 +11,7 @@ import {
   ValidationError,
 } from '@/lib/api-utils';
 import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
+import { logger } from '@/lib/logger';
 
 const setActiveClubSchema = z.object({
   clubId: z.string().uuid(),
@@ -79,6 +80,13 @@ export async function POST(request: NextRequest) {
     if (error instanceof SyntaxError) {
       return errorResponse('INVALID_JSON', 'Invalid JSON body', 400);
     }
+    // This route bypasses withAuth (it CHANGES the active tenant), so it
+    // also misses withAuth's unhandled-error logger. A DB outage or Clerk
+    // SDK throw would otherwise 500 silently — log explicitly here.
+    logger.error('set_active_club_failed', {
+      error: error instanceof Error ? error.message : 'unknown',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return errorResponse('INTERNAL_ERROR', 'Something went wrong', 500);
   }
 }

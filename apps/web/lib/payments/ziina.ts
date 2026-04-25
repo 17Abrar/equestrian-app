@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import {
@@ -110,8 +110,10 @@ export const ziinaAdapter: PaymentProviderAdapter = {
 
     return {
       // Ziina doesn't expose a stable "merchant id" we can read without extra
-      // scopes; key the account on a synthetic id so the DB row stays valid.
-      externalAccountId: `ziina_${Date.now().toString(36)}`,
+      // scopes; key the account on the clubId so a disconnect/reconnect after
+      // an API-key rotation produces the same external id and the
+      // findPaymentAccountByExternalId fallback continues to resolve.
+      externalAccountId: `ziina_${input.clubId}`,
       metadata: {
         apiBaseUrl: API_BASE_URL,
         hasWebhookSecret: !!creds.webhookSigningSecret,
@@ -275,8 +277,25 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     const amountReceived =
       status === 'succeeded' ? (payload.data?.amount ?? 0) : undefined;
 
+    // Compose the eventId from `(event, payment_intent_id, status)` so the
+    // pending → completed transition stream produces distinct ids. Without
+    // `status` in the key, every transition for the same intent collides
+    // and `claimWebhookEvent` discards the second event as already-processed
+    // — leaving the booking stuck on the first non-terminal status.
+    //
+    // When `data.id` is absent, fall back to a deterministic SHA-256 of the
+    // body (matching the n-genius pattern). `Date.now()` would give every
+    // redelivery a unique key, defeating the whole dedup table.
+    const intentId = payload.data?.id;
+    const statusKey = payload.data?.status ?? 'nostatus';
+    const eventName = payload.event ?? 'ziina.event';
+    const eventId = intentId
+      ? `${eventName}:${intentId}:${statusKey}`
+      : `${eventName}:` +
+        createHash('sha256').update(input.body).digest('hex').slice(0, 24);
+
     return {
-      eventId: `${payload.event ?? 'ziina.event'}:${payload.data?.id ?? Date.now()}`,
+      eventId,
       eventType: payload.event ?? 'unknown',
       providerPaymentId: payload.data?.id,
       providerAccountId: payload.data?.account_id,

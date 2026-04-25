@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type RiderFiltersInput, type UpdateRiderProfileInput, type CreateRiderInput } from '@equestrian/shared/schemas';
 import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 export interface Rider {
   id: string;
@@ -23,15 +24,6 @@ export interface Rider {
   displayName: string | null;
   email: string | null;
   phone: string | null;
-}
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 export function useRiders(filters: Partial<RiderFiltersInput> = {}) {

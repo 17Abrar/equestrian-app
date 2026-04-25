@@ -10,6 +10,7 @@ import {
   type CreateLessonTypeInput,
 } from '@equestrian/shared/schemas';
 import { type ApiResponse, type ApiSuccessResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -90,17 +91,6 @@ export interface Booking {
   arenaName: string | null;
   riderName: string | null;
   horseName: string | null;
-}
-
-// ─── Fetch Helper ─────────────────────────────────────────────────────
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 // ─── Arenas ───────────────────────────────────────────────────────────
@@ -265,7 +255,7 @@ export function useCancelBookingSlot() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ slotId, reason }: { slotId: string; reason?: string }) =>
+    mutationFn: ({ slotId, reason }: { slotId: string; reason: string }) =>
       fetchJson<ApiResponse<{ id: string }>>(`/api/v1/booking-slots/${slotId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },

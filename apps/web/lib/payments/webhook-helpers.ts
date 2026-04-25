@@ -23,10 +23,11 @@ import type { ProviderName } from './types';
  */
 function toBookingPaymentStatus(
   intent: PaymentIntentStatus | undefined,
-): 'pending' | 'paid' | 'failed' | undefined {
+): 'pending' | 'paid' | 'failed' | 'refunded' | undefined {
   if (!intent) return undefined;
   if (intent === 'succeeded') return 'paid';
   if (intent === 'failed' || intent === 'cancelled') return 'failed';
+  if (intent === 'refunded') return 'refunded';
   return 'pending';
 }
 

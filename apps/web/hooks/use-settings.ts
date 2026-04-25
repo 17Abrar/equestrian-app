@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 export interface NotificationPreferences {
   booking_confirmation?: { email: boolean };
@@ -59,15 +60,6 @@ export interface ClubSettings {
   isPublicListing: boolean;
   joinPolicy: string;
   shortDescription: string | null;
-}
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 export function useClubSettings() {

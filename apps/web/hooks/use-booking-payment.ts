@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import type { PaymentProviderName } from './use-payment-accounts';
+import { fetchJson } from '@/lib/fetch-json';
 
 /**
  * Payload returned from POST /api/v1/bookings/[id]/payment. The `flow`
@@ -26,17 +27,6 @@ export type BookingPaymentResult =
       paymentUrl: string;
       status: 'pending' | 'requires_action' | 'succeeded' | 'failed' | 'cancelled';
     };
-
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(
-      (data as { error?: { message?: string } }).error?.message ?? 'Request failed',
-    );
-  }
-  return data as T;
-}
 
 export function usePaymentForBooking() {
   const queryClient = useQueryClient();

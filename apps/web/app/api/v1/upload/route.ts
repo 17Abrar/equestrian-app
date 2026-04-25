@@ -124,5 +124,12 @@ export async function POST(request: NextRequest) {
         throw err;
       }
     },
+    // Tighter than the default 60/min — uploads consume R2 storage and
+    // egress, and the existing folder structure (`horses/photos` etc.)
+    // doesn't pin a key to a single rider's resource. 10/min still
+    // comfortably covers the legitimate flows (registration form,
+    // documents tab) while bounding the abuse surface for any
+    // authenticated rider in a club.
+    { rateLimit: { maxRequests: 10, windowMs: 60_000 } },
   );
 }

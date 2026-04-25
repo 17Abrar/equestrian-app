@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { createBookingSlotSchema } from '@equestrian/shared/schemas';
 import { isDateInPast } from '@equestrian/shared/utils';
-import { getBookingSlotsByClub, createBookingSlot } from '@equestrian/db/queries';
+import {
+  getBookingSlotsByClub,
+  createBookingSlot,
+  getArenaById,
+  getMemberById,
+} from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
 import {
@@ -69,6 +74,19 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // arenaId / coachMemberId reference tables that have no compound
+      // (id, club_id) FK, so a forged UUID from another club would
+      // otherwise insert cleanly and surface that club's arena/coach name
+      // to riders here. Verify both are scoped to the caller's club.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId);
+        if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);
+      }
+      if (data.coachMemberId) {
+        const coach = await getMemberById(ctx.clubId, data.coachMemberId);
+        if (!coach) return errorResponse('INVALID_COACH', 'Coach not found in this club', 400);
+      }
+
       const slot = await createBookingSlot(ctx.clubId, data);
 
       if (!slot) {
@@ -83,6 +101,9 @@ export async function POST(request: NextRequest) {
 
       return successResponse(slot, 201);
     },
-    { requiredPermission: 'bookings:create' },
+    // `bookings:create` is held by riders so they can self-book lessons;
+    // creating slots is staff configuration. Use the wildcard-matched
+    // `bookings:update` (admin/manager only).
+    { requiredPermission: 'bookings:update' },
   );
 }

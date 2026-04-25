@@ -3,7 +3,11 @@ import { eq } from 'drizzle-orm';
 import { addDays, format } from 'date-fns';
 import { createRecurringSlotsSchema } from '@equestrian/shared/schemas';
 import { isDateInPast } from '@equestrian/shared/utils';
-import { createBulkBookingSlots } from '@equestrian/db/queries';
+import {
+  createBulkBookingSlots,
+  getArenaById,
+  getMemberById,
+} from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
@@ -30,6 +34,17 @@ export async function POST(request: NextRequest) {
 
       if (data.dateTo < data.dateFrom) {
         return errorResponse('INVALID_DATE', 'End date must be after start date', 422);
+      }
+
+      // Verify cross-club FKs before fan-out — a single bad UUID would
+      // otherwise be repeated on up to 365 inserted rows.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId);
+        if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);
+      }
+      if (data.coachMemberId) {
+        const coach = await getMemberById(ctx.clubId, data.coachMemberId);
+        if (!coach) return errorResponse('INVALID_COACH', 'Coach not found in this club', 400);
       }
 
       // Expand days of week + date range into individual slot dates
@@ -96,6 +111,9 @@ export async function POST(request: NextRequest) {
 
       return successResponse({ created }, 201);
     },
-    { requiredPermission: 'bookings:create' },
+    // Bulk slot creation is staff configuration; `bookings:create` (which
+    // riders hold for self-booking) would let any rider mint hundreds of
+    // slots. Mirror the single-slot POST and PATCH — admin/manager only.
+    { requiredPermission: 'bookings:update' },
   );
 }

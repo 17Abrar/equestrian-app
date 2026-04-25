@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
+import { fetchJson } from '@/lib/fetch-json';
 
 export interface DashboardStats {
   horses: {
@@ -26,15 +27,6 @@ export interface DashboardStats {
     slotStartTime: string;
     riderName: string | null;
   }>;
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Request failed');
-  }
-  return data as T;
 }
 
 export function useDashboardStats() {

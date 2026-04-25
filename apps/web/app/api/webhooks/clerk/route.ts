@@ -3,6 +3,11 @@ import { headers } from 'next/headers';
 import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
 import { eq, and } from 'drizzle-orm';
+import {
+  claimWebhookEvent,
+  markWebhookEventFailed,
+  markWebhookEventProcessed,
+} from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
 import { mapClerkRoleToAppRole } from '@/lib/clerk-roles';
 
@@ -91,6 +96,27 @@ export async function POST(request: Request) {
 
   const eventType = event.type;
   logger.info('clerk_webhook_received', { type: eventType });
+
+  // Idempotency layer. Without this, an out-of-order Svix retry of a stale
+  // `organizationMembership.updated` (role change to coach) AFTER
+  // `organizationMembership.deleted` arrived would re-set both `isActive`
+  // and `role` on the member — silently re-activating someone who was
+  // just deactivated. svix-id is stable across retries, so it's the right
+  // dedup key.
+  const claim = await claimWebhookEvent('clerk', svixId);
+
+  if (claim.status === 'already_processed') {
+    logger.info('clerk_webhook_duplicate', { type: eventType, svixId });
+    return new Response('OK', { status: 200 });
+  }
+
+  if (claim.status === 'in_flight') {
+    // Another worker holds the claim. Return 503 so Svix retries — by then
+    // either the in-flight worker has finished (→ already_processed) or
+    // the stale window has elapsed and the retry can re-claim.
+    logger.info('clerk_webhook_in_flight', { type: eventType, svixId });
+    return new Response('Processing in progress', { status: 503 });
+  }
 
   try {
     switch (eventType) {
@@ -304,11 +330,15 @@ export async function POST(request: Request) {
         logger.info('clerk_webhook_unhandled', { type: eventType });
     }
 
+    await markWebhookEventProcessed('clerk', svixId);
     return new Response('OK', { status: 200 });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    await markWebhookEventFailed('clerk', svixId, message);
     logger.error('clerk_webhook_processing_failed', {
       type: eventType,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      svixId,
+      error: message,
       stack: error instanceof Error ? error.stack : undefined,
     });
 
