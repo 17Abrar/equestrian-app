@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 const ROLE_COLORS: Record<string, string> = {
   club_manager: 'bg-purple-100 text-purple-800',
@@ -80,7 +81,8 @@ export function StaffList() {
     try {
       await deactivateStaff.mutateAsync(memberId);
       toast.success('Staff member deactivated');
-    } catch {
+    } catch (err) {
+      reportMutationError('staff.deactivate', err, { memberId });
       toast.error('Failed to deactivate staff member');
     }
   }
@@ -189,6 +191,7 @@ function AddStaffDialog() {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('staff.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to add staff member');
     }
   }

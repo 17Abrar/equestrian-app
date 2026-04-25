@@ -16,14 +16,6 @@ export function toMajorUnits(amount: number): number {
 }
 
 /**
- * Formats a stored amount (in smallest units) as a display string.
- * Example: formatMoney(15000, 'AED') → "150.00 AED"
- */
-export function formatMoney(amountMinor: number, currency: string): string {
-  return `${toMajorUnits(amountMinor).toFixed(2)} ${currency}`;
-}
-
-/**
  * Maps currency codes to the locale that produces the most natural grouping
  * for that currency. Values default to "en-{country}" which Intl recognizes
  * and which produces ASCII digits + Western thousands separators — safer in
@@ -45,11 +37,11 @@ const CURRENCY_LOCALE: Record<string, string> = {
 
 /**
  * Zero-decimal currencies per ISO 4217 that Stripe also treats as
- * zero-decimal. JOD / KWD / OMR / BHD / TND are 3-decimal (minor units in
+ * zero-decimal. BHD / JOD / KWD / OMR / TND are 3-decimal (minor units in
  * thousandths). We don't actively support those pricing models yet — the
  * DB stores `_minor_units` meaning cents for 2-decimal currencies — but
- * listing here lets the formatter at least render the right fraction count
- * if a 3-decimal club is ever onboarded.
+ * listing here lets the formatter render the right fraction count if a
+ * 3-decimal club is ever onboarded.
  */
 const THREE_DECIMAL_CURRENCIES = new Set(['BHD', 'JOD', 'KWD', 'OMR', 'TND']);
 const ZERO_DECIMAL_CURRENCIES = new Set([
@@ -57,19 +49,17 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
 ]);
 
 /**
- * Display-ready money formatter. Pass the stored minor-unit integer + ISO
- * currency code; picks a sensible locale and fraction-digit count.
- *
- * Used by email templates, invoice lists, and any UI that displays stored
- * amounts. Keeps the locale decision in one place so a future non-AED club
- * doesn't produce mixed formatting across the app.
+ * Display-ready money formatter. The canonical way to render a stored
+ * minor-unit integer. Produces a suffix-format string with thousands
+ * separators and the right fraction-digit count for the currency.
  *
  * Examples:
- *   formatCurrency(250000, 'AED') → "AED 2,500.00"
- *   formatCurrency(250000, 'USD') → "USD 2,500.00"
- *   formatCurrency(5000,   'JPY') → "JPY 5,000"
+ *   formatMoney(10099,  'AED') → "100.99 AED"
+ *   formatMoney(250000, 'AED') → "2,500.00 AED"
+ *   formatMoney(5000,   'JPY') → "5,000 JPY"
+ *   formatMoney(100000, 'BHD') → "100.000 BHD"
  */
-export function formatCurrency(amountMinor: number, currency: string): string {
+export function formatMoney(amountMinor: number, currency: string): string {
   const upper = currency.toUpperCase();
   const locale = CURRENCY_LOCALE[upper] ?? 'en-US';
 
@@ -85,5 +75,11 @@ export function formatCurrency(amountMinor: number, currency: string): string {
     maximumFractionDigits: decimals,
   });
 
-  return `${upper} ${numberText}`;
+  return `${numberText} ${upper}`;
 }
+
+/**
+ * Alias for `formatMoney`. Kept so existing callers keep compiling; prefer
+ * `formatMoney` for new code.
+ */
+export const formatCurrency = formatMoney;

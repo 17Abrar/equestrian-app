@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
@@ -38,6 +39,7 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
       });
       toast.success('Discovery settings updated');
     } catch (err) {
+      reportMutationError('settings.discovery.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
   }

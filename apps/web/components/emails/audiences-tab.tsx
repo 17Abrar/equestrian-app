@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -140,7 +141,10 @@ function AudienceRow({ audience }: { audience: Audience }) {
       toast.success(`"${audience.name}" deleted`);
       qc.invalidateQueries({ queryKey: ['audiences'] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete'),
+    onError: (err) => {
+      reportMutationError('audience.delete', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to delete');
+    },
   });
 
   return (
@@ -240,7 +244,10 @@ function AudienceFormDialog({ mode, audience }: AudienceFormDialogProps) {
       qc.invalidateQueries({ queryKey: ['audiences'] });
       setOpen(false);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to save audience'),
+    onError: (err) => {
+      reportMutationError('audience.save', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to save audience');
+    },
   });
 
   function handleOpenChange(o: boolean) {

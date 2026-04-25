@@ -32,6 +32,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { HORSE_STATUS_COLORS } from '@/lib/ui-constants';
 
@@ -105,7 +106,8 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
       await deleteHorse.mutateAsync(horseId);
       toast.success('Horse archived');
       router.push('/horses');
-    } catch {
+    } catch (err) {
+      reportMutationError('horse.archive', err, { horseId });
       toast.error('Failed to archive horse');
     }
   }

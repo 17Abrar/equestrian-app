@@ -5,6 +5,23 @@
   "engines": {
     "node": ">=20"
   },
+  "pnpm": {
+    "_comment": [
+      "drizzle-orm lists @electric-sql/pglite as an optional peer. When",
+      "packages/db installs pglite for tests, pnpm creates a second",
+      "drizzle-orm resolution with the peer bound — which then has",
+      "nominally-incompatible private types against the copy apps/web",
+      "resolves (web doesn't depend on pglite). packageExtensions below",
+      "strips the pglite peer hint, forcing a single drizzle-orm resolution."
+    ],
+    "packageExtensions": {
+      "drizzle-orm": {
+        "peerDependenciesMeta": {
+          "@electric-sql/pglite": null
+        }
+      }
+    }
+  },
   "scripts": {
     "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=@equestrian/web",
@@ -16,13 +33,19 @@
     "typecheck": "turbo run typecheck",
     "db:generate": "turbo run db:generate --filter=@equestrian/db",
     "db:migrate": "turbo run db:migrate --filter=@equestrian/db",
+    "db:migrate:neon": "node scripts/migrate-neon.mjs",
     "db:push": "turbo run db:push --filter=@equestrian/db",
     "db:studio": "turbo run db:studio --filter=@equestrian/db",
+    "test:neon": "node scripts/test-neon-smoke.mjs",
+    "sentry:alerts": "node --env-file=.env.local scripts/setup-sentry-alerts.mjs",
+    "sentry:alerts:dry": "DRY_RUN=1 node --env-file=.env.local scripts/setup-sentry-alerts.mjs",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
+    "@neondatabase/serverless": "^0.10.4",
     "prettier": "^3.5.3",
     "turbo": "^2.5.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "ws": "^8.20.0"
   }
 }

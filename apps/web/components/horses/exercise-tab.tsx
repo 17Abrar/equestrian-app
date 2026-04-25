@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const INTENSITY_COLORS: Record<string, string> = {
@@ -49,7 +50,8 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
     try {
       await deleteSchedule.mutateAsync(scheduleId);
       toast.success('Exercise removed');
-    } catch {
+    } catch (err) {
+      reportMutationError('exercise.delete', err, { horseId, scheduleId });
       toast.error('Failed to remove exercise');
     }
   }
@@ -119,6 +121,7 @@ function AddExerciseDialog({ horseId }: { horseId: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('exercise.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add exercise');
     }
   }

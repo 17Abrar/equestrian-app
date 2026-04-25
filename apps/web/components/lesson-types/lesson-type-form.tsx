@@ -25,6 +25,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 // ─── Lesson Type Form Dialog (Create) ─────────────────────────────────
 
@@ -64,6 +65,7 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
       setOpen(false);
       onSuccess?.();
     } catch (error) {
+      reportMutationError('lesson_type.create', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create lesson type');
     }
   }
@@ -137,7 +139,8 @@ export function LessonTypesList() {
     try {
       await deleteLessonType.mutateAsync(id);
       toast.success('Lesson type removed');
-    } catch {
+    } catch (err) {
+      reportMutationError('lesson_type.delete', err, { lessonTypeId: id });
       toast.error('Failed to remove lesson type');
     }
   }
@@ -217,6 +220,7 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
       toast.success('Lesson type updated');
       setOpen(false);
     } catch (err) {
+      reportMutationError('lesson_type.update', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update');
     }
   }

@@ -1,9 +1,18 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { logger } from './logger';
 
 export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
+  /**
+   * When true, an Upstash failure returns `allowed: false` instead of
+   * falling back to per-isolate in-memory counters. Use this on
+   * burst-sensitive endpoints (slug enumeration, coupon validation) where
+   * the cost of locking out a few legitimate users during a Redis blip is
+   * lower than the cost of letting an attacker hammer them unthrottled.
+   */
+  failClosed?: boolean;
 }
 
 export interface RateLimitResult {
@@ -149,9 +158,27 @@ export async function checkRateLimit(
   if (isUpstashConfigured()) {
     try {
       return await upstashCheck(key, config);
-    } catch {
-      // If Upstash is briefly unavailable, fail open rather than block all
-      // traffic. In-memory still provides a loose cap inside the hot instance.
+    } catch (err) {
+      // Surface the outage so a sustained Redis problem isn't silent. Logged
+      // at warn so it lights up Sentry without paging.
+      logger.warn('rate_limit_fallback_to_memory', {
+        key,
+        failClosed: !!config.failClosed,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
+      if (config.failClosed) {
+        // Burst-sensitive endpoints opt into this — better to bounce a real
+        // user during a Redis blip than to let an attacker walk through. The
+        // user can retry; abuse protection holds.
+        return {
+          allowed: false,
+          remaining: 0,
+          retryAfterMs: Math.min(config.windowMs, 30_000),
+        };
+      }
+      // Default: fall back to per-isolate in-memory. On Cloudflare Workers
+      // this barely throttles (each isolate has its own counter) but it
+      // beats locking out every customer over a transient outage.
       return inMemoryCheck(key, config);
     }
   }

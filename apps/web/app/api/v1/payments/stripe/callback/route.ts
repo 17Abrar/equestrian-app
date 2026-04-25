@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     return redirectBack(origin, { status: 'error', error: 'missing_parameters' });
   }
 
-  const verifiedState = verifyOAuthState(state);
+  const verifiedState = await verifyOAuthState(state);
   if (!verifiedState) {
     logger.warn('stripe_oauth_state_invalid');
     return redirectBack(origin, { status: 'error', error: 'invalid_state' });

@@ -12,7 +12,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@equestrian/shared": "workspace:*",
@@ -21,10 +24,12 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.4.4",
     "@equestrian/typescript-config": "workspace:*",
     "@types/ws": "^8.18.1",
     "dotenv": "^16.5.0",
     "drizzle-kit": "^0.30.5",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.2"
   }
 }

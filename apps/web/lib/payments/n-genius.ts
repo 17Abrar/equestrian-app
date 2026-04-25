@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import {
   type CreatePaymentInput,
@@ -42,46 +43,30 @@ import {
 const API_BASE_URL =
   process.env.N_GENIUS_API_BASE_URL ?? 'https://api-gateway.ngenius-payments.com';
 
-interface NGeniusCredentials {
-  apiKey: string;
-  outletReference: string;
+const nGeniusCredentialsSchema = z.object({
+  apiKey: z.string().min(1),
+  outletReference: z.string().min(1),
   /** Tenant realm — required by some merchant configurations, omitted by others. */
-  realmName?: string;
+  realmName: z.string().min(1).optional(),
   /** Name of the custom header the merchant configured in the portal (e.g. `X-Webhook-Token`). */
-  webhookHeaderName?: string;
+  webhookHeaderName: z.string().min(1).optional(),
   /** Secret value that N-Genius will echo in the configured header on each delivery. */
-  webhookHeaderValue?: string;
-}
+  webhookHeaderValue: z.string().min(1).optional(),
+});
+
+type NGeniusCredentials = z.infer<typeof nGeniusCredentialsSchema>;
 
 function parseCredentials(raw: unknown): NGeniusCredentials {
-  if (!raw || typeof raw !== 'object') {
+  const result = nGeniusCredentialsSchema.safeParse(raw);
+  if (!result.success) {
     throw new PaymentProviderError(
       'INVALID_CREDENTIALS',
-      'N-Genius credentials are missing or malformed',
+      `N-Genius credentials are invalid: ${result.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ')}`,
     );
   }
-  const c = raw as Record<string, unknown>;
-  if (typeof c.apiKey !== 'string' || c.apiKey.length === 0) {
-    throw new PaymentProviderError(
-      'INVALID_CREDENTIALS',
-      'N-Genius credentials must include `apiKey`',
-    );
-  }
-  if (typeof c.outletReference !== 'string' || c.outletReference.length === 0) {
-    throw new PaymentProviderError(
-      'INVALID_CREDENTIALS',
-      'N-Genius credentials must include `outletReference`',
-    );
-  }
-  return {
-    apiKey: c.apiKey,
-    outletReference: c.outletReference,
-    realmName: typeof c.realmName === 'string' ? c.realmName : undefined,
-    webhookHeaderName:
-      typeof c.webhookHeaderName === 'string' ? c.webhookHeaderName : undefined,
-    webhookHeaderValue:
-      typeof c.webhookHeaderValue === 'string' ? c.webhookHeaderValue : undefined,
-  };
+  return result.data;
 }
 
 async function getAccessToken(creds: NGeniusCredentials): Promise<string> {

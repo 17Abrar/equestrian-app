@@ -17,7 +17,7 @@ export async function POST() {
       }
 
       try {
-        const state = signOAuthState(ctx.clubId);
+        const state = await signOAuthState(ctx.clubId);
         const result = await stripeAdapter.initOAuthConnection({
           clubId: ctx.clubId,
           // returnUrl isn't used by Stripe init directly — the callback route

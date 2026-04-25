@@ -144,3 +144,79 @@ export async function countAudienceMembers(
   const members = await resolveAudienceMembers(clubId, filters);
   return members.length;
 }
+
+/**
+ * Batched counts for many filter sets in one round-trip. The list-audiences
+ * UI was previously firing one `countAudienceMembers` per audience —
+ * Promise.all-wrapped, but still N round-trips. Here we pull every eligible
+ * rider plus the attributes the filters reference once, then evaluate each
+ * filter in memory. Equivalence with `resolveAudienceMembers` is mechanical:
+ * skillLevel comes from the same LEFT JOIN, minBookings from the booking
+ * count aggregate, activeWithinDays from the latest booking timestamp.
+ */
+export async function countAudienceMembersBatch(
+  clubId: string,
+  filterSets: AudienceFilters[],
+): Promise<number[]> {
+  if (filterSets.length === 0) return [];
+
+  const bookingAgg = db
+    .select({
+      memberId: bookings.riderMemberId,
+      totalBookings: sql<number>`count(*)::int`.as('total_bookings'),
+      lastBookingAt: sql<Date | null>`max(${bookings.createdAt})`.as('last_booking_at'),
+    })
+    .from(bookings)
+    .where(eq(bookings.clubId, clubId))
+    .groupBy(bookings.riderMemberId)
+    .as('booking_agg');
+
+  const rows = await db
+    .select({
+      memberId: clubMembers.id,
+      skillLevel: riderProfiles.skillLevel,
+      totalBookings: sql<number>`coalesce(${bookingAgg.totalBookings}, 0)`,
+      lastBookingAt: bookingAgg.lastBookingAt,
+    })
+    .from(clubMembers)
+    .leftJoin(
+      riderProfiles,
+      and(
+        eq(riderProfiles.memberId, clubMembers.id),
+        eq(riderProfiles.clubId, clubId),
+      ),
+    )
+    .leftJoin(bookingAgg, eq(bookingAgg.memberId, clubMembers.id))
+    .where(
+      and(
+        eq(clubMembers.clubId, clubId),
+        eq(clubMembers.role, 'rider'),
+        eq(clubMembers.isActive, true),
+      ),
+    );
+
+  const now = Date.now();
+  const DAY_MS = 86_400_000;
+
+  return filterSets.map((filters) => {
+    let count = 0;
+    for (const r of rows) {
+      if (filters.skillLevel && r.skillLevel !== filters.skillLevel) continue;
+      if (
+        typeof filters.minBookings === 'number' &&
+        filters.minBookings > 0 &&
+        r.totalBookings < filters.minBookings
+      ) continue;
+      if (
+        typeof filters.activeWithinDays === 'number' &&
+        filters.activeWithinDays > 0
+      ) {
+        if (!r.lastBookingAt) continue;
+        const daysSince = (now - new Date(r.lastBookingAt).getTime()) / DAY_MS;
+        if (daysSince > filters.activeWithinDays) continue;
+      }
+      count += 1;
+    }
+    return count;
+  });
+}

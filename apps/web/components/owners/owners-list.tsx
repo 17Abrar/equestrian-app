@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 function OwnersSkeleton() {
   return (
@@ -55,7 +56,8 @@ export function OwnersList() {
     try {
       await deactivateOwner.mutateAsync(memberId);
       toast.success('Owner deactivated');
-    } catch {
+    } catch (err) {
+      reportMutationError('owner.deactivate', err, { memberId });
       toast.error('Failed to deactivate owner');
     }
   }
@@ -148,6 +150,7 @@ function AddOwnerDialog() {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('owner.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to add owner');
     }
   }

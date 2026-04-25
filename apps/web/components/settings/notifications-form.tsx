@@ -12,6 +12,7 @@ import {
   type ClubSettings,
   type NotificationPreferences,
 } from '@/hooks/use-settings';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface TriggerInfo {
   key: keyof NotificationPreferences;
@@ -137,6 +138,7 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
       await updateSettings.mutateAsync({ notificationPreferences: prefs });
       toast.success('Notification preferences saved');
     } catch (err) {
+      reportMutationError('settings.notifications.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save preferences');
     }
   }

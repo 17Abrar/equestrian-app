@@ -376,6 +376,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let providerPaymentId: string | undefined;
     let status: PaymentIntentStatus | undefined;
     let amountReceivedMinorUnits: number | undefined;
+    let bookingId: string | undefined;
 
     if (event.data.object && typeof event.data.object === 'object') {
       const obj = event.data.object as {
@@ -385,6 +386,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
         amount_received?: number;
         payment_intent?: string | { id?: string } | null;
         amount_refunded?: number;
+        metadata?: Record<string, string | undefined>;
       };
       if (obj.object === 'payment_intent' && obj.id) {
         providerPaymentId = obj.id;
@@ -402,6 +404,14 @@ export const stripeAdapter: PaymentProviderAdapter = {
             : obj.payment_intent?.id;
         amountReceivedMinorUnits = obj.amount_refunded;
       }
+      // Our own `bookingId` rides on the PI's metadata — stamped at create
+      // time by the bookings/[id]/payment route. Lets the webhook resolve
+      // the booking even when the `provider_payment_id` column hasn't been
+      // written yet (fast-succeed payments racing with the route).
+      const md = obj.metadata;
+      if (md && typeof md.bookingId === 'string') {
+        bookingId = md.bookingId;
+      }
     }
 
     return {
@@ -411,6 +421,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
       // On a Connect platform webhook, `event.account` is the connected
       // account id that the event pertains to.
       providerAccountId: event.account ?? undefined,
+      bookingId,
       status,
       amountReceivedMinorUnits,
       data: event,

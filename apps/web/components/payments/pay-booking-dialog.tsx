@@ -23,6 +23,7 @@ import {
   usePaymentForBooking,
   type BookingPaymentResult,
 } from '@/hooks/use-booking-payment';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 // Lazy-load Stripe once per session. loadStripe caches the promise internally.
 let stripePromise: Promise<Stripe | null> | null = null;
@@ -79,6 +80,7 @@ export function PayBookingDialog({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        reportMutationError('payment.create', err, { bookingId });
         setError(err instanceof Error ? err.message : 'Could not start payment');
       });
 
@@ -187,6 +189,10 @@ function StripePaymentForm({
 
     if (result.error) {
       const message = result.error.message ?? 'Payment failed';
+      reportMutationError('payment.confirm', result.error, {
+        type: result.error.type,
+        code: result.error.code,
+      });
       setSubmitError(message);
       toast.error(message);
       setSubmitting(false);

@@ -10,6 +10,7 @@ import {
   Section,
   Img,
 } from '@react-email/components';
+import { formatMoney } from '@equestrian/shared/utils';
 
 interface BookingConfirmationProps {
   riderName: string;
@@ -24,6 +25,9 @@ interface BookingConfirmationProps {
   amount?: string;
   currency?: string;
   addToCalendarUrl: string;
+  /** When set, the booking is for a guest (not a club member). The recipient
+   *  is the booker/payer; the guest is the actual rider on the day. */
+  guestName?: string;
 }
 
 export function BookingConfirmation({
@@ -39,6 +43,7 @@ export function BookingConfirmation({
   amount,
   currency = 'AED',
   addToCalendarUrl,
+  guestName,
 }: BookingConfirmationProps) {
   // Format date: "2026-03-31" → "Monday, March 31, 2026"
   const formattedDate = (() => {
@@ -63,12 +68,16 @@ export function BookingConfirmation({
     return `${displayHour}:${minutes} ${ampm}`;
   })();
 
-  // Format amount: "18000" (fils) → "180.00" (major currency unit)
+  // Format amount: "18000" (minor-unit string from caller) → "180.00 AED".
+  // `amount` is kept as a string for back-compat with the template contract
+  // (the caller passes `String(booking.amount)`), but the actual formatting
+  // is delegated to the shared formatMoney helper so zero/3-decimal
+  // currencies render correctly and all money in the app shows identically.
   const formattedAmount = (() => {
     if (!amount) return null;
     const numericAmount = Number(amount);
     if (isNaN(numericAmount)) return amount;
-    return (numericAmount / 100).toFixed(2);
+    return formatMoney(numericAmount, currency);
   })();
 
   return (
@@ -81,9 +90,18 @@ export function BookingConfirmation({
           <Heading style={styles.heading}>Booking Confirmed</Heading>
 
           <Text style={styles.greeting}>Hi {riderName},</Text>
-          <Text style={styles.text}>Your lesson has been confirmed. Here are the details:</Text>
+          <Text style={styles.text}>
+            {guestName
+              ? `Your guest booking for ${guestName} has been confirmed. Here are the details:`
+              : 'Your lesson has been confirmed. Here are the details:'}
+          </Text>
 
           <Section style={styles.detailsBox}>
+            {guestName && (
+              <Text style={styles.detailRow}>
+                <strong>Rider:</strong> {guestName}
+              </Text>
+            )}
             <Text style={styles.detailRow}>
               <strong>Lesson:</strong> {lessonType}
             </Text>
@@ -104,7 +122,7 @@ export function BookingConfirmation({
             </Text>
             {formattedAmount && (
               <Text style={styles.detailRow}>
-                <strong>Amount:</strong> {formattedAmount} {currency}
+                <strong>Amount:</strong> {formattedAmount}
               </Text>
             )}
           </Section>

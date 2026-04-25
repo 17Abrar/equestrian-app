@@ -7,7 +7,7 @@ import {
   markBookingNoShow,
   getMemberById,
 } from '@equestrian/db/queries';
-import { calculateNoShowFee } from '@equestrian/shared/utils';
+import { calculateNoShowFee, formatMoney } from '@equestrian/shared/utils';
 import {
   withAuth,
   successResponse,
@@ -93,12 +93,19 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
               time: String(booking.slotStartTime),
               arena: booking.arenaName ?? 'Arena',
               clubName: club.name,
-              cancellationFee: noShowFee > 0 ? `${(noShowFee / 100).toFixed(2)} ${booking.currency}` : undefined,
+              cancellationFee: noShowFee > 0 ? formatMoney(noShowFee, booking.currency) : undefined,
               type: 'no_show',
             }),
           });
-        } catch {
-          // Email failure is non-fatal
+        } catch (err) {
+          // Non-fatal for the request, but tag it for the alert rule.
+          logger.error('email_send_failed', {
+            trigger: 'no_show',
+            bookingId,
+            clubId: ctx.clubId,
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
         }
       });
 

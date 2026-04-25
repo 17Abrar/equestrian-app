@@ -1,5 +1,9 @@
 import { type NextRequest } from 'next/server';
-import { recordWebhookEventOrSkip } from '@equestrian/db/queries';
+import {
+  claimWebhookEvent,
+  markWebhookEventFailed,
+  markWebhookEventProcessed,
+} from '@equestrian/db/queries';
 import { stripeAdapter } from '@/lib/payments/stripe';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -66,16 +70,26 @@ export async function POST(request: NextRequest) {
     return new Response('OK', { status: 200 });
   }
 
-  // Exactly-once guard — Stripe's delivery is at-least-once, so a retried
-  // `charge.refunded` could otherwise fire a second receipt email or race
-  // on the livery-invoice TOCTOU.
-  const fresh = await recordWebhookEventOrSkip('stripe', event.eventId);
-  if (!fresh) {
+  // Two-phase claim — see `claimWebhookEvent`. A fresh `claimed` proceeds
+  // to processing; `already_processed` ACKs 200; `in_flight` returns 503
+  // so Stripe retries after the other worker finishes (or the stale
+  // threshold elapses if it crashed).
+  const claim = await claimWebhookEvent('stripe', event.eventId);
+
+  if (claim.status === 'already_processed') {
     logger.info('stripe_webhook_duplicate', {
       eventId: event.eventId,
       type: event.eventType,
     });
     return new Response('OK', { status: 200 });
+  }
+
+  if (claim.status === 'in_flight') {
+    logger.info('stripe_webhook_in_flight', {
+      eventId: event.eventId,
+      type: event.eventType,
+    });
+    return new Response('Processing in progress', { status: 503 });
   }
 
   try {
@@ -87,16 +101,19 @@ export async function POST(request: NextRequest) {
     if (!bookingResult) {
       await applyLiveryInvoiceWebhook({ provider: 'stripe', event });
     }
+    await markWebhookEventProcessed('stripe', event.eventId);
+    return new Response('OK', { status: 200 });
   } catch (err) {
-    // Log but still return 200 — Stripe retries on non-2xx, and a DB blip
-    // shouldn't cause duplicate processing storms. The next event will
-    // re-converge since our status transitions are idempotent.
+    const message = err instanceof Error ? err.message : 'unknown';
+    await markWebhookEventFailed('stripe', event.eventId, message);
     logger.error('stripe_webhook_processing_failed', {
       eventType: event.eventType,
       eventId: event.eventId,
-      error: err instanceof Error ? err.message : 'unknown',
+      attempt: claim.attempt,
+      error: message,
     });
+    // Return 500 so Stripe retries. markWebhookEventFailed leaves the row
+    // in a re-claimable state for the retry.
+    return new Response('Processing failed', { status: 500 });
   }
-
-  return new Response('OK', { status: 200 });
 }

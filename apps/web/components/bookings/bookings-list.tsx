@@ -20,6 +20,7 @@ import {
   type Booking,
 } from '@/hooks/use-bookings';
 import { AddBookingDialog } from './add-booking-dialog';
+import { formatMoney } from '@equestrian/shared/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -50,6 +51,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 
@@ -176,6 +178,7 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       setReason('');
       onClose();
     } catch (err) {
+      reportMutationError('booking.action', err, { type: state?.type, bookingId: state?.booking.id });
       toast.error(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setIsSubmitting(false);
@@ -398,7 +401,7 @@ export function BookingsList() {
                       <div className="flex flex-col items-end gap-1">
                         {booking.amount !== null && (
                           <span className="font-semibold">
-                            {(booking.amount / 100).toFixed(2)} {booking.currency}
+                            {formatMoney(booking.amount, booking.currency)}
                           </span>
                         )}
                         <Badge

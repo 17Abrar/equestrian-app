@@ -36,6 +36,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { useClubSettings } from '@/hooks/use-settings';
 
 const RECORD_TYPE_COLORS: Record<string, string> = {
   vaccination: 'bg-blue-100 text-blue-800',
@@ -67,6 +69,11 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const { data, isLoading, isError, error, refetch } = useHealthRecords(horseId, typeFilter);
   const deleteRecord = useDeleteHealthRecord(horseId);
+  const { data: settings } = useClubSettings();
+  // Health records have no currency column; display costs in the club's
+  // configured currency so vet invoices render consistently with the rest
+  // of the dashboard.
+  const currency = settings?.data.currency ?? 'AED';
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load records'} onRetry={() => refetch()} />;
@@ -77,7 +84,8 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
     try {
       await deleteRecord.mutateAsync(recordId);
       toast.success('Record deleted');
-    } catch {
+    } catch (err) {
+      reportMutationError('health.delete', err, { horseId, recordId });
       toast.error('Failed to delete record');
     }
   }
@@ -136,7 +144,7 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
                   </TableCell>
                   <TableCell className="font-medium">{r.title}</TableCell>
                   <TableCell className="text-muted-foreground">{r.vetName ?? '—'}</TableCell>
-                  <TableCell>{r.cost != null ? formatMoney(r.cost, 'AED') : '—'}</TableCell>
+                  <TableCell>{r.cost != null ? formatMoney(r.cost, currency) : '—'}</TableCell>
                   <TableCell>
                     {r.followUpNeeded ? (
                       <Badge variant="outline" className="text-orange-600">{r.followUpDate ?? 'Needed'}</Badge>
@@ -188,6 +196,7 @@ function AddHealthRecordDialog({ horseId }: { horseId: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('health.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add record');
     }
   }
@@ -322,7 +331,8 @@ function MedicationCard({ horseId, medication }: { horseId: string; medication: 
         skipReason,
       });
       toast.success(wasAdministered ? 'Medication administered' : 'Medication skipped');
-    } catch {
+    } catch (err) {
+      reportMutationError('medication.log', err, { horseId, medicationId: medication.id, wasAdministered });
       toast.error('Failed to log medication');
     }
   }
@@ -395,6 +405,7 @@ function AddMedicationDialog({ horseId }: { horseId: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('medication.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add medication');
     }
   }

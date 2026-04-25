@@ -5,7 +5,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { createHorseSchema, type CreateHorseFormValues, type CreateHorseInput } from '@equestrian/shared/schemas';
-import { useCreateHorse, useUpdateHorse, type Horse } from '@/hooks/use-horses';
+import {
+  useCreateHorse,
+  useUpdateHorse,
+  useTransferHorseOwner,
+  type Horse,
+} from '@/hooks/use-horses';
 import { useOwnerMembers } from '@/hooks/use-staff';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface HorseFormProps {
   horse?: Horse;
@@ -37,6 +43,7 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
   const router = useRouter();
   const createHorse = useCreateHorse();
   const updateHorse = useUpdateHorse(horse?.id ?? '');
+  const transferOwner = useTransferHorseOwner(horse?.id ?? '');
   const { data: ownersData } = useOwnerMembers();
   const isEditing = !!horse;
 
@@ -82,8 +89,19 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
 
   async function onSubmit(data: CreateHorseInput) {
     try {
-      if (isEditing) {
-        await updateHorse.mutateAsync(data);
+      if (isEditing && horse) {
+        // Owner changes must go through the dedicated transfer endpoint so
+        // the new owner is validated and the change is audit-logged — the
+        // main update schema deliberately omits `ownerMemberId`.
+        const nextOwner = data.ownerMemberId ?? null;
+        const ownerChanged = (horse.ownerMemberId ?? null) !== nextOwner;
+
+        const { ownerMemberId: _omit, ...rest } = data;
+        await updateHorse.mutateAsync(rest);
+
+        if (ownerChanged) {
+          await transferOwner.mutateAsync(nextOwner);
+        }
         toast.success('Horse updated successfully');
       } else {
         await createHorse.mutateAsync(data);
@@ -95,11 +113,14 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
         router.push('/horses');
       }
     } catch (error) {
+      reportMutationError(isEditing ? 'horse.update' : 'horse.create', error, { horseId: horse?.id });
       toast.error(error instanceof Error ? error.message : `Failed to ${isEditing ? 'update' : 'create'} horse`);
     }
   }
 
-  const isPending = isEditing ? updateHorse.isPending : createHorse.isPending;
+  const isPending = isEditing
+    ? updateHorse.isPending || transferOwner.isPending
+    : createHorse.isPending;
 
   return (
     <Form {...form}>

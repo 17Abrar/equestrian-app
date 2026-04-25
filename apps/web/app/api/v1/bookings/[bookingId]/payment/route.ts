@@ -6,7 +6,7 @@ import {
   getClubById,
   setBookingPaymentRef,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -48,8 +48,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const { bookingId } = await params;
 
       // Body is optional — default mode when absent.
-      const raw = await request.json().catch(() => ({}));
-      const { mode = 'default' } = validateInput(bodySchema, raw);
+      const { mode = 'default' } = await parseOptionalBody(request, bodySchema);
 
       // 1. Load booking, verify it belongs to the caller or they have staff rights.
       const booking = await getBookingById(ctx.clubId, bookingId);
@@ -107,18 +106,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const adapter = getAdapter(account.provider);
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+      // Stripe / N-Genius / Ziina all require ABSOLUTE return/cancel URLs.
+      // A relative-URL fallback would silently misconfigure every provider —
+      // fail loud at the first payment instead of leaving riders stranded
+      // on a 4xx page from the provider.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+      if (!appUrl) {
+        logger.error('payment_app_url_not_configured', {
+          bookingId,
+          clubId: ctx.clubId,
+        });
+        return errorResponse(
+          'PROVIDER_NOT_CONFIGURED',
+          'Payment return URL is not configured. Contact support.',
+          503,
+        );
+      }
       // `?from=payment` tells the return-URL page that this is a post-redirect
       // landing so it can show "confirming payment…" while the webhook lands.
       const returnUrlPath = `/rider/bookings/${bookingId}?from=payment`;
-      const returnUrl = appUrl
-        ? new URL(returnUrlPath, appUrl).toString()
-        : returnUrlPath;
+      const returnUrl = new URL(returnUrlPath, appUrl).toString();
 
-      // Compute the platform cut for providers that support native split
-      // payments (currently just Stripe). N-Genius and Ziina don't have an
-      // equivalent application-fee concept — platform revenue on those
-      // providers has to be invoiced separately.
+      // booking.amount is the NET (post-coupon) amount we charge — coupon
+      // discounts are baked into it at booking-create time. Platform fee is
+      // computed off the net charge because that's what we actually settle.
+      // N-Genius and Ziina don't support split payments — their adapters
+      // ignore applicationFeeMinorUnits.
       const bookingAmount = booking.amount;
       let applicationFeeMinorUnits: number | undefined;
       if (account.provider === 'stripe') {

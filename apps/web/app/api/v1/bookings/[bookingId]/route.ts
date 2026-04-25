@@ -1,7 +1,7 @@
 import React from 'react';
 import { type NextRequest, after } from 'next/server';
 import { cancelBookingSchema } from '@equestrian/shared/schemas';
-import { calculateCancellationFee } from '@equestrian/shared/utils';
+import { calculateCancellationFee, formatMoney } from '@equestrian/shared/utils';
 import {
   getBookingById,
   getBookingSlotById,
@@ -154,7 +154,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           if (!riderMember?.email) return;
 
           const feeDisplay = feeResult.fee > 0
-            ? `${(feeResult.fee / 100).toFixed(2)} ${existing.currency}`
+            ? formatMoney(feeResult.fee, existing.currency)
             : undefined;
 
           await sendTriggeredEmail({
@@ -174,8 +174,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
               isLateCancellation: feeResult.isLate,
             }),
           });
-        } catch {
-          // Email failure is non-fatal
+        } catch (err) {
+          // Email failure is non-fatal for the request, but Sentry needs
+          // to see it under the right `logger.event` tag so the
+          // OBSERVABILITY.md alert rule fires. Otherwise the throw
+          // surfaces as a raw unhandled Error that bypasses our
+          // structured logging entirely.
+          logger.error('email_send_failed', {
+            trigger: 'booking_cancellation',
+            bookingId,
+            clubId: ctx.clubId,
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
         }
       });
 

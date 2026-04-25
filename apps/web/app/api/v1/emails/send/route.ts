@@ -7,11 +7,16 @@ import { clubMembers } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
+// Plain-text only — no `html` field. A compromised staff account can
+// already use this endpoint to spam every member of their club, but
+// accepting raw HTML would let them mount more convincing phishing
+// templates served from the club's verified Resend domain. If we ever
+// need rich content, add a server-side allowlist (DOMPurify) — never
+// pass through caller-supplied HTML.
 const sendEmailSchema = z.object({
   to: z.string().email('Invalid email address'),
   subject: z.string().min(1, 'Subject is required').max(500),
-  body: z.string().min(1, 'Body is required'),
-  html: z.string().optional(),
+  body: z.string().min(1, 'Body is required').max(20_000),
 });
 
 export async function POST(request: NextRequest) {
@@ -58,7 +63,6 @@ export async function POST(request: NextRequest) {
           to: [data.to],
           subject: data.subject,
           text: data.body,
-          ...(data.html ? { html: data.html } : {}),
         });
 
         if (error) {

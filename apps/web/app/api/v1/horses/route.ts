@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { horseFiltersSchema, createHorseSchema } from '@equestrian/shared/schemas';
-import { getHorsesByClub, createHorse } from '@equestrian/db/queries';
+import { getHorsesByClub, createHorse, getMemberById } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
@@ -32,6 +32,16 @@ export async function POST(request: NextRequest) {
     async (ctx) => {
       const body = await request.json();
       const data = validateInput(createHorseSchema, body);
+
+      // The owner dropdown is populated from the club's owner list, but a
+      // caller hitting the API directly could pass any UUID. Verify the
+      // owner belongs to this club before the insert.
+      if (data.ownerMemberId) {
+        const owner = await getMemberById(ctx.clubId, data.ownerMemberId);
+        if (!owner) {
+          return errorResponse('INVALID_OWNER', 'Owner is not a member of this club', 400);
+        }
+      }
 
       const horse = await createHorse(ctx.clubId, data);
 

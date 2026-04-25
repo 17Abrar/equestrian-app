@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import {
   competitions,
@@ -215,8 +215,13 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
 
 /**
  * Atomically creates a competition entry after verifying:
- * 1. Registration deadline has not passed
- * 2. Class is not full (max entries not exceeded)
+ * 1. The rider belongs to this club (prevents enrolling a foreign-club
+ *    member in our competition, which would attach their name to our
+ *    leaderboard and charge them for an entry they never initiated).
+ * 2. The horse (if supplied) is either owned by the rider or is a
+ *    school horse marked `available` — all scoped to this club.
+ * 3. Registration deadline has not passed.
+ * 4. Class is not full (max entries not exceeded).
  */
 export async function createCompetitionEntry(clubId: string, data: EntryCreate) {
   return writeTransaction(async (tx) => {
@@ -243,6 +248,53 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
     const cls = classRow[0];
     if (!cls) {
       throw new Error('CLASS_NOT_FOUND');
+    }
+
+    // Tenancy guard — the audit found this was missing. A caller with
+    // `competitions:register` could otherwise enroll any UUID as the rider.
+    const rider = await tx
+      .select({ id: clubMembers.id })
+      .from(clubMembers)
+      .where(
+        and(
+          eq(clubMembers.id, data.riderMemberId),
+          eq(clubMembers.clubId, clubId),
+        ),
+      )
+      .limit(1);
+    if (!rider[0]) {
+      throw new Error('RIDER_NOT_IN_CLUB');
+    }
+
+    // Horse guard — if present, it must live in this club and must be
+    // either the rider's own horse or a school horse the club has marked
+    // as available.
+    if (data.horseId) {
+      const horseRow = await tx
+        .select({
+          ownerMemberId: horses.ownerMemberId,
+          status: horses.status,
+        })
+        .from(horses)
+        .where(
+          and(
+            eq(horses.id, data.horseId),
+            eq(horses.clubId, clubId),
+            isNull(horses.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const h = horseRow[0];
+      if (!h) {
+        throw new Error('HORSE_NOT_FOUND');
+      }
+      const isRidersHorse = h.ownerMemberId === data.riderMemberId;
+      const isAvailableSchoolHorse =
+        h.ownerMemberId === null && h.status === 'available';
+      if (!isRidersHorse && !isAvailableSchoolHorse) {
+        throw new Error('HORSE_NOT_AVAILABLE_FOR_RIDER');
+      }
     }
 
     // Check registration deadline

@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 export function CompetitionForm() {
   const router = useRouter();
@@ -59,6 +60,7 @@ export function CompetitionForm() {
         router.push('/competitions');
       }
     } catch (error) {
+      reportMutationError('competition.create', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create competition');
     }
   }

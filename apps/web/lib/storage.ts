@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const ALLOWED_CONTENT_TYPES = [
@@ -125,4 +130,164 @@ export async function getUploadUrl(params: {
     key,
     publicUrl: `${publicUrl}/${key}`,
   };
+}
+
+// ─── Post-upload magic-byte verification ─────────────────────────────
+
+/**
+ * Known magic-byte signatures for the content types we accept. The
+ * client declares a content-type at presign time and R2 binds it into
+ * the signed headers, but the actual file body isn't inspected. A
+ * malicious client can declare `image/jpeg` and PUT arbitrary bytes.
+ * `X-Content-Type-Options: nosniff` blocks browser execution, but the
+ * object is still hosted at its public R2 URL — this verifier closes
+ * that gap by inspecting the first bytes server-side after upload.
+ *
+ * Entries are ordered longest-prefix-first so a DOCX/ZIP (PK 03 04) is
+ * matched before a bare `PK`. Each entry is a concrete byte sequence;
+ * wildcards are only used where a format allows variation within a
+ * fixed-length header (WebP, WEBP at offset 8).
+ */
+interface MagicSignature {
+  contentType: string;
+  /** Sequence of expected bytes; `null` entries match any byte (wildcard). */
+  bytes: (number | null)[];
+}
+
+const MAGIC_SIGNATURES: MagicSignature[] = [
+  { contentType: 'image/jpeg', bytes: [0xff, 0xd8, 0xff] },
+  {
+    contentType: 'image/png',
+    bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  },
+  {
+    contentType: 'image/webp',
+    // "RIFF" then 4 size bytes (wildcard) then "WEBP"
+    bytes: [
+      0x52, 0x49, 0x46, 0x46,
+      null, null, null, null,
+      0x57, 0x45, 0x42, 0x50,
+    ],
+  },
+  // GIF87a / GIF89a share the first 6 bytes only on positions 0-3; the
+  // version byte differs. Use the shared prefix "GIF8".
+  { contentType: 'image/gif', bytes: [0x47, 0x49, 0x46, 0x38] },
+  { contentType: 'application/pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
+  // Legacy .doc (OLE compound document).
+  {
+    contentType: 'application/msword',
+    bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1],
+  },
+  // .docx is a ZIP container (PK\x03\x04).
+  {
+    contentType:
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    bytes: [0x50, 0x4b, 0x03, 0x04],
+  },
+];
+
+function matchesMagic(bytes: Uint8Array, sig: MagicSignature): boolean {
+  if (bytes.length < sig.bytes.length) return false;
+  for (let i = 0; i < sig.bytes.length; i++) {
+    const expected = sig.bytes[i];
+    if (expected === null) continue;
+    if (bytes[i] !== expected) return false;
+  }
+  return true;
+}
+
+/** Result of a magic-byte check. `ok === false` means the caller should
+ *  delete the R2 object and reject the save operation it was trying to
+ *  confirm (e.g. saving the photo URL on a horse record). */
+export interface MagicByteResult {
+  ok: boolean;
+  declaredType: string;
+  /** First signature that matched — undefined if nothing matched. */
+  detectedType?: string;
+}
+
+/**
+ * Fetches the first ~16 bytes of a just-uploaded R2 object and confirms
+ * they match the declared content type. Non-destructive; the caller
+ * decides whether to delete on mismatch (`deleteR2Object`).
+ *
+ * We intentionally read a tiny range to keep the verifier cheap — R2
+ * charges per-GB egress, and a signature check doesn't need more than
+ * the header block.
+ */
+export async function verifyObjectMagicBytes(
+  key: string,
+  declaredType: string,
+): Promise<MagicByteResult> {
+  const bucketName = process.env.R2_BUCKET_NAME;
+  if (!bucketName) {
+    throw new Error('R2_BUCKET_NAME is not configured.');
+  }
+
+  const client = getR2Client();
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      // HTTP range: first 16 bytes is enough to cover every signature above
+      // (WebP's is 12 bytes; everything else is ≤8).
+      Range: 'bytes=0-15',
+    }),
+  );
+
+  if (!response.Body) {
+    return { ok: false, declaredType };
+  }
+
+  // @aws-sdk/client-s3 in Node returns Body with transformToByteArray();
+  // on Workers it returns a ReadableStream. Handle both.
+  const body = response.Body as {
+    transformToByteArray?: () => Promise<Uint8Array>;
+  } & ReadableStream;
+
+  let bytes: Uint8Array;
+  if (typeof body.transformToByteArray === 'function') {
+    bytes = await body.transformToByteArray();
+  } else {
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+  }
+
+  const match = MAGIC_SIGNATURES.find((sig) => matchesMagic(bytes, sig));
+  return {
+    ok: match?.contentType === declaredType,
+    declaredType,
+    detectedType: match?.contentType,
+  };
+}
+
+/**
+ * Removes an object from R2. Used to clean up mis-typed uploads caught by
+ * `verifyObjectMagicBytes`. Swallows errors — the object may already be
+ * gone, and a failed delete shouldn't block the higher-level operation
+ * from returning a clean error to the user.
+ */
+export async function deleteR2Object(key: string): Promise<void> {
+  const bucketName = process.env.R2_BUCKET_NAME;
+  if (!bucketName) return;
+  const client = getR2Client();
+  try {
+    await client.send(
+      new DeleteObjectCommand({ Bucket: bucketName, Key: key }),
+    );
+  } catch {
+    // non-fatal — caller has already decided to reject the upload.
+  }
 }

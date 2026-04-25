@@ -360,3 +360,50 @@ export async function findBookingByProviderPaymentId(
     ? { clubId: row.clubId, bookingId: row.id, currentPaymentStatus: row.paymentStatus }
     : null;
 }
+
+/**
+ * Webhook-time lookup by booking id, scoped to the club resolved from the
+ * event's provider account id. Used as a fallback when the
+ * `provider_payment_id` lookup misses — fast-succeed payment webhooks can
+ * arrive between `adapter.createPayment` returning and the route writing
+ * the id back to the booking row, leaving the id-based lookup empty for a
+ * booking that definitively exists.
+ *
+ * Returns `null` if the booking doesn't exist or doesn't belong to the
+ * claimed club (a webhook signed by Club A claiming a booking from Club B
+ * is either a replay attack or a config bug — either way, reject).
+ *
+ * `currentProviderPaymentId` is returned so the caller can detect the
+ * TOCTOU (it'll be `null`) and store the provider id while it's updating
+ * the status.
+ */
+export async function findBookingByIdForWebhook(
+  bookingId: string,
+  clubId: string,
+): Promise<{
+  clubId: string;
+  bookingId: string;
+  currentPaymentStatus: string;
+  currentProviderPaymentId: string | null;
+} | null> {
+  const rows = await rawDb
+    .select({
+      id: bookings.id,
+      clubId: bookings.clubId,
+      paymentStatus: bookings.paymentStatus,
+      providerPaymentId: bookings.providerPaymentId,
+    })
+    .from(bookings)
+    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .limit(1);
+
+  const row = rows[0];
+  return row
+    ? {
+        clubId: row.clubId,
+        bookingId: row.id,
+        currentPaymentStatus: row.paymentStatus,
+        currentProviderPaymentId: row.providerPaymentId,
+      }
+    : null;
+}

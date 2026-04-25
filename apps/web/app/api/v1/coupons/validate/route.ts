@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { validateCoupon } from '@equestrian/db/queries';
+import { getMemberById, validateCoupon } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
@@ -48,6 +48,20 @@ export async function POST(request: NextRequest) {
             403,
           );
         }
+      } else {
+        // Staff path: confirm the rider actually belongs to this club. The
+        // route would otherwise count per-rider coupon usage against an
+        // arbitrary UUID, which doesn't leak data today (couponId is
+        // already club-scoped) but would under any future cross-club
+        // coupon link.
+        const rider = await getMemberById(ctx.clubId, data.riderMemberId);
+        if (!rider) {
+          return errorResponse(
+            'INVALID_RIDER',
+            'Rider is not a member of this club',
+            400,
+          );
+        }
       }
 
       const result = await validateCoupon({
@@ -60,6 +74,8 @@ export async function POST(request: NextRequest) {
 
       return successResponse(result);
     },
-    { rateLimit: { maxRequests: 10, windowMs: 60_000 } },
+    // failClosed: a Redis outage shouldn't let an attacker brute-force coupon
+    // codes by spamming this endpoint. Legit users retry; abuse stays capped.
+    { rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true } },
   );
 }

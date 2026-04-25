@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface FeedingTabProps {
   horseId: string;
@@ -35,7 +36,8 @@ export function FeedingTab({ horseId }: FeedingTabProps) {
     try {
       await deletePlan.mutateAsync(planId);
       toast.success('Feeding plan removed');
-    } catch {
+    } catch (err) {
+      reportMutationError('feeding.delete', err, { horseId, planId });
       toast.error('Failed to remove feeding plan');
     }
   }
@@ -116,6 +118,7 @@ function AddFeedingPlanDialog({ horseId }: { horseId: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('feeding.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add feeding plan');
     }
   }

@@ -2,7 +2,9 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   adminGetPaymentAccountByProvider,
-  recordWebhookEventOrSkip,
+  claimWebhookEvent,
+  markWebhookEventFailed,
+  markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { ziinaAdapter } from '@/lib/payments/ziina';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
@@ -87,14 +89,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('OK', { status: 200 });
   }
 
-  const fresh = await recordWebhookEventOrSkip('ziina', event.eventId);
-  if (!fresh) {
+  const claim = await claimWebhookEvent('ziina', event.eventId);
+
+  if (claim.status === 'already_processed') {
     logger.info('ziina_webhook_duplicate', {
       eventId: event.eventId,
       type: event.eventType,
       clubId,
     });
     return new Response('OK', { status: 200 });
+  }
+
+  if (claim.status === 'in_flight') {
+    logger.info('ziina_webhook_in_flight', {
+      eventId: event.eventId,
+      type: event.eventType,
+      clubId,
+    });
+    return new Response('Processing in progress', { status: 503 });
   }
 
   try {
@@ -111,14 +123,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!bookingResult) {
       await applyLiveryInvoiceWebhook({ provider: 'ziina', event });
     }
+    await markWebhookEventProcessed('ziina', event.eventId);
+    return new Response('OK', { status: 200 });
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown';
+    await markWebhookEventFailed('ziina', event.eventId, message);
     logger.error('ziina_webhook_processing_failed', {
       eventType: event.eventType,
       eventId: event.eventId,
       clubId,
-      error: err instanceof Error ? err.message : 'unknown',
+      attempt: claim.attempt,
+      error: message,
     });
+    return new Response('Processing failed', { status: 500 });
   }
-
-  return new Response('OK', { status: 200 });
 }

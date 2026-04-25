@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface NavItem {
   label: string;
@@ -190,6 +191,7 @@ function ActiveStableSwitcher() {
       toast.success('Switched stable');
       router.refresh();
     } catch (err) {
+      reportMutationError('rider.switch_stable', err);
       toast.error(err instanceof Error ? err.message : 'Failed to switch');
     } finally {
       setSwitching(false);

@@ -6,7 +6,7 @@ import {
   createAuditEntry,
   cancelPendingInvoicesForHorse,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -22,8 +22,7 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { horseId } = await params;
-    const body = await request.json().catch(() => ({}));
-    const data = validateInput(retireHorseOwnershipSchema, body);
+    const data = await parseOptionalBody(request, retireHorseOwnershipSchema);
 
     const ownership = await getHorseOwnershipByUser(ctx.userId, horseId);
     if (!ownership) {

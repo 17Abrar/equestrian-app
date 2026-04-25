@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { formatMoney } from '@equestrian/shared/utils';
 
 function CompetitionsListSkeleton() {
   return (
@@ -170,7 +171,7 @@ function CompetitionCard({ competition }: { competition: Competition }) {
 
           {competition.entryFee !== null && competition.entryFee > 0 && (
             <p className="mt-3 text-sm font-medium">
-              Entry: {(competition.entryFee / 100).toFixed(2)} {competition.currency}
+              Entry: {formatMoney(competition.entryFee, competition.currency)}
             </p>
           )}
         </CardContent>

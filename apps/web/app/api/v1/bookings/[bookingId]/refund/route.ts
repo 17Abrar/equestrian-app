@@ -3,17 +3,18 @@ import { z } from 'zod';
 import {
   adminGetPaymentAccountByProvider,
   getBookingById,
-  setBookingPaymentRef,
+  recordBookingRefund,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
 const bodySchema = z.object({
   /**
-   * Partial refund amount in minor units (fils). Omit for a full refund.
-   * Must be <= the booking's captured amount.
+   * Partial refund amount in minor units (fils). Omit to refund the
+   * remaining balance (original amount minus whatever has already been
+   * refunded). Must be <= `booking.amount - booking.refundedAmountMinor`.
    */
   amountMinorUnits: z.number().int().positive().optional(),
   reason: z.string().max(500).optional(),
@@ -25,33 +26,33 @@ interface RouteParams {
 
 /**
  * Admin-initiated refund. Calls the provider that captured the original
- * payment (Stripe / N-Genius / Ziina) via its adapter, then updates the
- * booking's `paymentStatus` to `refunded`. The provider's refund webhook
- * will arrive later and the idempotent webhook path will recognise the
- * booking is already in `refunded` — a no-op.
+ * payment (Stripe / N-Genius / Ziina) via its adapter, then records the
+ * refund against the booking's running refund ledger.
  *
- * Full refund path — partial refunds update the same status but you can
- * track the difference via `booking.amount` vs provider's reported refund
- * total. A follow-up migration could add a `refunds` table for a formal
- * partial-refund ledger if needed.
+ * Partial refunds set `paymentStatus = 'partial'` and are re-entrant —
+ * an admin can issue a 20 AED goodwill refund today and another 30 AED
+ * tomorrow, up to the original amount. The status only flips to
+ * 'refunded' once the running total equals the original amount.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
 
-      const raw = await request.json().catch(() => ({}));
-      const data = validateInput(bodySchema, raw);
+      const data = await parseOptionalBody(request, bodySchema);
 
       const booking = await getBookingById(ctx.clubId, bookingId);
       if (!booking) {
         return errorResponse('NOT_FOUND', 'Booking not found', 404);
       }
 
-      if (booking.paymentStatus !== 'paid') {
+      // 'paid' and 'partial' are both valid starting states — the latter
+      // means an earlier refund already happened and there's still
+      // headroom before the original amount.
+      if (booking.paymentStatus !== 'paid' && booking.paymentStatus !== 'partial') {
         return errorResponse(
-          'NOT_PAID',
-          `Booking payment status is "${booking.paymentStatus}" — only paid bookings can be refunded.`,
+          'NOT_REFUNDABLE',
+          `Booking payment status is "${booking.paymentStatus}" — only paid or partially-refunded bookings can be refunded.`,
           422,
         );
       }
@@ -64,10 +65,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      if (data.amountMinorUnits && booking.amount && data.amountMinorUnits > booking.amount) {
+      if (booking.amount == null) {
         return errorResponse(
-          'AMOUNT_EXCEEDS_PAYMENT',
-          'Refund amount cannot exceed the original payment.',
+          'NO_BOOKING_AMOUNT',
+          'Booking has no captured amount to refund.',
+          422,
+        );
+      }
+
+      const refundedSoFar = booking.refundedAmountMinor ?? 0;
+      const remaining = booking.amount - refundedSoFar;
+
+      if (remaining <= 0) {
+        return errorResponse(
+          'NOTHING_TO_REFUND',
+          'Booking is already fully refunded.',
+          422,
+        );
+      }
+
+      const requestedAmount = data.amountMinorUnits ?? remaining;
+
+      if (requestedAmount > remaining) {
+        return errorResponse(
+          'AMOUNT_EXCEEDS_REMAINING',
+          `Refund amount (${requestedAmount}) exceeds the remaining refundable balance (${remaining}).`,
           422,
         );
       }
@@ -90,21 +112,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const refund = await adapter.refund({
           account,
           providerPaymentId: booking.providerPaymentId,
-          amountMinorUnits: data.amountMinorUnits,
+          amountMinorUnits: requestedAmount,
           reason: data.reason,
-          // Stable key: dropped-response retries must resolve to the same
-          // provider refund. Varying the key (e.g., randomUUID) would let
-          // a partial-refund retry double-charge the club. The amount is
-          // part of the key so an admin can later issue a DIFFERENT partial
-          // refund against the same booking.
-          idempotencyKey: `refund_${bookingId}_${data.amountMinorUnits ?? 'full'}`,
+          // Stable key, parameterised on the running total at request time so
+          // each partial refund has a distinct idempotency key. Without
+          // `refundedSoFar` in the key, a second 20-AED partial would collide
+          // with the first and the provider would no-op instead of refunding.
+          idempotencyKey: `refund_${bookingId}_${refundedSoFar}_${requestedAmount}`,
         });
 
-        // Flip the booking to refunded immediately — the webhook that lands
-        // later is a no-op because the status is already terminal.
-        await setBookingPaymentRef(ctx.clubId, bookingId, {
-          paymentStatus: 'refunded',
-        });
+        const updated = await recordBookingRefund(ctx.clubId, bookingId, requestedAmount);
+
+        if (!updated) {
+          // Concurrent refund changed the running total between our read and
+          // write — provider already captured the refund, so surface a soft
+          // error and let the admin retry to see the current state.
+          logger.error('booking_refund_ledger_conflict', {
+            bookingId,
+            clubId: ctx.clubId,
+            provider,
+            providerRefundId: refund.providerRefundId,
+            requestedAmount,
+            refundedSoFarAtRead: refundedSoFar,
+          });
+          return errorResponse(
+            'REFUND_RACE',
+            'Another refund was recorded in the meantime. Check the booking and try again if more refund is due.',
+            409,
+          );
+        }
 
         logger.info('booking_refunded', {
           requestId: ctx.requestId,
@@ -113,13 +149,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           provider,
           providerRefundId: refund.providerRefundId,
           refundStatus: refund.status,
-          partial: !!data.amountMinorUnits,
+          amountMinor: requestedAmount,
+          newRefundedTotal: updated.refundedAmountMinor,
+          newStatus: updated.paymentStatus,
+          partial: updated.paymentStatus === 'partial',
         });
 
         void ctx.audit({
           action: 'booking.refund',
           resourceType: 'booking',
           resourceId: bookingId,
+          changes: {
+            refundedAmountMinor: {
+              from: refundedSoFar,
+              to: updated.refundedAmountMinor,
+            },
+            paymentStatus: { from: booking.paymentStatus, to: updated.paymentStatus },
+          },
         });
 
         return successResponse({
@@ -127,7 +173,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           provider,
           providerRefundId: refund.providerRefundId,
           status: refund.status,
-          partial: !!data.amountMinorUnits,
+          partial: updated.paymentStatus === 'partial',
+          refundedAmountMinor: updated.refundedAmountMinor,
+          remainingRefundableMinor: booking.amount - updated.refundedAmountMinor,
         });
       } catch (err) {
         if (err instanceof PaymentProviderError) {

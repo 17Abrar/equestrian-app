@@ -24,6 +24,7 @@ import {
   type CreateLessonTypeInput,
 } from '@equestrian/shared/schemas';
 import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
+import { formatMoney } from '@equestrian/shared/utils';
 import { useUpdateSettings } from '@/hooks/use-settings';
 import {
   useArenas,
@@ -504,7 +505,7 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>{lt.durationMinutes}min</span>
-                  <span>{(lt.price / 100).toFixed(2)} {lt.currency}</span>
+                  <span>{formatMoney(lt.price, lt.currency)}</span>
                   <span>max {lt.maxRiders}</span>
                 </div>
               </div>

@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { PaymentsPanel } from '@/components/payments/payments-panel';
 import { NotificationsForm } from '@/components/settings/notifications-form';
 import { PermissionsMatrix } from '@/components/settings/permissions-matrix';
@@ -151,6 +152,7 @@ function ClubProfileForm({ settings }: { settings: ClubSettings }) {
       await updateSettings.mutateAsync(data);
       toast.success('Club profile updated');
     } catch (err) {
+      reportMutationError('settings.profile.update', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update profile');
     }
   }
@@ -280,6 +282,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
       await updateSettings.mutateAsync(data);
       toast.success('Booking rules updated');
     } catch (err) {
+      reportMutationError('settings.booking_rules.update', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update booking rules');
     }
   }

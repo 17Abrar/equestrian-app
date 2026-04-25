@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { FileUpload } from '@/components/ui/file-upload';
 import { useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 
@@ -51,6 +52,7 @@ export function BrandingForm({ settings }: { settings: ClubSettings }) {
       });
       toast.success('Branding updated');
     } catch (err) {
+      reportMutationError('settings.branding.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save branding');
     }
   }

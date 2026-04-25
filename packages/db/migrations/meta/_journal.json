@@ -57,6 +57,27 @@
       "when": 1777248000001,
       "tag": "0012_webhook_events",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777248000002,
+      "tag": "0013_webhook_events_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777248000003,
+      "tag": "0014_booking_refunded_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777248000004,
+      "tag": "0015_booking_guest_fields",
+      "breakpoints": true
     }
   ]
 }

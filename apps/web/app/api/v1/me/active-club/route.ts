@@ -1,10 +1,15 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { errorResponse, validateInput, ValidationError } from '@/lib/api-utils';
+import {
+  errorResponse,
+  successResponse,
+  validateInput,
+  ValidationError,
+} from '@/lib/api-utils';
 import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
 
 const setActiveClubSchema = z.object({
@@ -29,7 +34,10 @@ export async function POST(request: NextRequest) {
       return errorResponse('UNAUTHORIZED', 'Authentication required', 401);
     }
 
-    const body = await request.json().catch(() => ({}));
+    // No catch — clubId is required, so an empty/malformed body should
+    // surface as 400 INVALID_JSON (via the SyntaxError branch below)
+    // rather than as a confusing missing-field validation error.
+    const body = await request.json();
     const data = validateInput(setActiveClubSchema, body);
 
     const membership = await db
@@ -52,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = NextResponse.json({ success: true, data: { clubId: data.clubId } });
+    const response = successResponse({ clubId: data.clubId });
     // 30-day cookie; renewed on each switch. Scoped to the whole site so
     // server components and API handlers see it. HttpOnly so client JS can't
     // read it — the client knows its active club via the /me response anyway.
@@ -81,7 +89,7 @@ export async function DELETE() {
   if (!userId) {
     return errorResponse('UNAUTHORIZED', 'Authentication required', 401);
   }
-  const response = NextResponse.json({ success: true, data: { cleared: true } });
+  const response = successResponse({ cleared: true });
   response.cookies.delete(ACTIVE_CLUB_COOKIE);
   return response;
 }

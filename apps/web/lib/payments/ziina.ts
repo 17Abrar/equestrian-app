@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import {
   type CreatePaymentInput,
@@ -33,30 +34,24 @@ import {
 
 const API_BASE_URL = process.env.ZIINA_API_BASE_URL ?? 'https://api-v2.ziina.com/api';
 
-interface ZiinaCredentials {
-  apiKey: string;
-  webhookSigningSecret?: string;
-}
+const ziinaCredentialsSchema = z.object({
+  apiKey: z.string().min(1),
+  webhookSigningSecret: z.string().min(1).optional(),
+});
+
+type ZiinaCredentials = z.infer<typeof ziinaCredentialsSchema>;
 
 function parseCredentials(raw: unknown): ZiinaCredentials {
-  if (!raw || typeof raw !== 'object') {
+  const result = ziinaCredentialsSchema.safeParse(raw);
+  if (!result.success) {
     throw new PaymentProviderError(
       'INVALID_CREDENTIALS',
-      'Ziina credentials are missing or malformed',
+      `Ziina credentials are invalid: ${result.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ')}`,
     );
   }
-  const c = raw as Record<string, unknown>;
-  if (typeof c.apiKey !== 'string' || c.apiKey.length === 0) {
-    throw new PaymentProviderError(
-      'INVALID_CREDENTIALS',
-      'Ziina credentials must include `apiKey`',
-    );
-  }
-  return {
-    apiKey: c.apiKey,
-    webhookSigningSecret:
-      typeof c.webhookSigningSecret === 'string' ? c.webhookSigningSecret : undefined,
-  };
+  return result.data;
 }
 
 function authHeaders(apiKey: string, extra: Record<string, string> = {}) {

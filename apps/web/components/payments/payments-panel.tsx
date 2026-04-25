@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import {
   type PaymentAccount,
   type PaymentProviderName,
@@ -263,6 +264,7 @@ function StripeConnectButton({ label }: { label: string }) {
         window.location.href = res.data.redirectUrl;
       }
     } catch (err) {
+      reportMutationError('payments.stripe.connect', err);
       toast.error(err instanceof Error ? err.message : 'Could not start Stripe connection');
     }
   }
@@ -324,6 +326,7 @@ function NGeniusConnectDialog({ label }: { label: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('payments.n_genius.connect', err);
       toast.error(err instanceof Error ? err.message : 'Connection failed');
     }
   }
@@ -476,6 +479,7 @@ function ZiinaConnectDialog({ label }: { label: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('payments.ziina.connect', err);
       toast.error(err instanceof Error ? err.message : 'Connection failed');
     }
   }
@@ -564,6 +568,7 @@ function SetActiveButton({ provider }: { provider: PaymentProviderName }) {
       await setActive.mutateAsync(provider);
       toast.success('Active provider updated');
     } catch (err) {
+      reportMutationError('payments.set_active', err, { provider });
       toast.error(err instanceof Error ? err.message : 'Could not change active provider');
     }
   }
@@ -594,6 +599,7 @@ function DisconnectButton({
       await disconnect.mutateAsync(provider);
       toast.success(`${displayName} disconnected`);
     } catch (err) {
+      reportMutationError('payments.disconnect', err, { provider });
       toast.error(err instanceof Error ? err.message : 'Could not disconnect');
     }
   }

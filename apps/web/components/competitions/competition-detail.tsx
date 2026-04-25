@@ -11,7 +11,7 @@ import {
   createCompetitionEntrySchema,
   createCompetitionResultSchema,
 } from '@equestrian/shared/schemas';
-import { toMinorUnits } from '@equestrian/shared/utils';
+import { toMinorUnits, formatMoney } from '@equestrian/shared/utils';
 import {
   useCompetition,
   useCompetitionClasses,
@@ -71,6 +71,7 @@ import {
 } from '@/components/ui/select';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { useRouter } from 'next/navigation';
 
 interface CompetitionDetailProps {
@@ -121,7 +122,8 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
       await deleteCompetition.mutateAsync(competitionId);
       toast.success('Competition archived');
       router.push('/competitions');
-    } catch {
+    } catch (err) {
+      reportMutationError('competition.delete', err, { competitionId });
       toast.error('Failed to delete competition');
     }
   }
@@ -208,7 +210,7 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Entry Fee</p>
                 <p className="font-medium">
-                  {(competition.entryFee / 100).toFixed(2)} {competition.currency}
+                  {formatMoney(competition.entryFee, competition.currency)}
                 </p>
               </div>
             </CardContent>
@@ -316,7 +318,7 @@ function ClassRow({
           )}
           {cls.entryFee !== null && cls.entryFee > 0 && (
             <p className="font-medium">
-              {(cls.entryFee / 100).toFixed(2)} {cls.currency}
+              {formatMoney(cls.entryFee, cls.currency)}
             </p>
           )}
         </div>
@@ -454,6 +456,7 @@ function AddClassForm({ competitionId }: { competitionId: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('competition.class.create', err, { competitionId });
       toast.error(err instanceof Error ? err.message : 'Failed to add class');
     }
   }
@@ -519,6 +522,7 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('competition.entry.create', err, { competitionId });
       toast.error(err instanceof Error ? err.message : 'Failed to add entry');
     }
   }
@@ -585,6 +589,7 @@ function AddResultForm({ competitionId, classId, entries }: { competitionId: str
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('competition.result.create', err, { competitionId });
       toast.error(err instanceof Error ? err.message : 'Failed to add result');
     }
   }

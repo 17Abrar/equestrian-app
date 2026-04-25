@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/form';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 
@@ -229,6 +230,7 @@ function AddRiderDialog() {
       form.reset();
       setOpen(false);
     } catch (error) {
+      reportMutationError('rider.create', error);
       toast.error(error instanceof Error ? error.message : 'Failed to add rider');
     }
   }

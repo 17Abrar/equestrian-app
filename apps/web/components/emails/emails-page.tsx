@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Mail } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AudiencesTab } from '@/components/emails/audiences-tab';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 async function sendEmail(data: { to: string; subject: string; body: string }) {
   const res = await fetch('/api/v1/emails/send', {
@@ -34,8 +35,6 @@ export function EmailsPage() {
       <Tabs defaultValue="compose">
         <TabsList>
           <TabsTrigger value="compose">Compose</TabsTrigger>
-          <TabsTrigger value="sent">Sent</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="audiences">Audiences</TabsTrigger>
         </TabsList>
 
@@ -43,48 +42,11 @@ export function EmailsPage() {
           <ComposeTab />
         </TabsContent>
 
-        <TabsContent value="sent" className="mt-6">
-          <PlaceholderTab
-            title="Sent Emails"
-            description="View history of all sent emails with delivery and open tracking."
-            icon={Mail}
-          />
-        </TabsContent>
-
-        <TabsContent value="templates" className="mt-6">
-          <PlaceholderTab
-            title="Email Templates"
-            description="Create and manage reusable email templates for common communications."
-            icon={Mail}
-          />
-        </TabsContent>
-
         <TabsContent value="audiences" className="mt-6">
           <AudiencesTab />
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function PlaceholderTab({ title, description, icon: Icon }: { title: string; description: string; icon: typeof Mail }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-            <Icon className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">This feature is coming soon.</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -108,6 +70,7 @@ function ComposeTab() {
       setSubject('');
       setBody('');
     } catch (err) {
+      reportMutationError('email.send', err);
       toast.error(err instanceof Error ? err.message : 'Failed to send email');
     } finally {
       setSending(false);

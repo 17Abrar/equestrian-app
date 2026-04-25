@@ -109,8 +109,47 @@ export async function writeTransaction<T>(
  * Direct access to the HTTP driver — use for operations that must bypass
  * any ambient transaction (webhooks, Clerk org resolution, audit writes
  * that survive a tenant transaction rollback).
+ *
+ * Exposed as a Proxy only so the test harness can override it; in
+ * production `rawExecutorStore` is always empty and calls land on
+ * `httpDb` directly.
  */
-export { httpDb as rawDb };
+const rawExecutorStore = new AsyncLocalStorage<AnyExecutor>();
+
+export const rawDb = new Proxy({} as HttpDb, {
+  get(_target, prop) {
+    const executor = (rawExecutorStore.getStore() ?? httpDb) as unknown as Record<
+      string | symbol,
+      unknown
+    >;
+    const value = executor[prop];
+    if (typeof value === 'function') {
+      return (value as (...args: unknown[]) => unknown).bind(executor);
+    }
+    return value;
+  },
+});
 
 export type Database = HttpDb;
 export type PoolDatabase = WsDb;
+
+/**
+ * Test-only escape hatch: run `fn` with an arbitrary drizzle executor
+ * bound to BOTH ambient stores (the main `db` Proxy and `rawDb`), so
+ * every query in the graph — including the ones that deliberately
+ * bypass ambient transactions via `rawDb` — routes to the test db.
+ * Production code must not call this.
+ *
+ * Accepts `unknown` so tests can push a pglite-backed drizzle instance
+ * without widening the production `AnyExecutor` union. The Proxy only
+ * dispatches by method name at runtime, so any drizzle-like object
+ * with the same surface works.
+ */
+export function __runWithExecutorForTest<T>(
+  executor: unknown,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return executorStore.run(executor as AnyExecutor, () =>
+    rawExecutorStore.run(executor as AnyExecutor, fn),
+  );
+}

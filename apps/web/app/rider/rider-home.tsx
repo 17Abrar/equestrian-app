@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { BOOKING_STATUS_COLORS } from '@/lib/ui-constants';
+import { formatMoney } from '@equestrian/shared/utils';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -47,7 +48,7 @@ function formatTime(timeStr: string): string {
 
 function formatAmount(amount: number | null, currency: string): string {
   if (amount === null) return '';
-  return `${(amount / 100).toFixed(2)} ${currency}`;
+  return formatMoney(amount, currency);
 }
 
 interface BookingCardProps {

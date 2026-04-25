@@ -179,6 +179,23 @@ export function useUpdateHorse(horseId: string) {
   });
 }
 
+export function useTransferHorseOwner(horseId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ownerMemberId: string | null) =>
+      fetchJson<ApiResponse<Horse>>(`/api/v1/horses/${horseId}/owner`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerMemberId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['horses'] });
+      queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
+    },
+  });
+}
+
 export function useDeleteHorse() {
   const queryClient = useQueryClient();
 

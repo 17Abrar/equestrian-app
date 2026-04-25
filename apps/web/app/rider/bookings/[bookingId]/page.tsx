@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { useBooking, type Booking } from '@/hooks/use-bookings';
 import { PayBookingDialog } from '@/components/payments/pay-booking-dialog';
+import { formatMoney } from '@equestrian/shared/utils';
 
 // Payment methods that settle at the stable — no online flow expected.
 const OFFLINE_METHODS = new Set(['cash', 'card_in_person', 'bank_transfer', 'package_credit']);
@@ -43,7 +44,7 @@ function formatDate(dateStr: string): string {
 
 function formatPrice(amount: number | null, currency: string): string {
   if (amount == null) return '—';
-  return `${(amount / 100).toFixed(2)} ${currency}`;
+  return formatMoney(amount, currency);
 }
 
 // ─── Page ────────────────────────────────────────────────────────────
@@ -84,8 +85,13 @@ export default function RiderBookingDetailPage({
   const [payOpen, setPayOpen] = useState(false);
 
   // Auto-open the pay dialog when the rider just finished booking and the
-  // payment status is still pending — saves them a click.
+  // payment status is still pending — saves them a click. The booking is
+  // typically null on first render (query in flight), so depending only on
+  // mount would skip the open every time. Use a ref to guarantee single-fire
+  // while letting the effect re-run as the query data arrives.
+  const hasAutoOpenedRef = useRef(false);
   useEffect(() => {
+    if (hasAutoOpenedRef.current) return;
     if (!booking) return;
     if (booking.paymentStatus !== 'pending') return;
     if (OFFLINE_METHODS.has(booking.paymentMethod ?? '')) return;
@@ -93,9 +99,8 @@ export default function RiderBookingDetailPage({
     // webhook land rather than immediately reopening the dialog.
     if (returningFromPayment) return;
     setPayOpen(true);
-    // Only trigger once per load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    hasAutoOpenedRef.current = true;
+  }, [booking, returningFromPayment]);
 
   if (query.isLoading) {
     return <BookingSkeleton />;
@@ -238,6 +243,15 @@ function PaymentBanner({
     return (
       <Banner tone="muted" title="Payment refunded">
         Your payment for this booking was refunded.
+      </Banner>
+    );
+  }
+
+  if (booking.paymentStatus === 'partial') {
+    return (
+      <Banner tone="muted" title="Partial refund issued">
+        Part of your payment for this booking was refunded. Contact your
+        stable if you have questions about the amount.
       </Banner>
     );
   }

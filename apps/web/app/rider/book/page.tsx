@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBookingSlots, useCreateBooking, type BookingSlot } from '@/hooks/use-bookings';
+import { formatMoney } from '@equestrian/shared/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -76,7 +77,7 @@ function formatTime(timeStr: string): string {
 }
 
 function formatPrice(price: number, currency: string): string {
-  return `${(price / 100).toFixed(2)} ${currency}`;
+  return formatMoney(price, currency);
 }
 
 // ─── Slot Card ────────────────────────────────────────────────────────
@@ -209,7 +210,7 @@ export default function RiderBookPage() {
       const json = await res.json() as { data?: { valid?: boolean; discount?: number; error?: string } };
       if (json.data?.valid && json.data.discount) {
         setCouponDiscount(json.data.discount);
-        toast.success(`Discount applied: ${(json.data.discount / 100).toFixed(2)} ${selectedSlot.lessonTypeCurrency}`);
+        toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
       } else {
         setCouponError(json.data?.error ?? 'Invalid code');
       }
@@ -372,7 +373,7 @@ export default function RiderBookPage() {
           {couponError && <p className="text-sm text-destructive">{couponError}</p>}
           {couponDiscount > 0 && (
             <p className="text-sm text-green-600">
-              Discount: -{(couponDiscount / 100).toFixed(2)} {selectedSlot.lessonTypeCurrency}
+              Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
             </p>
           )}
         </div>

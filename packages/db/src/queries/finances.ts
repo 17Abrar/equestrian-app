@@ -259,6 +259,11 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
       .from(couponUsages)
       .where(
         and(
+          // Belt-and-braces tenant scope. `couponId` is already club-scoped
+          // today, so this is redundant — but a future cross-club coupon
+          // link would silently leak per-rider counts across tenants
+          // without it.
+          eq(couponUsages.clubId, params.clubId),
           eq(couponUsages.couponId, coupon.id),
           eq(couponUsages.riderMemberId, params.riderMemberId),
         ),

@@ -82,9 +82,23 @@ export type CreateHorseFormValues = z.input<typeof createHorseSchema>;
 /** Output type after Zod parsing — defaults applied, for API/DB layer */
 export type CreateHorseInput = z.output<typeof createHorseSchema>;
 
-export const updateHorseSchema = createHorseSchema.partial();
+// Ownership transfers must go through POST /api/v1/horses/[horseId]/owner
+// so the new owner is validated as a member of the club and the change is
+// recorded in the audit log. Keeping `ownerMemberId` on this schema would
+// let any caller with `horses:update` reassign ownership to an arbitrary
+// UUID via a vanilla PATCH — a mass-assignment hole.
+export const updateHorseSchema = createHorseSchema.partial().omit({
+  ownerMemberId: true,
+});
 
 export type UpdateHorseInput = z.infer<typeof updateHorseSchema>;
+
+export const transferHorseOwnerSchema = z.object({
+  // `null` = school horse / no owner.
+  ownerMemberId: z.string().uuid().nullable(),
+});
+
+export type TransferHorseOwnerInput = z.output<typeof transferHorseOwnerSchema>;
 
 export const horseFiltersSchema = z.object({
   search: z.string().optional(),
@@ -270,7 +284,6 @@ export const createBookingSchema = z.object({
     'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
     'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
   ]).optional(),
-  amount: optionalNumeric(z.number().int()),
   couponCode: z.string().optional(),
   autoMatchHorse: z.boolean().default(true),
   // When present, this booking is for a guest (non-member). `riderMemberId`

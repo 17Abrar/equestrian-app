@@ -40,10 +40,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
     // Rate-limit join attempts per user — without this, a signed-in attacker
     // can enumerate slugs (probing 404 vs 200/403) and auto-join every open
-    // stable. The route doesn't use `withAuth` so we call checkRateLimit directly.
+    // stable. The route doesn't use `withAuth` so we call checkRateLimit
+    // directly. failClosed=true means a Redis outage bounces the user with
+    // 429 rather than silently letting the attack through (the legit user's
+    // retry costs them nothing).
     const rl = await checkRateLimit(`join:${userId}`, {
       maxRequests: 10,
       windowMs: 60_000,
+      failClosed: true,
     });
     if (!rl.allowed) {
       const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
@@ -137,8 +141,15 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
               clubName: club.name,
             }),
           });
-        } catch {
-          // Email failure is non-fatal — already logged inside sendEmail
+        } catch (err) {
+          // Non-fatal for the request, but Sentry needs to see it under
+          // the right `logger.event` tag so the alert rule fires.
+          logger.error('email_send_failed', {
+            trigger: 'rider_welcome',
+            clubId: club.id,
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
         }
       });
     }

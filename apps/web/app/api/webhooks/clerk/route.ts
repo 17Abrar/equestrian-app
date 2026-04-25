@@ -45,7 +45,11 @@ function generateSlug(name: string): string {
 function slugVariants(baseSlug: string): string[] {
   const variants = [baseSlug];
   for (let i = 0; i < 6; i++) {
-    variants.push(`${baseSlug}-${Math.random().toString(36).slice(2, 6)}`);
+    // Use crypto.randomUUID for the suffix so an attacker who controls the
+    // org name can't predict the next variant from a guessable PRNG seed.
+    // Pick the first 4 chars after the dashes to keep slugs short.
+    const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 4);
+    variants.push(`${baseSlug}-${suffix}`);
   }
   return variants;
 }

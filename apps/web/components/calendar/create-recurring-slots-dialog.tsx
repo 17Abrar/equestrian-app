@@ -20,6 +20,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 const DAYS = [
   { value: 0, label: 'Sun' },
@@ -64,6 +65,7 @@ export function CreateRecurringSlotsDialog() {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('slots.recurring.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create slots');
     }
   }

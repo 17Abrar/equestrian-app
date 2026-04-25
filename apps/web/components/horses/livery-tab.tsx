@@ -41,6 +41,7 @@ import {
 import { useRetireHorseOwnership, type Horse } from '@/hooks/use-horses';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatCurrency } from '@equestrian/shared/utils';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface LiveryTabProps {
   horse: Horse;
@@ -147,6 +148,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
       toast.success(`${horse.name}'s ownership retired`);
       setRetireOpen(false);
     } catch (err) {
+      reportMutationError('horse_ownership.retire', err, { horseId: horse.id });
       toast.error(err instanceof Error ? err.message : 'Failed to retire');
     }
   }
@@ -274,6 +276,7 @@ function InvoicesCard({
       toast.success('Invoice cancelled');
       setCancelTarget(null);
     } catch (err) {
+      reportMutationError('livery_invoice.cancel', err, { invoiceId: cancelTarget?.id });
       toast.error(err instanceof Error ? err.message : 'Failed to cancel');
     }
   }

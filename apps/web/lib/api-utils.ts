@@ -77,6 +77,35 @@ export function validateInput<S extends ZodTypeAny>(
   return result.data;
 }
 
+/**
+ * Parses a JSON request body for routes that accept an optional body
+ * (i.e. all schema fields are optional or have defaults). An empty body
+ * validates against the schema as `{}`, letting defaults kick in;
+ * malformed JSON propagates a `SyntaxError` that `withAuth` renders as
+ * `400 INVALID_JSON`.
+ *
+ * Replaces the ad-hoc `request.json().catch(() => ({}))` pattern which
+ * silently swallowed malformed JSON — a caller typo on a refund request
+ * would become an unintended full refund because Zod defaults took
+ * over. See audit 2026-04-24.
+ */
+export async function parseOptionalBody<S extends ZodTypeAny>(
+  request: Request,
+  schema: S,
+): Promise<S['_output']> {
+  const text = await request.text();
+  if (text.length === 0) {
+    return validateInput(schema, {});
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new SyntaxError('Request body contains invalid JSON');
+  }
+  return validateInput(schema, raw);
+}
+
 export class ValidationError extends Error {
   public readonly code = 'VALIDATION_ERROR';
   public readonly details: unknown;

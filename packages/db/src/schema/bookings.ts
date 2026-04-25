@@ -137,6 +137,7 @@ export const bookings = pgTable('bookings', {
   amount: integer('amount'),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
   discountAmount: integer('discount_amount').default(0),
+  refundedAmountMinor: integer('refunded_amount_minor').notNull().default(0),
   couponId: uuid('coupon_id').references(() => coupons.id),
   packageId: uuid('package_id').references(() => riderPackages.id),
 

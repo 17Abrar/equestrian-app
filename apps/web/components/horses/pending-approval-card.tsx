@@ -23,6 +23,7 @@ import {
   useDeclineHorseOwnership,
   type Horse,
 } from '@/hooks/use-horses';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface PendingApprovalCardProps {
   horse: Horse;
@@ -169,6 +170,7 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
       toast.success(`${horse.name} approved`);
       onOpenChange(false);
     } catch (err) {
+      reportMutationError('horse_ownership.approve', err, { horseId: horse.id });
       toast.error(err instanceof Error ? err.message : 'Failed to approve');
     }
   }
@@ -249,6 +251,7 @@ function DeclineDialog({ horse, open, onOpenChange }: DialogProps) {
       onOpenChange(false);
       setReason('');
     } catch (err) {
+      reportMutationError('horse_ownership.decline', err, { horseId: horse.id });
       toast.error(err instanceof Error ? err.message : 'Failed to decline');
     }
   }

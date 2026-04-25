@@ -10,6 +10,7 @@ import {
   useHorseUtilizationReport,
   useCancellationReport,
 } from '@/hooks/use-reports';
+import { useClubSettings } from '@/hooks/use-settings';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,8 @@ export function ReportsPage() {
   const lessons = useLessonPopularityReport(dateFrom, dateTo);
   const horses = useHorseUtilizationReport(dateFrom, dateTo);
   const cancellations = useCancellationReport(dateFrom, dateTo);
+  const { data: settings } = useClubSettings();
+  const currency = settings?.data.currency ?? 'AED';
 
   const totalRevenue = useMemo(() => {
     if (!revenue.data?.data) return 0;
@@ -61,7 +64,7 @@ export function ReportsPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <SummaryCard
           title="Revenue"
-          value={formatMoney(totalRevenue, 'AED')}
+          value={formatMoney(totalRevenue, currency)}
           icon={TrendingUp}
           loading={revenue.isLoading}
         />
@@ -154,7 +157,7 @@ export function ReportsPage() {
                     <span className="text-muted-foreground">{d.date}</span>
                     <div className="flex items-center gap-4">
                       <span className="text-muted-foreground">{d.count} bookings</span>
-                      <span className="font-medium">{formatMoney(d.revenue, 'AED')}</span>
+                      <span className="font-medium">{formatMoney(d.revenue, currency)}</span>
                     </div>
                   </div>
                 ))

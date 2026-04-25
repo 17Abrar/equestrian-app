@@ -37,6 +37,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           switch (err.message) {
             case 'CLASS_NOT_FOUND':
               return errorResponse('NOT_FOUND', 'Competition class not found', 404);
+            case 'RIDER_NOT_IN_CLUB':
+              return errorResponse('INVALID_RIDER', 'Rider is not a member of this club', 400);
+            case 'HORSE_NOT_FOUND':
+              return errorResponse('INVALID_HORSE', 'Horse not found', 404);
+            case 'HORSE_NOT_AVAILABLE_FOR_RIDER':
+              return errorResponse(
+                'HORSE_NOT_AVAILABLE',
+                'This horse is not available for the selected rider',
+                422,
+              );
             case 'COMPETITION_NOT_AVAILABLE':
               return errorResponse('NOT_AVAILABLE', 'Competition is not available for registration', 422);
             case 'REGISTRATION_DEADLINE_PASSED':

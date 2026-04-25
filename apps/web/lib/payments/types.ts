@@ -127,6 +127,15 @@ export interface WebhookEvent {
    * Webhook routes use this to resolve which club the event belongs to.
    */
   providerAccountId?: string;
+  /**
+   * The booking id we set in the payment's metadata when creating the intent.
+   * Populated by adapters whose providers carry arbitrary metadata through to
+   * webhooks (Stripe). Used to close a race where a webhook arrives between
+   * `adapter.createPayment` returning and the route storing the generated
+   * `providerPaymentId` on the booking: the `providerPaymentId` lookup fails,
+   * but we can still resolve the booking via this field.
+   */
+  bookingId?: string;
   status?: PaymentIntentStatus;
   amountReceivedMinorUnits?: number;
   data: unknown;

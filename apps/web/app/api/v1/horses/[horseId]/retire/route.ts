@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { retireHorseOwnershipSchema } from '@equestrian/shared/schemas';
 import { retireHorseOwnership, cancelPendingInvoicesForHorse } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -18,8 +18,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
-      const body = await request.json().catch(() => ({}));
-      const data = validateInput(retireHorseOwnershipSchema, body);
+      const data = await parseOptionalBody(request, retireHorseOwnershipSchema);
 
       const horse = await retireHorseOwnership(ctx.clubId, horseId, data.liveryEndDate);
 

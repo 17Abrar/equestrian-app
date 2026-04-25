@@ -3,6 +3,7 @@ import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
+import { coupons, couponUsages } from '../schema/packages';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -286,6 +287,7 @@ export async function getBookingById(clubId: string, bookingId: string) {
       amount: bookings.amount,
       currency: bookings.currency,
       discountAmount: bookings.discountAmount,
+      refundedAmountMinor: bookings.refundedAmountMinor,
       horseMatchScore: bookings.horseMatchScore,
       horseMatchAuto: bookings.horseMatchAuto,
       coachNotes: bookings.coachNotes,
@@ -295,6 +297,9 @@ export async function getBookingById(clubId: string, bookingId: string) {
       createdAt: bookings.createdAt,
       paymentProvider: bookings.paymentProvider,
       providerPaymentId: bookings.providerPaymentId,
+      isGuestBooking: bookings.isGuestBooking,
+      guestName: bookings.guestName,
+      guestEmail: bookings.guestEmail,
       slotDate: bookingSlots.date,
       slotStartTime: bookingSlots.startTime,
       slotEndTime: bookingSlots.endTime,
@@ -321,7 +326,9 @@ export async function getBookingById(clubId: string, bookingId: string) {
 /**
  * Creates a booking and atomically increments the slot's rider count.
  * The slot update includes a capacity guard that prevents overbooking
- * under concurrent requests.
+ * under concurrent requests. When a coupon is applied, also records the
+ * usage and bumps `coupons.usage_count` inside the same transaction so
+ * `validateCoupon`'s maxUses gate cannot be bypassed by replay.
  */
 export async function createBooking(clubId: string, data: BookingCreate) {
   return writeTransaction(async (tx) => {
@@ -347,7 +354,35 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     }
 
     const result = await tx.insert(bookings).values({ ...data, clubId }).returning();
-    return result[0];
+    const booking = result[0];
+
+    // Without this, `validateCoupon`'s maxUses / maxUsesPerRider gates stay
+    // at 0 forever and the same coupon can be re-applied indefinitely. The
+    // booking holds the NET (charged) amount; reconstruct the original
+    // sticker price by adding the discount back.
+    if (booking && data.couponId) {
+      const finalAmount = data.amount ?? 0;
+      const discount = data.discountAmount ?? 0;
+      const originalAmount = finalAmount + discount;
+      await tx.insert(couponUsages).values({
+        clubId,
+        couponId: data.couponId,
+        riderMemberId: data.riderMemberId,
+        bookingId: booking.id,
+        originalAmount,
+        discountAmount: discount,
+        finalAmount,
+      });
+      await tx
+        .update(coupons)
+        .set({
+          usageCount: sql`${coupons.usageCount} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(coupons.id, data.couponId), eq(coupons.clubId, clubId)));
+    }
+
+    return booking;
   });
 }
 
@@ -421,6 +456,77 @@ export async function markBookingNoShow(
       ),
     )
     .returning();
+
+  return result[0] ?? null;
+}
+
+/**
+ * Atomically records a successful refund: adds `amountMinor` to the
+ * booking's running `refundedAmountMinor` and flips `paymentStatus` to
+ * 'partial' or 'refunded' based on whether the total equals the
+ * original amount.
+ *
+ * Returns `null` if:
+ *   - The booking doesn't exist or is in another club.
+ *   - The booking has no captured `amount` (shouldn't happen for paid
+ *     bookings, but guards a bad state).
+ *   - The cumulative refund would exceed `amount` (caller should have
+ *     validated this; the DB-level CHECK is a belt-and-braces guard).
+ *
+ * The single UPDATE with a WHERE on the pre-refund `refundedAmountMinor`
+ * serialises concurrent refund attempts — if two admins click "refund"
+ * at the same time, only one UPDATE sees its expected pre-state.
+ */
+export async function recordBookingRefund(
+  clubId: string,
+  bookingId: string,
+  amountMinor: number,
+): Promise<{
+  id: string;
+  paymentStatus: string;
+  refundedAmountMinor: number;
+} | null> {
+  if (amountMinor <= 0) return null;
+
+  const existing = await db
+    .select({
+      amount: bookings.amount,
+      refundedAmountMinor: bookings.refundedAmountMinor,
+    })
+    .from(bookings)
+    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .limit(1);
+
+  const current = existing[0];
+  if (!current || current.amount == null) return null;
+
+  const newRefunded = current.refundedAmountMinor + amountMinor;
+  if (newRefunded > current.amount) return null;
+
+  const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
+
+  const result = await db
+    .update(bookings)
+    .set({
+      refundedAmountMinor: newRefunded,
+      paymentStatus: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        // Optimistic concurrency: only update if the pre-state is what
+        // we read above. If another refund landed in between, this
+        // UPDATE returns no rows and the caller can surface a conflict.
+        eq(bookings.refundedAmountMinor, current.refundedAmountMinor),
+      ),
+    )
+    .returning({
+      id: bookings.id,
+      paymentStatus: bookings.paymentStatus,
+      refundedAmountMinor: bookings.refundedAmountMinor,
+    });
 
   return result[0] ?? null;
 }

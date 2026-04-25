@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
 import {
   findHorsesDueForBilling,
   findHorseBillingAnchor,
@@ -15,6 +15,7 @@ import {
 import { getAdapter } from '@/lib/payments/registry';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { logger } from '@/lib/logger';
+import { errorResponse, successResponse } from '@/lib/api-utils';
 import { LiveryInvoiceIssued } from '@equestrian/email-templates/livery-invoice-issued';
 import { LiveryInvoiceOverdue } from '@equestrian/email-templates/livery-invoice-overdue';
 
@@ -43,10 +44,7 @@ export async function POST(request: NextRequest) {
 
   if (!expected) {
     logger.error('livery_cron_secret_not_configured');
-    return NextResponse.json(
-      { success: false, error: { code: 'NOT_CONFIGURED', message: 'CRON_SECRET not set' } },
-      { status: 503 },
-    );
+    return errorResponse('NOT_CONFIGURED', 'CRON_SECRET not set', 503);
   }
 
   // Constant-time compare so an attacker can't learn the secret
@@ -57,11 +55,20 @@ export async function POST(request: NextRequest) {
   const secretOk =
     provided.length === target.length && timingSafeEqual(provided, target);
   if (!secretOk) {
-    logger.warn('livery_cron_bad_secret');
-    return NextResponse.json(
-      { success: false, error: { code: 'UNAUTHORIZED', message: 'Bad cron secret' } },
-      { status: 401 },
-    );
+    // Enrich so an operator hitting the alert can tell who's calling: a
+    // stale Cloudflare scheduled trigger from a previous deploy, internet
+    // noise, or active fuzzing. Don't log the provided secret value.
+    logger.warn('livery_cron_bad_secret', {
+      headerPresent: headerSecret !== null,
+      providedLength: provided.length,
+      ip:
+        request.headers.get('cf-connecting-ip') ??
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        request.headers.get('x-real-ip') ??
+        'unknown',
+      userAgent: request.headers.get('user-agent') ?? 'unknown',
+    });
+    return errorResponse('UNAUTHORIZED', 'Bad cron secret', 401);
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -77,15 +84,12 @@ export async function POST(request: NextRequest) {
     remindersSkipped: reminded.skipped,
   });
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      date: today,
-      invoicesIssued: issued.issued,
-      invoicesSkipped: issued.skipped,
-      remindersSent: reminded.sent,
-      remindersSkipped: reminded.skipped,
-    },
+  return successResponse({
+    date: today,
+    invoicesIssued: issued.issued,
+    invoicesSkipped: issued.skipped,
+    remindersSent: reminded.sent,
+    remindersSkipped: reminded.skipped,
   });
 }
 
@@ -132,7 +136,15 @@ async function createPayIntent(args: {
   horseName: string;
   ownerMemberId: string;
   clubId: string;
-  periodStart: string;
+  /**
+   * Opaque reference string that lands in the provider's `bookingId`
+   * metadata + the human-readable description. For fresh invoices this is
+   * the period start (YYYY-MM-DD); for reminders we don't carry that, so
+   * the invoice number is passed instead. The adapter treats it as a
+   * blind string — the format is only meaningful when the value reaches
+   * an operator reading provider logs.
+   */
+  reference: string;
   idempotencyKey: string;
 }): Promise<PayIntentResult | null> {
   try {
@@ -142,14 +154,14 @@ async function createPayIntent(args: {
       account: args.account,
       amountMinorUnits: args.amountMinor,
       currency: args.currency,
-      bookingId: `livery:${args.horseId}:${args.periodStart}`,
+      bookingId: `livery:${args.horseId}:${args.reference}`,
       riderId: args.ownerMemberId,
       clubId: args.clubId,
-      description: `Livery — ${args.horseName} — ${args.periodStart}`,
+      description: `Livery — ${args.horseName} — ${args.reference}`,
       metadata: {
         resource: 'livery_invoice',
         horseId: args.horseId,
-        period: args.periodStart,
+        reference: args.reference,
       },
       returnUrl: 'https://cavaliq.com/rider/invoices',
       idempotencyKey: args.idempotencyKey,
@@ -207,7 +219,7 @@ async function issueDueInvoices(today: string): Promise<{ issued: number; skippe
             horseName: horse.horseName,
             ownerMemberId: horse.ownerMemberId,
             clubId: horse.clubId,
-            periodStart: period.periodStart,
+            reference: period.periodStart,
             idempotencyKey: `livery:${horse.horseId}:${period.periodStart}`,
           })
         : null;
@@ -349,7 +361,7 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
           horseName: inv.horseName,
           ownerMemberId: inv.ownerMemberId,
           clubId: inv.clubId,
-          periodStart: inv.invoiceNumber,
+          reference: inv.invoiceNumber,
           idempotencyKey: `livery:${inv.invoiceId}:reminder:${inv.reminderCount + 1}`,
         });
         if (refreshed) {

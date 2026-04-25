@@ -75,8 +75,15 @@ export async function POST(request: NextRequest) {
                 clubName: club?.name ?? '',
               }),
             });
-          } catch {
-            // Email failure is non-fatal
+          } catch (err) {
+            // Non-fatal for the request, but tag it for the alert rule.
+            logger.error('email_send_failed', {
+              trigger: 'rider_welcome',
+              clubId: ctx.clubId,
+              memberId: result.member.id,
+              error: err instanceof Error ? err.message : String(err),
+              stack: err instanceof Error ? err.stack : undefined,
+            });
           }
         });
       }

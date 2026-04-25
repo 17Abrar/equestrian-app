@@ -21,6 +21,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 const CATEGORY_LABELS: Record<string, string> = {
   medical_report: 'Medical Report',
@@ -52,7 +53,8 @@ export function DocumentsTab({ horseId }: DocumentsTabProps) {
     try {
       await deleteDoc.mutateAsync(documentId);
       toast.success('Document removed');
-    } catch {
+    } catch (err) {
+      reportMutationError('document.delete', err, { horseId, documentId });
       toast.error('Failed to remove document');
     }
   }
@@ -142,6 +144,7 @@ function AddDocumentDialog({ horseId }: { horseId: string }) {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('document.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add document');
     }
   }

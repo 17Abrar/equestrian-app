@@ -21,6 +21,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { type z } from 'zod';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 type SlotFormValues = z.input<typeof createBookingSlotSchema>;
 
@@ -52,6 +53,7 @@ export function CreateSingleSlotDialog() {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('slots.single.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create slot');
     }
   }

@@ -1,0 +1,135 @@
+name: CI
+
+# Runs typecheck + lint + tests on every PR and on direct pushes to main.
+# Required so type errors and lint regressions can't slip into the
+# `cf:deploy` path — that script doesn't gate on either.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Manual trigger: `gh workflow run ci.yml` (or via the Actions tab UI).
+  # Useful for re-running the neon-smoke job after adjusting secrets, or
+  # for validating CI changes without opening a throwaway PR.
+  workflow_dispatch:
+    inputs:
+      skip_neon:
+        description: 'Skip the Neon test-branch smoke job'
+        type: boolean
+        default: false
+
+# Cancel in-progress runs of the same workflow on the same ref. PRs only need
+# the latest run; older ones are wasted CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck · lint · test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Match `packageManager` field in root package.json so the lockfile
+          # version matches what we install with locally.
+          version: 10.20.0
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm turbo typecheck --filter='./apps/web' --filter='./packages/*'
+
+      - name: Lint
+        run: pnpm turbo lint --filter='./apps/web' --filter='./packages/*'
+
+      - name: Test
+        run: pnpm turbo test --filter='./apps/web' --filter='./packages/*'
+
+  neon-smoke:
+    # Spins up an ephemeral Neon branch from `main`, applies all
+    # migrations, and runs `scripts/test-neon-smoke.mjs` against it via
+    # the real neon-http driver. Catches the ~1% of edge cases where
+    # pglite (used by the in-process tests above) diverges from real
+    # Postgres — Neon's HTTP single-statement enforcement, real
+    # Postgres MVCC + CHECK-constraint behaviour, etc. The branch is
+    # deleted at the end whether the smoke test passes or fails.
+    name: neon test branch · smoke
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 10
+
+    # Skip on pull_request from forks — they can't read repository
+    # secrets, and Neon's create-branch-action would fail with no api_key.
+    # Also skip when manually dispatched with skip_neon=true (e.g. when
+    # re-running just to validate verify-job changes). Branches in this
+    # repo and pushes to main still run.
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.skip_neon != true) ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Neon test branch
+        id: create-branch
+        uses: neondatabase/create-branch-action@v5
+        with:
+          # Project + auth come from repo secrets / variables. Set
+          # NEON_PROJECT_ID under Settings → Secrets and variables →
+          # Actions → Variables; NEON_API_KEY under Secrets. Generate
+          # the API key at console.neon.tech → Account → API keys.
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Apply migrations
+        env:
+          # Use the unpooled URL — pgbouncer rejects DDL on the pooled host.
+          DATABASE_URL_UNPOOLED: ${{ steps.create-branch.outputs.db_url }}
+        run: pnpm db:migrate:neon
+
+      - name: Smoke test
+        env:
+          DATABASE_URL: ${{ steps.create-branch.outputs.db_url }}
+        run: pnpm test:neon
+
+      - name: Delete Neon test branch
+        # `if: always()` so a failed smoke test still tears down the
+        # branch — leaving orphans burns Neon compute hours.
+        if: always() && steps.create-branch.outputs.branch_id != ''
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ steps.create-branch.outputs.branch_id }}
+          api_key: ${{ secrets.NEON_API_KEY }}

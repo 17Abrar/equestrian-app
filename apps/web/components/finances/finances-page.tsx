@@ -17,6 +17,7 @@ import {
   usePayments, useInvoices, useCoupons, useCreateCoupon,
   type Expense,
 } from '@/hooks/use-finances';
+import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,6 +37,7 @@ import {
 import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 export function FinancesPage() {
   return (
@@ -66,6 +68,11 @@ export function FinancesPage() {
 
 function OverviewTab() {
   const { data, isLoading, isError, error, refetch } = useFinanceOverview();
+  const { data: settings } = useClubSettings();
+  // Finance totals aren't currency-tagged (they're aggregates across mixed
+  // payment rows). Display them in the club's configured currency so the
+  // overview matches what the rider sees on their booking invoice.
+  const currency = settings?.data.currency ?? 'AED';
 
   if (isLoading) return <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load overview'} onRetry={() => refetch()} />;
@@ -83,7 +90,7 @@ function OverviewTab() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold">{formatMoney(overview.totalRevenue, 'AED')}</p>
+              <p className="text-2xl font-bold">{formatMoney(overview.totalRevenue, currency)}</p>
             </div>
           </CardContent>
         </Card>
@@ -94,7 +101,7 @@ function OverviewTab() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Expenses</p>
-              <p className="text-2xl font-bold">{formatMoney(overview.totalExpenses, 'AED')}</p>
+              <p className="text-2xl font-bold">{formatMoney(overview.totalExpenses, currency)}</p>
             </div>
           </CardContent>
         </Card>
@@ -105,7 +112,7 @@ function OverviewTab() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Outstanding</p>
-              <p className="text-2xl font-bold">{formatMoney(overview.outstandingBalance, 'AED')}</p>
+              <p className="text-2xl font-bold">{formatMoney(overview.outstandingBalance, currency)}</p>
             </div>
           </CardContent>
         </Card>
@@ -121,7 +128,7 @@ function OverviewTab() {
                   <span className="text-sm capitalize">{pm.method?.replace('_', ' ') ?? 'Unknown'}</span>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-muted-foreground">{pm.count} transactions</span>
-                    <span className="font-medium">{formatMoney(pm.total, 'AED')}</span>
+                    <span className="font-medium">{formatMoney(pm.total, currency)}</span>
                   </div>
                 </div>
               ))}
@@ -294,6 +301,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
       toast.success('Expense updated');
       setOpen(false);
     } catch (err) {
+      reportMutationError('expense.update', err, { expenseId: expense.id });
       toast.error(err instanceof Error ? err.message : 'Failed to update expense');
     }
   }
@@ -374,6 +382,7 @@ function DeleteExpenseButton({ expense }: { expense: Expense }) {
       await deleteExpense.mutateAsync(expense.id);
       toast.success('Expense deleted');
     } catch (err) {
+      reportMutationError('expense.delete', err, { expenseId: expense.id });
       toast.error(err instanceof Error ? err.message : 'Failed to delete expense');
     }
   }
@@ -420,6 +429,7 @@ function AddExpenseDialog() {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('expense.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to add expense');
     }
   }
@@ -474,6 +484,10 @@ function AddExpenseDialog() {
 }
 
 function CouponsTab() {
+  const { data: settings } = useClubSettings();
+  // Coupons don't store a currency column; display fixed-amount discounts
+  // in the club's configured currency.
+  const currency = settings?.data.currency ?? 'AED';
   const [page, _setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: 25 });
 
@@ -513,7 +527,7 @@ function CouponsTab() {
               <TableRow key={c.id}>
                 <TableCell className="font-mono font-bold">{c.code}</TableCell>
                 <TableCell>
-                  {c.discountType === 'percentage' ? `${c.discountValue}%` : formatMoney(c.discountValue, 'AED')}
+                  {c.discountType === 'percentage' ? `${c.discountValue}%` : formatMoney(c.discountValue, currency)}
                 </TableCell>
                 <TableCell>{c.usageCount}{c.maxUses ? ` / ${c.maxUses}` : ''}</TableCell>
                 <TableCell><Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge></TableCell>
@@ -543,6 +557,7 @@ function AddCouponDialog() {
       form.reset();
       setOpen(false);
     } catch (err) {
+      reportMutationError('coupon.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create coupon');
     }
   }

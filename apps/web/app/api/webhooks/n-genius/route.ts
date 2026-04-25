@@ -1,7 +1,9 @@
 import { type NextRequest } from 'next/server';
 import {
+  claimWebhookEvent,
   findPaymentAccountByExternalId,
-  recordWebhookEventOrSkip,
+  markWebhookEventFailed,
+  markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { nGeniusAdapter } from '@/lib/payments/n-genius';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
@@ -43,7 +45,11 @@ export async function POST(request: NextRequest) {
   let parsed: NGeniusPayload;
   try {
     parsed = JSON.parse(body) as NGeniusPayload;
-  } catch {
+  } catch (err) {
+    logger.warn('n_genius_webhook_invalid_json', {
+      error: err instanceof Error ? err.message : 'unknown',
+      bodyPreview: body.slice(0, 200),
+    });
     return new Response('Invalid JSON', { status: 400 });
   }
 
@@ -104,13 +110,22 @@ export async function POST(request: NextRequest) {
     return new Response('OK', { status: 200 });
   }
 
-  const fresh = await recordWebhookEventOrSkip('n_genius', event.eventId);
-  if (!fresh) {
+  const claim = await claimWebhookEvent('n_genius', event.eventId);
+
+  if (claim.status === 'already_processed') {
     logger.info('n_genius_webhook_duplicate', {
       eventId: event.eventId,
       type: event.eventType,
     });
     return new Response('OK', { status: 200 });
+  }
+
+  if (claim.status === 'in_flight') {
+    logger.info('n_genius_webhook_in_flight', {
+      eventId: event.eventId,
+      type: event.eventType,
+    });
+    return new Response('Processing in progress', { status: 503 });
   }
 
   try {
@@ -123,14 +138,18 @@ export async function POST(request: NextRequest) {
     if (!bookingResult) {
       await applyLiveryInvoiceWebhook({ provider: 'n_genius', event });
     }
+    await markWebhookEventProcessed('n_genius', event.eventId);
+    return new Response('OK', { status: 200 });
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown';
+    await markWebhookEventFailed('n_genius', event.eventId, message);
     logger.error('n_genius_webhook_processing_failed', {
       eventType: event.eventType,
       eventId: event.eventId,
       clubId: account.clubId,
-      error: err instanceof Error ? err.message : 'unknown',
+      attempt: claim.attempt,
+      error: message,
     });
+    return new Response('Processing failed', { status: 500 });
   }
-
-  return new Response('OK', { status: 200 });
 }

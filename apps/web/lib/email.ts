@@ -81,8 +81,17 @@ export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolea
  */
 export function sendEmailAsync(params: SendEmailParams): void {
   const task = () =>
-    sendEmail(params).catch(() => {
-      // Already logged inside sendEmail — swallow here
+    sendEmail(params).catch((err) => {
+      // sendEmail catches everything internally and logs as
+      // `email_send_failed` / `email_send_error`. The .catch here is a
+      // belt-and-braces guard against a future regression where sendEmail
+      // is changed to throw — without this, the error would surface as
+      // a raw unhandled rejection in Sentry, bypassing alert routing.
+      logger.error('email_send_unhandled', {
+        to: params.to,
+        subject: params.subject,
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
   try {
     after(task);
@@ -157,11 +166,7 @@ export async function sendTriggeredEmail(params: TriggeredEmailParams): Promise<
     });
     return;
   }
-  try {
-    await sendEmail(emailParams);
-  } catch {
-    // sendEmail never throws but guard anyway
-  }
+  await sendEmail(emailParams);
 }
 
 /**

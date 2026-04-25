@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/form';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 function ArenasListSkeleton() {
   return (
@@ -84,6 +85,7 @@ export function ArenasList() {
       setDialogOpen(false);
       form.reset();
     } catch (submitError) {
+      reportMutationError('arena.create', submitError);
       toast.error(submitError instanceof Error ? submitError.message : 'Failed to create arena');
     }
   }
@@ -92,7 +94,8 @@ export function ArenasList() {
     try {
       await deleteArena.mutateAsync(arenaId);
       toast.success('Arena removed');
-    } catch {
+    } catch (err) {
+      reportMutationError('arena.delete', err, { arenaId });
       toast.error('Failed to remove arena');
     }
   }
@@ -315,6 +318,7 @@ function EditArenaDialog({ arena, open, onOpenChange }: { arena: Arena; open: bo
       queryClient.invalidateQueries({ queryKey: ['arenas'] });
       onOpenChange(false);
     } catch (err) {
+      reportMutationError('arena.update', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update arena');
     }
   }

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   createAudience,
   listAudiences,
-  countAudienceMembers,
+  countAudienceMembersBatch,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
@@ -27,15 +27,17 @@ export async function GET() {
   return withAuth(
     async (ctx) => {
       const rows = await listAudiences(ctx.clubId);
-      // Attach a live member count so the list page shows an accurate badge
-      // without the UI making N+1 preview calls. Cheap because audiences are
-      // few per club in practice.
-      const withCounts = await Promise.all(
-        rows.map(async (a) => ({
-          ...a,
-          memberCount: await countAudienceMembers(ctx.clubId, a.filters ?? {}),
-        })),
+      // One round-trip to compute every audience's member count, regardless
+      // of how many audiences the club has. Replaces the previous
+      // Promise.all(rows.map(countAudienceMembers)) — same shape, single query.
+      const counts = await countAudienceMembersBatch(
+        ctx.clubId,
+        rows.map((a) => a.filters ?? {}),
       );
+      const withCounts = rows.map((a, i) => ({
+        ...a,
+        memberCount: counts[i] ?? 0,
+      }));
       return successResponse(withCounts);
     },
     { requiredPermission: 'emails:read' },

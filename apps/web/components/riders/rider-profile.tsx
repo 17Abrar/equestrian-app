@@ -10,6 +10,7 @@ import { updateRiderProfileSchema, type UpdateRiderProfileFormValues, type Updat
 import { useRider, useUpdateRider, type Rider } from '@/hooks/use-riders';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { formatMoney } from '@equestrian/shared/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,6 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ErrorState } from '@/components/shared/error-state';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 
@@ -123,6 +125,7 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
       toast.success('Rider profile updated');
       setIsEditing(false);
     } catch (submitError) {
+      reportMutationError('rider.update_profile', submitError);
       toast.error(submitError instanceof Error ? submitError.message : 'Failed to update rider');
     }
   }
@@ -518,7 +521,7 @@ function BookingRow({ booking }: { booking: Booking }) {
         <div className="flex flex-col items-end gap-1 text-right">
           {booking.amount != null && (
             <span className="text-sm font-semibold">
-              {(booking.amount / 100).toFixed(2)} {booking.currency}
+              {formatMoney(booking.amount, booking.currency)}
             </span>
           )}
           <Badge variant="secondary" className={`text-xs ${statusTone}`}>

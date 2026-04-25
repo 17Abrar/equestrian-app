@@ -83,10 +83,14 @@ export DATABASE_URL_UNPOOLED="postgresql://<user>:<pass>@<host>/<db>?sslmode=req
 pnpm db:migrate
 ```
 
-This applies everything through `0005_booking_provider_refs`. After it
-completes, inspect one row via `pnpm db:studio` to confirm the new
-`payment_provider` / `provider_payment_id` columns exist on `bookings` and
-that `club_payment_accounts` has RLS enabled.
+This applies every migration listed in `meta/_journal.json` — currently
+through `0014_booking_refunded_amount`. After it completes, spot-check
+via `pnpm db:studio`: `bookings` should have `payment_provider`,
+`provider_payment_id`, `refunded_amount_minor`; `webhook_events` should
+have `status`, `attempt_count`, `last_attempted_at`, `last_error`.
+
+For schema changes on subsequent deploys, see **Migration gate** under
+the deploy loop below — that's the routine, not this one-time section.
 
 ## One-time: external provider configuration
 
@@ -136,6 +140,29 @@ SENTRY_AUTH_TOKEN=<from sentry.io/settings/auth-tokens>
 Without these, the build still succeeds but production stack traces stay
 minified.
 
+### CI secrets (GitHub Actions)
+
+The CI workflow (`.github/workflows/ci.yml`) has two jobs that need
+external credentials:
+
+**Sentry alert-rules sync** (only if you wire it into CI later — by
+default the script runs locally via `pnpm sentry:alerts`):
+- `SENTRY_ALERTS_AUTH_TOKEN` — user token, scopes `alerts:write` +
+  `project:read`. Generate at *Settings → Account → API → Auth Tokens*.
+
+**Neon test-branch smoke job** (runs on every PR + main push):
+- Repository **secret** `NEON_API_KEY` — generate at
+  *console.neon.tech → Account settings → API keys*. Scope: full
+  account access.
+- Repository **variable** `NEON_PROJECT_ID` — visible in your Neon
+  project URL (e.g. `crimson-flower-12345678`). Use a *variable*, not
+  a *secret* — secrets are masked from logs and the create-branch
+  action prints the project id during normal output.
+
+Without these, the `neon-smoke` job will fail on the create-branch
+step with a missing-credentials error. PRs from forks skip the job
+entirely (the `if:` guard in the workflow).
+
 ---
 
 ## Deploy loop
@@ -152,6 +179,34 @@ pnpm cf:deploy
 
 The first deploy will take ~2 minutes while Cloudflare provisions the TLS
 cert for `cavaliq.com`. Subsequent deploys are <30s.
+
+### Migration gate (do this BEFORE `cf:deploy`)
+
+If the branch you're deploying contains any new files under
+`packages/db/migrations/` (or any schema change in
+`packages/db/src/schema/`), **apply the migrations first**:
+
+```sh
+cd packages/db
+# DATABASE_URL_UNPOOLED must point at the Neon unpooled endpoint — pooled
+# connections reject DDL. Safe to re-run; migrations are idempotent.
+export DATABASE_URL_UNPOOLED="postgresql://<user>:<pass>@<host>/<db>?sslmode=require"
+pnpm db:migrate
+```
+
+Why the order matters: the deployed code often references columns the
+migration just added. Deploying first means the first request after
+rollout hits a column-not-found error. Migrating first is always safe —
+old code tolerates extra columns just fine.
+
+A quick check to run before you deploy:
+
+```sh
+# Every tag in meta/_journal.json should also exist as a .sql file, AND
+# every .sql file you added should be referenced in the journal.
+ls packages/db/migrations/*.sql | sed -E 's|.*/||; s|\.sql$||'
+jq -r '.entries[].tag' packages/db/migrations/meta/_journal.json
+```
 
 ### Regenerating the Cloudflare env type
 

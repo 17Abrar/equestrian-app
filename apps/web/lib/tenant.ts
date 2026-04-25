@@ -129,6 +129,28 @@ export async function getTenantContext(): Promise<TenantContext> {
     : undefined;
   const primary = chosen ?? memberships[0]!;
 
+  // If the cookie pointed somewhere the user no longer belongs, rewrite it to
+  // the fallback club. Two reasons: (a) the next request gets a direct cookie
+  // match instead of falling through this branch again, and (b) UI code that
+  // reads the cookie client-side won't still be advertising the stale club.
+  // `cookieStore.set` is only supported inside a Route Handler/Server Action
+  // context, so wrap in a try/catch — RSC contexts will throw and we just
+  // leave the cookie as-is (the server branch still resolves correctly).
+  if (activeClubCookie && !chosen) {
+    try {
+      cookieStore.set(ACTIVE_CLUB_COOKIE, primary.clubId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    } catch {
+      // RSC read-only context — next mutation (e.g. /me/active-club POST)
+      // will correct the cookie. Safe to ignore.
+    }
+  }
+
   return {
     clubId: primary.clubId,
     memberId: primary.memberId,

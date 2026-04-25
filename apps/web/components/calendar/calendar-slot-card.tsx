@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { LESSON_TYPE_COLORS } from '@/lib/ui-constants';
 import { getCapacityInfo, CAPACITY_BADGE_CLASSES, CAPACITY_DOT_CLASSES } from '@/lib/capacity';
 import { useUpdateBookingSlot, useCancelBookingSlot, type BookingSlot } from '@/hooks/use-bookings';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 function getSlotColor(lessonType: string): string {
   return LESSON_TYPE_COLORS[lessonType] ?? '#6366f1';
@@ -95,7 +96,8 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
       await cancelSlot.mutateAsync({ slotId: slot.id, reason: cancelReason || undefined });
       toast.success('Slot cancelled');
       setCancelOpen(false);
-    } catch {
+    } catch (err) {
+      reportMutationError('slot.cancel', err, { slotId: slot.id });
       toast.error('Failed to cancel slot');
     }
   }
@@ -183,6 +185,7 @@ function RescheduleForm({ slot, onSuccess }: { slot: BookingSlot; onSuccess: () 
       toast.success('Slot rescheduled');
       onSuccess();
     } catch (err) {
+      reportMutationError('slot.reschedule', err, { slotId: slot.id });
       toast.error(err instanceof Error ? err.message : 'Failed to reschedule');
     }
   }

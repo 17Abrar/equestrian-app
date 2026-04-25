@@ -182,8 +182,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Apply coupon if provided
-      const bookingAmount = data.amount ?? slot.lessonTypePrice;
+      // Apply coupon if provided. Price comes from the lesson type — never
+      // accept it from the request body, otherwise a rider could POST
+      // `{ amount: 1 }` and pay 1 fil for a full-price lesson.
+      const grossAmount = slot.lessonTypePrice;
       let discountAmount = 0;
       let couponId: string | undefined;
 
@@ -191,7 +193,7 @@ export async function POST(request: NextRequest) {
         const couponResult = await validateCoupon({
           clubId: ctx.clubId,
           code: data.couponCode,
-          amount: bookingAmount,
+          amount: grossAmount,
           riderMemberId: data.riderMemberId,
         });
 
@@ -203,6 +205,11 @@ export async function POST(request: NextRequest) {
         couponId = couponResult.couponId;
       }
 
+      // booking.amount stores the NET amount actually charged. discountAmount
+      // is kept alongside as an audit trail so reports can show "saved X".
+      // Refund cap and Stripe charge both naturally read booking.amount.
+      const netAmount = Math.max(0, grossAmount - discountAmount);
+
       let booking;
       try {
         booking = await createBooking(ctx.clubId, {
@@ -210,7 +217,7 @@ export async function POST(request: NextRequest) {
           riderMemberId: data.riderMemberId,
           horseId: assignedHorseId,
           bookedByMemberId: ctx.memberId,
-          amount: bookingAmount,
+          amount: netAmount,
           currency: slot.lessonTypeCurrency,
           paymentMethod: data.paymentMethod,
           discountAmount,
@@ -284,9 +291,16 @@ export async function POST(request: NextRequest) {
             clubId: ctx.clubId,
             trigger: 'booking_confirmation',
             to: riderMember.email,
-            subject: `Booking Confirmed — ${fullBooking.lessonTypeName}`,
+            subject: fullBooking.isGuestBooking
+              ? `Guest Booking Confirmed — ${fullBooking.lessonTypeName}`
+              : `Booking Confirmed — ${fullBooking.lessonTypeName}`,
             template: React.createElement(BookingConfirmation, {
+              // For guest bookings, the email is addressed to the booker/payer
+              // and the guest's name is rendered inside as the actual rider.
               riderName: fullBooking.riderName ?? riderMember.displayName ?? '',
+              guestName: fullBooking.isGuestBooking
+                ? (fullBooking.guestName ?? undefined)
+                : undefined,
               lessonType: fullBooking.lessonTypeName,
               date: String(fullBooking.slotDate),
               time: String(fullBooking.slotStartTime),

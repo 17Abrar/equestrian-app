@@ -1,4 +1,5 @@
 import {
+  findBookingByIdForWebhook,
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
   recordPaymentAccountError,
@@ -83,16 +84,55 @@ export async function applyPaymentWebhook({
     bookingRef = await findBookingByProviderPaymentId(event.providerPaymentId, provider);
   }
 
+  // TOCTOU fallback. The route stores `providerPaymentId` on the booking
+  // AFTER calling the adapter; a fast-succeed webhook (Apple Pay, 3DS
+  // instant-succeed) can arrive in that gap. The `provider_payment_id`
+  // lookup above misses because the DB hasn't been updated yet — but
+  // adapters that support metadata (Stripe) embed the bookingId in the
+  // PI, letting us resolve the booking directly by id. The result of
+  // `findBookingByIdForWebhook` is scoped to `clubId`, so a malicious
+  // event from Club A claiming a booking from Club B won't match.
+  if (!bookingRef && event.bookingId) {
+    const fallback = await findBookingByIdForWebhook(event.bookingId, clubId);
+    if (fallback) {
+      logger.info('webhook_booking_resolved_via_metadata', {
+        clubId,
+        bookingId: fallback.bookingId,
+        provider,
+        eventType: event.eventType,
+        hadStoredProviderPaymentId: fallback.currentProviderPaymentId !== null,
+      });
+      bookingRef = {
+        clubId: fallback.clubId,
+        bookingId: fallback.bookingId,
+        currentPaymentStatus: fallback.currentPaymentStatus,
+      };
+    }
+  }
+
   if (!bookingRef) {
     // Event is for a payment we don't have a booking for. Could be a test
-    // event, a payment created outside the app, or a race with a booking
-    // we haven't committed yet. Log and ack.
+    // event, a payment created outside the app, or a genuine unknown.
     logger.info('webhook_no_booking_for_event', {
       provider,
       eventType: event.eventType,
       providerPaymentId: event.providerPaymentId ?? null,
+      bookingId: event.bookingId ?? null,
     });
     return null;
+  }
+
+  // Refund events on an already-'partial' booking: the refund route is the
+  // authoritative ledger (it tracks the running refunded total). Webhooks
+  // don't carry a reliable refund amount, so overriding 'partial' with
+  // 'refunded' here would misrepresent the rider's remaining balance.
+  if (isRefundEvent && bookingRef.currentPaymentStatus === 'partial') {
+    logger.info('webhook_preserving_partial_refund_status', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      eventType: event.eventType,
+    });
+    return { clubId, bookingId: bookingRef.bookingId };
   }
 
   const nextStatus = isRefundEvent
@@ -104,9 +144,9 @@ export async function applyPaymentWebhook({
     return { clubId, bookingId: bookingRef.bookingId };
   }
 
-  // Don't downgrade from `paid` or `refunded` back to `pending` — webhooks
+  // Don't downgrade from a terminal state back to `pending` — webhooks
   // can arrive out of order.
-  const terminal = new Set(['paid', 'refunded']);
+  const terminal = new Set(['paid', 'partial', 'refunded']);
   if (
     terminal.has(bookingRef.currentPaymentStatus) &&
     !terminal.has(nextStatus)
@@ -120,9 +160,22 @@ export async function applyPaymentWebhook({
     return { clubId, bookingId: bookingRef.bookingId };
   }
 
-  await setBookingPaymentRef(clubId!, bookingRef!.bookingId, {
+  if (!event.providerPaymentId) {
+    // Unreachable: `bookingRef` is only ever populated by a lookup keyed on
+    // `event.providerPaymentId`. Belt-and-braces so the setBookingPaymentRef
+    // call below doesn't need a non-null assertion.
+    logger.warn('webhook_missing_payment_id_on_matched_booking', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      provider,
+      eventType: event.eventType,
+    });
+    return { clubId, bookingId: bookingRef.bookingId };
+  }
+
+  await setBookingPaymentRef(clubId, bookingRef.bookingId, {
     paymentProvider: provider,
-    providerPaymentId: event.providerPaymentId!,
+    providerPaymentId: event.providerPaymentId,
     paymentStatus: nextStatus,
   });
 
