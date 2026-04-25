@@ -17,11 +17,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { bookingId } = await params;
 
-      // Allow riders (cancel_own) and staff (bookings:update)
-      const canCancelOwn = hasPermission(ctx.orgRole, 'bookings:cancel_own');
+      // Cancel-preview is a precondition to actually cancelling, so the gate
+      // mirrors the DELETE handler in ../route.ts (bookings:cancel_own for
+      // riders/parents, bookings:update for staff with broad cancel rights).
+      // It does NOT match the read gate on the sibling GET — staff who can
+      // read but not cancel (coach, horse_owner) wouldn't act on this data,
+      // so we don't surface it.
       const canCancelAny = hasPermission(ctx.orgRole, 'bookings:update');
+      const canCancelOwn = hasPermission(ctx.orgRole, 'bookings:cancel_own');
 
-      if (!canCancelOwn && !canCancelAny) {
+      if (!canCancelAny && !canCancelOwn) {
         return errorResponse('FORBIDDEN', 'You do not have permission to cancel bookings', 403);
       }
 
@@ -30,8 +35,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Booking not found', 404);
       }
 
-      // Riders can only preview cancellation for their own bookings
-      if (canCancelOwn && !canCancelAny) {
+      // Riders/parents can only preview cancellation for their own bookings.
+      if (!canCancelAny && canCancelOwn) {
         if (!ctx.memberId) {
           return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
         }

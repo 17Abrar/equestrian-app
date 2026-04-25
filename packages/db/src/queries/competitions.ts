@@ -162,6 +162,15 @@ export async function getCompetitionClasses(clubId: string, competitionId: strin
     .orderBy(asc(competitionClasses.sortOrder), asc(competitionClasses.name));
 }
 
+export async function getCompetitionClassById(clubId: string, classId: string) {
+  const result = await db
+    .select()
+    .from(competitionClasses)
+    .where(and(eq(competitionClasses.id, classId), eq(competitionClasses.clubId, clubId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function createCompetitionClass(clubId: string, data: ClassCreate) {
   const result = await db.insert(competitionClasses).values({ ...data, clubId }).returning();
   return result[0];

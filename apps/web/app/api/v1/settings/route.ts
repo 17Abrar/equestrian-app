@@ -31,7 +31,8 @@ export async function PATCH(request: NextRequest) {
 
       // Accept any combination of profile, booking rules, branding, or
       // notification updates in a single PATCH. Unknown keys are ignored
-      // silently by each schema's strict-by-default behavior.
+      // silently by each schema's strip-by-default behavior — Zod's
+      // default is to drop unrecognised keys, NOT reject (.strict()) them.
       const profileResult = updateClubProfileSchema.safeParse(body);
       const rulesResult = updateBookingRulesSchema.safeParse(body);
       const brandingResult = updateBrandingSchema.safeParse(body);

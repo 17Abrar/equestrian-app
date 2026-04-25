@@ -142,6 +142,29 @@ export async function updateMedication(
 
 // ─── Medication Logs ──────────────────────────────────────────────────
 
+/**
+ * Returns the medication if (clubId, horseId, medicationId) all match a single
+ * row, else null. Lightweight existence check — used by the logs route to bind
+ * a write request's path params to the caller's tenant before insert. The
+ * underlying FKs only reference single columns (horses(id), horse_medications(id)),
+ * so this is the only place enforcing "this medication is on this horse in this
+ * club".
+ */
+export async function getMedicationByIds(clubId: string, horseId: string, medicationId: string) {
+  const result = await db
+    .select({ id: horseMedications.id })
+    .from(horseMedications)
+    .where(
+      and(
+        eq(horseMedications.id, medicationId),
+        eq(horseMedications.clubId, clubId),
+        eq(horseMedications.horseId, horseId),
+      ),
+    )
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function getMedicationLogs(clubId: string, horseId: string, medicationId: string) {
   return db
     .select()

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SignUp } from '@clerk/nextjs';
 import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
+import { safeSameOriginPath } from '@/lib/safe-redirect';
 
 interface PageProps {
   searchParams: Promise<{ as?: string; redirect_url?: string }>;
@@ -25,7 +26,10 @@ export default async function SignUpPage({ searchParams }: PageProps) {
   const { as, redirect_url } = await searchParams;
   const isStable = as === 'stable';
 
-  const postSignUpUrl = redirect_url ?? (isStable ? '/onboarding' : '/rider');
+  // Defence in depth: only honour `redirect_url` when it's a same-origin path.
+  // See sign-in/page.tsx for rationale.
+  const safeRedirect = safeSameOriginPath(redirect_url);
+  const postSignUpUrl = safeRedirect ?? (isStable ? '/onboarding' : '/rider');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">

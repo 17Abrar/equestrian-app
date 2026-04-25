@@ -1,7 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { createMedicationLogSchema } from '@equestrian/shared/schemas';
-import { getMedicationLogs, createMedicationLog } from '@equestrian/db/queries';
-import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
+import {
+  getMedicationLogs,
+  createMedicationLog,
+  getMedicationByIds,
+} from '@equestrian/db/queries';
+import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; medicationId: string }>;
@@ -22,6 +26,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId, medicationId } = await params;
+
+      // Verify the medication actually belongs to (this club, this horse).
+      // Path params alone aren't trustworthy — the medication FK references
+      // horse_medications(id) only, so without this check a caller could log
+      // doses against a foreign club's medication.
+      const medication = await getMedicationByIds(ctx.clubId, horseId, medicationId);
+      if (!medication) {
+        return errorResponse('NOT_FOUND', 'Medication not found for this horse', 404);
+      }
+
       const body = await request.json();
       const data = validateInput(createMedicationLogSchema, body);
 

@@ -326,12 +326,63 @@ export async function getBookingById(clubId: string, bookingId: string) {
 /**
  * Creates a booking and atomically increments the slot's rider count.
  * The slot update includes a capacity guard that prevents overbooking
- * under concurrent requests. When a coupon is applied, also records the
- * usage and bumps `coupons.usage_count` inside the same transaction so
- * `validateCoupon`'s maxUses gate cannot be bypassed by replay.
+ * under concurrent requests. When a coupon is applied, locks the coupon
+ * row (FOR UPDATE), re-checks the maxUses / maxUsesPerRider gates, and
+ * then records the usage and bumps `coupons.usage_count` inside the same
+ * transaction.
+ *
+ * The lock-and-recheck is what closes the TOCTOU window between the
+ * pre-flight `validateCoupon` call (in the route) and the usage insert:
+ * without it, two parallel bookings by the same rider both pass the
+ * pre-flight (each reads count=0) and then both insert a usage row,
+ * blowing past `max_uses_per_rider`. The route maps the recheck failures
+ * (COUPON_*) back to 422 INVALID_COUPON for the user.
  */
 export async function createBooking(clubId: string, data: BookingCreate) {
   return writeTransaction(async (tx) => {
+    // Lock the coupon row first, BEFORE the slot update, so a coupon
+    // failure rolls back without touching slot capacity. Any concurrent
+    // booking by the same rider waits behind this lock and then re-reads
+    // the now-current `usage_count` / per-rider count.
+    if (data.couponId) {
+      const lockedCoupon = await tx
+        .select({
+          id: coupons.id,
+          maxUses: coupons.maxUses,
+          maxUsesPerRider: coupons.maxUsesPerRider,
+          usageCount: coupons.usageCount,
+        })
+        .from(coupons)
+        .where(and(eq(coupons.id, data.couponId), eq(coupons.clubId, clubId)))
+        .for('update')
+        .limit(1);
+
+      const c = lockedCoupon[0];
+      if (!c) {
+        throw new Error('COUPON_NOT_FOUND');
+      }
+
+      if (c.maxUses != null && c.usageCount >= c.maxUses) {
+        throw new Error('COUPON_MAX_USES_REACHED');
+      }
+
+      if (c.maxUsesPerRider != null) {
+        const riderCount = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(couponUsages)
+          .where(
+            and(
+              eq(couponUsages.clubId, clubId),
+              eq(couponUsages.couponId, data.couponId),
+              eq(couponUsages.riderMemberId, data.riderMemberId),
+            ),
+          );
+        if ((riderCount[0]?.count ?? 0) >= c.maxUsesPerRider) {
+          throw new Error('COUPON_RIDER_MAX_USES_REACHED');
+        }
+      }
+    }
+
     // Atomically increment rider count only if capacity is not exceeded.
     // This prevents the race condition where two concurrent requests both
     // pass the API-level capacity check before either transaction commits.
@@ -356,10 +407,10 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     const result = await tx.insert(bookings).values({ ...data, clubId }).returning();
     const booking = result[0];
 
-    // Without this, `validateCoupon`'s maxUses / maxUsesPerRider gates stay
-    // at 0 forever and the same coupon can be re-applied indefinitely. The
-    // booking holds the NET (charged) amount; reconstruct the original
-    // sticker price by adding the discount back.
+    // Without this, the gates checked above stay at 0 forever and the same
+    // coupon can be re-applied indefinitely. The booking holds the NET
+    // (charged) amount; reconstruct the original sticker price by adding
+    // the discount back.
     if (booking && data.couponId) {
       const finalAmount = data.amount ?? 0;
       const discount = data.discountAmount ?? 0;

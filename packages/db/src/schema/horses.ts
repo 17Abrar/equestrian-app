@@ -9,6 +9,7 @@ import {
   boolean,
   timestamp,
   index,
+  unique,
 } from 'drizzle-orm/pg-core';
 import {
   horseStatusEnum,
@@ -98,4 +99,9 @@ export const horses = pgTable('horses', {
   index('idx_horses_skill').on(table.clubId, table.skillLevel),
   index('idx_horses_owner').on(table.ownerMemberId),
   index('idx_horses_deleted').on(table.deletedAt),
+  // FK target for composite (horse_id, club_id) -> horses(id, club_id) on
+  // every horse sub-resource table. Tautologically unique because id is
+  // the PK, but Postgres needs the explicit constraint to use the column
+  // pair as an FK target. See migration 0017.
+  unique('horses_id_club_unique').on(table.id, table.clubId),
 ]);

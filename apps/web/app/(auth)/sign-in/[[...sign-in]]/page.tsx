@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SignIn } from '@clerk/nextjs';
 import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
+import { safeSameOriginPath } from '@/lib/safe-redirect';
 
 interface PageProps {
   searchParams: Promise<{ as?: string; redirect_url?: string }>;
@@ -25,7 +26,11 @@ export default async function SignInPage({ searchParams }: PageProps) {
   const { as, redirect_url } = await searchParams;
   const isStable = as === 'stable';
 
-  const postSignInUrl = redirect_url ?? (isStable ? '/' : '/rider');
+  // Defence in depth: only honour `redirect_url` when it's a same-origin path.
+  // Clerk's allowed-origins list in the dashboard is the first line of
+  // defence; this stops an open-redirect even if that allowlist regresses.
+  const safeRedirect = safeSameOriginPath(redirect_url);
+  const postSignInUrl = safeRedirect ?? (isStable ? '/' : '/rider');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">

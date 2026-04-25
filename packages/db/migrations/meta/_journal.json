@@ -85,6 +85,13 @@
       "when": 1777248000005,
       "tag": "0016_rider_profiles_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777248000006,
+      "tag": "0017_horse_composite_fks",
+      "breakpoints": true
     }
   ]
 }

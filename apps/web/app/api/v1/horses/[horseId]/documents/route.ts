@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { createDocumentSchema } from '@equestrian/shared/schemas';
-import { getDocuments, createDocument } from '@equestrian/db/queries';
-import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
+import { getDocuments, createDocument, getHorseById } from '@equestrian/db/queries';
+import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -23,6 +23,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+
+      // Bind the horse to this tenant before insert. The R2 file URL was already
+      // verified against ctx.clubId by /api/v1/upload/verify, but the
+      // horse_documents.horse_id FK references horses(id) only — without this
+      // guard a forged URL referencing another club's horseId would attach the
+      // file row to the wrong tenant.
+      const horse = await getHorseById(ctx.clubId, horseId);
+      if (!horse) {
+        return errorResponse('NOT_FOUND', 'Horse not found', 404);
+      }
+
       const body = await request.json();
       const data = validateInput(createDocumentSchema, body);
 

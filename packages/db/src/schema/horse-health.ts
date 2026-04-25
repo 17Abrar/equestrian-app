@@ -10,6 +10,7 @@ import {
   time,
   numeric,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { fileCategoryEnum } from './enums';
 import { clubs } from './clubs';
@@ -21,9 +22,10 @@ export const horseHealthRecords = pgTable('horse_health_records', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
+  // FK is composite (horse_id, club_id) -> horses(id, club_id), declared
+  // below. Replaces the pre-0017 single-column FK so the DB rejects
+  // mismatched-tenant inserts.
+  horseId: uuid('horse_id').notNull(),
 
   recordType: varchar('record_type', { length: 50 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
@@ -50,6 +52,11 @@ export const horseHealthRecords = pgTable('horse_health_records', {
   index('idx_health_records_horse').on(table.horseId),
   index('idx_health_records_type').on(table.horseId, table.recordType),
   index('idx_health_records_next_due').on(table.nextDueDate),
+  foreignKey({
+    name: 'horse_health_records_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const horseMedications = pgTable('horse_medications', {
@@ -57,9 +64,7 @@ export const horseMedications = pgTable('horse_medications', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
+  horseId: uuid('horse_id').notNull(),
 
   medicationName: varchar('medication_name', { length: 255 }).notNull(),
   dosage: varchar('dosage', { length: 100 }).notNull(),
@@ -76,6 +81,11 @@ export const horseMedications = pgTable('horse_medications', {
 }, (table) => [
   index('idx_medications_horse').on(table.horseId),
   index('idx_medications_active').on(table.horseId, table.isActive),
+  foreignKey({
+    name: 'horse_medications_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const horseMedicationLogs = pgTable('horse_medication_logs', {
@@ -86,9 +96,7 @@ export const horseMedicationLogs = pgTable('horse_medication_logs', {
   medicationId: uuid('medication_id')
     .notNull()
     .references(() => horseMedications.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
+  horseId: uuid('horse_id').notNull(),
 
   administeredAt: timestamp('administered_at', { withTimezone: true }).notNull(),
   administeredByMemberId: uuid('administered_by_member_id').references(() => clubMembers.id),
@@ -100,6 +108,11 @@ export const horseMedicationLogs = pgTable('horse_medication_logs', {
 }, (table) => [
   index('idx_med_logs_medication').on(table.medicationId),
   index('idx_med_logs_date').on(table.administeredAt),
+  foreignKey({
+    name: 'horse_medication_logs_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const horseFeedingPlans = pgTable('horse_feeding_plans', {
@@ -107,9 +120,7 @@ export const horseFeedingPlans = pgTable('horse_feeding_plans', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
+  horseId: uuid('horse_id').notNull(),
 
   mealName: varchar('meal_name', { length: 100 }).notNull(),
   feedType: varchar('feed_type', { length: 255 }),
@@ -122,6 +133,11 @@ export const horseFeedingPlans = pgTable('horse_feeding_plans', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_feeding_plans_horse').on(table.horseId),
+  foreignKey({
+    name: 'horse_feeding_plans_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const horseFeedTracker = pgTable('horse_feed_tracker', {
@@ -151,9 +167,7 @@ export const horseExerciseSchedules = pgTable('horse_exercise_schedules', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
+  horseId: uuid('horse_id').notNull(),
 
   dayOfWeek: integer('day_of_week').notNull(),
   exerciseType: varchar('exercise_type', { length: 100 }).notNull(),
@@ -165,6 +179,11 @@ export const horseExerciseSchedules = pgTable('horse_exercise_schedules', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_exercise_horse').on(table.horseId),
+  foreignKey({
+    name: 'horse_exercise_schedules_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const horseDocuments = pgTable('horse_documents', {
@@ -172,9 +191,7 @@ export const horseDocuments = pgTable('horse_documents', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
+  horseId: uuid('horse_id').notNull(),
 
   fileName: varchar('file_name', { length: 255 }).notNull(),
   fileUrl: text('file_url').notNull(),
@@ -188,4 +205,9 @@ export const horseDocuments = pgTable('horse_documents', {
 }, (table) => [
   index('idx_documents_horse').on(table.horseId),
   index('idx_documents_category').on(table.horseId, table.category),
+  foreignKey({
+    name: 'horse_documents_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);

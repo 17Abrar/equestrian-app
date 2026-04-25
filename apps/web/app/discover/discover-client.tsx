@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUser, UserButton } from '@clerk/nextjs';
 import { Search, MapPin, ArrowRight, Home } from 'lucide-react';
@@ -39,7 +39,10 @@ export function DiscoverClient() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Debounce the search input so we aren't hitting the API per keystroke.
-  useMemo(() => {
+  // useEffect (not useMemo) — useMemo never invokes the returned cleanup, so
+  // each keystroke would leak its setTimeout and the debounce would degrade
+  // into "every keystroke fires after 250ms" instead of "only the last".
+  useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
   }, [search]);

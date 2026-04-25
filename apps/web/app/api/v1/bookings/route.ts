@@ -235,6 +235,29 @@ export async function POST(request: NextRequest) {
         if (err instanceof Error && err.message === 'SLOT_FULL') {
           return errorResponse('SLOT_FULL', 'This slot is now full', 409);
         }
+        // Coupon gates re-checked under FOR UPDATE in createBooking. These
+        // surface only when validateCoupon's pre-flight passed but a
+        // concurrent booking by the same rider (or any rider against a
+        // global maxUses) consumed the remaining quota in between.
+        if (err instanceof Error) {
+          if (err.message === 'COUPON_NOT_FOUND') {
+            return errorResponse('INVALID_COUPON', 'Promo code is no longer valid', 422);
+          }
+          if (err.message === 'COUPON_MAX_USES_REACHED') {
+            return errorResponse(
+              'INVALID_COUPON',
+              'This promo code has reached its maximum uses',
+              422,
+            );
+          }
+          if (err.message === 'COUPON_RIDER_MAX_USES_REACHED') {
+            return errorResponse(
+              'INVALID_COUPON',
+              'You have already used this promo code',
+              422,
+            );
+          }
+        }
         // Catch unique-index violations from idx_bookings_unique_rider_slot
         // and idx_bookings_unique_guest_slot. Postgres raises 23505 for these.
         const pgCode = (err as { code?: string } | null)?.code;
