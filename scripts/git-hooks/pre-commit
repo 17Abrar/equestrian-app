@@ -25,8 +25,11 @@ yellow() { printf '\033[0;33m%s\033[0m\n' "$*" >&2; }
 staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$staged_files" ] && exit 0
 
-# 1. Env-file gate — refuse any local env file regardless of contents.
-env_files=$(printf '%s\n' "$staged_files" | grep -E '(^|/)\.env(\.[^/]+)?\.local$|(^|/)\.env$' || true)
+# 1. Env-file gate — refuse any .env* file other than .env.example.
+#    Catches .env, .env.local, .env.production.local, .env.production.bak,
+#    .env.local.swp, etc. — anything that starts with `.env.` (or is exactly
+#    `.env`) and isn't the committed sample.
+env_files=$(printf '%s\n' "$staged_files" | grep -E '(^|/)\.env($|\..*)' | grep -vE '(^|/)\.env\.example$' || true)
 if [ -n "$env_files" ]; then
   red "✗ Refusing to commit local env file(s):"
   printf '    %s\n' $env_files >&2

@@ -1,3 +1,10 @@
 
+# Local env files (defense-in-depth — root .gitignore also covers these,
+# but explicit nested rules survive `git add -f` regressions and remain
+# visible to anyone reading just this directory's gitignore).
+.env
+.env.*
+!.env.example
+
 # clerk configuration (can include secrets)
 /.clerk/

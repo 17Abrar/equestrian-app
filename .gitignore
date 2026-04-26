@@ -17,10 +17,13 @@ dist/
 ios/
 android/
 
-# Environment variables
+# Environment variables — catches all .env* variants except the committed
+# sample. Backups (.env.local.bak), swap files (.env.local.swp), and
+# uncommon shapes like .env.production are all covered. The negation keeps
+# .env.example tracked.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # OS
 .DS_Store
