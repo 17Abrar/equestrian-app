@@ -2,6 +2,7 @@ import {
   Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
+import { safeHref } from './util/safe-href';
 
 interface LiveryInvoiceOverdueProps {
   ownerName: string;
@@ -62,7 +63,7 @@ export function LiveryInvoiceOverdue({
 
           {payLink && (
             <Section style={{ textAlign: 'center' as const, margin: '24px 0' }}>
-              <Button href={payLink} style={styles.button}>
+              <Button href={safeHref(payLink)} style={styles.button}>
                 Pay now
               </Button>
             </Section>

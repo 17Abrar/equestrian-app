@@ -103,6 +103,7 @@ if (!g[STORE_KEY]) {
 const store = g[STORE_KEY];
 
 function inMemoryCheck(key: string, config: RateLimitConfig): RateLimitResult {
+  ensureCleanupStarted();
   const now = Date.now();
   const windowStart = now - config.windowMs;
 
@@ -128,20 +129,24 @@ function inMemoryCheck(key: string, config: RateLimitConfig): RateLimitResult {
 const CLEANUP_INTERVAL_MS = 300_000;
 const MAX_WINDOW_MS = 120_000;
 
-if (g[INTERVAL_KEY]) {
-  clearInterval(g[INTERVAL_KEY]);
-}
-g[INTERVAL_KEY] = setInterval(() => {
-  const now = Date.now();
-  for (const [key, timestamps] of store) {
-    const filtered = timestamps.filter((t) => t > now - MAX_WINDOW_MS);
-    if (filtered.length === 0) {
-      store.delete(key);
-    } else {
-      store.set(key, filtered);
+// Lazy: the cleanup interval starts on first in-memory check rather than at
+// module init. A previous module-init `setInterval` fired for every Worker
+// isolate cold-start, including isolates that only ever serve Upstash-backed
+// production routes — wasted CPU + kept isolates alive longer than necessary.
+function ensureCleanupStarted(): void {
+  if (g[INTERVAL_KEY]) return;
+  g[INTERVAL_KEY] = setInterval(() => {
+    const now = Date.now();
+    for (const [key, timestamps] of store) {
+      const filtered = timestamps.filter((t) => t > now - MAX_WINDOW_MS);
+      if (filtered.length === 0) {
+        store.delete(key);
+      } else {
+        store.set(key, filtered);
+      }
     }
-  }
-}, CLEANUP_INTERVAL_MS);
+  }, CLEANUP_INTERVAL_MS);
+}
 
 // ─── Public API ──────────────────────────────────────────────────────
 

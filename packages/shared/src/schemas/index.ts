@@ -19,6 +19,20 @@ function optionalNumeric(schema: z.ZodNumber = z.number()) {
   return numericField(schema).optional();
 }
 
+// URL fields where the form treats `''` as "not set". Without `.or(z.literal(''))`
+// the empty string from a cleared input fails `.url()` validation and the form
+// surfaces a misleading "invalid url" error.
+//   `optionalUrl`         — undefined | '' | https?://…
+//   `nullableOptionalUrl` — undefined | null | '' | https?://…   (used when
+//                           the underlying column is nullable so admins can
+//                           explicitly clear the value, not just leave it
+//                           unchanged)
+const optionalUrl = z.union([z.string().url().max(2000), z.literal('')]).optional();
+const nullableOptionalUrl = z
+  .union([z.string().url().max(2000), z.literal('')])
+  .nullable()
+  .optional();
+
 // ─── Common ────────────────────────────────────────────────────────────
 
 export const paginationSchema = z.object({
@@ -53,9 +67,11 @@ export const createHorseSchema = z.object({
   mandatoryRestDays: numericField(z.number().int().min(0)).default(1),
 
   saleStatus: z.enum(['not_for_sale', 'for_sale', 'sold']).default('not_for_sale'),
-  purchasePrice: optionalNumeric(z.number().int()),
-  currentValue: optionalNumeric(z.number().int()),
-  salePrice: optionalNumeric(z.number().int()),
+  // Asset prices are minor-unit integers ≥ 0. Negative values would slip
+  // through the prior `.int()` and surface as nonsense in the finance UI.
+  purchasePrice: optionalNumeric(z.number().int().min(0)),
+  currentValue: optionalNumeric(z.number().int().min(0)),
+  salePrice: optionalNumeric(z.number().int().min(0)),
 
   saddleSize: z.string().max(50).optional(),
   girthSize: z.string().max(50).optional(),
@@ -399,8 +415,8 @@ export const updateClubProfileSchema = z.object({
   // Nullable to match the underlying column (text, no NOT NULL) and the
   // branding schema's shape — staff need to be able to *clear* the logo
   // from the profile editor too, not just set a new one.
-  logoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
-  websiteUrl: z.string().url().max(2000).optional().or(z.literal('')),
+  logoUrl: nullableOptionalUrl,
+  websiteUrl: optionalUrl,
   socialInstagram: z.string().max(255).optional(),
   socialFacebook: z.string().max(255).optional(),
   socialTiktok: z.string().max(255).optional(),
@@ -417,9 +433,9 @@ const hexColor = z
 export const updateBrandingSchema = z.object({
   brandPrimaryColor: hexColor.optional(),
   brandSecondaryColor: hexColor.optional(),
-  logoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
-  coverPhotoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
-  faviconUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
+  logoUrl: nullableOptionalUrl,
+  coverPhotoUrl: nullableOptionalUrl,
+  faviconUrl: nullableOptionalUrl,
 });
 
 export type UpdateBrandingInput = z.output<typeof updateBrandingSchema>;

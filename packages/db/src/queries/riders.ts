@@ -44,6 +44,16 @@ export async function getRidersByClub(clubId: string, filters: RiderFilters) {
   const where = and(...conditions);
   const offset = (filters.page - 1) * filters.pageSize;
 
+  // Belt-and-braces tenant scope on the join. `rider_profiles.club_id` is
+  // already filtered by `where`, but the FK on `member_id -> club_members.id`
+  // is single-column — it does not enforce that the joined membership row
+  // belongs to the same club. Migration 0019 closes this at the schema
+  // level via a composite FK; binding the join here is defence in depth.
+  const memberJoin = and(
+    eq(riderProfiles.memberId, clubMembers.id),
+    eq(clubMembers.clubId, clubId),
+  );
+
   const [data, countResult] = await Promise.all([
     db
       .select({
@@ -67,7 +77,7 @@ export async function getRidersByClub(clubId: string, filters: RiderFilters) {
         phone: clubMembers.phone,
       })
       .from(riderProfiles)
-      .innerJoin(clubMembers, eq(riderProfiles.memberId, clubMembers.id))
+      .innerJoin(clubMembers, memberJoin)
       .where(where)
       .orderBy(asc(clubMembers.displayName))
       .limit(filters.pageSize)
@@ -75,7 +85,7 @@ export async function getRidersByClub(clubId: string, filters: RiderFilters) {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(riderProfiles)
-      .innerJoin(clubMembers, eq(riderProfiles.memberId, clubMembers.id))
+      .innerJoin(clubMembers, memberJoin)
       .where(where),
   ]);
 
@@ -108,7 +118,10 @@ export async function getRiderById(clubId: string, riderId: string) {
       phone: clubMembers.phone,
     })
     .from(riderProfiles)
-    .innerJoin(clubMembers, eq(riderProfiles.memberId, clubMembers.id))
+    .innerJoin(
+      clubMembers,
+      and(eq(riderProfiles.memberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
     .where(and(eq(riderProfiles.id, riderId), eq(riderProfiles.clubId, clubId)))
     .limit(1);
 
@@ -130,7 +143,10 @@ export async function getRiderByMemberId(clubId: string, memberId: string) {
       displayName: clubMembers.displayName,
     })
     .from(riderProfiles)
-    .innerJoin(clubMembers, eq(riderProfiles.memberId, clubMembers.id))
+    .innerJoin(
+      clubMembers,
+      and(eq(riderProfiles.memberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
     .where(and(eq(riderProfiles.memberId, memberId), eq(riderProfiles.clubId, clubId)))
     .limit(1);
 

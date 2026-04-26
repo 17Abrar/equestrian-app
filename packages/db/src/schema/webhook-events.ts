@@ -34,7 +34,13 @@ export const webhookEvents = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     provider: varchar('provider', { length: 50 }).notNull(),
     eventId: varchar('event_id', { length: 255 }).notNull(),
-    status: varchar('status', { length: 20 }).notNull().default('processed'),
+    // Default reflects the two-phase claim protocol: a fresh row starts as
+    // `'received'` (in-flight), the success path UPDATEs to `'processed'`,
+    // and the failure path UPDATEs to `'failed'`. The previous default of
+    // `'processed'` lied about state — every caller passes `status` explicitly
+    // so the default was unreachable, but a future contributor reading the
+    // schema would draw the wrong conclusion.
+    status: varchar('status', { length: 20 }).notNull().default('received'),
     attemptCount: integer('attempt_count').notNull().default(1),
     lastAttemptedAt: timestamp('last_attempted_at', { withTimezone: true })
       .notNull()

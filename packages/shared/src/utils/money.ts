@@ -36,12 +36,20 @@ const CURRENCY_LOCALE: Record<string, string> = {
 };
 
 /**
- * Zero-decimal currencies per ISO 4217 that Stripe also treats as
- * zero-decimal. BHD / JOD / KWD / OMR / TND are 3-decimal (minor units in
- * thousandths). We don't actively support those pricing models yet — the
- * DB stores `_minor_units` meaning cents for 2-decimal currencies — but
- * listing here lets the formatter render the right fraction count if a
- * 3-decimal club is ever onboarded.
+ * Currency fraction-digit overrides per ISO 4217.
+ *
+ *   THREE_DECIMAL_CURRENCIES  — minor unit is one-thousandth of major
+ *                                (BHD, JOD, KWD, OMR, TND). Stored in the
+ *                                DB as `_minor_units` integers exactly as
+ *                                with 2-decimal currencies — `formatMoney`
+ *                                divides by 1000 instead of 100 so the
+ *                                display value matches the printed
+ *                                banknote.
+ *   ZERO_DECIMAL_CURRENCIES   — Stripe-defined zero-decimal (no fractional
+ *                                unit). `_minor_units` already IS the
+ *                                major-unit value; divisor stays 1.
+ *
+ * Anything outside both sets defaults to 2 decimals.
  */
 const THREE_DECIMAL_CURRENCIES = new Set(['BHD', 'JOD', 'KWD', 'OMR', 'TND']);
 const ZERO_DECIMAL_CURRENCIES = new Set([

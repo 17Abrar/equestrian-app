@@ -175,9 +175,15 @@ export async function getTenantContext(): Promise<TenantContext> {
         path: '/',
         maxAge: 60 * 60 * 24 * 30,
       });
-    } catch {
-      // RSC read-only context — next mutation (e.g. /me/active-club POST)
-      // will correct the cookie. Safe to ignore.
+    } catch (err) {
+      // RSC read-only context throws here — that's expected, the next
+      // mutation (e.g. /me/active-club POST) will correct the cookie.
+      // Logged at debug so the legitimate RSC path doesn't spam Sentry,
+      // but a non-RSC failure (e.g. handler crash) is still observable.
+      logger.debug('active_club_cookie_rewrite_skipped', {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

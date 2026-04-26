@@ -1,21 +1,33 @@
 import { type NextRequest } from 'next/server';
-import { createOwnerSchema } from '@equestrian/shared/schemas';
+import { z } from 'zod';
+import { createOwnerSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getOwnersByClub, createMember } from '@equestrian/db/queries';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 import { randomUUID } from 'crypto';
 
+// Reuse `paginationSchema` (caps `pageSize` at 100). The previous
+// `Number(searchParams.pageSize) || 25` path had no upper bound — a single
+// `?pageSize=999999999` request loaded the entire owners table for the club
+// into the Worker isolate.
+const ownerFiltersSchema = z.object({
+  search: z.string().optional(),
+  ...paginationSchema.shape,
+});
+
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const page = Number(searchParams.page) || 1;
-      const pageSize = Number(searchParams.pageSize) || 25;
-      const search = searchParams.search;
+      const filters = validateInput(ownerFiltersSchema, searchParams);
 
-      const { data, total } = await getOwnersByClub(ctx.clubId, { search, page, pageSize });
+      const { data, total } = await getOwnersByClub(ctx.clubId, filters);
 
-      return paginatedResponse(data, { page, pageSize, total });
+      return paginatedResponse(data, {
+        page: filters.page,
+        pageSize: filters.pageSize,
+        total,
+      });
     },
     { requiredPermission: 'owners:read' },
   );

@@ -24,8 +24,16 @@ export async function POST(request: NextRequest) {
       const body = await request.json();
       const data = validateInput(connectSchema, body);
 
+      if (!nGeniusAdapter.connectWithCredentials) {
+        return errorResponse(
+          'NOT_SUPPORTED',
+          'N-Genius adapter does not support credential connect',
+          500,
+        );
+      }
+
       try {
-        const result = await nGeniusAdapter.connectWithCredentials!({
+        const result = await nGeniusAdapter.connectWithCredentials({
           clubId: ctx.clubId,
           credentials: {
             apiKey: data.apiKey,

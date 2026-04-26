@@ -89,6 +89,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('OK', { status: 200 });
   }
 
+  // Bind the event's account_id to the URL's clubId. The signature check
+  // above already proved the body was signed with this club's secret — but
+  // if the same secret were ever pasted into two clubs' connect flows
+  // (operator misconfiguration), a webhook for Club A's payment posted to
+  // /api/webhooks/ziina/<clubB-uuid> would otherwise be applied to Club B.
+  // Defence in depth.
+  if (
+    event.providerAccountId &&
+    account.externalAccountId &&
+    event.providerAccountId !== account.externalAccountId
+  ) {
+    logger.warn('ziina_webhook_account_mismatch', {
+      clubId,
+      expected: account.externalAccountId,
+      got: event.providerAccountId,
+    });
+    return new Response('Account mismatch', { status: 400 });
+  }
+
   const claim = await claimWebhookEvent('ziina', event.eventId);
 
   if (claim.status === 'already_processed') {

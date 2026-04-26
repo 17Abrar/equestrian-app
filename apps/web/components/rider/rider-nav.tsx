@@ -12,7 +12,6 @@ import {
   Home,
   CalendarPlus,
   TrendingUp,
-  Users,
   User,
   Compass,
   Rabbit,
@@ -48,7 +47,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Stables', href: '/discover', icon: Compass },
   { label: 'Horses', href: '/rider/horses', icon: Rabbit },
   { label: 'Progress', href: '/rider/progress', icon: TrendingUp },
-  { label: 'Community', href: '/rider/community', icon: Users },
   { label: 'Profile', href: '/rider/profile', icon: User },
 ];
 

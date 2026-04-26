@@ -70,8 +70,13 @@ export async function GET(request: NextRequest) {
     return redirectBack(origin, { status: 'error', error: 'forbidden' });
   }
 
+  if (!stripeAdapter.completeOAuthCallback) {
+    logger.error('stripe_oauth_callback_unsupported');
+    return redirectBack(origin, { status: 'error', error: 'callback_unsupported' });
+  }
+
   try {
-    const callbackResult = await stripeAdapter.completeOAuthCallback!({ code });
+    const callbackResult = await stripeAdapter.completeOAuthCallback({ code });
 
     await upsertPaymentAccount(ctx.clubId, {
       provider: 'stripe',

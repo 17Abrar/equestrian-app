@@ -11,6 +11,7 @@ import {
   Img,
 } from '@react-email/components';
 import { formatMoney } from '@equestrian/shared/utils';
+import { safeHref } from './util/safe-href';
 
 interface BookingConfirmationProps {
   riderName: string;
@@ -127,7 +128,7 @@ export function BookingConfirmation({
             )}
           </Section>
 
-          <Button href={addToCalendarUrl} style={styles.button}>
+          <Button href={safeHref(addToCalendarUrl)} style={styles.button}>
             Add to Calendar
           </Button>
 

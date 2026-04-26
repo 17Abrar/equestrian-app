@@ -17,6 +17,8 @@ import {
   horseDocuments,
 } from '../schema/horse-health';
 import { competitions, competitionClasses } from '../schema/competitions';
+import { riderProfiles } from '../schema/rider-profiles';
+import { invoices, payments } from '../schema/finances';
 
 /**
  * Tests for the existence-and-binding helpers that the route layer uses
@@ -322,5 +324,110 @@ describe('composite FK on horse sub-tables — DB rejects mismatched tenant', ()
 
     const after = await testDb.db.select().from(horseMedications);
     expect(after.find((m) => m.id === seeded.medicationA)).toBeUndefined();
+  });
+});
+
+/**
+ * Schema-level enforcement (migration 0019): the composite FK
+ * (member_id, club_id) -> club_members(id, club_id) on rider_profiles,
+ * payments, and invoices makes a mismatched-tenant insert fail at the DB
+ * layer. The riders / payments / invoices list pages JOIN club_members for
+ * display name; without this FK, a row planted with (clubId=A, memberId=
+ * memberB) would surface clubB's display name on a clubA list view.
+ */
+describe('composite FK on member_id tables — DB rejects mismatched tenant', () => {
+  async function getMemberIds(): Promise<{
+    clubA: string;
+    clubB: string;
+    memberA: string;
+    memberB: string;
+  }> {
+    const seeded = await seedTwoClubsWithResources(testDb.db);
+    const { eq } = await import('drizzle-orm');
+    const aMembers = await testDb.db
+      .select({ id: clubMembers.id })
+      .from(clubMembers)
+      .where(eq(clubMembers.clubId, seeded.clubA));
+    const bMembers = await testDb.db
+      .select({ id: clubMembers.id })
+      .from(clubMembers)
+      .where(eq(clubMembers.clubId, seeded.clubB));
+    return {
+      clubA: seeded.clubA,
+      clubB: seeded.clubB,
+      memberA: aMembers[0]!.id,
+      memberB: bMembers[0]!.id,
+    };
+  }
+
+  it('rider_profiles insert with foreign clubId fails', async () => {
+    const ids = await getMemberIds();
+    await expect(
+      testDb.db.insert(riderProfiles).values({
+        clubId: ids.clubB, // foreign club
+        memberId: ids.memberA, // belongs to clubA
+        skillLevel: 'beginner',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('payments insert with foreign clubId fails', async () => {
+    const ids = await getMemberIds();
+    await expect(
+      testDb.db.insert(payments).values({
+        clubId: ids.clubB,
+        memberId: ids.memberA,
+        amount: 1000,
+        paymentMethod: 'card',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('invoices insert with foreign clubId fails', async () => {
+    const ids = await getMemberIds();
+    await expect(
+      testDb.db.insert(invoices).values({
+        clubId: ids.clubB,
+        memberId: ids.memberA,
+        invoiceNumber: 'INV-X',
+        amount: 1000,
+        totalAmount: 1000,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rider_profiles insert with matching (clubId, memberId) succeeds — sanity check', async () => {
+    const ids = await getMemberIds();
+    await expect(
+      testDb.db.insert(riderProfiles).values({
+        clubId: ids.clubA,
+        memberId: ids.memberA,
+        skillLevel: 'beginner',
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('deleting a member cascades to rider_profiles via the composite FK', async () => {
+    const ids = await getMemberIds();
+    const { eq } = await import('drizzle-orm');
+    await testDb.db.insert(riderProfiles).values({
+      clubId: ids.clubA,
+      memberId: ids.memberA,
+      skillLevel: 'beginner',
+    });
+
+    const before = await testDb.db
+      .select()
+      .from(riderProfiles)
+      .where(eq(riderProfiles.memberId, ids.memberA));
+    expect(before.length).toBe(1);
+
+    await testDb.db.delete(clubMembers).where(eq(clubMembers.id, ids.memberA));
+
+    const after = await testDb.db
+      .select()
+      .from(riderProfiles)
+      .where(eq(riderProfiles.memberId, ids.memberA));
+    expect(after.length).toBe(0);
   });
 });

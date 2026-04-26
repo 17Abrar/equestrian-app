@@ -134,6 +134,20 @@
       "when": 1777248000007,
       "tag": "0018_competition_results_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1777248000008,
+      "tag": "0019_member_composite_fks",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1777248000009,
+      "tag": "0020_webhook_events_status_default",
+      "breakpoints": true
     }
   ]
 }

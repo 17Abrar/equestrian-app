@@ -224,8 +224,16 @@ export async function POST(request: Request) {
 
         const foundClub = club[0];
         if (!foundClub) {
-          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId });
-          break;
+          // Svix delivery is best-effort, not strictly ordered. The
+          // membership event can arrive before its `organization.created`
+          // sibling. Silently swallowing this here would leave the club
+          // with no `club_members` row for the admin who just signed up.
+          // Mark the claim as failed so the next Svix retry can re-claim,
+          // and return 503 so Svix actually retries instead of treating
+          // the 200 as success.
+          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId, eventType });
+          await markWebhookEventFailed('clerk', svixId, 'club_not_found_retry');
+          return new Response('Club not found, retry pending', { status: 503 });
         }
 
         const displayName = [userData.first_name, userData.last_name]
@@ -271,7 +279,13 @@ export async function POST(request: Request) {
           .limit(1);
 
         const foundClub = club[0];
-        if (!foundClub) break;
+        if (!foundClub) {
+          // Same race as `created` above. Retry instead of dropping the
+          // role change silently.
+          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId, eventType });
+          await markWebhookEventFailed('clerk', svixId, 'club_not_found_retry');
+          return new Response('Club not found, retry pending', { status: 503 });
+        }
 
         await db
           .update(clubMembers)
@@ -304,7 +318,13 @@ export async function POST(request: Request) {
           .limit(1);
 
         const foundClub = club[0];
-        if (!foundClub) break;
+        if (!foundClub) {
+          // Same race as above. Retry instead of leaving the member
+          // active in our DB after Clerk has removed them.
+          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId, eventType });
+          await markWebhookEventFailed('clerk', svixId, 'club_not_found_retry');
+          return new Response('Club not found, retry pending', { status: 503 });
+        }
 
         await db
           .update(clubMembers)

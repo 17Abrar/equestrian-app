@@ -52,13 +52,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm turbo typecheck --filter='./apps/web' --filter='./packages/*'
+        run: pnpm turbo typecheck --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
       - name: Lint
-        run: pnpm turbo lint --filter='./apps/web' --filter='./packages/*'
+        run: pnpm turbo lint --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
+      # Mobile has no `test` script today — turbo silently skips packages
+      # without the requested task, so this is a no-op for apps/mobile until
+      # a test suite lands there.
       - name: Test
-        run: pnpm turbo test --filter='./apps/web' --filter='./packages/*'
+        run: pnpm turbo test --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
   neon-smoke:
     # Spins up an ephemeral Neon branch from `main`, applies all

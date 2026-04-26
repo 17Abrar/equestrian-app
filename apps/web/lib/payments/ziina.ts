@@ -289,10 +289,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     const intentId = payload.data?.id;
     const statusKey = payload.data?.status ?? 'nostatus';
     const eventName = payload.event ?? 'ziina.event';
+    // 32 hex chars = 128 bits of entropy on the SHA-256 — collision is
+    // astronomically unlikely for any practical webhook volume but cheap
+    // to extend from the prior 24 (96 bits).
     const eventId = intentId
       ? `${eventName}:${intentId}:${statusKey}`
       : `${eventName}:` +
-        createHash('sha256').update(input.body).digest('hex').slice(0, 24);
+        createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 
     return {
       eventId,

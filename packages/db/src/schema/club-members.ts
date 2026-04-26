@@ -23,5 +23,10 @@ export const clubMembers = pgTable(
     unique('club_members_club_user_unique').on(table.clubId, table.clerkUserId),
     index('idx_club_members_user').on(table.clerkUserId),
     index('idx_club_members_role').on(table.clubId, table.role),
+    // FK target for composite (member_id, club_id) -> club_members(id, club_id)
+    // on rider_profiles, payments, invoices. Tautologically unique because id
+    // is the PK, but Postgres needs the explicit constraint to use the column
+    // pair as an FK target. See migration 0019.
+    unique('club_members_id_club_unique').on(table.id, table.clubId),
   ],
 );
