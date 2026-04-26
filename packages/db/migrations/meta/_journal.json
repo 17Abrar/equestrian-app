@@ -92,6 +92,13 @@
       "when": 1777248000006,
       "tag": "0017_horse_composite_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777248000007,
+      "tag": "0018_competition_results_unique",
+      "breakpoints": true
     }
   ]
 }

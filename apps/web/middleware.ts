@@ -82,9 +82,33 @@ export default clerkMiddleware(async (auth, request) => {
   return response;
 });
 
+// The extension list is anchored to the end of the path with `$`, so
+// `data.json` is NOT excluded by the `js` alternative — only paths ending
+// in `.js` are. This replaces the previous `js(?!on)` lookahead, which
+// was easy to break when adding extensions (every new alternative needed
+// to be checked against partial-prefix collisions like js/json).
+const STATIC_ASSET_EXTS = [
+  'html?',
+  'css',
+  'js',
+  'jpe?g',
+  'webp',
+  'png',
+  'gif',
+  'svg',
+  'ttf',
+  'woff2?',
+  'ico',
+  'csv',
+  'docx?',
+  'xlsx?',
+  'zip',
+  'webmanifest',
+].join('|');
+
 export const config = {
   matcher: [
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    `/((?!_next|[^?]*\\.(?:${STATIC_ASSET_EXTS})$).*)`,
     '/(api|trpc)(.*)',
   ],
 };

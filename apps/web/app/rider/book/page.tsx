@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { fetchJson } from '@/lib/fetch-json';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -198,7 +199,13 @@ export default function RiderBookPage() {
     setCouponDiscount(0);
     setCouponValidating(true);
     try {
-      const res = await fetch('/api/v1/coupons/validate', {
+      // The validate endpoint returns 200 with `{ valid: false, error }` for
+      // recoverable cases (wrong code, expired, etc.) and a non-2xx for
+      // network/server failures. fetchJson promotes non-2xx to thrown errors;
+      // the body-shape check below handles the recoverable case.
+      const json = await fetchJson<{
+        data: { valid: boolean; discount?: number; error?: string };
+      }>('/api/v1/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -207,15 +214,14 @@ export default function RiderBookPage() {
           riderMemberId: memberId,
         }),
       });
-      const json = await res.json() as { data?: { valid?: boolean; discount?: number; error?: string } };
-      if (json.data?.valid && json.data.discount) {
+      if (json.data.valid && json.data.discount) {
         setCouponDiscount(json.data.discount);
         toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
       } else {
-        setCouponError(json.data?.error ?? 'Invalid code');
+        setCouponError(json.data.error ?? 'Invalid code');
       }
-    } catch {
-      setCouponError('Failed to validate code');
+    } catch (err) {
+      setCouponError(err instanceof Error ? err.message : 'Failed to validate code');
     } finally {
       setCouponValidating(false);
     }

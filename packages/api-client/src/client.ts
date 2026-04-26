@@ -13,6 +13,37 @@ interface ApiClientConfig {
   getOrganizationId: () => string | null;
 }
 
+/**
+ * Verifies a parsed JSON value matches the `ApiResponse<unknown>` envelope
+ * shape: either `{ success: true, data }` or
+ * `{ success: false, error: { code, message } }`. Returns a normalised
+ * envelope or `null` if the body doesn't match. Without this, a server
+ * misconfiguration (HTML error page, gateway timeout, non-JSON body) would
+ * cast straight to `ApiResponse<T>` and the consumer would dereference
+ * undefined fields. Mobile callers see a clean `NETWORK_ERROR` instead.
+ */
+function parseEnvelope<T>(raw: unknown): ApiResponse<T> | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  if (obj.success === true) {
+    return { success: true, data: obj.data as T };
+  }
+  if (obj.success === false) {
+    const err = obj.error;
+    if (typeof err === 'object' && err !== null) {
+      const e = err as Record<string, unknown>;
+      const code = typeof e.code === 'string' ? e.code : 'UNKNOWN_ERROR';
+      const message = typeof e.message === 'string' ? e.message : 'Request failed';
+      return { success: false, error: { code, message, details: e.details } };
+    }
+    return {
+      success: false,
+      error: { code: 'UNKNOWN_ERROR', message: 'Request failed' },
+    };
+  }
+  return null;
+}
+
 export function createApiClient(config: ApiClientConfig) {
   async function request<T>(path: string, options: FetchOptions = {}): Promise<ApiResponse<T>> {
     const { method = 'GET', body, headers = {}, signal } = options;
@@ -41,8 +72,18 @@ export function createApiClient(config: ApiClientConfig) {
         signal,
       });
 
-      const data = (await response.json()) as ApiResponse<T>;
-      return data;
+      const raw: unknown = await response.json();
+      const envelope = parseEnvelope<T>(raw);
+      if (!envelope) {
+        return {
+          success: false,
+          error: {
+            code: 'INVALID_RESPONSE',
+            message: 'Server returned an unexpected response shape',
+          },
+        };
+      }
+      return envelope;
     } catch (error) {
       return {
         success: false,

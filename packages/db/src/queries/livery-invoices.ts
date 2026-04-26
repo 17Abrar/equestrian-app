@@ -245,7 +245,13 @@ export async function findOverdueInvoicesForReminders(today: string) {
   return rows;
 }
 
-export async function markInvoiceOverdueAndLogReminder(invoiceId: string) {
+// `clubId` is threaded through these helpers as defence-in-depth. Today's
+// callers (cron + provider webhooks) hand back a row that already carries
+// the right clubId, so the constraint is redundant — but a future caller
+// that derives `invoiceId` from a less-trusted source (e.g. a rider portal
+// route exposing owner-side invoice ops) would otherwise have no DB-level
+// guard against acting on a foreign-club row.
+export async function markInvoiceOverdueAndLogReminder(clubId: string, invoiceId: string) {
   const result = await rawDb
     .update(liveryInvoices)
     .set({
@@ -254,13 +260,14 @@ export async function markInvoiceOverdueAndLogReminder(invoiceId: string) {
       reminderCount: sql`${liveryInvoices.reminderCount} + 1`,
       updatedAt: new Date(),
     })
-    .where(eq(liveryInvoices.id, invoiceId))
+    .where(and(eq(liveryInvoices.id, invoiceId), eq(liveryInvoices.clubId, clubId)))
     .returning();
   return result[0] ?? null;
 }
 
 /** Attach a provider payment reference to an already-created invoice. */
 export async function setInvoiceProviderRef(
+  clubId: string,
   invoiceId: string,
   provider: string,
   providerPaymentId: string,
@@ -274,7 +281,7 @@ export async function setInvoiceProviderRef(
       payLink,
       updatedAt: new Date(),
     })
-    .where(eq(liveryInvoices.id, invoiceId))
+    .where(and(eq(liveryInvoices.id, invoiceId), eq(liveryInvoices.clubId, clubId)))
     .returning();
   return result[0] ?? null;
 }

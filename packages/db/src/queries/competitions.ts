@@ -211,8 +211,14 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
       horseName: horses.name,
     })
     .from(competitionEntries)
-    .innerJoin(clubMembers, eq(competitionEntries.riderMemberId, clubMembers.id))
-    .leftJoin(horses, eq(competitionEntries.horseId, horses.id))
+    // Defence-in-depth: tenant-owned joined tables also carry club_id, but
+    // FK chains alone don't enforce it. Mirror the clubId condition into
+    // each join so a stale row can't leak into the leaderboard.
+    .innerJoin(
+      clubMembers,
+      and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
+    .leftJoin(horses, and(eq(competitionEntries.horseId, horses.id), eq(horses.clubId, clubId)))
     .where(
       and(
         eq(competitionEntries.clubId, clubId),
@@ -414,9 +420,18 @@ export async function getCompetitionResults(clubId: string, classId: string) {
       horseName: horses.name,
     })
     .from(competitionResults)
-    .innerJoin(competitionEntries, eq(competitionResults.entryId, competitionEntries.id))
-    .innerJoin(clubMembers, eq(competitionEntries.riderMemberId, clubMembers.id))
-    .leftJoin(horses, eq(competitionEntries.horseId, horses.id))
+    .innerJoin(
+      competitionEntries,
+      and(
+        eq(competitionResults.entryId, competitionEntries.id),
+        eq(competitionEntries.clubId, clubId),
+      ),
+    )
+    .innerJoin(
+      clubMembers,
+      and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
+    .leftJoin(horses, and(eq(competitionEntries.horseId, horses.id), eq(horses.clubId, clubId)))
     .where(
       and(
         eq(competitionResults.clubId, clubId),

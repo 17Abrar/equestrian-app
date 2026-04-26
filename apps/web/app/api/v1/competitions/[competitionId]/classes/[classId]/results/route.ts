@@ -45,7 +45,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('INVALID_ENTRY', 'Entry does not belong to this class', 422);
       }
 
-      const result = await createCompetitionResult(ctx.clubId, data);
+      // Two judges submitting the same entry concurrently both pass the
+      // entry-exists check above; the unique constraint
+      // `competition_results_entry_unique` (migration 0018) makes the loser
+      // see Postgres 23505. Map it to a clean 409 instead of falling through
+      // to the catch-all 500 in withAuth.
+      let result;
+      try {
+        result = await createCompetitionResult(ctx.clubId, data);
+      } catch (err) {
+        const pgCode = (err as { code?: string } | null)?.code;
+        const msg = err instanceof Error ? err.message : '';
+        if (pgCode === '23505' || msg.includes('competition_results_entry_unique')) {
+          return errorResponse(
+            'DUPLICATE_RESULT',
+            'A result already exists for this entry',
+            409,
+          );
+        }
+        throw err;
+      }
 
       if (!result) {
         return errorResponse('CREATE_FAILED', 'Failed to create result', 500);

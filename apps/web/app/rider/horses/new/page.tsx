@@ -23,6 +23,7 @@ import { FileUpload } from '@/components/ui/file-upload';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { fetchJson } from '@/lib/fetch-json';
 
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
@@ -42,17 +43,7 @@ interface MyHorsesResponse {
 function useMemberships() {
   return useQuery({
     queryKey: ['me', 'horses'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/me/horses');
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to load memberships',
-        );
-      }
-      return data as ApiSuccessResponse<MyHorsesResponse>;
-    },
+    queryFn: () => fetchJson<ApiSuccessResponse<MyHorsesResponse>>('/api/v1/me/horses'),
     staleTime: 60 * 1000,
   });
 }
@@ -74,21 +65,12 @@ interface RegisterBody {
 function useRegisterHorse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: RegisterBody) => {
-      const res = await fetch('/api/v1/horses/register-ownership', {
+    mutationFn: (body: RegisterBody) =>
+      fetchJson<ApiSuccessResponse<{ id: string }>>('/api/v1/horses/register-ownership', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to register horse',
-        );
-      }
-      return data;
-    },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['me', 'horses'] });
     },
