@@ -348,6 +348,17 @@ export async function POST(request: NextRequest) {
 
       return successResponse(booking, 201);
     },
-    { requiredPermission: 'bookings:create' },
+    {
+      requiredPermission: 'bookings:create',
+      // Rate-limit booking creation per user. The /coupons/validate route
+      // is rate-limited (10/min, failClosed) to defeat coupon-code
+      // enumeration, but a brute-forcer could otherwise just hit this
+      // endpoint with `{ slotId, couponCode: 'GUESS_X' }` 1000× and read
+      // the success/failure on the booking — see audit B-23. 30/min lets
+      // legitimate burst-booking through (e.g. an admin batch-creating)
+      // while still capping the brute-force surface.
+      rateLimit: { maxRequests: 30, windowMs: 60_000 },
+      routeKey: 'bookings:create',
+    },
   );
 }

@@ -60,12 +60,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Constant-time compare so an attacker can't learn the secret
-  // byte-by-byte via response timing. Length check first — timingSafeEqual
-  // throws on length mismatch.
+  // byte-by-byte via response timing. timingSafeEqual throws on length
+  // mismatch — we pad the shorter buffer to the expected length so a
+  // wrong-length header still pays the full O(n) compare and doesn't
+  // short-circuit faster than the right-length-but-wrong-value path
+  // (audit B-15).
   const provided = Buffer.from(headerSecret ?? '', 'utf8');
   const target = Buffer.from(expected, 'utf8');
-  const secretOk =
-    provided.length === target.length && timingSafeEqual(provided, target);
+  const sameLength = provided.length === target.length;
+  const padded = sameLength ? provided : Buffer.alloc(target.length);
+  const compareResult = timingSafeEqual(padded, target);
+  const secretOk = sameLength && compareResult;
   if (!secretOk) {
     // Enrich so an operator hitting the alert can tell who's calling: a
     // stale Cloudflare scheduled trigger from a previous deploy, internet

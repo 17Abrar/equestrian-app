@@ -35,11 +35,20 @@ export async function POST(request: NextRequest) {
 
       // The owner dropdown is populated from the club's owner list, but a
       // caller hitting the API directly could pass any UUID. Verify the
-      // owner belongs to this club before the insert.
+      // owner belongs to this club AND has a role that's actually allowed
+      // to own a horse — coaches/grooms/managers passed here would surface
+      // as the horse's owner in /me/horses (audit A-5).
       if (data.ownerMemberId) {
         const owner = await getMemberById(ctx.clubId, data.ownerMemberId);
         if (!owner) {
           return errorResponse('INVALID_OWNER', 'Owner is not a member of this club', 400);
+        }
+        if (owner.role !== 'horse_owner' && owner.role !== 'rider') {
+          return errorResponse(
+            'INVALID_OWNER_ROLE',
+            'Horse owner must have role horse_owner or rider',
+            400,
+          );
         }
       }
 

@@ -12,7 +12,7 @@ import { sendTriggeredEmailAsync } from '@/lib/email';
 import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
 import { rawDb } from '@equestrian/db';
 import { clubs, clubMembers, horses } from '@equestrian/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import type { PaymentIntentStatus, WebhookEvent } from './types';
 import type { ProviderName } from './types';
@@ -279,6 +279,9 @@ export async function applyLiveryInvoiceWebhook({
 
   // Fetch what we need for the email — owner contact, club name, horse name.
   // One round-trip, rawDb because we're outside any tenant transaction.
+  // Defence-in-depth: bind clubId on every join so a malformed invoice (one
+  // whose ownerMemberId/horseId points at a foreign club) can't render an
+  // email to the wrong person. Audit A-3.
   const detail = await rawDb
     .select({
       clubName: clubs.name,
@@ -287,8 +290,14 @@ export async function applyLiveryInvoiceWebhook({
       horseName: horses.name,
     })
     .from(clubs)
-    .innerJoin(clubMembers, eq(clubMembers.id, invoice.ownerMemberId))
-    .innerJoin(horses, eq(horses.id, invoice.horseId))
+    .innerJoin(
+      clubMembers,
+      and(eq(clubMembers.id, invoice.ownerMemberId), eq(clubMembers.clubId, invoice.clubId)),
+    )
+    .innerJoin(
+      horses,
+      and(eq(horses.id, invoice.horseId), eq(horses.clubId, invoice.clubId)),
+    )
     .where(eq(clubs.id, invoice.clubId))
     .limit(1);
 

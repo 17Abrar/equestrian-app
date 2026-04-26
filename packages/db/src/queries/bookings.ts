@@ -751,6 +751,14 @@ export async function reverseBookingRefund(
  * route writes it once on first PI create; the persisted value is then
  * read on retries so a later change to `clubs.platform_fee_percent` can't
  * make finance reports diverge from what Stripe captured (see audit B-3).
+ *
+ * CAS guard on `providerPaymentId` (audit B-19): when this call is
+ * setting/updating providerPaymentId, the WHERE only matches if the
+ * existing column is either NULL (first attach) or already equal to the
+ * new value (idempotent re-write). Without this, a stale webhook for a
+ * previously-abandoned PaymentIntent could overwrite the live PI's id —
+ * subsequent webhooks for the live PI would then miss the booking and
+ * the rider's payment status would never settle.
  */
 export async function setBookingPaymentRef(
   clubId: string,
@@ -762,6 +770,13 @@ export async function setBookingPaymentRef(
     applicationFeeMinor?: number;
   },
 ) {
+  const conditions = [eq(bookings.id, bookingId), eq(bookings.clubId, clubId)];
+  if (data.providerPaymentId) {
+    conditions.push(
+      sql`(${bookings.providerPaymentId} IS NULL OR ${bookings.providerPaymentId} = ${data.providerPaymentId})`,
+    );
+  }
+
   const result = await db
     .update(bookings)
     .set({
@@ -773,7 +788,7 @@ export async function setBookingPaymentRef(
         : {}),
       updatedAt: new Date(),
     })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .where(and(...conditions))
     .returning();
 
   return result[0] ?? null;

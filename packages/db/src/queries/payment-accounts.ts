@@ -1,4 +1,4 @@
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { clubPaymentAccounts } from '../schema/finances';
 import { bookings } from '../schema/bookings';
@@ -300,6 +300,13 @@ export async function recordPaymentAccountError(
  *
  * Only call this from webhook routes; in-app code should use the tenant-scoped
  * `getPaymentAccountByProvider`.
+ *
+ * Filters out `disabled` accounts (audit B-25): a club that disconnected
+ * but whose row remained will keep receiving Stripe webhooks for in-flight
+ * sessions, and we should NOT apply those payments to bookings — the
+ * club no longer wants this provider, and the row stays only as an audit
+ * trail. Returning null here pushes the webhook handler down the
+ * "no booking matched" branch, which acks 200 silently.
  */
 export async function findPaymentAccountByExternalId(
   externalAccountId: string,
@@ -312,6 +319,7 @@ export async function findPaymentAccountByExternalId(
       and(
         eq(clubPaymentAccounts.externalAccountId, externalAccountId),
         eq(clubPaymentAccounts.provider, provider),
+        sql`${clubPaymentAccounts.status} != 'disabled'`,
       ),
     )
     .limit(1);

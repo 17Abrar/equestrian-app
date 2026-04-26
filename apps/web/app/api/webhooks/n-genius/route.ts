@@ -9,6 +9,7 @@ import { nGeniusAdapter } from '@/lib/payments/n-genius';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
 /**
@@ -41,6 +42,25 @@ interface NGeniusPayload {
 }
 
 export async function POST(request: NextRequest) {
+  // IP-keyed rate limit before any DB work — N-Genius's single endpoint
+  // accepts arbitrary outletIds, so a fuzzer could otherwise force the
+  // route to JSON.parse + DB-lookup + AES-GCM-decrypt on every request
+  // (audit B-7). Generous cap because legitimate retries on transient
+  // failures should not lock out the merchant.
+  const ip =
+    request.headers.get('cf-connecting-ip') ??
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
+  const rl = await checkRateLimit(`webhook:n_genius:${ip}`, {
+    maxRequests: 60,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) {
+    logger.warn('n_genius_webhook_rate_limited', { ip });
+    return new Response('Too many requests', { status: 429 });
+  }
+
   const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.n_genius, 'n_genius');
   if (body === null) {
     return new Response('Payload too large', { status: 413 });
@@ -76,9 +96,11 @@ export async function POST(request: NextRequest) {
       outletId,
       eventName: parsed.eventName,
     });
-    // Still 200 so N-Genius stops retrying — the config bug needs human
-    // intervention; retries won't fix it.
-    return new Response('OK', { status: 200 });
+    // 401 (not 200) so a third party fuzzing outletIds can't distinguish
+    // "unknown outlet" from "known outlet, wrong header" — see audit B-6.
+    // N-Genius does retry on 4xx but bounded (their max-retries policy
+    // covers the legit misconfig case after a small bounded window).
+    return new Response('Unknown outlet', { status: 401 });
   }
 
   const creds = account.credentials as

@@ -7,6 +7,7 @@ import {
   getBookingSlotsByClub,
   createBookingSlot,
   getArenaById,
+  getLessonTypeById,
   getMemberById,
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
@@ -74,10 +75,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // arenaId / coachMemberId reference tables that have no compound
-      // (id, club_id) FK, so a forged UUID from another club would
-      // otherwise insert cleanly and surface that club's arena/coach name
-      // to riders here. Verify both are scoped to the caller's club.
+      // lessonTypeId / arenaId / coachMemberId reference tables that have no
+      // compound (id, club_id) FK, so a forged UUID from another club would
+      // otherwise insert cleanly and surface that club's lesson type / arena
+      // / coach name to riders here. Verify all three are scoped to the
+      // caller's club. (audit A-2)
+      const lessonType = await getLessonTypeById(ctx.clubId, data.lessonTypeId);
+      if (!lessonType) {
+        return errorResponse('INVALID_LESSON_TYPE', 'Lesson type not found in this club', 400);
+      }
       if (data.arenaId) {
         const arena = await getArenaById(ctx.clubId, data.arenaId);
         if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);

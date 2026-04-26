@@ -46,6 +46,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             400,
           );
         }
+        // Mirror the role check on POST /horses (audit A-5) — only
+        // horse_owners and riders are valid owners. Coach/groom assignment
+        // would surface in /me/horses as if they owned the horse.
+        if (owner.role !== 'horse_owner' && owner.role !== 'rider') {
+          return errorResponse(
+            'INVALID_OWNER_ROLE',
+            'Horse owner must have role horse_owner or rider',
+            400,
+          );
+        }
       }
 
       const updated = await updateHorse(ctx.clubId, horseId, {
