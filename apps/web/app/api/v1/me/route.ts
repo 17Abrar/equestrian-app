@@ -3,12 +3,15 @@ import { getClubById, getActiveMembershipsForUser } from '@equestrian/db/queries
 
 export async function GET() {
   return withAuth(async (ctx) => {
-    // Include the active club's display name + the user's full membership
-    // list so the rider nav can show "booking from X" and render a switcher
-    // without a second round-trip.
+    // Memberships are already loaded by `getTenantContext` on the
+    // club_members fallback path (riders who joined via /discover) — reuse
+    // them when present. The Clerk-active-org path doesn't load them, so
+    // fall back to a direct fetch in that case.
     const [club, memberships] = await Promise.all([
       getClubById(ctx.clubId),
-      getActiveMembershipsForUser(ctx.userId),
+      ctx.memberships
+        ? Promise.resolve(ctx.memberships)
+        : getActiveMembershipsForUser(ctx.userId),
     ]);
 
     return successResponse({

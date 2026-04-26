@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { type ZodError, type ZodTypeAny } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
-import { getTenantContext, TenantError } from './tenant';
+import { getTenantContext, TenantError, type ActiveMembership } from './tenant';
 import { hasPermission, PermissionError } from './permissions';
 import { logger } from './logger';
 import { checkRateLimit, type RateLimitConfig } from './rate-limit';
@@ -36,6 +36,13 @@ interface AuthenticatedContext {
   orgId: string;
   orgRole: UserRole;
   onboardingCompleted: boolean;
+  /**
+   * All active club memberships for this user, when getTenantContext loaded
+   * them as part of resolution. Only populated on the club_members fallback
+   * path (Path 2) — Clerk-org-resolved sessions leave this undefined and
+   * must call getActiveMembershipsForUser themselves.
+   */
+  memberships?: ActiveMembership[];
   requestId: string;
   audit: (params: AuditParams) => Promise<void>;
 }

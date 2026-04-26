@@ -396,7 +396,10 @@ export const updateClubProfileSchema = z.object({
   country: z.string().max(100).optional(),
   timezone: z.string().max(50).optional(),
   currency: z.string().length(3).optional(),
-  logoUrl: z.string().url().optional().or(z.literal('')),
+  // Nullable to match the underlying column (text, no NOT NULL) and the
+  // branding schema's shape — staff need to be able to *clear* the logo
+  // from the profile editor too, not just set a new one.
+  logoUrl: z.string().url().nullable().optional().or(z.literal('')),
   websiteUrl: z.string().url().optional().or(z.literal('')),
   socialInstagram: z.string().optional(),
   socialFacebook: z.string().optional(),

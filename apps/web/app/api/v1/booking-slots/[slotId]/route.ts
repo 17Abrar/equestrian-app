@@ -70,10 +70,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         if (!coach) return errorResponse('INVALID_COACH', 'Coach not found in this club', 400);
       }
 
-      const slot = await updateBookingSlot(ctx.clubId, slotId, data);
+      const result = await updateBookingSlot(ctx.clubId, slotId, data);
 
-      if (!slot) {
+      if ('notFound' in result) {
         return errorResponse('NOT_FOUND', 'Slot not found', 404);
+      }
+      if ('cancelled' in result) {
+        return errorResponse(
+          'SLOT_CANCELLED',
+          'This slot has been cancelled and cannot be edited',
+          409,
+        );
       }
 
       logger.info('slot_updated', { slotId, clubId: ctx.clubId });
@@ -84,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         resourceId: slotId,
       });
 
-      return successResponse(slot);
+      return successResponse(result);
     },
     { requiredPermission: 'bookings:update' },
   );

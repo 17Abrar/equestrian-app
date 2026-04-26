@@ -15,6 +15,24 @@ import { logger } from './logger';
  */
 export const ACTIVE_CLUB_COOKIE = 'cavaliq_active_club';
 
+/**
+ * Shape of a single active membership exposed through TenantContext. Only
+ * populated when `getTenantContext` resolved via the club_members fallback
+ * (Path 2) — that path already loads the full membership list to honor the
+ * active-club cookie, so re-exposing it lets multi-club consumers (the
+ * /me endpoint, the rider stable switcher) skip a second round-trip.
+ *
+ * Path 1 (Clerk active org) leaves this `undefined`; consumers that need
+ * memberships in that case must call `getActiveMembershipsForUser` themselves.
+ */
+export interface ActiveMembership {
+  memberId: string;
+  clubId: string;
+  clubName: string;
+  clubSlug: string;
+  role: UserRole;
+}
+
 interface TenantContext {
   clubId: string;
   memberId: string | null;
@@ -22,6 +40,7 @@ interface TenantContext {
   orgId: string;
   orgRole: UserRole;
   onboardingCompleted: boolean;
+  memberships?: ActiveMembership[];
 }
 
 /**
@@ -102,13 +121,16 @@ export async function getTenantContext(): Promise<TenantContext> {
 
   // Path 2 — club_members fallback for riders who joined via /discover.
   // Load all active memberships so we can honor the active-club cookie (if set)
-  // and fall back to most-recently-joined otherwise. The extra rows are a few
-  // hundred bytes at most.
+  // and fall back to most-recently-joined otherwise. We also pull name+slug so
+  // downstream consumers (the /me endpoint, switcher UI) can render the list
+  // without a second round-trip — see TenantContext.memberships.
   const memberships = await db
     .select({
       memberId: clubMembers.id,
       clubId: clubMembers.clubId,
       role: clubMembers.role,
+      clubName: clubs.name,
+      clubSlug: clubs.slug,
       clerkOrgId: clubs.clerkOrgId,
       onboardingCompletedAt: clubs.onboardingCompletedAt,
     })
@@ -169,6 +191,13 @@ export async function getTenantContext(): Promise<TenantContext> {
     orgId: primary.clerkOrgId ?? primary.clubId,
     orgRole: primary.role,
     onboardingCompleted: !!primary.onboardingCompletedAt,
+    memberships: memberships.map((m) => ({
+      memberId: m.memberId,
+      clubId: m.clubId,
+      clubName: m.clubName,
+      clubSlug: m.clubSlug,
+      role: m.role,
+    })),
   };
 }
 

@@ -1,4 +1,5 @@
 import { eq, and, desc, isNull, sql, ilike, inArray, type SQL } from 'drizzle-orm';
+import { escapeLikePattern } from '@equestrian/shared/utils';
 import { rawDb, db } from '../index';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
@@ -30,10 +31,10 @@ export async function listPublicClubs(filters: DiscoveryFilters) {
   ];
 
   if (filters.search) {
-    conditions.push(ilike(clubs.name, `%${filters.search}%`));
+    conditions.push(ilike(clubs.name, `%${escapeLikePattern(filters.search)}%`));
   }
   if (filters.city) {
-    conditions.push(ilike(clubs.city, `%${filters.city}%`));
+    conditions.push(ilike(clubs.city, `%${escapeLikePattern(filters.city)}%`));
   }
 
   const where = and(...conditions);

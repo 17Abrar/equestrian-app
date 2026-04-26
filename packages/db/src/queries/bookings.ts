@@ -133,17 +133,44 @@ export async function createBulkBookingSlots(clubId: string, slots: BookingSlotC
   return result.length;
 }
 
+/**
+ * Updates a booking slot in place. Returns:
+ *   - the updated row on success
+ *   - `{ notFound: true }` when no slot with this id/club exists
+ *   - `{ cancelled: true }` when the slot exists but is cancelled (terminal
+ *     state — editable fields would mutate something the cancellation
+ *     cascade has already settled)
+ *
+ * The caller is expected to map these to 404 / 409 respectively.
+ */
 export async function updateBookingSlot(
   clubId: string,
   slotId: string,
   data: Partial<Pick<typeof bookingSlots.$inferInsert, 'date' | 'startTime' | 'endTime' | 'maxRiders' | 'arenaId' | 'coachMemberId'>>,
-) {
+): Promise<typeof bookingSlots.$inferSelect | { notFound: true } | { cancelled: true }> {
   const result = await db
     .update(bookingSlots)
     .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(bookingSlots.id, slotId), eq(bookingSlots.clubId, clubId)))
+    .where(
+      and(
+        eq(bookingSlots.id, slotId),
+        eq(bookingSlots.clubId, clubId),
+        eq(bookingSlots.isCancelled, false),
+      ),
+    )
     .returning();
-  return result[0] ?? null;
+
+  if (result[0]) return result[0];
+
+  // The UPDATE matched zero rows. Distinguish "doesn't exist" from
+  // "exists but cancelled" so the route can surface a useful error.
+  const probe = await db
+    .select({ id: bookingSlots.id })
+    .from(bookingSlots)
+    .where(and(eq(bookingSlots.id, slotId), eq(bookingSlots.clubId, clubId)))
+    .limit(1);
+
+  return probe[0] ? { cancelled: true } : { notFound: true };
 }
 
 /**
@@ -383,9 +410,18 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       }
     }
 
-    // Atomically increment rider count only if capacity is not exceeded.
-    // This prevents the race condition where two concurrent requests both
-    // pass the API-level capacity check before either transaction commits.
+    // Atomically increment rider count only if (a) capacity is not exceeded,
+    // (b) the slot is not cancelled, and (c) the slot belongs to this club.
+    //
+    // (a) prevents the overbooking race the original fix addressed.
+    // (b) closes a second race: an admin's cancelBookingSlot can commit
+    //     between the route's pre-flight read and this UPDATE, leaving us
+    //     about to insert a confirmed booking on a now-cancelled slot.
+    //     The cancellation cascade has already run and won't see this new
+    //     row — the rider would receive no cancellation email and no refund.
+    // (c) is defence-in-depth: any future regression that bypasses the API
+    //     pre-flight cannot write a booking row with clubId=A against a
+    //     slot whose clubId=B.
     const slotUpdate = await tx
       .update(bookingSlots)
       .set({
@@ -395,6 +431,8 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       .where(
         and(
           eq(bookingSlots.id, data.slotId),
+          eq(bookingSlots.clubId, clubId),
+          eq(bookingSlots.isCancelled, false),
           sql`${bookingSlots.currentRiders} < ${bookingSlots.maxRiders}`,
         ),
       )

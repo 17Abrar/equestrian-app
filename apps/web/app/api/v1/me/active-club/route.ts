@@ -98,6 +98,17 @@ export async function DELETE() {
     return errorResponse('UNAUTHORIZED', 'Authentication required', 401);
   }
   const response = successResponse({ cleared: true });
-  response.cookies.delete(ACTIVE_CLUB_COOKIE);
+  // Explicit expiry instead of `cookies.delete()` — the latter can be flaky
+  // under the OpenNext Cloudflare adapter when the cookie was set with a
+  // specific path (some adapter versions emit a Set-Cookie without the
+  // matching path attribute, leaving the original cookie in place).
+  // Setting the same path with maxAge=0 + empty value is the reliable form.
+  response.cookies.set(ACTIVE_CLUB_COOKIE, '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
   return response;
 }

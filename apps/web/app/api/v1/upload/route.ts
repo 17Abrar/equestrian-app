@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { type UserRole } from '@equestrian/shared/types';
 import {
   getUploadUrl,
   getFolderRoot,
@@ -39,29 +40,16 @@ export async function POST(request: NextRequest) {
         return errorResponse('INVALID_FOLDER', 'Unknown upload folder', 400);
       }
 
-      // Horses are the one folder where owners (horses:update_own) are valid
-      // uploaders even though they lack the cross-club `horses:update` permission.
-      const basePermission = UPLOAD_FOLDER_PERMISSIONS[root]!;
-      const allowed = root === 'horses'
-        ? hasPermission(ctx.orgRole, 'horses:update') ||
-          hasPermission(ctx.orgRole, 'horses:update_own')
-        : hasPermission(ctx.orgRole, basePermission);
-
-      if (!allowed) {
-        return errorResponse(
-          'FORBIDDEN',
-          'You do not have permission to upload to this folder',
-          403,
-        );
-      }
-
+      // Resolve which club the file lands in AND the role the caller has
+      // AT THAT CLUB. The permission gate must run against the role at the
+      // target club, not the active tenant — otherwise a user who is admin
+      // at A and rider at B can upload into B's admin-only folders by
+      // forwarding their A-club permissions through `targetClubId`.
       let uploadClubId = ctx.clubId;
+      let effectiveRole: UserRole = ctx.orgRole;
       if (data.targetClubId && data.targetClubId !== ctx.clubId) {
-        // User wants to upload against a different club than their active
-        // tenant. Allowed only if they're an active member of that club
-        // (prevents a forged clubId from putting files into arbitrary buckets).
         const membership = await db
-          .select({ id: clubMembers.id })
+          .select({ id: clubMembers.id, role: clubMembers.role })
           .from(clubMembers)
           .where(
             and(
@@ -80,6 +68,23 @@ export async function POST(request: NextRequest) {
           );
         }
         uploadClubId = data.targetClubId;
+        effectiveRole = membership[0].role;
+      }
+
+      // Horses are the one folder where owners (horses:update_own) are valid
+      // uploaders even though they lack the cross-club `horses:update` permission.
+      const basePermission = UPLOAD_FOLDER_PERMISSIONS[root]!;
+      const allowed = root === 'horses'
+        ? hasPermission(effectiveRole, 'horses:update') ||
+          hasPermission(effectiveRole, 'horses:update_own')
+        : hasPermission(effectiveRole, basePermission);
+
+      if (!allowed) {
+        return errorResponse(
+          'FORBIDDEN',
+          'You do not have permission to upload to this folder',
+          403,
+        );
       }
 
       try {

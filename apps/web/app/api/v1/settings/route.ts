@@ -5,9 +5,27 @@ import {
   updateBrandingSchema,
   updateNotificationsSchema,
   updateDiscoverySchema,
+  type UpdateClubProfileInput,
+  type UpdateBookingRulesInput,
+  type UpdateBrandingInput,
+  type UpdateNotificationsInput,
+  type UpdateDiscoveryInput,
 } from '@equestrian/shared/schemas';
 import { getClubById, updateClubSettings } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
+
+// Union of every settings sub-schema's *input* shape. Typing the merged
+// PATCH payload as this — instead of `Record<string, unknown>` — means a
+// future schema gets caught at compile time if one of its fields is not
+// also a real settings field, and prevents the merge from silently picking
+// up unrelated keys (e.g. a privileged column slipping in via copy-paste).
+type SettingsPatchData = Partial<
+  UpdateClubProfileInput &
+    UpdateBookingRulesInput &
+    UpdateBrandingInput &
+    UpdateNotificationsInput &
+    UpdateDiscoveryInput
+>;
 
 export async function GET() {
   return withAuth(
@@ -39,7 +57,7 @@ export async function PATCH(request: NextRequest) {
       const notificationsResult = updateNotificationsSchema.safeParse(body);
       const discoveryResult = updateDiscoverySchema.safeParse(body);
 
-      const data: Record<string, unknown> = {
+      const merged: SettingsPatchData = {
         ...(profileResult.success ? profileResult.data : {}),
         ...(rulesResult.success ? rulesResult.data : {}),
         ...(brandingResult.success ? brandingResult.data : {}),
@@ -47,19 +65,26 @@ export async function PATCH(request: NextRequest) {
         ...(discoveryResult.success ? discoveryResult.data : {}),
       };
 
-      if (Object.keys(data).length === 0) {
+      if (Object.keys(merged).length === 0) {
         return errorResponse('VALIDATION_ERROR', 'No valid fields provided', 400);
       }
 
-      // Drizzle numeric columns expect strings — convert fee percentages
-      if (data.lateCancellationFeePercent !== undefined) {
-        data.lateCancellationFeePercent = String(data.lateCancellationFeePercent);
-      }
-      if (data.noShowFeePercent !== undefined) {
-        data.noShowFeePercent = String(data.noShowFeePercent);
-      }
+      // Split out the numeric fee fields and rebuild the payload — Drizzle's
+      // `numeric` columns require strings (preserves precision), Zod gives us
+      // numbers. Doing the split first instead of mutating-in-place keeps the
+      // typed `merged` object intact for any future readers.
+      const { lateCancellationFeePercent, noShowFeePercent, ...rest } = merged;
+      const dbUpdate = {
+        ...rest,
+        ...(lateCancellationFeePercent !== undefined
+          ? { lateCancellationFeePercent: String(lateCancellationFeePercent) }
+          : {}),
+        ...(noShowFeePercent !== undefined
+          ? { noShowFeePercent: String(noShowFeePercent) }
+          : {}),
+      };
 
-      const club = await updateClubSettings(ctx.clubId, data);
+      const club = await updateClubSettings(ctx.clubId, dbUpdate);
 
       if (!club) {
         return errorResponse('NOT_FOUND', 'Club not found', 404);

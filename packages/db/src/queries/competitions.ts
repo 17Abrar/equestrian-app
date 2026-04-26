@@ -360,6 +360,27 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
   });
 }
 
+/**
+ * Loads a single entry scoped to club. Used by routes that need to enforce
+ * ownership-based permissions before allowing a mutation (e.g. a rider can
+ * withdraw their own entry but not someone else's).
+ */
+export async function getCompetitionEntryById(clubId: string, entryId: string) {
+  const result = await db
+    .select({
+      id: competitionEntries.id,
+      classId: competitionEntries.classId,
+      riderMemberId: competitionEntries.riderMemberId,
+      horseId: competitionEntries.horseId,
+      status: competitionEntries.status,
+      paymentStatus: competitionEntries.paymentStatus,
+    })
+    .from(competitionEntries)
+    .where(and(eq(competitionEntries.id, entryId), eq(competitionEntries.clubId, clubId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function withdrawCompetitionEntry(
   clubId: string,
   entryId: string,

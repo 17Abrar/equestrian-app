@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const filters = expenseFiltersSchema.parse(searchParams);
+      const filters = validateInput(expenseFiltersSchema, searchParams);
       const { data, total } = await getExpensesByClub(ctx.clubId, filters);
       return paginatedResponse(data, { page: filters.page, pageSize: filters.pageSize, total });
     },

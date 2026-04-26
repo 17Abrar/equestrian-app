@@ -10,8 +10,22 @@ type MemberUpdate = Partial<Omit<MemberCreate, 'clerkUserId'>>;
 /**
  * Get club members filtered by role(s). Used for dropdowns (rider selection,
  * owner selection, coach assignment, etc.)
+ *
+ * An empty `roles` array means "no role filter" and returns every active
+ * member of the club. Postgres treats `= ANY(array[])` as `false`, so a
+ * literal pass-through would silently return zero rows — the dropdowns
+ * that omit the `role` query param were rendering empty for that reason.
  */
 export async function getMembersByRole(clubId: string, roles: string[]) {
+  const conditions: SQL[] = [
+    eq(clubMembers.clubId, clubId),
+    eq(clubMembers.isActive, true),
+  ];
+
+  if (roles.length > 0) {
+    conditions.push(sql`${clubMembers.role} = ANY(${roles})`);
+  }
+
   return db
     .select({
       id: clubMembers.id,
@@ -23,13 +37,7 @@ export async function getMembersByRole(clubId: string, roles: string[]) {
       isActive: clubMembers.isActive,
     })
     .from(clubMembers)
-    .where(
-      and(
-        eq(clubMembers.clubId, clubId),
-        eq(clubMembers.isActive, true),
-        sql`${clubMembers.role} = ANY(${roles})`,
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(asc(clubMembers.displayName));
 }
 
