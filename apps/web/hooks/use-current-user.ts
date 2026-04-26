@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { type UserRole } from '@equestrian/shared/types';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 interface ActiveClub {
@@ -32,6 +33,6 @@ export function useCurrentUser() {
   return useQuery({
     queryKey: ['me'],
     queryFn: () => fetchJson<ApiSuccessResponse<CurrentUser>>('/api/v1/me'),
-    staleTime: 5 * 60 * 1000, // 5 minutes — user context rarely changes
+    staleTime: STALE_TIME_STABLE,
   });
 }
