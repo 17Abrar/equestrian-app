@@ -1,4 +1,4 @@
-import { and, eq, sql, lte, inArray, desc, isNull, gt, type SQL } from 'drizzle-orm';
+import { and, asc, eq, sql, lte, inArray, desc, isNull, gt, type SQL } from 'drizzle-orm';
 import { db, rawDb } from '../index';
 import { liveryInvoices } from '../schema/livery-invoices';
 import { horses } from '../schema/horses';
@@ -253,7 +253,14 @@ export async function findOverdueInvoicesForReminders(today: string) {
         isNull(clubs.deletedAt),
         isNull(horses.deletedAt),
       ),
-    );
+    )
+    // Bounded run-time so the cron can't hit Workers' wall-clock budget on
+    // a sustained backlog. Earliest reminder_count first so the day-7 nudge
+    // doesn't get systematically skipped while the cron processes day-30s
+    // (audit G-13). Operators monitoring `cron_capacity_hit` should bump
+    // this if it pegs.
+    .orderBy(asc(liveryInvoices.reminderCount), asc(liveryInvoices.dueDate))
+    .limit(200);
   return rows;
 }
 

@@ -130,6 +130,11 @@ export async function POST(request: NextRequest) {
           const availableHorses = await getAvailableHorsesForMatching(
             ctx.clubId,
             slot.date,
+            // Filter pairing history to this rider only (audit G-14) —
+            // the matching algorithm only scores against the calling
+            // rider's prior pairings, so loading every (rider, horse,
+            // rating) tuple in the club's history was wasted work.
+            data.riderMemberId,
           );
 
           const age = rider.dateOfBirth

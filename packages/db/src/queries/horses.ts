@@ -212,7 +212,17 @@ export async function updateHorse(clubId: string, horseId: string, data: HorseUp
   return result[0] ?? null;
 }
 
-export async function getAvailableHorsesForMatching(clubId: string, date: string) {
+export async function getAvailableHorsesForMatching(
+  clubId: string,
+  date: string,
+  // Optional rider filter (audit G-14). When set, the pairing-history pull
+  // narrows to just this rider's prior pairings instead of loading every
+  // (rider, horse, rating) tuple in the club's history. The matching
+  // algorithm only consumes the calling rider's pairings anyway.
+  // Optional for back-compat: callers that don't supply it pay the same
+  // perf cost as before.
+  riderMemberId?: string,
+) {
   const availableHorses = await db
     .select()
     .from(horses)
@@ -263,7 +273,12 @@ export async function getAvailableHorsesForMatching(clubId: string, date: string
       rating: horsePairingHistory.rating,
     })
     .from(horsePairingHistory)
-    .where(eq(horsePairingHistory.clubId, clubId));
+    .where(
+      and(
+        eq(horsePairingHistory.clubId, clubId),
+        riderMemberId ? eq(horsePairingHistory.riderMemberId, riderMemberId) : undefined,
+      ),
+    );
 
   const pairingMap = new Map<string, Array<{ riderId: string; rating: number }>>();
   for (const row of pairingHistory) {

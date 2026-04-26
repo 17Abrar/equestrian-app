@@ -148,14 +148,18 @@ export async function withAuth(
 
     const tenantCtx = await getTenantContext();
 
-    // Rate limiting (per user, default 60 req/min). When the caller provides
-    // a `routeKey`, namespace the counter so this route's budget doesn't pool
-    // with the user's traffic on every other endpoint that shares the same
-    // config — see ApiHandlerOptions.routeKey.
+    // Rate limiting (per user, default 60 req/min). When the caller doesn't
+    // pass a routeKey, fall back to the request pathname (set on the
+    // headers by middleware) so each route gets its own bucket — without
+    // this, all endpoints share a single 60/min budget per user and a
+    // 3-tab admin polling 5 endpoints starves itself with spurious 429s.
+    // Audit G-21.
     const rateLimitConfig = options?.rateLimit ?? { maxRequests: 60, windowMs: 60_000 };
+    const pathname = headerStore.get('x-pathname') ?? '';
+    const fallbackKey = pathname ? `${tenantCtx.userId}:${pathname}` : tenantCtx.userId;
     const rateLimitKey = options?.routeKey
       ? `${tenantCtx.userId}:${options.routeKey}`
-      : tenantCtx.userId;
+      : fallbackKey;
     const rateLimitResult = await checkRateLimit(rateLimitKey, rateLimitConfig);
     if (!rateLimitResult.allowed) {
       const retryAfter = Math.ceil((rateLimitResult.retryAfterMs ?? 1000) / 1000);

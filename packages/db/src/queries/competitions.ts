@@ -515,5 +515,8 @@ export async function getCompetitionsForCalendar(clubId: string, dateFrom: strin
         sql`${competitions.endDate} >= ${dateFrom}`,
       ),
     )
-    .orderBy(asc(competitions.startDate));
+    .orderBy(asc(competitions.startDate))
+    // Defensive cap (audit G-9). The route's Zod refine caps the date
+    // window at 90 days; this cap survives a future schema relaxation.
+    .limit(500);
 }

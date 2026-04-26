@@ -34,9 +34,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(updateCompetitionSchema, body);
 
-      // Convert registrationDeadline from datetime-local to UTC using club timezone
+      // Convert registrationDeadline from datetime-local to UTC using club
+      // timezone. Detect by exact datetime-local regex (YYYY-MM-DDTHH:MM
+      // optionally with seconds) — the previous heuristic checked for
+      // absence of `Z`/`+` and tripped over legitimate ISO strings with a
+      // negative offset like `2026-05-15T10:00:00-04:00`. See audit G-15.
+      const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
       let registrationDeadline = data.registrationDeadline;
-      if (registrationDeadline && !registrationDeadline.includes('Z') && !registrationDeadline.includes('+')) {
+      if (registrationDeadline && DATETIME_LOCAL_RE.test(registrationDeadline)) {
         const clubRow = await db
           .select({ timezone: clubs.timezone })
           .from(clubs)

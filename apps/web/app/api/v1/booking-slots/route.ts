@@ -22,13 +22,30 @@ import { hasPermission } from '@/lib/permissions';
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
-const bookingSlotFiltersSchema = z.object({
-  date: z.string().regex(datePattern, 'Date must be YYYY-MM-DD format').optional(),
-  dateFrom: z.string().regex(datePattern, 'dateFrom must be YYYY-MM-DD format').optional(),
-  dateTo: z.string().regex(datePattern, 'dateTo must be YYYY-MM-DD format').optional(),
-  lessonTypeId: z.string().uuid('Invalid lesson type ID').optional(),
-  coachMemberId: z.string().uuid('Invalid coach member ID').optional(),
-});
+// Cap the requested window so a malicious / careless caller can't ask for
+// every slot the club has ever created. The DB query also has a defensive
+// .limit(2000) — see audit G-8.
+const MAX_SLOT_RANGE_DAYS = 90;
+
+const bookingSlotFiltersSchema = z
+  .object({
+    date: z.string().regex(datePattern, 'Date must be YYYY-MM-DD format').optional(),
+    dateFrom: z.string().regex(datePattern, 'dateFrom must be YYYY-MM-DD format').optional(),
+    dateTo: z.string().regex(datePattern, 'dateTo must be YYYY-MM-DD format').optional(),
+    lessonTypeId: z.string().uuid('Invalid lesson type ID').optional(),
+    coachMemberId: z.string().uuid('Invalid coach member ID').optional(),
+  })
+  .refine(
+    (data) => {
+      if (!data.dateFrom || !data.dateTo) return true;
+      const from = Date.parse(data.dateFrom);
+      const to = Date.parse(data.dateTo);
+      if (Number.isNaN(from) || Number.isNaN(to)) return true;
+      const days = (to - from) / 86_400_000;
+      return days <= MAX_SLOT_RANGE_DAYS;
+    },
+    { message: `Date range cannot exceed ${MAX_SLOT_RANGE_DAYS} days` },
+  );
 
 export async function GET(request: NextRequest) {
   return withAuth(

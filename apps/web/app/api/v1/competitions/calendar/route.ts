@@ -3,10 +3,25 @@ import { z } from 'zod';
 import { getCompetitionsForCalendar } from '@equestrian/db/queries';
 import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
 
-const calendarFiltersSchema = z.object({
-  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dateFrom must be YYYY-MM-DD'),
-  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dateTo must be YYYY-MM-DD'),
-});
+const MAX_CALENDAR_RANGE_DAYS = 90;
+
+const calendarFiltersSchema = z
+  .object({
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dateFrom must be YYYY-MM-DD'),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dateTo must be YYYY-MM-DD'),
+  })
+  .refine((d) => d.dateFrom <= d.dateTo, {
+    message: 'dateFrom must be on or before dateTo',
+  })
+  .refine(
+    (d) => {
+      const from = Date.parse(d.dateFrom);
+      const to = Date.parse(d.dateTo);
+      if (Number.isNaN(from) || Number.isNaN(to)) return true;
+      return (to - from) / 86_400_000 <= MAX_CALENDAR_RANGE_DAYS;
+    },
+    { message: `Date range cannot exceed ${MAX_CALENDAR_RANGE_DAYS} days` },
+  );
 
 export async function GET(request: NextRequest) {
   return withAuth(

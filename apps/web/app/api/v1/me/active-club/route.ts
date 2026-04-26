@@ -17,6 +17,32 @@ const setActiveClubSchema = z.object({
   clubId: z.string().uuid(),
 });
 
+// Same allowlist the CORS middleware reads. We re-check at the route level
+// so a cookie-mutating request from a non-cavaliq origin is refused even
+// if Clerk's session validation lets the request through (audit G-18).
+// Today Clerk's allowed-origins config catches this for browsers, but the
+// extra layer survives a Clerk config change and is cheap.
+const CSRF_ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
+);
+
+function isSameOriginRequest(request: NextRequest): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) {
+    // Server-to-server callers (no Origin header — e.g. wrangler dev curl,
+    // monitoring probes) are never the CSRF threat model: a browser
+    // attacker can't strip Origin from a fetch with credentials. Allow.
+    return true;
+  }
+  // Always-allow the request's own URL origin (handles localhost, preview
+  // domains) plus the explicit allowlist for production.
+  if (origin === request.nextUrl.origin) return true;
+  return CSRF_ALLOWED_ORIGINS.has(origin);
+}
+
 /**
  * Rider-facing stable switcher. Sets a cookie that `getTenantContext()`
  * honors when the user has no active Clerk org. The membership check
@@ -30,6 +56,13 @@ const setActiveClubSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    if (!isSameOriginRequest(request)) {
+      logger.warn('active_club_cross_origin_blocked', {
+        origin: request.headers.get('origin'),
+      });
+      return errorResponse('FORBIDDEN', 'Cross-origin request blocked', 403);
+    }
+
     const { userId } = await auth();
     if (!userId) {
       return errorResponse('UNAUTHORIZED', 'Authentication required', 401);

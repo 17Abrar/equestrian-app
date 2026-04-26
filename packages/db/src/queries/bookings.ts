@@ -96,7 +96,12 @@ export async function getBookingSlotsByClub(clubId: string, filters: BookingSlot
       and(eq(bookingSlots.coachMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
     .where(and(...conditions))
-    .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime));
+    .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime))
+    // Defensive cap (audit G-8). Without it, a `dateFrom=1970-01-01&dateTo=
+    // 2099-12-31` request returns every slot the club ever created — a
+    // 5MB+ JSON payload on a busy stable. The route enforces a 90-day
+    // window via Zod, but the DB cap is the last line of defence.
+    .limit(2000);
 }
 
 export async function getBookingSlotById(clubId: string, slotId: string) {
