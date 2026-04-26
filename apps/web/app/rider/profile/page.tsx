@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserButton } from '@clerk/nextjs';
 import { User, Shield, Scale, Ruler, Pencil, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -275,6 +276,7 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
       toast.success('Profile saved');
       onSaved();
     } catch (err) {
+      reportMutationError('rider.profile.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
   }

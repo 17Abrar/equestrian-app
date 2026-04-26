@@ -25,7 +25,13 @@ interface BookingConfirmationProps {
   clubLogo: string;
   amount?: string;
   currency?: string;
-  addToCalendarUrl: string;
+  /**
+   * Optional calendar URL (webcal://, https:// to ICS, or data:text/calendar).
+   * When omitted the "Add to Calendar" button is hidden — see audit D-4.
+   * The previous template always rendered the button with `href='#'` if the
+   * caller hadn't built the URL, producing a dead CTA in every confirmation.
+   */
+  addToCalendarUrl?: string;
   /** When set, the booking is for a guest (not a club member). The recipient
    *  is the booker/payer; the guest is the actual rider on the day. */
   guestName?: string;
@@ -128,9 +134,11 @@ export function BookingConfirmation({
             )}
           </Section>
 
-          <Button href={safeHref(addToCalendarUrl)} style={styles.button}>
-            Add to Calendar
-          </Button>
+          {addToCalendarUrl && (
+            <Button href={safeHref(addToCalendarUrl)} style={styles.button}>
+              Add to Calendar
+            </Button>
+          )}
 
           <Hr style={styles.hr} />
 

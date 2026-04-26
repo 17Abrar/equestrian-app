@@ -334,7 +334,9 @@ export async function POST(request: NextRequest) {
               clubLogo: '',
               amount: fullBooking.amount ? String(fullBooking.amount) : undefined,
               currency: fullBooking.currency ?? 'AED',
-              addToCalendarUrl: '#',
+              // addToCalendarUrl omitted until the ICS-generation feature
+              // ships — see audit D-4. Template now hides the button when
+              // unset rather than rendering it with a dead `#` href.
             }),
           });
         } catch (emailErr) {

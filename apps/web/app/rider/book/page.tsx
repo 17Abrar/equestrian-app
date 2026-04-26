@@ -17,6 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { useBookingSlots, useCreateBooking, type BookingSlot } from '@/hooks/use-bookings';
 import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -211,6 +212,7 @@ export default function RiderBookPage() {
         setCouponError(json.data.error ?? 'Invalid code');
       }
     } catch (err) {
+      reportMutationError('rider.coupon.validate', err, { code: couponCode });
       setCouponError(err instanceof Error ? err.message : 'Failed to validate code');
     } finally {
       setCouponValidating(false);

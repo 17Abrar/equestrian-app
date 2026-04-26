@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { Plus, Clock, CheckCircle2, XCircle, Archive, Rabbit, Receipt } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -115,6 +116,7 @@ export default function RiderHorsesPage() {
       toast.success(`${retiring.name} retired`);
       setRetiring(null);
     } catch (err) {
+      reportMutationError('rider.horse.retire', err, { horseId: retiring.id });
       toast.error(err instanceof Error ? err.message : 'Failed to retire');
     }
   }

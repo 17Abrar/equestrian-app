@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Upload, X, FileText, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface FileUploadProps {
   /** Current file URL (displays existing file) */
@@ -136,6 +137,7 @@ export function FileUpload({
       // Step 4: Pass the public URL back to the form
       onChange(publicUrl);
     } catch (err) {
+      reportMutationError('upload.file', err, { folder });
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
     } finally {
       setUploading(false);

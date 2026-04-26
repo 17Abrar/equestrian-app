@@ -35,6 +35,7 @@ import {
   type LessonType,
 } from '@/hooks/use-bookings';
 import { fetchJson } from '@/lib/fetch-json';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -174,6 +175,7 @@ function WelcomeStep({ onNext }: WelcomeStepProps) {
       toast.success('Club settings saved');
       onNext();
     } catch (err) {
+      reportMutationError('onboarding.club_basics.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save settings');
     }
   }
@@ -287,6 +289,7 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
       form.reset();
       refetch();
     } catch (err) {
+      reportMutationError('onboarding.arena.create', err, { name: data.name });
       toast.error(err instanceof Error ? err.message : 'Failed to add arena');
     }
   }
@@ -461,6 +464,7 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
       form.reset();
       refetch();
     } catch (err) {
+      reportMutationError('onboarding.lesson_type.create', err, { name: data.name });
       toast.error(err instanceof Error ? err.message : 'Failed to add lesson type');
     }
   }
@@ -732,6 +736,7 @@ function StaffStep({ onComplete, onBack }: StaffStepProps) {
       toast.success(`${data.displayName} added as ${data.role.replace('_', ' ')}`);
       form.reset();
     } catch (err) {
+      reportMutationError('onboarding.staff.create', err, { role: data.role });
       toast.error(err instanceof Error ? err.message : 'Failed to add staff');
     } finally {
       setIsSubmitting(false);
@@ -860,6 +865,7 @@ export default function OnboardingPage() {
       toast.success('Setup complete! Welcome to your dashboard.');
       router.push('/');
     } catch (err) {
+      reportMutationError('onboarding.complete', err);
       toast.error(err instanceof Error ? err.message : 'Failed to complete onboarding');
     } finally {
       setCompleting(false);

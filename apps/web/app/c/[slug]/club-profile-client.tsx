@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import {
   ArrowLeft,
   MapPin,
@@ -78,6 +79,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
         router.push('/rider');
       }
     } catch (err) {
+      reportMutationError('public.club.join', err, { slug: club.slug });
       toast.error(err instanceof Error ? err.message : 'Network error');
     } finally {
       setJoining(false);

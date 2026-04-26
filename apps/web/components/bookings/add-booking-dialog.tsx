@@ -247,14 +247,28 @@ export function AddBookingDialog() {
                         }),
                       });
                       const json = await res.json();
+                      // 422 INVALID_COUPON returns `{success:false,error:{message,...}}`
+                      // — the previous code only checked `json.data?.valid`,
+                      // which silently swapped the server's "expired"/"min spend"
+                      // detail for a generic "Invalid code". See audit D-7 / E-8.
+                      if (!res.ok) {
+                        const message =
+                          (json as { error?: { message?: string } }).error?.message ??
+                          'Failed to validate code';
+                        setCouponError(message);
+                        return;
+                      }
                       if (json.data?.valid) {
                         setCouponDiscount(json.data.discount);
                         toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
                       } else {
                         setCouponError(json.data?.error ?? 'Invalid code');
                       }
-                    } catch {
-                      setCouponError('Failed to validate code');
+                    } catch (err) {
+                      reportMutationError('coupon.validate', err, { code: couponCode, riderMemberId });
+                      setCouponError(
+                        err instanceof Error ? err.message : 'Failed to validate code',
+                      );
                     }
                   }}
                 >

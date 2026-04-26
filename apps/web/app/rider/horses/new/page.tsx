@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { ArrowLeft, Rabbit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -135,6 +136,7 @@ export default function RegisterHorsePage() {
       toast.success('Horse submitted for approval');
       router.push('/rider/horses');
     } catch (err) {
+      reportMutationError('rider.horse.register', err);
       toast.error(err instanceof Error ? err.message : 'Failed to register');
     }
   }
