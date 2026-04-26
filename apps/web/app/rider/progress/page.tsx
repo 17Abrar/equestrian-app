@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { formatTime } from '@equestrian/shared/utils';
 
 interface RiderProfile {
   id: string;
@@ -53,15 +54,6 @@ function StatCard({ icon: Icon, label, value }: { icon: typeof TrendingUp; label
       </CardContent>
     </Card>
   );
-}
-
-function formatTime(timeStr: string): string {
-  const parts = timeStr.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 || 12;
-  return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
 }
 
 function ProgressSkeleton() {

@@ -63,6 +63,11 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
 
   const output = JSON.stringify(entry);
 
+  // The logger is the one place where direct `console` calls are intentional —
+  // this is what writes the structured JSON to stdout/stderr that Cloudflare
+  // tails into Logpush. Suppress no-console for the whole switch rather than
+  // line-by-line so future cases (e.g., 'fatal') don't sneak past lint.
+  /* eslint-disable no-console */
   switch (level) {
     case 'error':
       console.error(output);
@@ -73,10 +78,9 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
       forwardToSentry('warning', event, sanitized);
       break;
     default:
-      // Using console methods intentionally for structured logging
-      // eslint-disable-next-line no-console
       console.log(output);
   }
+  /* eslint-enable no-console */
 }
 
 function forwardToSentry(

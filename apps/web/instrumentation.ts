@@ -24,7 +24,12 @@ export const onRequestError: typeof Sentry.captureRequestError = async (
 ) => {
   try {
     return await Sentry.captureRequestError(err, request, context);
-  } catch {
-    // Intentionally silent — surfacing this error would mask the original one.
+  } catch (sentryErr) {
+    // Don't re-throw — masking the original error is worse than dropping the
+    // report. But log via raw console so the failure surfaces in Cloudflare
+    // logs even when Sentry itself is the broken subsystem (the app-side
+    // logger forwards to Sentry, so it would loop).
+    // eslint-disable-next-line no-console
+    console.error('[sentry] captureRequestError failed:', sentryErr);
   }
 };

@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { logger } from './logger';
 
 const ALLOWED_CONTENT_TYPES = [
   'image/jpeg',
@@ -277,7 +278,9 @@ export async function verifyObjectMagicBytes(
  * Removes an object from R2. Used to clean up mis-typed uploads caught by
  * `verifyObjectMagicBytes`. Swallows errors — the object may already be
  * gone, and a failed delete shouldn't block the higher-level operation
- * from returning a clean error to the user.
+ * from returning a clean error to the user. The failure is logged so a
+ * sustained R2 outage / permissions regression doesn't leave abuse uploads
+ * piling up silently.
  */
 export async function deleteR2Object(key: string): Promise<void> {
   const bucketName = process.env.R2_BUCKET_NAME;
@@ -287,7 +290,10 @@ export async function deleteR2Object(key: string): Promise<void> {
     await client.send(
       new DeleteObjectCommand({ Bucket: bucketName, Key: key }),
     );
-  } catch {
-    // non-fatal — caller has already decided to reject the upload.
+  } catch (err) {
+    logger.warn('r2_delete_failed', {
+      key,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }

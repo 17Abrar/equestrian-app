@@ -23,6 +23,7 @@
     }
   },
   "scripts": {
+    "prepare": "git config --local core.hooksPath scripts/git-hooks 2>/dev/null || true",
     "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=@equestrian/web",
     "dev:mobile": "turbo run dev --filter=@equestrian/mobile",

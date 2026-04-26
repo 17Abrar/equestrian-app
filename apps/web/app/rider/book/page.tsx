@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBookingSlots, useCreateBooking, type BookingSlot } from '@/hooks/use-bookings';
-import { formatMoney } from '@equestrian/shared/utils';
+import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,19 +64,9 @@ function toDateString(d: Date): string {
   return d.toISOString().split('T')[0]!;
 }
 
-function formatDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
-function formatTime(timeStr: string): string {
-  const parts = timeStr.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 || 12;
-  return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
-}
-
+// `formatPrice` from the shared utils returns `'—'` for null amounts; this
+// page always has a price (it's required on a lesson type), so use formatMoney
+// directly — keeps the type tight (`number`, not `number | null`).
 function formatPrice(price: number, currency: string): string {
   return formatMoney(price, currency);
 }

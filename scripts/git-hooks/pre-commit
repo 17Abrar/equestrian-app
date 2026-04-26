@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Pre-commit guard. Refuses to record commits that contain:
+#   1. Local env files (.env / .env.local / .env.*.local) — these hold real
+#      keys (Sentry tokens, Clerk secrets, Stripe live keys). The repo's
+#      .gitignore already excludes them, but `git add -f`, an editor
+#      backup, or a global gitignore drift will defeat that.
+#   2. Obvious secret-shaped strings — the prefixes Sentry, Stripe live,
+#      AWS, GitHub, OpenAI, and Clerk live use. False positives are rare
+#      because the prefixes are deliberately distinctive; in the rare case
+#      one fires on a doc snippet, set BYPASS_SECRET_SCAN=1 for one commit.
+#
+# Wired up by the root `prepare` script via `git config core.hooksPath`.
+# Runs on every `git commit`; fast (only inspects staged content).
+#
+# Bypass options (use sparingly):
+#   git commit --no-verify        # skip ALL hooks
+#   BYPASS_SECRET_SCAN=1 git ...  # skip pattern check, keep env-file check
+
+set -euo pipefail
+
+red() { printf '\033[0;31m%s\033[0m\n' "$*" >&2; }
+yellow() { printf '\033[0;33m%s\033[0m\n' "$*" >&2; }
+
+# Newly added or modified files in this commit (not deletions).
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged_files" ] && exit 0
+
+# 1. Env-file gate — refuse any local env file regardless of contents.
+env_files=$(printf '%s\n' "$staged_files" | grep -E '(^|/)\.env(\.[^/]+)?\.local$|(^|/)\.env$' || true)
+if [ -n "$env_files" ]; then
+  red "✗ Refusing to commit local env file(s):"
+  printf '    %s\n' $env_files >&2
+  red ""
+  red "  These files hold real secrets. They are gitignored on purpose."
+  red "  If you absolutely must commit a sample, name it .env.example and"
+  red "  scrub the values to placeholders first."
+  exit 1
+fi
+
+# 2. Secret-pattern scan over the staged diff.
+if [ "${BYPASS_SECRET_SCAN:-}" != "1" ]; then
+  # Patterns chosen because their prefixes are distinctive enough that a
+  # match almost always means a real key. `sk_test_` is intentionally NOT
+  # blocked — Stripe test keys are safe and routinely appear in fixtures.
+  diff=$(git diff --cached --no-color -U0)
+  if [ -n "$diff" ]; then
+    if printf '%s' "$diff" | grep -E \
+      -e 'sntrys_[A-Za-z0-9+/=._-]{20,}' \
+      -e 'sk_live_[A-Za-z0-9]{20,}' \
+      -e 'rk_live_[A-Za-z0-9]{20,}' \
+      -e 'pk_live_[A-Za-z0-9]{20,}' \
+      -e 'sk_[A-Z0-9]{20,}' \
+      -e 'AKIA[0-9A-Z]{16}' \
+      -e 'ghp_[A-Za-z0-9]{36}' \
+      -e 'github_pat_[A-Za-z0-9_]{82}' \
+      -e 'sk-proj-[A-Za-z0-9_-]{40,}' \
+      -e 'sk-ant-[A-Za-z0-9_-]{40,}' \
+      -q; then
+      red "✗ Refusing to commit — staged changes look like they contain a real secret."
+      red ""
+      red "  Run \`git diff --cached\` and check for keys (Sentry/Stripe/AWS/GitHub/OpenAI/Anthropic)."
+      red "  If this is a false positive, re-run with BYPASS_SECRET_SCAN=1."
+      exit 1
+    fi
+  fi
+fi
+
+exit 0

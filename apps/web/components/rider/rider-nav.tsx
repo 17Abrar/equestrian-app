@@ -32,6 +32,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
+import { fetchJson } from '@/lib/fetch-json';
 
 interface NavItem {
   label: string;
@@ -173,18 +174,11 @@ function ActiveStableSwitcher() {
     if (clubId === activeClubId) return;
     setSwitching(true);
     try {
-      const res = await fetch('/api/v1/me/active-club', {
+      await fetchJson('/api/v1/me/active-club', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clubId }),
       });
-      const body = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (body as { error?: { message?: string } }).error?.message ??
-            'Failed to switch stable',
-        );
-      }
       // Throw away every cached query since all data was tenant-scoped to
       // the previous club. Refresh to re-run server components (rider
       // layout's tenant check, home page's data loads).

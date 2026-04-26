@@ -131,9 +131,9 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
             WhatsApp. Posts with your club&apos;s logo and cover photo drive the most joins.
           </p>
           <p>
-            Use <span className="font-medium">Open</span> join policy while you&apos;re launching
-            — friction kills conversion. Switch to <span className="font-medium">Approval</span>{' '}
-            once you have a waitlist you need to manage.
+            Keep public discovery on while you&apos;re launching — friction kills conversion. Turn
+            it off to make the club <span className="font-medium">Invite only</span> when you
+            want to vet riders manually before they can book.
           </p>
         </CardContent>
       </Card>

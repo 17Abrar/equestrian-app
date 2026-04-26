@@ -51,6 +51,23 @@ function toWithCredentials(row: PaymentAccountRow): PaymentAccountWithCredential
   }
   const plaintext = decryptField(row.encryptedCredentials);
   if (!plaintext) {
+    // AES-GCM auth-tag verification failed (or the row predates the v1: prefix
+    // and isn't valid plaintext either). Without this log, a key rotation
+    // without re-encryption surfaces downstream as the misleading "secret not
+    // configured" 503 from webhook routes — the operator wastes hours hunting
+    // a config issue while every signature check fails. Use console.warn for
+    // the same reason as the JSON.parse branch below: this package can't
+    // import the app-side logger without a circular dep.
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        event: 'payment_account_credentials_decrypt_failed',
+        timestamp: new Date().toISOString(),
+        clubId: row.clubId,
+        provider: row.provider,
+        accountId: row.id,
+      }),
+    );
     return { ...summary, credentials: null };
   }
   try {

@@ -54,8 +54,22 @@ export async function POST(request: NextRequest) {
         return errorResponse('EMAIL_NOT_CONFIGURED', 'Email service is not configured. Set RESEND_API_KEY.', 503);
       }
 
+      // EMAIL_FROM must be a verified sender on the club's Resend domain.
+      // Falling back to onboarding@resend.dev (Resend's sandbox sender) was
+      // the previous behaviour, but Gmail flags those as "via resend.dev"
+      // and tanks deliverability — refuse to send rather than silently
+      // produce low-trust mail. The dev fallback only applies outside prod
+      // so local testing without EMAIL_FROM still works.
+      const envFrom = process.env.EMAIL_FROM;
+      if (!envFrom && process.env.NODE_ENV === 'production') {
+        return errorResponse(
+          'EMAIL_NOT_CONFIGURED',
+          'Email sender is not configured. Set EMAIL_FROM to a verified Resend address.',
+          503,
+        );
+      }
       const resend = new Resend(resendApiKey);
-      const fromAddress = process.env.EMAIL_FROM ?? 'Cavaliq <onboarding@resend.dev>';
+      const fromAddress = envFrom ?? 'Cavaliq <onboarding@resend.dev>';
 
       try {
         const { data: result, error } = await resend.emails.send({

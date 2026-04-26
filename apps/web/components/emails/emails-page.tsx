@@ -10,18 +10,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AudiencesTab } from '@/components/emails/audiences-tab';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { fetchJson } from '@/lib/fetch-json';
 
-async function sendEmail(data: { to: string; subject: string; body: string }) {
-  const res = await fetch('/api/v1/emails/send', {
+interface SendEmailResult {
+  data: { id: string | null; message: string };
+}
+
+function sendEmail(data: { to: string; subject: string; body: string }) {
+  return fetchJson<SendEmailResult>('/api/v1/emails/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  const result = await res.json();
-  if (!res.ok) {
-    throw new Error(result.error?.message ?? 'Failed to send email');
-  }
-  return result;
 }
 
 export function EmailsPage() {

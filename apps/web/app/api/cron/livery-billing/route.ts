@@ -13,8 +13,19 @@ import {
   type PaymentAccountWithCredentials,
 } from '@equestrian/db/queries';
 import { getAdapter } from '@/lib/payments/registry';
-import { sendTriggeredEmailAsync } from '@/lib/email';
+import { PaymentProviderError } from '@/lib/payments/types';
+import { sendTriggeredEmail, sendTriggeredEmailAsync } from '@/lib/email';
 import { logger } from '@/lib/logger';
+
+// Errors that mean the operator needs to do something (reconnect a provider,
+// fix an env var) rather than retry — escalate to error level so they page
+// instead of getting lost in warn-noise.
+const OPERATOR_ACTIONABLE_PAY_ERROR_CODES = new Set([
+  'ACCOUNT_NOT_CONNECTED',
+  'AUTH_FAILED',
+  'PROVIDER_NOT_CONFIGURED',
+  'MISSING_CREDENTIALS',
+]);
 import { errorResponse, successResponse } from '@/lib/api-utils';
 import { LiveryInvoiceIssued } from '@equestrian/email-templates/livery-invoice-issued';
 import { LiveryInvoiceOverdue } from '@equestrian/email-templates/livery-invoice-overdue';
@@ -173,12 +184,24 @@ async function createPayIntent(args: {
       payLink: result.flow === 'redirect' ? result.paymentUrl : undefined,
     };
   } catch (err) {
-    logger.warn('livery_payment_intent_failed', {
+    // Operator-actionable failures (provider disconnected, missing/expired
+    // credentials, env var unset) won't fix themselves on retry — log at
+    // error level so they page. Generic adapter throws stay at warn so a
+    // transient provider 5xx during a cron run doesn't wake anyone up.
+    const code = err instanceof PaymentProviderError ? err.code : undefined;
+    const isOperatorActionable = !!code && OPERATOR_ACTIONABLE_PAY_ERROR_CODES.has(code);
+    const fields = {
       horseId: args.horseId,
       clubId: args.clubId,
       provider: args.account.provider,
+      code,
       error: err instanceof Error ? err.message : 'unknown',
-    });
+    };
+    if (isOperatorActionable) {
+      logger.error('livery_payment_intent_failed', fields);
+    } else {
+      logger.warn('livery_payment_intent_failed', fields);
+    }
     return null;
   }
 }
@@ -376,10 +399,16 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
         }
       }
 
-      await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
-
+      // Send the email FIRST and only increment reminder_count on a
+      // successful send. The previous order incremented before sending, so a
+      // transient Resend outage on day 7 would burn the day-7 reminder slot
+      // — the next cron pass keys off reminder_count and would jump straight
+      // to the day-14 cadence, leaving the owner without the day-7 nudge.
+      // Synchronous send (sendTriggeredEmail, not sendTriggeredEmailAsync) so
+      // failures throw and we can skip the increment. Owners with no email
+      // on file still bump the counter — there's no reminder to retry there.
       if (inv.ownerEmail) {
-        sendTriggeredEmailAsync({
+        await sendTriggeredEmail({
           clubId: inv.clubId,
           trigger: 'livery_invoice_overdue',
           to: inv.ownerEmail,
@@ -397,6 +426,8 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
           }),
         });
       }
+
+      await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
       sent += 1;
     } catch (err) {
       logger.error('livery_reminder_send_failed', {

@@ -19,33 +19,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { useBooking, type Booking } from '@/hooks/use-bookings';
 import { PayBookingDialog } from '@/components/payments/pay-booking-dialog';
-import { formatMoney } from '@equestrian/shared/utils';
+import { formatTime, formatDate, formatPrice } from '@equestrian/shared/utils';
 
 // Payment methods that settle at the stable — no online flow expected.
 const OFFLINE_METHODS = new Set(['cash', 'card_in_person', 'bank_transfer', 'package_credit']);
-
-function formatTime(timeStr: string): string {
-  const parts = timeStr.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 || 12;
-  return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatPrice(amount: number | null, currency: string): string {
-  if (amount == null) return '—';
-  return formatMoney(amount, currency);
-}
 
 // ─── Page ────────────────────────────────────────────────────────────
 
@@ -162,7 +139,7 @@ export default function RiderBookingDetailPage({
         <CardContent className="space-y-3 text-sm">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            {formatDate(booking.slotDate)}
+            {formatDate(booking.slotDate, 'long')}
           </div>
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
