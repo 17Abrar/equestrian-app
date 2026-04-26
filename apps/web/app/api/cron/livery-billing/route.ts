@@ -3,10 +3,10 @@ import { type NextRequest } from 'next/server';
 import {
   findHorsesDueForBilling,
   findHorseBillingAnchor,
-  createLiveryInvoice,
-  nextLiveryInvoiceNumber,
+  createLiveryInvoiceWithGeneratedNumber,
   findOverdueInvoicesForReminders,
   markInvoiceOverdueAndLogReminder,
+  markInvoiceOverdueOnly,
   setInvoiceProviderRef,
   adminGetActivePaymentAccount,
   type BillableHorse,
@@ -223,7 +223,8 @@ async function issueDueInvoices(today: string): Promise<{ issued: number; skippe
         continue;
       }
 
-      const invoiceNumber = await nextLiveryInvoiceNumber(horse.clubId);
+      // Number is allocated atomically inside createLiveryInvoiceWith
+      // GeneratedNumber so a concurrent run can't mint a duplicate (G-4).
 
       // Amount at time of invoice — snapshotted so a later fee change doesn't
       // retro-alter past invoices.
@@ -247,11 +248,10 @@ async function issueDueInvoices(today: string): Promise<{ issued: number; skippe
           })
         : null;
 
-      const invoice = await createLiveryInvoice({
+      const invoice = await createLiveryInvoiceWithGeneratedNumber({
         clubId: horse.clubId,
         horseId: horse.horseId,
         ownerMemberId: horse.ownerMemberId,
-        invoiceNumber,
         periodStart: period.periodStart,
         periodEnd: period.periodEnd,
         amountMinorUnits: amountMinor,
@@ -281,7 +281,7 @@ async function issueDueInvoices(today: string): Promise<{ issued: number; skippe
             ownerName: horse.ownerName ?? 'there',
             horseName: horse.horseName,
             clubName: horse.clubName,
-            invoiceNumber,
+            invoiceNumber: invoice.invoiceNumber,
             periodStart: period.periodStart,
             periodEnd: period.periodEnd,
             amountMinorUnits: amountMinor,
@@ -405,8 +405,14 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
       // — the next cron pass keys off reminder_count and would jump straight
       // to the day-14 cadence, leaving the owner without the day-7 nudge.
       // Synchronous send (sendTriggeredEmail, not sendTriggeredEmailAsync) so
-      // failures throw and we can skip the increment. Owners with no email
-      // on file still bump the counter — there's no reminder to retry there.
+      // failures throw and we can skip the increment.
+      //
+      // Owners with no email on file get a one-shot `pending → overdue`
+      // status flip (no counter bump) so a future email patch resumes the
+      // 7/14/30-day cadence from scratch — see audit G-2. Without this
+      // fix, three reminder slots got burned on null-email rows and the
+      // invoice went permanently silent even after the admin added a
+      // contact address.
       if (inv.ownerEmail) {
         await sendTriggeredEmail({
           clubId: inv.clubId,
@@ -425,10 +431,12 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
             payLink,
           }),
         });
+        await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
+        sent += 1;
+      } else {
+        await markInvoiceOverdueOnly(inv.clubId, inv.invoiceId);
+        skipped += 1;
       }
-
-      await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
-      sent += 1;
     } catch (err) {
       logger.error('livery_reminder_send_failed', {
         invoiceId: inv.invoiceId,

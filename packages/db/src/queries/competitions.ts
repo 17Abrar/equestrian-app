@@ -130,10 +130,26 @@ export async function createCompetition(clubId: string, data: CompetitionCreate)
 
 export async function updateCompetition(clubId: string, competitionId: string, data: CompetitionUpdate) {
   const values = { ...toCompetitionValues(data), updatedAt: new Date() } as Partial<NewCompetition>;
+
+  // `cancelled` and `completed` are terminal — once entries are finalised
+  // and refunds have been issued, a generic PATCH must not flip the
+  // competition back to `published`/`draft` (audit E-3). That would
+  // re-open registration against a stale capacity that already counts
+  // withdrawn entries, with no rebroadcast to the riders who were
+  // refunded. Editing a name / location / sponsorship blurb on a
+  // cancelled comp still works.
+  const conditions = [
+    eq(competitions.id, competitionId),
+    eq(competitions.clubId, clubId),
+  ];
+  if (values.status !== undefined) {
+    conditions.push(sql`${competitions.status} NOT IN ('cancelled', 'completed')`);
+  }
+
   const result = await db
     .update(competitions)
     .set(values)
-    .where(and(eq(competitions.id, competitionId), eq(competitions.clubId, clubId)))
+    .where(and(...conditions))
     .returning();
   return result[0] ?? null;
 }
@@ -400,6 +416,11 @@ export async function withdrawCompetitionEntry(
   entryId: string,
   reason: string,
 ) {
+  // Don't overwrite a `withdrawn` or `scratched` row — the latter is a
+  // judge's call (e.g. failed check-in) and idempotently re-applying
+  // withdrawal would replace the scratch reason with the rider's. See
+  // audit E-12. Routes that hit a no-op transition surface 422 to the
+  // caller via the `null` return.
   const result = await db
     .update(competitionEntries)
     .set({
@@ -408,7 +429,13 @@ export async function withdrawCompetitionEntry(
       withdrawalReason: reason,
       updatedAt: new Date(),
     })
-    .where(and(eq(competitionEntries.id, entryId), eq(competitionEntries.clubId, clubId)))
+    .where(
+      and(
+        eq(competitionEntries.id, entryId),
+        eq(competitionEntries.clubId, clubId),
+        sql`${competitionEntries.status} NOT IN ('withdrawn', 'scratched')`,
+      ),
+    )
     .returning();
   return result[0] ?? null;
 }

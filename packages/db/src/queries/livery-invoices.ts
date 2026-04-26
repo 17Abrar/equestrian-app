@@ -272,6 +272,32 @@ export async function markInvoiceOverdueAndLogReminder(clubId: string, invoiceId
   return result[0] ?? null;
 }
 
+/**
+ * One-shot `pending → overdue` transition that leaves `reminder_count`
+ * untouched. Used by the cron when an invoice is past due but the owner
+ * has no email on file (audit G-2): bumping the counter would burn through
+ * the 7/14/30-day cadence on rows that never sent anything, leaving them
+ * permanently silent once the admin patches the email later. Idempotent
+ * — a second call after the row is already overdue is a no-op.
+ */
+export async function markInvoiceOverdueOnly(clubId: string, invoiceId: string) {
+  const result = await rawDb
+    .update(liveryInvoices)
+    .set({
+      status: 'overdue',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(liveryInvoices.id, invoiceId),
+        eq(liveryInvoices.clubId, clubId),
+        eq(liveryInvoices.status, 'pending'),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
 /** Attach a provider payment reference to an already-created invoice. */
 export async function setInvoiceProviderRef(
   clubId: string,
@@ -457,9 +483,12 @@ export async function cancelLiveryInvoice(clubId: string, invoiceId: string) {
 
 /**
  * Simple sequential invoice number per club. Format: `LIV-{clubSlug}-{n}`
- * where n is the current count of livery invoices for that club + 1. Good
- * enough for human readability; uniqueness is still guaranteed by the
- * (horse_id, period_start) constraint, not by the number itself.
+ * where n is the current count of livery invoices for that club + 1.
+ *
+ * Concurrent callers can both compute the same `n`; the
+ * `livery_invoices_club_number_unique` index ensures only one wins, and
+ * `createLiveryInvoiceWithGeneratedNumber` retries on the resulting
+ * 23505 with a fresh number — see audit G-4.
  */
 export async function nextLiveryInvoiceNumber(clubId: string) {
   const result = await rawDb
@@ -468,5 +497,51 @@ export async function nextLiveryInvoiceNumber(clubId: string) {
     .where(eq(liveryInvoices.clubId, clubId));
   const n = (result[0]?.count ?? 0) + 1;
   return `LIV-${clubId.slice(0, 6)}-${String(n).padStart(5, '0')}`;
+}
+
+/**
+ * Issue a livery invoice with a freshly-generated unique number, retrying
+ * on the per-club (club_id, invoice_number) unique-index collision that
+ * concurrent cron runs would otherwise produce. The (horse_id,
+ * period_start) idempotency conflict is still handled by createLiveryInvoice's
+ * onConflictDoNothing — that path returns null (already issued).
+ *
+ * Returns the issued invoice (with its allocated number) or null if the
+ * (horse, period) idempotency caught it.
+ */
+type CreateLiveryInvoiceWithoutNumber = Omit<CreateInvoiceInput, 'invoiceNumber'>;
+
+export async function createLiveryInvoiceWithGeneratedNumber(
+  input: CreateLiveryInvoiceWithoutNumber,
+): Promise<NonNullable<Awaited<ReturnType<typeof createLiveryInvoice>>> | null> {
+  const MAX_ATTEMPTS = 8;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const invoiceNumber = await nextLiveryInvoiceNumber(input.clubId);
+    try {
+      const invoice = await createLiveryInvoice({ ...input, invoiceNumber });
+      return invoice;
+    } catch (err) {
+      // Postgres 23505 unique-violation. Drizzle bubbles the underlying
+      // PG error so we inspect `.code`. Only retry on the per-club number
+      // index — any other 23505 is a real bug we shouldn't paper over.
+      const code =
+        err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+      const constraint =
+        err && typeof err === 'object' && 'constraint' in err
+          ? String((err as { constraint: unknown }).constraint)
+          : '';
+      if (code === '23505' && constraint === 'livery_invoices_club_number_unique') {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(
+    `Failed to allocate unique livery invoice number after ${MAX_ATTEMPTS} attempts (clubId=${input.clubId}): ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
 }
 

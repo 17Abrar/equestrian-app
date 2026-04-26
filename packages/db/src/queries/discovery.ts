@@ -153,6 +153,18 @@ export async function hasPendingJoinRequest(
 /**
  * Open-policy path: rider is instantly added as a club_member with role=rider.
  * Must be called only when the club's joinPolicy is 'open'.
+ *
+ * Idempotent on (club_id, clerk_user_id): a duplicate INSERT (double-click,
+ * concurrent retries) maps via ON CONFLICT DO UPDATE so the second caller
+ * gets the existing row back instead of a 23505 → 500. A previously-left
+ * member (`is_active=false`) is reactivated in the same path — the audit
+ * race E-4 manifested as a permanent 500 for users who tried to rejoin
+ * after leaving, because `isUserMember` filtered on `isActive=true` while
+ * the unique index spans both states.
+ *
+ * `email` and `displayName` are written even on conflict so a fresh
+ * Clerk profile (renamed user, updated email) re-syncs to the membership
+ * row on rejoin.
  */
 export async function joinClubInstantly(input: {
   clubId: string;
@@ -169,6 +181,15 @@ export async function joinClubInstantly(input: {
       email: input.email,
       displayName: input.displayName,
       isActive: true,
+    })
+    .onConflictDoUpdate({
+      target: [clubMembers.clubId, clubMembers.clerkUserId],
+      set: {
+        isActive: true,
+        email: input.email,
+        displayName: input.displayName,
+        updatedAt: new Date(),
+      },
     })
     .returning();
   return rows[0];

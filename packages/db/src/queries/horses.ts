@@ -186,10 +186,27 @@ export async function createHorse(clubId: string, data: HorseCreate) {
 
 export async function updateHorse(clubId: string, horseId: string, data: HorseUpdate) {
   const values = { ...toDecimalStrings(data), updatedAt: new Date() } as Partial<NewHorse>;
+
+  // Encode legal operational-status transitions at the SQL gate (audit E-2).
+  // `retired` and `sold` are terminal — once a horse is in either state, the
+  // generic PATCH must not flip it back to available/resting/etc., because
+  // doing so silently bypasses the ownership lifecycle (`retireHorseOwnership`
+  // / sale audit) and lets matching pick a horse that's been removed from the
+  // school string. Updates that don't touch `status` (name, gear, photos)
+  // still work on terminal rows so admins can fix typos.
+  const conditions = [
+    eq(horses.id, horseId),
+    eq(horses.clubId, clubId),
+    isNull(horses.deletedAt),
+  ];
+  if (values.status !== undefined) {
+    conditions.push(sql`${horses.status} NOT IN ('retired', 'sold')`);
+  }
+
   const result = await db
     .update(horses)
     .set(values)
-    .where(and(eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)))
+    .where(and(...conditions))
     .returning();
 
   return result[0] ?? null;
