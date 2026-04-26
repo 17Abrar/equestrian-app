@@ -12,7 +12,16 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
+// Keys whose values are never safe to land in stdout/Logpush/Sentry. Lower-
+// cased on lookup so callers don't have to think about casing. PII fields
+// (email/phone/etc.) are included because CLAUDE.md explicitly forbids them
+// in logs and several email/audit paths used to carry them through to Sentry
+// extras — see audit D-1 / G-20. If a route legitimately needs to log a
+// recipient identity for debugging, hash it (e.g. `hashEmail(...)`) before
+// passing — the redactor matches on key name, so a `recipientHash` field
+// passes through cleanly.
 const SENSITIVE_KEYS = new Set([
+  // Auth / secrets
   'password',
   'token',
   'cardnumber',
@@ -28,6 +37,32 @@ const SENSITIVE_KEYS = new Set([
   'credit_card',
   'ssn',
   'cvv',
+  // PII — addressing identity, contact info, sensitive personal data
+  'email',
+  'recipient',
+  'to',
+  'cc',
+  'bcc',
+  'subject',
+  'phone',
+  'phonenumber',
+  'phone_number',
+  'dateofbirth',
+  'date_of_birth',
+  'displayname',
+  'display_name',
+  'medicalnotes',
+  'medical_notes',
+  'emergencycontactphone',
+  'emergency_contact_phone',
+  'emergencycontactname',
+  'emergency_contact_name',
+  'guestemail',
+  'guest_email',
+  'guestphone',
+  'guest_phone',
+  'guestname',
+  'guest_name',
 ]);
 
 function sanitize(data: unknown, depth = 0): unknown {

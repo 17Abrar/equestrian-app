@@ -12,6 +12,7 @@ import {
   type BillableHorse,
   type PaymentAccountWithCredentials,
 } from '@equestrian/db/queries';
+import { getTodayDateString } from '@equestrian/shared/utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { sendTriggeredEmail, sendTriggeredEmailAsync } from '@/lib/email';
@@ -82,13 +83,20 @@ export async function POST(request: NextRequest) {
     return errorResponse('UNAUTHORIZED', 'Bad cron secret', 401);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // UTC `today` is used as the SQL upper bound on candidates — it's a
+  // conservative filter that catches every horse/invoice whose club-local
+  // today is at or past the due/start date. The cron then filters per club
+  // using `getTodayDateString(club.timezone)` so non-GCC clubs don't bill a
+  // calendar day early/late (audit G-3). Rolling at 02:00 UTC means most
+  // GCC clubs see a same-day match; Pacific clubs see their local today
+  // resolve correctly via the JS filter.
+  const utcToday = new Date().toISOString().slice(0, 10);
 
-  const issued = await issueDueInvoices(today);
-  const reminded = await sendReminders(today);
+  const issued = await issueDueInvoices(utcToday);
+  const reminded = await sendReminders(utcToday);
 
   logger.info('livery_cron_completed', {
-    today,
+    utcToday,
     invoicesIssued: issued.issued,
     invoicesSkipped: issued.skipped,
     remindersSent: reminded.sent,
@@ -96,7 +104,7 @@ export async function POST(request: NextRequest) {
   });
 
   return successResponse({
-    date: today,
+    date: utcToday,
     invoicesIssued: issued.issued,
     invoicesSkipped: issued.skipped,
     remindersSent: reminded.sent,
@@ -208,16 +216,24 @@ async function createPayIntent(args: {
 
 // ─── Invoice generation ───────────────────────────────────────────────
 
-async function issueDueInvoices(today: string): Promise<{ issued: number; skipped: number }> {
-  const horses = await findHorsesDueForBilling(today);
+async function issueDueInvoices(utcToday: string): Promise<{ issued: number; skipped: number }> {
+  const horses = await findHorsesDueForBilling(utcToday);
   const accountCache: AccountCache = new Map();
   let issued = 0;
   let skipped = 0;
 
   for (const horse of horses) {
     try {
+      // Per-club today — non-UTC zones see this resolve to a different
+      // calendar date than `utcToday`. The SQL filter over-fetches by up
+      // to 24h; we trim here.
+      const clubToday = getTodayDateString(horse.clubTimezone);
+      if (horse.liveryStartDate > clubToday) {
+        skipped += 1;
+        continue;
+      }
       const anchor = await findHorseBillingAnchor(horse.horseId);
-      const period = nextBillingPeriod(horse, anchor, today);
+      const period = nextBillingPeriod(horse, anchor, clubToday);
       if (!period) {
         skipped += 1;
         continue;
@@ -338,14 +354,22 @@ function nextBillingPeriod(
 
 const REMINDER_THRESHOLDS = [7, 14, 30];
 
-async function sendReminders(today: string): Promise<{ sent: number; skipped: number }> {
-  const invoices = await findOverdueInvoicesForReminders(today);
+async function sendReminders(utcToday: string): Promise<{ sent: number; skipped: number }> {
+  const invoices = await findOverdueInvoicesForReminders(utcToday);
   const accountCache: AccountCache = new Map();
   let sent = 0;
   let skipped = 0;
 
   for (const inv of invoices) {
-    const daysOverdue = daysBetween(inv.dueDate, today);
+    // Resolve "today" in the invoice's own club timezone — for non-UTC
+    // zones, `utcToday` may be one calendar day ahead/behind, leading to
+    // reminder slots being skipped or doubled. See audit G-3.
+    const clubToday = getTodayDateString(inv.clubTimezone);
+    if (inv.dueDate > clubToday) {
+      skipped += 1;
+      continue;
+    }
+    const daysOverdue = daysBetween(inv.dueDate, clubToday);
     if (daysOverdue < REMINDER_THRESHOLDS[0]!) {
       skipped += 1;
       continue;

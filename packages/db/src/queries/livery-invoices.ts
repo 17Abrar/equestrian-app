@@ -24,6 +24,9 @@ export interface BillableHorse {
   clubId: string;
   clubName: string;
   clubCurrency: string;
+  /** Club IANA timezone — used by the cron to derive a per-club "today"
+   * so non-GCC clubs aren't billed on the wrong calendar date (audit G-3). */
+  clubTimezone: string;
   ownerMemberId: string;
   ownerEmail: string | null;
   ownerName: string | null;
@@ -57,6 +60,7 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
       clubId: horses.clubId,
       clubName: clubs.name,
       clubCurrency: clubs.currency,
+      clubTimezone: clubs.timezone,
       ownerMemberId: horses.ownerMemberId,
       ownerEmail: clubMembers.email,
       ownerName: clubMembers.displayName,
@@ -220,6 +224,7 @@ export async function findOverdueInvoicesForReminders(today: string) {
     .select({
       invoiceId: liveryInvoices.id,
       clubId: liveryInvoices.clubId,
+      clubTimezone: clubs.timezone,
       horseId: liveryInvoices.horseId,
       ownerMemberId: liveryInvoices.ownerMemberId,
       invoiceNumber: liveryInvoices.invoiceNumber,

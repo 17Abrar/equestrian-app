@@ -7,7 +7,29 @@ import { eq } from 'drizzle-orm';
 import { logger } from './logger';
 import type { ReactElement } from 'react';
 
-const FROM_ADDRESS = process.env.EMAIL_FROM ?? 'Cavaliq <onboarding@resend.dev>';
+// In production, refuse to send unless EMAIL_FROM is explicitly configured.
+// The previous fallback to `onboarding@resend.dev` (Resend's sandbox sender)
+// silently produced low-trust mail that Gmail flags as "via resend.dev" and
+// drops into spam — see audit D-2. Dev keeps the fallback so local testing
+// without secrets still works. The /emails/send route had this guard before
+// but every transactional send path (booking confirmation, livery invoice,
+// no-show alerts, owner approvals) bypassed it by going through this module
+// directly.
+const FALLBACK_FROM_ADDRESS = 'Cavaliq <onboarding@resend.dev>';
+
+function resolveFromAddress(): string | null {
+  const configured = process.env.EMAIL_FROM;
+  if (configured && configured.trim().length > 0) {
+    return configured;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('email_from_unset_in_prod', {
+      message: 'EMAIL_FROM is not set; refusing to send transactional mail from the resend.dev sandbox sender',
+    });
+    return null;
+  }
+  return FALLBACK_FROM_ADDRESS;
+}
 
 function getResendClient(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
@@ -35,11 +57,17 @@ export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolea
     return { sent: false, error: 'Email not configured' };
   }
 
+  const fromAddress = resolveFromAddress();
+  if (!fromAddress) {
+    // Already logged via `email_from_unset_in_prod` in resolveFromAddress.
+    return { sent: false, error: 'EMAIL_FROM not configured in production' };
+  }
+
   try {
     const html = await render(params.template);
 
     const { data, error } = await resend.emails.send({
-      from: FROM_ADDRESS,
+      from: fromAddress,
       to: [params.to],
       subject: params.subject,
       html,

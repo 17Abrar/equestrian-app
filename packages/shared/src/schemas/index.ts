@@ -104,9 +104,18 @@ export type CreateHorseInput = z.output<typeof createHorseSchema>;
 // recorded in the audit log. Keeping `ownerMemberId` on this schema would
 // let any caller with `horses:update` reassign ownership to an arbitrary
 // UUID via a vanilla PATCH — a mass-assignment hole.
-export const updateHorseSchema = createHorseSchema.partial().omit({
-  ownerMemberId: true,
-});
+//
+// `.strict()` rejects unknown keys at parse time. Without it, a request
+// body that smuggled in `totalLessonsCompleted: 9999` or `clubId: 'X'`
+// would silently strip those fields — fine today (Drizzle ignores them),
+// but a future widening of the queries' SET clause would silently
+// expose mass-assignment. See audit G-5.
+export const updateHorseSchema = createHorseSchema
+  .partial()
+  .omit({
+    ownerMemberId: true,
+  })
+  .strict();
 
 export type UpdateHorseInput = z.infer<typeof updateHorseSchema>;
 
@@ -184,16 +193,21 @@ export type RetireHorseOwnershipInput = z.output<typeof retireHorseOwnershipSche
 
 // ─── Riders ────────────────────────────────────────────────────────────
 
-export const updateRiderProfileSchema = z.object({
-  dateOfBirth: z.string().max(50).optional(),
-  weightKg: optionalNumeric(z.number().positive()),
-  heightCm: optionalNumeric(z.number().positive()),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
-  emergencyContactName: z.string().max(255).optional(),
-  emergencyContactPhone: z.string().max(50).optional(),
-  emergencyContactRelation: z.string().max(100).optional(),
-  medicalNotes: z.string().max(5000).optional(),
-});
+// `.strict()` — see audit G-5. Without it, a body containing
+// `totalLessonsCompleted` or `parentMemberId` would be silently stripped;
+// a future widening of the queries' SET clause would expose mass-assignment.
+export const updateRiderProfileSchema = z
+  .object({
+    dateOfBirth: z.string().max(50).optional(),
+    weightKg: optionalNumeric(z.number().positive()),
+    heightCm: optionalNumeric(z.number().positive()),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+    emergencyContactName: z.string().max(255).optional(),
+    emergencyContactPhone: z.string().max(50).optional(),
+    emergencyContactRelation: z.string().max(100).optional(),
+    medicalNotes: z.string().max(5000).optional(),
+  })
+  .strict();
 
 export type UpdateRiderProfileFormValues = z.input<typeof updateRiderProfileSchema>;
 export type UpdateRiderProfileInput = z.output<typeof updateRiderProfileSchema>;
@@ -242,7 +256,8 @@ export const createLessonTypeSchema = z.object({
 export type CreateLessonTypeFormValues = z.input<typeof createLessonTypeSchema>;
 export type CreateLessonTypeInput = z.output<typeof createLessonTypeSchema>;
 
-export const updateLessonTypeSchema = createLessonTypeSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateLessonTypeSchema = createLessonTypeSchema.partial().strict();
 
 // ─── Arenas ────────────────────────────────────────────────────────────
 
@@ -256,7 +271,8 @@ export const createArenaSchema = z.object({
 
 export type CreateArenaInput = z.infer<typeof createArenaSchema>;
 
-export const updateArenaSchema = createArenaSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateArenaSchema = createArenaSchema.partial().strict();
 
 // ─── Booking Slots ─────────────────────────────────────────────────────
 
@@ -353,7 +369,8 @@ export const createCompetitionSchema = z.object({
 export type CreateCompetitionFormValues = z.input<typeof createCompetitionSchema>;
 export type CreateCompetitionInput = z.output<typeof createCompetitionSchema>;
 
-export const updateCompetitionSchema = createCompetitionSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateCompetitionSchema = createCompetitionSchema.partial().strict();
 export type UpdateCompetitionInput = z.output<typeof updateCompetitionSchema>;
 
 export const competitionFiltersSchema = z.object({
@@ -507,7 +524,8 @@ export const createStaffSchema = z.object({
 
 export type CreateStaffInput = z.output<typeof createStaffSchema>;
 
-export const updateStaffSchema = createStaffSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateStaffSchema = createStaffSchema.partial().strict();
 export type UpdateStaffInput = z.output<typeof updateStaffSchema>;
 
 export const staffFiltersSchema = z.object({
@@ -526,6 +544,12 @@ export const createOwnerSchema = z.object({
 
 export type CreateOwnerInput = z.output<typeof createOwnerSchema>;
 
+// `.strict()` — see audit G-5. Caller must use this rather than
+// `createOwnerSchema.partial()` so unknown keys 422 instead of being
+// silently stripped (e.g. `role: 'club_admin'` mass-assignment).
+export const updateOwnerSchema = createOwnerSchema.partial().strict();
+export type UpdateOwnerInput = z.output<typeof updateOwnerSchema>;
+
 // ─── Finances ─────────────────────────────────────────────────────────
 
 export const createExpenseSchema = z.object({
@@ -541,8 +565,11 @@ export const createExpenseSchema = z.object({
 export type CreateExpenseFormValues = z.input<typeof createExpenseSchema>;
 export type CreateExpenseInput = z.output<typeof createExpenseSchema>;
 
+// `.strict()` — see audit G-5. Combined with the non-empty refine so a
+// body with `{}` 422s rather than running an updatedAt-only UPDATE.
 export const updateExpenseSchema = createExpenseSchema
   .partial()
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided',
   });
@@ -623,7 +650,8 @@ export const createMedicationSchema = z.object({
 });
 
 export type CreateMedicationInput = z.output<typeof createMedicationSchema>;
-export const updateMedicationSchema = createMedicationSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateMedicationSchema = createMedicationSchema.partial().strict();
 
 export const createMedicationLogSchema = z.object({
   medicationId: z.string().uuid(),
