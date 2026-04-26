@@ -84,31 +84,17 @@ export default clerkMiddleware(async (auth, request) => {
 
 // The extension list is anchored to the end of the path with `$`, so
 // `data.json` is NOT excluded by the `js` alternative — only paths ending
-// in `.js` are. This replaces the previous `js(?!on)` lookahead, which
-// was easy to break when adding extensions (every new alternative needed
-// to be checked against partial-prefix collisions like js/json).
-const STATIC_ASSET_EXTS = [
-  'html?',
-  'css',
-  'js',
-  'jpe?g',
-  'webp',
-  'png',
-  'gif',
-  'svg',
-  'ttf',
-  'woff2?',
-  'ico',
-  'csv',
-  'docx?',
-  'xlsx?',
-  'zip',
-  'webmanifest',
-].join('|');
-
+// in `.js` are. Replaces the previous `js(?!on)` lookahead, which was
+// easy to break when adding extensions (every new alternative had to be
+// audited for partial-prefix collisions like js/json). To add a new
+// static extension, append it to the alternation below.
+//
+// NB: Next.js parses `config.matcher` statically at build time and rejects
+// template-literal interpolation, so the pattern has to be a literal
+// string here — don't refactor it into a constant.
 export const config = {
   matcher: [
-    `/((?!_next|[^?]*\\.(?:${STATIC_ASSET_EXTS})$).*)`,
+    '/((?!_next|[^?]*\\.(?:html?|css|js|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)$).*)',
     '/(api|trpc)(.*)',
   ],
 };
