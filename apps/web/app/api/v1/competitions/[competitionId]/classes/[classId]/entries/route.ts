@@ -1,6 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { createCompetitionEntrySchema } from '@equestrian/shared/schemas';
-import { getCompetitionEntries, createCompetitionEntry } from '@equestrian/db/queries';
+import {
+  getCompetitionClassById,
+  getCompetitionEntries,
+  createCompetitionEntry,
+} from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
@@ -9,10 +13,32 @@ interface RouteParams {
   params: Promise<{ competitionId: string; classId: string }>;
 }
 
+/**
+ * Asserts that the URL's `classId` actually belongs to the URL's
+ * `competitionId` (audit A-4). The sibling routes
+ * `classes/[classId]/route.ts` and `classes/[classId]/results/route.ts`
+ * already enforce this binding; the entries route was inconsistent.
+ *
+ * Returns null on success, or a 404 NextResponse on mismatch.
+ */
+async function assertClassBelongsToCompetition(
+  clubId: string,
+  competitionId: string,
+  classId: string,
+) {
+  const cls = await getCompetitionClassById(clubId, classId);
+  if (!cls || cls.competitionId !== competitionId) {
+    return errorResponse('NOT_FOUND', 'Class does not belong to this competition', 404);
+  }
+  return null;
+}
+
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
-      const { classId } = await params;
+      const { competitionId, classId } = await params;
+      const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
+      if (mismatch) return mismatch;
       const entries = await getCompetitionEntries(ctx.clubId, classId);
       return successResponse(entries);
     },
@@ -23,7 +49,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
-      const { classId } = await params;
+      const { competitionId, classId } = await params;
+      const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
+      if (mismatch) return mismatch;
       const body = await request.json();
       const data = validateInput(createCompetitionEntrySchema, body);
 

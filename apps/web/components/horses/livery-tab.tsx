@@ -41,6 +41,7 @@ import {
 import { useRetireHorseOwnership, type Horse } from '@/hooks/use-horses';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatCurrency } from '@equestrian/shared/utils';
+import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface LiveryTabProps {
@@ -82,7 +83,7 @@ function useHorseLiveryInvoices(horseId: string, enabled: boolean) {
       return data as ApiSuccessResponse<LiveryInvoice[]>;
     },
     enabled,
-    staleTime: 30_000,
+    staleTime: STALE_TIME_FREQUENT,
   });
 }
 

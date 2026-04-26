@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatTime } from '@equestrian/shared/utils';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 
 interface RiderProfile {
   id: string;
@@ -36,7 +37,7 @@ function useRiderProfile() {
       }
       return data as ApiSuccessResponse<RiderProfile | null>;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME_STABLE,
   });
 }
 

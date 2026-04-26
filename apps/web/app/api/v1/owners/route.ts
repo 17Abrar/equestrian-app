@@ -1,10 +1,10 @@
 import { type NextRequest } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createOwnerSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getOwnersByClub, createMember } from '@equestrian/db/queries';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
-import { randomUUID } from 'crypto';
 
 // Reuse `paginationSchema` (caps `pageSize` at 100). The previous
 // `Number(searchParams.pageSize) || 25` path had no upper bound — a single

@@ -11,6 +11,7 @@ import {
   ValidationError,
 } from '@/lib/api-utils';
 import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
+import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
 import { logger } from '@/lib/logger';
 
 const setActiveClubSchema = z.object({
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: ACTIVE_CLUB_COOKIE_TTL_SECONDS,
     });
     return response;
   } catch (error) {

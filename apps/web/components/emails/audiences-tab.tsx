@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Trash2, Users, Pencil } from 'lucide-react';
+import { STALE_TIME_BURST } from '@equestrian/shared/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -407,7 +408,7 @@ function LivePreview({ filters }: { filters: AudienceFilters }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filters }),
       }),
-    staleTime: 10_000,
+    staleTime: STALE_TIME_BURST,
   });
 
   return (

@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { MAX_MONTHLY_LIVERY_FEE_MINOR } from '../constants';
+import {
+  MAX_MONTHLY_LIVERY_FEE_MINOR,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from '../constants';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -38,7 +42,9 @@ const nullableOptionalUrl = z
 
 export const paginationSchema = z.object({
   page: numericField(z.number().int().min(1)).default(1),
-  pageSize: numericField(z.number().int().min(1).max(100)).default(25),
+  pageSize: numericField(
+    z.number().int().min(1).max(MAX_PAGE_SIZE),
+  ).default(DEFAULT_PAGE_SIZE),
 });
 
 export type PaginationInput = z.infer<typeof paginationSchema>;

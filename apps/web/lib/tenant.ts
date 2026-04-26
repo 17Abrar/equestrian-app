@@ -4,6 +4,7 @@ import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { type UserRole } from '@equestrian/shared/types';
+import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
 import { mapClerkRoleToAppRole } from './clerk-roles';
 import { logger } from './logger';
 
@@ -173,7 +174,7 @@ export async function getTenantContext(): Promise<TenantContext> {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 30,
+        maxAge: ACTIVE_CLUB_COOKIE_TTL_SECONDS,
       });
     } catch (err) {
       // RSC read-only context throws here — that's expected, the next

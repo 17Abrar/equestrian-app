@@ -1,9 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { eq, and, ilike, asc, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { riderProfiles } from '../schema/rider-profiles';
 import { clubMembers } from '../schema/club-members';
 import { escapeLikePattern } from '@equestrian/shared/utils';
-import { randomUUID } from 'crypto';
 
 type NewRiderProfile = typeof riderProfiles.$inferInsert;
 type DrizzleRiderUpdate = Partial<Omit<NewRiderProfile, 'id' | 'clubId' | 'memberId' | 'createdAt' | 'updatedAt'>>;

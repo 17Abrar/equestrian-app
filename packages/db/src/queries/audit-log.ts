@@ -82,7 +82,11 @@ export async function getAuditLog(clubId: string, filters: AuditLogFilters) {
       .limit(filters.pageSize)
       .offset(offset),
     db
-      .select({ count: sql<number>`count(*)` })
+      // ::int cast — Postgres returns count(*) as bigint which @neondatabase/
+      // serverless surfaces as a string in the JSON output; the `<number>`
+      // generic was lying. Mirrors every other count query in the codebase.
+      // See audit F-16.
+      .select({ count: sql<number>`count(*)::int` })
       .from(auditLog)
       .where(and(...conditions)),
   ]);

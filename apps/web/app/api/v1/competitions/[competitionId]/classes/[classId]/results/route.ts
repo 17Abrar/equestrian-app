@@ -1,7 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { eq, and } from 'drizzle-orm';
 import { createCompetitionResultSchema } from '@equestrian/shared/schemas';
-import { getCompetitionResults, createCompetitionResult } from '@equestrian/db/queries';
+import {
+  getCompetitionClassById,
+  getCompetitionResults,
+  createCompetitionResult,
+} from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { competitionEntries } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
@@ -13,7 +17,12 @@ interface RouteParams {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
-      const { classId } = await params;
+      const { competitionId, classId } = await params;
+      // Audit A-4: bind URL's classId to URL's competitionId.
+      const cls = await getCompetitionClassById(ctx.clubId, classId);
+      if (!cls || cls.competitionId !== competitionId) {
+        return errorResponse('NOT_FOUND', 'Class does not belong to this competition', 404);
+      }
       const results = await getCompetitionResults(ctx.clubId, classId);
       return successResponse(results);
     },

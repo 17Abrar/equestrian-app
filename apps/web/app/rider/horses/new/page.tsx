@@ -24,6 +24,7 @@ import { FileUpload } from '@/components/ui/file-upload';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { STALE_TIME_MEDIUM } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
@@ -45,7 +46,7 @@ function useMemberships() {
   return useQuery({
     queryKey: ['me', 'horses'],
     queryFn: () => fetchJson<ApiSuccessResponse<MyHorsesResponse>>('/api/v1/me/horses'),
-    staleTime: 60 * 1000,
+    staleTime: STALE_TIME_MEDIUM,
   });
 }
 

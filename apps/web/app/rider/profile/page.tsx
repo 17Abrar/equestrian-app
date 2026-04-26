@@ -23,6 +23,7 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { fetchJson } from '@/lib/fetch-json';
 
@@ -60,7 +61,7 @@ function useRiderProfile() {
   return useQuery({
     queryKey: ['me', 'profile'],
     queryFn: () => fetchJson<ApiSuccessResponse<RiderProfile | null>>('/api/v1/me/profile'),
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME_STABLE,
   });
 }
 
