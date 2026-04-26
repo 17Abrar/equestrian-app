@@ -55,14 +55,21 @@ export default {
     const task = worker
       .fetch(request, env, ctx)
       .then(async (res) => {
-        // Read + discard the body so the response is drained before the
-        // isolate shuts down — CF will log the status via observability.
-        const body = await res.text().catch(() => '');
+        // Drain the response body so the isolate doesn't hold the socket
+        // open; we don't read its content — see audit G-27, body could
+        // include `error.message` text we'd rather not echo.
+        await res.text().catch(() => '');
         if (!res.ok) {
+          // Most non-2xx paths from the cron route ALSO fire a
+          // logger.error() inside the route (which goes to Sentry) — see
+          // the route's top-level try/catch and per-step logger.error
+          // calls. This console.error is the last-resort signal for
+          // operators reading Cloudflare's tail when the route itself
+          // failed to log; status code only, no body content (which
+          // could include error.message with internal info — audit G-27).
           console.error('cron_scheduled_non_ok', {
             cron: event.cron,
             status: res.status,
-            body: body.slice(0, 500),
           });
         } else {
           console.log('cron_scheduled_ok', {
@@ -72,6 +79,15 @@ export default {
         }
       })
       .catch((err) => {
+        // Fetch-level throw: the request never made it to the route, so
+        // there's no Sentry-connected logger.error inside Next.js to
+        // emit a tagged event. Best-effort signal via console.error so
+        // it lands in Cloudflare's observability tail. Operators
+        // monitoring `cron_scheduled_failed` need a separate Logpush
+        // alert rule until @sentry/cloudflare is wired into this entry —
+        // tracked by audit H-6. Worker-isolate fetch throws are rare
+        // (binding misconfig, bundler issue) so the alerting gap is
+        // narrow.
         console.error('cron_scheduled_failed', {
           cron: event.cron,
           error: err instanceof Error ? err.message : String(err),

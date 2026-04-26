@@ -59,9 +59,20 @@ wrangler secret put UPSTASH_REDIS_REST_TOKEN
 # Resend (email)
 wrangler secret put RESEND_API_KEY
 
+# Default From address for transactional email — must be a verified Resend
+# sender. lib/email refuses to send in production when this is unset (the
+# previous fallback to onboarding@resend.dev silently spam-trapped Gmail).
+# Format: `Cavaliq <hello@cavaliq.com>`.
+wrangler secret put EMAIL_FROM
+
 # Sentry (error tracking)
 wrangler secret put SENTRY_DSN
 wrangler secret put NEXT_PUBLIC_SENTRY_DSN
+
+# Daily livery-billing cron secret (REQUIRED — without it the cron route
+# 503s every fire). worker-entry.mjs sends this header when invoking the
+# scheduled handler at 02:00 UTC. Generate with: openssl rand -hex 32.
+wrangler secret put CRON_SECRET
 
 # Encryption key for horse medical data
 # Generate with: openssl rand -hex 32
@@ -308,3 +319,115 @@ under `env.staging` with:
 - the `-staging` / `test` versions of every secret
 
 Deploy via `pnpm --filter @equestrian/web exec wrangler deploy --env staging`.
+
+---
+
+## Backup + restore (Neon Postgres)
+
+Cavaliq's authoritative data — bookings, payment ledger, audit log, encrypted
+horse medical records — lives entirely in Neon. **Verify retention before
+relying on it**: Neon's free + Pro tiers come with a 7-day branch retention
+default; the Scale tier extends it. Confirm via the Neon console:
+
+```
+Settings → Project settings → "Branch retention period"
+```
+
+### Point-in-time restore
+
+Neon stores WAL for the retention window, so any timestamp in that range
+can be restored as a fresh branch. Useful for recovering from a botched
+migration / accidental DELETE.
+
+```sh
+# Install neonctl once (per machine)
+npm install -g neonctl
+
+# Authenticate
+neonctl auth
+
+# Create a recovery branch from a specific moment
+neonctl branches create \
+  --project-id <NEON_PROJECT_ID> \
+  --name recovery-2026-04-26-15h \
+  --parent main \
+  --timestamp 2026-04-26T15:00:00Z
+
+# Print its connection string (use the unpooled one for read-only diagnosis)
+neonctl connection-string recovery-2026-04-26-15h --pooled false
+```
+
+Connect to the recovery branch via `psql` or Drizzle Studio and verify the
+data matches expectations. The recovery branch is a full read/write copy,
+so SELECTs work without setting `app.current_club_id` (we dropped RLS in
+migration 0011).
+
+### Promotion (only after smoke testing the recovery branch)
+
+```sh
+# Make the recovery branch the new primary. THIS IS DESTRUCTIVE — the
+# current `main` becomes a sibling branch, not gone, but every running
+# Worker will start writing against the new primary on its next query.
+neonctl branches set-primary recovery-2026-04-26-15h
+```
+
+After promoting, run the standard smoke-test checklist above against the
+new primary BEFORE telling customers the system is back online. Common
+gotchas: deleted rows that were referenced by FKs in still-active rows
+will fail to insert; check for orphaned references with
+`packages/db/src/test/cross-tenant-binding.test.ts`'s spirit (run a few
+spot SELECTs).
+
+### Last tested
+
+Document the date you last actually performed a restore. Untested backups
+are not backups.
+
+> Last restore drill: **TODO** — schedule one within the first quarter
+> of operation.
+
+---
+
+## CI / branch protection (action required)
+
+`main` should be protected against force-push and direct commits, with
+the `verify` and `neon test branch · smoke` checks required before merge.
+Today the repo has no protection rule — the only enforcement that tests
+must pass is social. Run this once per repo:
+
+```sh
+gh api -X PUT /repos/<owner>/<repo>/branches/main/protection \
+  -f required_status_checks='{"strict":true,"contexts":["typecheck · lint · test","neon test branch · smoke"]}' \
+  -F enforce_admins=true \
+  -F required_pull_request_reviews='{"required_approving_review_count":1}' \
+  -F allow_force_pushes=false \
+  -F allow_deletions=false
+```
+
+For a one-founder shop, drop `required_pull_request_reviews` if review
+isn't realistic — but `required_status_checks` and `allow_force_pushes=false`
+are non-negotiable. Audit H-3.
+
+---
+
+## Deploy automation (action required)
+
+Production is currently deployed manually via `pnpm cf:deploy` from a
+developer's laptop. Anyone with `wrangler login` can ship code that
+didn't pass CI; there's no atomic merge → deploy coupling. The fix is a
+GitHub Actions workflow triggered on push to `main` after CI passes via
+`workflow_run`, using OIDC + `cloudflare/wrangler-action` so no
+long-lived `CLOUDFLARE_API_TOKEN` lives on a laptop. Audit H-2.
+
+Until that lands: deploy ONLY from a clean `main` checkout that has
+green CI on the same SHA, never from a feature branch.
+
+---
+
+## Sentry alerts (action required)
+
+`pnpm sentry:alerts` syncs the alert-rules table in OBSERVABILITY.md
+into Sentry. The script is idempotent. It must be run after every
+edit to OBSERVABILITY.md or OBSERVABILITY's added `logger.event` tags
+won't get an alert until someone remembers. Wire it as a CI job on
+push to `main`. Audit H-11.

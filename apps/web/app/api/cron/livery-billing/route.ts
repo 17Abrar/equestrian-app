@@ -92,24 +92,41 @@ export async function POST(request: NextRequest) {
   // resolve correctly via the JS filter.
   const utcToday = new Date().toISOString().slice(0, 10);
 
-  const issued = await issueDueInvoices(utcToday);
-  const reminded = await sendReminders(utcToday);
+  // Top-level try/catch so an unexpected throw in issueDueInvoices /
+  // sendReminders surfaces through the structured logger and reaches
+  // Sentry via the alert pipeline. Without this, an uncaught exception
+  // bubbles out of the route, the scheduled() wrapper logs raw
+  // `cron_scheduled_non_ok` to Cloudflare's tail (no Sentry tag), and
+  // the operator misses the alert — see audit H-6. Per-iteration
+  // catches inside the helpers already report their own row failures;
+  // this guard catches everything else.
+  try {
+    const issued = await issueDueInvoices(utcToday);
+    const reminded = await sendReminders(utcToday);
 
-  logger.info('livery_cron_completed', {
-    utcToday,
-    invoicesIssued: issued.issued,
-    invoicesSkipped: issued.skipped,
-    remindersSent: reminded.sent,
-    remindersSkipped: reminded.skipped,
-  });
+    logger.info('livery_cron_completed', {
+      utcToday,
+      invoicesIssued: issued.issued,
+      invoicesSkipped: issued.skipped,
+      remindersSent: reminded.sent,
+      remindersSkipped: reminded.skipped,
+    });
 
-  return successResponse({
-    date: utcToday,
-    invoicesIssued: issued.issued,
-    invoicesSkipped: issued.skipped,
-    remindersSent: reminded.sent,
-    remindersSkipped: reminded.skipped,
-  });
+    return successResponse({
+      date: utcToday,
+      invoicesIssued: issued.issued,
+      invoicesSkipped: issued.skipped,
+      remindersSent: reminded.sent,
+      remindersSkipped: reminded.skipped,
+    });
+  } catch (err) {
+    logger.error('livery_cron_failed', {
+      utcToday,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    return errorResponse('CRON_FAILED', 'Cron run failed', 500);
+  }
 }
 
 // GET mirrors POST for wiring variants that prefer GET (some cron wrappers).

@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubSentryEvent } from './lib/sentry-shared';
 
 // Next 15+ canonical client instrumentation. Loads automatically in the
 // browser bundle. The old `sentry.client.config.ts` filename is deprecated.
@@ -15,25 +16,29 @@ Sentry.init({
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1.0,
   enableLogs: true,
-  integrations: [Sentry.replayIntegration()],
+  // Mask all text + form inputs and block media so a replay of a guest-
+  // booking form doesn't capture the rider's name, phone number, or
+  // child's details. networkDetailAllowUrls left empty so we don't store
+  // request bodies (PII risk). See audit H-7 / H-20.
+  integrations: [
+    Sentry.replayIntegration({
+      maskAllText: true,
+      maskAllInputs: true,
+      blockAllMedia: true,
+      networkDetailAllowUrls: [],
+      networkRequestHeaders: [],
+      networkResponseHeaders: [],
+    }),
+  ],
   enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  // Scrub sensitive OAuth query params from the captured URL before the
-  // event leaves the browser.
-  beforeSend(event) {
-    if (event.request?.url) {
-      try {
-        const url = new URL(event.request.url);
-        ['code', 'state', 'token', 'access_token', 'refresh_token'].forEach((key) =>
-          url.searchParams.delete(key),
-        );
-        event.request.url = url.toString();
-      } catch {
-        // Non-URL strings pass through untouched.
-      }
-    }
-    return event;
-  },
+  // Scrub credentials from headers, query strings, AND breadcrumb URLs.
+  // The previous inline scrubber only stripped 5 query keys and ignored
+  // headers entirely — Clerk's __session cookie + bearer tokens leaked
+  // into Sentry context (audit H-7). The shared scrubber is runtime-
+  // portable (URL/URLSearchParams only) so it runs the same on server,
+  // edge, and browser.
+  beforeSend: scrubSentryEvent,
 });
 
 // Emits a Sentry transaction for every client-side router navigation so we
