@@ -377,12 +377,15 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let status: PaymentIntentStatus | undefined;
     let amountReceivedMinorUnits: number | undefined;
     let bookingId: string | undefined;
+    let refundStatus: WebhookEvent['refundStatus'];
+    let refundAmountMinor: number | undefined;
 
     if (event.data.object && typeof event.data.object === 'object') {
       const obj = event.data.object as {
         id?: string;
         object?: string;
         status?: string;
+        amount?: number;
         amount_received?: number;
         payment_intent?: string | { id?: string } | null;
         amount_refunded?: number;
@@ -395,14 +398,28 @@ export const stripeAdapter: PaymentProviderAdapter = {
         }
         amountReceivedMinorUnits = obj.amount_received;
       } else if (obj.object === 'charge') {
-        // Charge-level events (charge.refunded, charge.refund.updated) carry
-        // the PaymentIntent id on the Charge, not on `obj.id`. That's how we
-        // find the booking downstream.
+        // Charge-level events (charge.refunded) carry the PaymentIntent id
+        // on the Charge, not on `obj.id`. `amount_refunded` is the cumulative
+        // refunded total — useful for reconciliation but NOT for the
+        // delta of one specific refund (use `refund.updated` for that).
         providerPaymentId =
           typeof obj.payment_intent === 'string'
             ? obj.payment_intent
             : obj.payment_intent?.id;
         amountReceivedMinorUnits = obj.amount_refunded;
+      } else if (obj.object === 'refund') {
+        // `charge.refund.updated` events carry a Refund as the data object.
+        // Pull the parent PaymentIntent + the refund's own status/amount so
+        // the webhook handler can reverse the booking ledger when a
+        // `pending → failed` transition lands (audit B-4).
+        providerPaymentId =
+          typeof obj.payment_intent === 'string'
+            ? obj.payment_intent
+            : obj.payment_intent?.id;
+        if (obj.status) {
+          refundStatus = obj.status as WebhookEvent['refundStatus'];
+        }
+        refundAmountMinor = obj.amount;
       }
       // Our own `bookingId` rides on the PI's metadata — stamped at create
       // time by the bookings/[id]/payment route. Lets the webhook resolve
@@ -424,6 +441,8 @@ export const stripeAdapter: PaymentProviderAdapter = {
       bookingId,
       status,
       amountReceivedMinorUnits,
+      refundStatus,
+      refundAmountMinor,
       data: event,
     };
   },

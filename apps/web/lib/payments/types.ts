@@ -142,6 +142,19 @@ export interface WebhookEvent {
   bookingId?: string;
   status?: PaymentIntentStatus;
   amountReceivedMinorUnits?: number;
+  /**
+   * For refund events that carry a refund-object lifecycle (Stripe
+   * `charge.refund.updated`), the refund's own status. Distinct from
+   * `status` (which models the parent payment intent) because a refund
+   * can transition `pending → succeeded` OR `pending → failed`. When
+   * `failed`, the webhook handler reverses the booking's refund ledger
+   * (audit B-4).
+   */
+  refundStatus?: 'pending' | 'succeeded' | 'failed' | 'canceled' | 'requires_action';
+  /** Amount of THIS specific refund, in minor units. Distinct from
+   * `amountReceivedMinorUnits` which for charge events is the cumulative
+   * refunded total. Required to reverse the right amount on a failed refund. */
+  refundAmountMinor?: number;
   data: unknown;
 }
 

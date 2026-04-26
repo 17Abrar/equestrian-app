@@ -3,6 +3,7 @@ import {
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
   recordPaymentAccountError,
+  reverseBookingRefund,
   setBookingPaymentRef,
   findLiveryInvoiceByProviderPayment,
   markLiveryInvoicePaid,
@@ -121,6 +122,43 @@ export async function applyPaymentWebhook({
       bookingId: event.bookingId ?? null,
     });
     return null;
+  }
+
+  // A `pending → failed` refund transition (Stripe `charge.refund.updated`
+  // with refund.status = 'failed') means money the rider thought they got
+  // back actually never returned. Reverse the ledger entry so finance reports
+  // and future refund attempts see the correct running total — see audit
+  // B-4. Refund amount comes from the refund object directly (not the
+  // charge's cumulative `amount_refunded`).
+  if (isRefundEvent && event.refundStatus === 'failed' && event.refundAmountMinor) {
+    const reversed = await reverseBookingRefund(
+      clubId,
+      bookingRef.bookingId,
+      event.refundAmountMinor,
+    );
+    if (reversed) {
+      logger.warn('booking_refund_reversed', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        refundAmountMinor: event.refundAmountMinor,
+        newPaymentStatus: reversed.paymentStatus,
+        newRefundedAmountMinor: reversed.refundedAmountMinor,
+      });
+    } else {
+      // The webhook arrived for a refund we never recorded, OR the running
+      // total is smaller than the amount we'd reverse, OR an optimistic-
+      // concurrency conflict landed. Surface as warn so operators can
+      // reconcile from the provider dashboard.
+      logger.warn('booking_refund_reverse_skipped', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        refundAmountMinor: event.refundAmountMinor,
+        currentPaymentStatus: bookingRef.currentPaymentStatus,
+      });
+    }
+    return { clubId, bookingId: bookingRef.bookingId };
   }
 
   // Refund events on an already-'partial' booking: the refund route is the

@@ -151,6 +151,15 @@ export const bookings = pgTable('bookings', {
   paymentProvider: paymentProviderEnum('payment_provider'),
   providerPaymentId: varchar('provider_payment_id', { length: 255 }),
 
+  // Snapshot of the Stripe Connect platform fee at first payment-intent
+  // creation, in minor units (fils). Stripe honours `application_fee_amount`
+  // ONLY on the first PI create, so re-deriving from a live
+  // `clubs.platform_fee_percent` on every retry would silently let finance
+  // reports drift out of sync with what Stripe actually captured —
+  // see audit B-3. Null means "not yet set" (booking hasn't reached the
+  // payment step yet) or "non-Stripe provider".
+  applicationFeeMinor: integer('application_fee_minor'),
+
   // Check-in
   checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
   qrCode: varchar('qr_code', { length: 100 }),
