@@ -114,7 +114,7 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
-          <AddHealthRecordDialog horseId={horseId} />
+          <AddHealthRecordDialog horseId={horseId} currency={currency} />
         </div>
       </CardHeader>
       <CardContent>
@@ -179,7 +179,7 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
   );
 }
 
-function AddHealthRecordDialog({ horseId }: { horseId: string }) {
+function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currency: string }) {
   const [open, setOpen] = useState(false);
   const createRecord = useCreateHealthRecord(horseId);
 
@@ -190,7 +190,7 @@ function AddHealthRecordDialog({ horseId }: { horseId: string }) {
 
   async function onSubmit(data: CreateHealthRecordInput) {
     try {
-      const apiData = { ...data, cost: data.cost != null ? toMinorUnits(data.cost) : undefined };
+      const apiData = { ...data, cost: data.cost != null ? toMinorUnits(data.cost, currency) : undefined };
       await createRecord.mutateAsync(apiData);
       toast.success('Health record added');
       form.reset();

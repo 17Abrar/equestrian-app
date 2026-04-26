@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_MONTHLY_LIVERY_FEE_MINOR } from '../constants';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -155,10 +156,15 @@ export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnership
 /**
  * Admin approval. Fee is in minor units (AED fils). A zero fee is legal —
  * it means the stable is housing the owner's horse gratis or billing
- * off-platform — and still flips the record to `active`.
+ * off-platform — and still flips the record to `active`. The upper cap
+ * (`MAX_MONTHLY_LIVERY_FEE_MINOR`) catches order-of-magnitude typos
+ * (50000 fils intended, 5000000 entered) before the cron issues a
+ * 5-lakh AED invoice; see audit finding B-14.
  */
 export const approveHorseOwnershipSchema = z.object({
-  monthlyLiveryFeeMinor: numericField(z.number().int().min(0)),
+  monthlyLiveryFeeMinor: numericField(
+    z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR),
+  ),
   liveryStartDate: z.string().max(50).min(1, 'Start date is required'),
 });
 

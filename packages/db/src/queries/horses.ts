@@ -163,7 +163,16 @@ export async function getHorseById(clubId: string, horseId: string) {
     .from(horses)
     .innerJoin(clubs, eq(clubs.id, horses.clubId))
     .leftJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
-    .where(and(eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)))
+    .where(
+      and(
+        eq(horses.id, horseId),
+        eq(horses.clubId, clubId),
+        isNull(horses.deletedAt),
+        // Soft-deleted clubs (Clerk org.deleted) shouldn't surface their
+        // horses anywhere — see audit F-1.
+        isNull(clubs.deletedAt),
+      ),
+    )
     .limit(1);
 
   return result[0] ?? null;
@@ -471,6 +480,8 @@ export async function getHorsesOwnedByUser(clerkUserId: string) {
         eq(clubMembers.clerkUserId, clerkUserId),
         eq(clubMembers.isActive, true),
         isNull(horses.deletedAt),
+        // Don't surface a tombstoned club's horses in "My horses" — F-1.
+        isNull(clubs.deletedAt),
       ),
     )
     .orderBy(desc(horses.createdAt));

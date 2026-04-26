@@ -275,7 +275,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
     defaultValues: {
       category: expense.category,
       description: expense.description,
-      amount: toMajorUnits(expense.amount),
+      amount: toMajorUnits(expense.amount, expense.currency),
       currency: expense.currency,
       date: expense.date,
       vendorName: expense.vendorName ?? undefined,
@@ -287,7 +287,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
       form.reset({
         category: expense.category,
         description: expense.description,
-        amount: toMajorUnits(expense.amount),
+        amount: toMajorUnits(expense.amount, expense.currency),
         currency: expense.currency,
         date: expense.date,
         vendorName: expense.vendorName ?? undefined,

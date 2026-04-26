@@ -2,65 +2,88 @@ import { describe, it, expect } from 'vitest';
 import { toMinorUnits, toMajorUnits, formatMoney, formatCurrency } from './money';
 
 describe('toMinorUnits', () => {
-  it('converts whole dirhams to fils', () => {
-    expect(toMinorUnits(100)).toBe(10000);
+  it('converts whole dirhams to fils for AED (2-decimal)', () => {
+    expect(toMinorUnits(100, 'AED')).toBe(10000);
   });
 
   it('converts dirhams with two decimals', () => {
-    expect(toMinorUnits(100.99)).toBe(10099);
-    expect(toMinorUnits(2500)).toBe(250000);
+    expect(toMinorUnits(100.99, 'AED')).toBe(10099);
+    expect(toMinorUnits(2500, 'AED')).toBe(250000);
   });
 
-  it('rounds half-up at the cent boundary', () => {
-    // 0.045 → 4.5 → 5 (Math.round rounds half up away from zero for positives)
-    expect(toMinorUnits(0.045)).toBe(5);
-    // 0.044 → 4.4 → 4
-    expect(toMinorUnits(0.044)).toBe(4);
+  it('rounds half-up at the cent boundary (AED)', () => {
+    expect(toMinorUnits(0.045, 'AED')).toBe(5);
+    expect(toMinorUnits(0.044, 'AED')).toBe(4);
   });
 
   it('rounds at the half-cent boundary (100.005 → 10001 due to IEEE-754)', () => {
-    // 100.005 in IEEE-754 is 100.005000000000003 (slightly above 100.005),
-    // so 100.005 * 100 = 10000.500000000002; Math.round → 10001.
-    // The test pins this behaviour so a refactor (e.g. switching to a
-    // decimal library) is a deliberate choice, not an accident.
-    expect(toMinorUnits(100.005)).toBe(10001);
+    expect(toMinorUnits(100.005, 'AED')).toBe(10001);
   });
 
   it('rounds 1.005 to 100 minor units (different IEEE-754 representation)', () => {
-    // 1.005 in IEEE-754 is 1.0049999999999999 (slightly below 1.005), so
-    // 1.005 * 100 = 100.49999999999999; Math.round → 100. Same logical
-    // input, different rounding result — the float representation of the
-    // input value matters, not the half-up rule alone.
-    expect(toMinorUnits(1.005)).toBe(100);
+    expect(toMinorUnits(1.005, 'AED')).toBe(100);
   });
 
   it('handles zero correctly', () => {
-    expect(toMinorUnits(0)).toBe(0);
+    expect(toMinorUnits(0, 'AED')).toBe(0);
   });
 
   it('handles negative values (refunds)', () => {
-    expect(toMinorUnits(-100.5)).toBe(-10050);
+    expect(toMinorUnits(-100.5, 'AED')).toBe(-10050);
   });
 
   it('handles very large values without overflow', () => {
-    // 1 billion AED in fils is 100 billion — well inside Number.MAX_SAFE_INTEGER
-    expect(toMinorUnits(1_000_000_000)).toBe(100_000_000_000);
+    expect(toMinorUnits(1_000_000_000, 'AED')).toBe(100_000_000_000);
+  });
+
+  it('uses 1000-scale for 3-decimal currencies (KWD/BHD/JOD/OMR/TND)', () => {
+    expect(toMinorUnits(1, 'KWD')).toBe(1000);
+    expect(toMinorUnits(1.5, 'KWD')).toBe(1500);
+    expect(toMinorUnits(123.456, 'BHD')).toBe(123456);
+    expect(toMinorUnits(0.001, 'OMR')).toBe(1);
+  });
+
+  it('uses 1-scale (no minor unit) for 0-decimal currencies (JPY/KRW)', () => {
+    expect(toMinorUnits(5000, 'JPY')).toBe(5000);
+    expect(toMinorUnits(1234, 'KRW')).toBe(1234);
+    expect(toMinorUnits(0.5, 'JPY')).toBe(1); // rounded
+  });
+
+  it('treats unknown currency codes as 2-decimal', () => {
+    expect(toMinorUnits(100, 'XYZ')).toBe(10000);
+  });
+
+  it('is case-insensitive on the currency code', () => {
+    expect(toMinorUnits(1, 'kwd')).toBe(1000);
+    expect(toMinorUnits(1, 'aed')).toBe(100);
   });
 });
 
 describe('toMajorUnits', () => {
-  it('converts fils to dirhams', () => {
-    expect(toMajorUnits(10000)).toBe(100);
-    expect(toMajorUnits(10099)).toBe(100.99);
+  it('converts fils to dirhams for AED', () => {
+    expect(toMajorUnits(10000, 'AED')).toBe(100);
+    expect(toMajorUnits(10099, 'AED')).toBe(100.99);
   });
 
   it('handles zero', () => {
-    expect(toMajorUnits(0)).toBe(0);
+    expect(toMajorUnits(0, 'AED')).toBe(0);
   });
 
-  it('round-trips for whole-cent values', () => {
+  it('round-trips for whole-cent AED values', () => {
     for (const v of [0, 1, 99, 100, 12345, 99999]) {
-      expect(toMinorUnits(toMajorUnits(v))).toBe(v);
+      expect(toMinorUnits(toMajorUnits(v, 'AED'), 'AED')).toBe(v);
+    }
+  });
+
+  it('round-trips for KWD (3-decimal)', () => {
+    for (const v of [0, 1, 1500, 123456]) {
+      expect(toMinorUnits(toMajorUnits(v, 'KWD'), 'KWD')).toBe(v);
+    }
+  });
+
+  it('round-trips for JPY (0-decimal)', () => {
+    for (const v of [0, 1, 5000, 999999]) {
+      expect(toMinorUnits(toMajorUnits(v, 'JPY'), 'JPY')).toBe(v);
     }
   });
 });
@@ -90,13 +113,11 @@ describe('formatMoney', () => {
   });
 
   it('falls back to en-US locale for an unknown currency', () => {
-    // Unknown currency → defaults to 2-decimal, en-US locale
     const result = formatMoney(10099, 'XYZ');
     expect(result).toBe('100.99 XYZ');
   });
 
   it('handles negative amounts', () => {
-    // Refund display — the locale formatter inserts the minus sign.
     expect(formatMoney(-10099, 'AED')).toMatch(/^-?100\.99 AED$/);
   });
 
@@ -105,9 +126,6 @@ describe('formatMoney', () => {
   });
 
   it('exports formatCurrency as an alias for formatMoney', () => {
-    // Existing callers depend on this alias — the test pins the contract so a
-    // refactor that drops `formatCurrency` fails loudly here, not in random
-    // dashboard components.
     expect(formatCurrency).toBe(formatMoney);
   });
 });

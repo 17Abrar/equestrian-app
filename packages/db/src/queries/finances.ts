@@ -78,6 +78,15 @@ export async function getExpensesByClub(clubId: string, filters: ExpenseFilters)
   return { data, total: countResult[0]?.count ?? 0 };
 }
 
+export async function getExpenseById(clubId: string, expenseId: string) {
+  const result = await db
+    .select()
+    .from(expenses)
+    .where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function createExpense(clubId: string, data: ExpenseCreate, memberId?: string) {
   const result = await db.insert(expenses).values({
     ...data,

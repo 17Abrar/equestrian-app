@@ -218,7 +218,15 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
       clubMembers,
       and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
-    .leftJoin(horses, and(eq(competitionEntries.horseId, horses.id), eq(horses.clubId, clubId)))
+    // Hide tombstoned horses' names in the entries list — F-2.
+    .leftJoin(
+      horses,
+      and(
+        eq(competitionEntries.horseId, horses.id),
+        eq(horses.clubId, clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
     .where(
       and(
         eq(competitionEntries.clubId, clubId),
@@ -431,7 +439,15 @@ export async function getCompetitionResults(clubId: string, classId: string) {
       clubMembers,
       and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
-    .leftJoin(horses, and(eq(competitionEntries.horseId, horses.id), eq(horses.clubId, clubId)))
+    // Hide tombstoned horses' names in the results list — F-2.
+    .leftJoin(
+      horses,
+      and(
+        eq(competitionEntries.horseId, horses.id),
+        eq(horses.clubId, clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
     .where(
       and(
         eq(competitionResults.clubId, clubId),

@@ -6,6 +6,7 @@ import {
   createAuditEntry,
   cancelPendingInvoicesForHorse,
 } from '@equestrian/db/queries';
+import { writeTransaction } from '@equestrian/db';
 import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
@@ -39,30 +40,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const horse = await retireHorseOwnership(
-        ownership.clubId,
-        horseId,
-        data.liveryEndDate,
-      );
+      // Atomic retire + cancel-invoices — see audit G-6. Without the
+      // transaction, a DB blip between the two writes left the horse
+      // retired but the cron still firing reminders for invoices the
+      // owner cannot settle.
+      const result = await writeTransaction(async () => {
+        const retired = await retireHorseOwnership(
+          ownership.clubId,
+          horseId,
+          data.liveryEndDate,
+        );
+        if (!retired) return null;
+        const cancelled = await cancelPendingInvoicesForHorse(ownership.clubId, horseId);
+        return { horse: retired, cancelled };
+      });
 
-      if (!horse) {
-        // Caught above — but protect against a race where admin approves/retires
-        // simultaneously with the owner's request.
+      if (!result) {
+        // Race where admin retires simultaneously with the owner's request.
         return errorResponse('NOT_ACTIVE', 'Unable to retire horse', 409);
       }
-
-      const cancelled = await cancelPendingInvoicesForHorse(
-        ownership.clubId,
-        horseId,
-      ).catch((err) => {
-        logger.error('cancel_pending_invoices_failed', {
-          clubId: ownership.clubId,
-          horseId,
-          error: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
-        });
-        return 0;
-      });
 
       void createAuditEntry({
         clubId: ownership.clubId,
@@ -72,8 +68,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         resourceId: horseId,
         changes: {
           ownershipStatus: { from: 'active', to: 'retired' },
-          liveryEndDate: { from: null, to: horse.liveryEndDate },
-          invoicesCancelled: { from: null, to: cancelled },
+          liveryEndDate: { from: null, to: result.horse.liveryEndDate },
+          invoicesCancelled: { from: null, to: result.cancelled },
         },
       }).catch((err) => {
         logger.error('audit_log_failed', {
@@ -84,7 +80,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
       });
 
-      return successResponse(horse);
+      return successResponse(result.horse);
     },
     // Layered defence: the in-handler ownership check (`getHorseOwnershipByUser`)
     // is still the authoritative gate, but adding a permission requirement

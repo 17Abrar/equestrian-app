@@ -22,9 +22,11 @@ export async function POST(request: NextRequest) {
       const body = await request.json();
       const data = validateInput(createExpenseSchema, body);
 
+      // Convert at the user-entered currency, not a hardcoded 2-decimal scale
+      // — KWD/BHD/JOD/OMR/TND are 3-decimal, JPY/KRW/etc. are 0-decimal.
       const expense = await createExpense(ctx.clubId, {
         ...data,
-        amount: toMinorUnits(data.amount),
+        amount: toMinorUnits(data.amount, data.currency),
       }, ctx.memberId ?? undefined);
 
       if (!expense) {

@@ -76,6 +76,9 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
         lte(horses.liveryStartDate, today),
         gt(horses.monthlyLiveryFeeMinor, 0),
         isNull(horses.deletedAt),
+        // Soft-deleted clubs (Clerk org.deleted webhook flips this) must
+        // stop billing — see audit B-29 / F-1.
+        isNull(clubs.deletedAt),
       ),
     );
 
@@ -240,6 +243,10 @@ export async function findOverdueInvoicesForReminders(today: string) {
       and(
         inArray(liveryInvoices.status, ['pending', 'overdue']),
         lte(liveryInvoices.dueDate, today),
+        // Don't keep reminding owners of a club that's been deleted —
+        // see audit F-1.
+        isNull(clubs.deletedAt),
+        isNull(horses.deletedAt),
       ),
     );
   return rows;
@@ -326,6 +333,10 @@ export async function getLiveryInvoicesOwnedByUser(clerkUserId: string) {
       and(
         eq(clubMembers.clerkUserId, clerkUserId),
         eq(clubMembers.isActive, true),
+        // Hide tombstoned clubs / soft-deleted horses from the rider's
+        // "My horses" invoices view — see audit F-1 / F-2.
+        isNull(clubs.deletedAt),
+        isNull(horses.deletedAt),
       ),
     )
     .orderBy(desc(liveryInvoices.periodStart));
@@ -364,6 +375,9 @@ export async function getLiveryInvoiceForEmail(clubId: string, invoiceId: string
       and(
         eq(liveryInvoices.id, invoiceId),
         eq(liveryInvoices.clubId, clubId),
+        // Don't render emails for deleted clubs / archived horses — F-1 / F-2.
+        isNull(clubs.deletedAt),
+        isNull(horses.deletedAt),
       ),
     )
     .limit(1);
@@ -397,11 +411,13 @@ export async function manualMarkLiveryInvoicePaid(
 /**
  * Cancels every pending/overdue invoice for a horse. Called when ownership
  * is retired so the billing cron stops chasing the departed owner. Uses
- * `rawDb` because the owner-initiated retire path isn't in a tenant
- * transaction — the clubId scope is still applied in the WHERE clause.
+ * `db` (not `rawDb`) so the retire route can wrap this together with
+ * `retireHorseOwnership` in a single `writeTransaction` — see audit G-6.
+ * Standalone callers outside a transaction get HTTP semantics via the
+ * proxy fallback.
  */
 export async function cancelPendingInvoicesForHorse(clubId: string, horseId: string) {
-  const result = await rawDb
+  const result = await db
     .update(liveryInvoices)
     .set({
       status: 'cancelled',

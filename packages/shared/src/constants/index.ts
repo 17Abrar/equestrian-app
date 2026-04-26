@@ -44,3 +44,11 @@ export const TOAST_DURATION_INFO = 5000;
 // TanStack Query cache times (ms)
 export const STALE_TIME_FREQUENT = 30 * 1000; // 30 seconds for frequently-changing data
 export const STALE_TIME_STABLE = 5 * 60 * 1000; // 5 minutes for stable data
+
+// Livery billing — sanity cap on monthly fee. Stored in minor units (fils
+// for 2-decimal AED). 10M fils = 100,000 AED ≈ 27,000 USD per month. Real
+// fees top out an order of magnitude below this; the cap exists to catch
+// admin-form typos like 50000 → 5000000 (a missed comma) before the cron
+// issues an absurd invoice. For 3-decimal currencies (KWD/BHD/etc.) the
+// same cap covers ~10,000 KWD which is also generous.
+export const MAX_MONTHLY_LIVERY_FEE_MINOR = 10_000_000;

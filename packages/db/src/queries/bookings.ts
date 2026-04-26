@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
 import { clubMembers } from '../schema/club-members';
@@ -307,7 +307,13 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
         clubMembers,
         and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
       )
-      .leftJoin(horses, and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId)))
+      // Soft-deleted horses shouldn't surface their name in historical bookings —
+      // F-2. The leftJoin stays a leftJoin (NULL is fine; the name just becomes
+      // unavailable, matching what a hard delete would show).
+      .leftJoin(
+        horses,
+        and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId), isNull(horses.deletedAt)),
+      )
       .where(where)
       .orderBy(desc(bookingSlots.date), desc(bookingSlots.startTime))
       .limit(filters.pageSize)
@@ -381,7 +387,10 @@ export async function getBookingById(clubId: string, bookingId: string) {
       clubMembers,
       and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
-    .leftJoin(horses, and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId)))
+    .leftJoin(
+      horses,
+      and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId), isNull(horses.deletedAt)),
+    )
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
     .limit(1);
 

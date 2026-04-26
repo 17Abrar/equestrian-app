@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { createHealthRecordSchema } from '@equestrian/shared/schemas';
-import { getHealthRecords, createHealthRecord, getHorseById } from '@equestrian/db/queries';
+import { getClubById, getHealthRecords, createHealthRecord, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
@@ -36,9 +36,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(createHealthRecordSchema, body);
 
+      // Health records have no currency field — they ride the club's currency.
+      // Scale by it so KWD/BHD clubs (3-decimal) don't get silently 10×ed.
+      let costMinor: number | undefined;
+      if (data.cost != null) {
+        const club = await getClubById(ctx.clubId);
+        if (!club) {
+          return errorResponse('NOT_FOUND', 'Club not found', 404);
+        }
+        costMinor = toMinorUnits(data.cost, club.currency);
+      }
+
       const record = await createHealthRecord(ctx.clubId, horseId, {
         ...data,
-        cost: data.cost != null ? toMinorUnits(data.cost) : undefined,
+        cost: costMinor,
         createdByMemberId: ctx.memberId,
       });
 
