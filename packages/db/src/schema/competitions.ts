@@ -119,5 +119,9 @@ export const competitionResults = pgTable('competition_results', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  index('idx_competition_results_entry').on(table.entryId),
+  // One result per entry. Without this, two judges submitting the same
+  // entry race past the route-level entry-exists check and both INSERT,
+  // producing duplicate rows that rank the same rider twice on the
+  // leaderboard. See migration 0018.
+  unique('competition_results_entry_unique').on(table.entryId),
 ]);

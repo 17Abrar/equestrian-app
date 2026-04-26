@@ -23,6 +23,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { fetchJson } from '@/lib/fetch-json';
 
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
@@ -57,16 +58,7 @@ interface UpdateBody {
 function useRiderProfile() {
   return useQuery({
     queryKey: ['me', 'profile'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/me/profile');
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ?? 'Failed to fetch profile',
-        );
-      }
-      return data as ApiSuccessResponse<RiderProfile | null>;
-    },
+    queryFn: () => fetchJson<ApiSuccessResponse<RiderProfile | null>>('/api/v1/me/profile'),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -74,20 +66,12 @@ function useRiderProfile() {
 function useUpdateRiderProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: UpdateBody) => {
-      const res = await fetch('/api/v1/me/profile', {
+    mutationFn: (body: UpdateBody) =>
+      fetchJson<ApiSuccessResponse<RiderProfile>>('/api/v1/me/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ?? 'Failed to save profile',
-        );
-      }
-      return data as ApiSuccessResponse<RiderProfile>;
-    },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['me', 'profile'] });
     },

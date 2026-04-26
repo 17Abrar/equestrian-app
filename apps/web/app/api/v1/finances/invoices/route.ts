@@ -1,21 +1,21 @@
 import { type NextRequest } from 'next/server';
+import { invoiceFiltersSchema } from '@equestrian/shared/schemas';
 import { getInvoicesByClub } from '@equestrian/db/queries';
-import { withAuth, paginatedResponse } from '@/lib/api-utils';
+import { withAuth, paginatedResponse, validateInput } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const page = Number(searchParams.page) || 1;
-      const pageSize = Number(searchParams.pageSize) || 25;
+      const filters = validateInput(invoiceFiltersSchema, searchParams);
 
-      const { data, total } = await getInvoicesByClub(ctx.clubId, {
-        status: searchParams.status,
-        page,
-        pageSize,
+      const { data, total } = await getInvoicesByClub(ctx.clubId, filters);
+
+      return paginatedResponse(data, {
+        page: filters.page,
+        pageSize: filters.pageSize,
+        total,
       });
-
-      return paginatedResponse(data, { page, pageSize, total });
     },
     { requiredPermission: 'finances:read' },
   );

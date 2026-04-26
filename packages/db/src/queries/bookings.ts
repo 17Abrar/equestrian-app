@@ -81,9 +81,20 @@ export async function getBookingSlotsByClub(clubId: string, filters: BookingSlot
       coachName: clubMembers.displayName,
     })
     .from(bookingSlots)
-    .innerJoin(lessonTypes, eq(bookingSlots.lessonTypeId, lessonTypes.id))
-    .leftJoin(arenas, eq(bookingSlots.arenaId, arenas.id))
-    .leftJoin(clubMembers, eq(bookingSlots.coachMemberId, clubMembers.id))
+    // Defence-in-depth: tenant-owned joined tables (lesson_types, arenas,
+    // club_members) all carry club_id, but FK chains alone don't enforce
+    // it — a migration error or hand-written SQL could attach a slot to a
+    // foreign-club lesson type. Mirroring the clubId condition into each
+    // join keeps a stale row from leaking into a hot-path read.
+    .innerJoin(
+      lessonTypes,
+      and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
+    )
+    .leftJoin(arenas, and(eq(bookingSlots.arenaId, arenas.id), eq(arenas.clubId, clubId)))
+    .leftJoin(
+      clubMembers,
+      and(eq(bookingSlots.coachMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
     .where(and(...conditions))
     .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime));
 }
@@ -111,9 +122,15 @@ export async function getBookingSlotById(clubId: string, slotId: string) {
       coachName: clubMembers.displayName,
     })
     .from(bookingSlots)
-    .innerJoin(lessonTypes, eq(bookingSlots.lessonTypeId, lessonTypes.id))
-    .leftJoin(arenas, eq(bookingSlots.arenaId, arenas.id))
-    .leftJoin(clubMembers, eq(bookingSlots.coachMemberId, clubMembers.id))
+    .innerJoin(
+      lessonTypes,
+      and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
+    )
+    .leftJoin(arenas, and(eq(bookingSlots.arenaId, arenas.id), eq(arenas.clubId, clubId)))
+    .leftJoin(
+      clubMembers,
+      and(eq(bookingSlots.coachMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
     .where(and(eq(bookingSlots.id, slotId), eq(bookingSlots.clubId, clubId)))
     .limit(1);
 
@@ -277,11 +294,20 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
         horseName: horses.name,
       })
       .from(bookings)
-      .innerJoin(bookingSlots, eq(bookings.slotId, bookingSlots.id))
-      .innerJoin(lessonTypes, eq(bookingSlots.lessonTypeId, lessonTypes.id))
-      .leftJoin(arenas, eq(bookingSlots.arenaId, arenas.id))
-      .innerJoin(clubMembers, eq(bookings.riderMemberId, clubMembers.id))
-      .leftJoin(horses, eq(bookings.horseId, horses.id))
+      .innerJoin(
+        bookingSlots,
+        and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+      )
+      .innerJoin(
+        lessonTypes,
+        and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
+      )
+      .leftJoin(arenas, and(eq(bookingSlots.arenaId, arenas.id), eq(arenas.clubId, clubId)))
+      .innerJoin(
+        clubMembers,
+        and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
+      .leftJoin(horses, and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId)))
       .where(where)
       .orderBy(desc(bookingSlots.date), desc(bookingSlots.startTime))
       .limit(filters.pageSize)
@@ -289,7 +315,10 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(bookings)
-      .innerJoin(bookingSlots, eq(bookings.slotId, bookingSlots.id))
+      .innerJoin(
+        bookingSlots,
+        and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+      )
       .where(where),
   ]);
 
@@ -339,11 +368,20 @@ export async function getBookingById(clubId: string, bookingId: string) {
       horseName: horses.name,
     })
     .from(bookings)
-    .innerJoin(bookingSlots, eq(bookings.slotId, bookingSlots.id))
-    .innerJoin(lessonTypes, eq(bookingSlots.lessonTypeId, lessonTypes.id))
-    .leftJoin(arenas, eq(bookingSlots.arenaId, arenas.id))
-    .innerJoin(clubMembers, eq(bookings.riderMemberId, clubMembers.id))
-    .leftJoin(horses, eq(bookings.horseId, horses.id))
+    .innerJoin(
+      bookingSlots,
+      and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+    )
+    .innerJoin(
+      lessonTypes,
+      and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
+    )
+    .leftJoin(arenas, and(eq(bookingSlots.arenaId, arenas.id), eq(arenas.clubId, clubId)))
+    .innerJoin(
+      clubMembers,
+      and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+    )
+    .leftJoin(horses, and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId)))
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
     .limit(1);
 

@@ -14,7 +14,7 @@ const audienceFiltersSchema = z
     activeWithinDays: z.number().int().min(1).max(3650).optional(),
     hasActivePackage: z.boolean().optional(),
     minBookings: z.number().int().min(1).optional(),
-    tags: z.array(z.string()).optional(),
+    tags: z.array(z.string().max(100)).max(50).optional(),
   })
   .strict();
 

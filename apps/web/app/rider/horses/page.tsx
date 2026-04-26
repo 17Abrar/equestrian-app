@@ -24,6 +24,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatCurrency } from '@equestrian/shared/utils';
+import { fetchJson } from '@/lib/fetch-json';
 
 type OwnershipStatus = 'pending' | 'active' | 'retired' | 'declined';
 
@@ -66,17 +67,7 @@ interface MyHorsesResponse {
 function useMyHorses() {
   return useQuery({
     queryKey: ['me', 'horses'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/me/horses');
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to load horses',
-        );
-      }
-      return data as ApiSuccessResponse<MyHorsesResponse>;
-    },
+    queryFn: () => fetchJson<ApiSuccessResponse<MyHorsesResponse>>('/api/v1/me/horses'),
     staleTime: 60 * 1000,
   });
 }
@@ -84,20 +75,12 @@ function useMyHorses() {
 function useRetireHorse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (horseId: string) => {
-      const res = await fetch(`/api/v1/me/horses/${horseId}/retire`, {
+    mutationFn: (horseId: string) =>
+      fetchJson<ApiSuccessResponse<{ id: string }>>(`/api/v1/me/horses/${horseId}/retire`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ?? 'Failed to retire',
-        );
-      }
-      return data;
-    },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['me', 'horses'] });
     },

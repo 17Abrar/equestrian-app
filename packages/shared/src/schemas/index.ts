@@ -35,18 +35,18 @@ export const createHorseSchema = z.object({
   barnName: z.string().max(255).optional(),
   breed: z.string().max(100).optional(),
   gender: z.string().max(20).optional(),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().max(50).optional(),
   color: z.string().max(100).optional(),
   heightHands: optionalNumeric(z.number().positive()),
   weightKg: optionalNumeric(z.number().positive()),
-  markings: z.string().optional(),
+  markings: z.string().max(1000).optional(),
   microchipNumber: z.string().max(100).optional(),
   passportNumber: z.string().max(100).optional(),
   registrationNumber: z.string().max(100).optional(),
 
   status: z.enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold']).default('available'),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-  temperament: z.array(z.string()).optional(),
+  temperament: z.array(z.string().max(50)).max(20).optional(),
   weightLimitKg: optionalNumeric(z.number().positive()),
   minRiderAge: optionalNumeric(z.number().int().positive()),
   maxLessonsPerDay: numericField(z.number().int().min(1)).default(3),
@@ -64,16 +64,16 @@ export const createHorseSchema = z.object({
   bitSize: z.string().max(50).optional(),
   blanketSize: z.string().max(50).optional(),
   bootsSize: z.string().max(50).optional(),
-  gearNotes: z.string().optional(),
+  gearNotes: z.string().max(2000).optional(),
 
   insuranceProvider: z.string().max(255).optional(),
   insurancePolicyNumber: z.string().max(100).optional(),
-  insuranceCoverage: z.string().optional(),
-  insuranceExpiry: z.string().optional(),
+  insuranceCoverage: z.string().max(500).optional(),
+  insuranceExpiry: z.string().max(50).optional(),
 
-  primaryPhotoUrl: z.string().url().optional(),
-  photoUrls: z.array(z.string().url()).optional(),
-  notes: z.string().optional(),
+  primaryPhotoUrl: z.string().url().max(2000).optional(),
+  photoUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+  notes: z.string().max(2000).optional(),
   ownerMemberId: z.string().uuid().optional(),
 });
 
@@ -101,7 +101,7 @@ export const transferHorseOwnerSchema = z.object({
 export type TransferHorseOwnerInput = z.output<typeof transferHorseOwnerSchema>;
 
 export const horseFiltersSchema = z.object({
-  search: z.string().optional(),
+  search: z.string().max(200).optional(),
   status: z.enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold']).optional(),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
   ownershipStatus: z.enum(['pending', 'active', 'retired', 'declined']).optional(),
@@ -124,12 +124,12 @@ export const registerHorseOwnershipSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
   breed: z.string().max(100).optional(),
   gender: z.string().max(20).optional(),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().max(50).optional(),
   color: z.string().max(100).optional(),
   heightHands: optionalNumeric(z.number().positive()),
   weightKg: optionalNumeric(z.number().positive()),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-  primaryPhotoUrl: z.string().url().optional(),
+  primaryPhotoUrl: z.string().url().max(2000).optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -143,7 +143,7 @@ export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnership
  */
 export const approveHorseOwnershipSchema = z.object({
   monthlyLiveryFeeMinor: numericField(z.number().int().min(0)),
-  liveryStartDate: z.string().min(1, 'Start date is required'),
+  liveryStartDate: z.string().max(50).min(1, 'Start date is required'),
 });
 
 export type ApproveHorseOwnershipInput = z.output<typeof approveHorseOwnershipSchema>;
@@ -155,7 +155,7 @@ export const declineHorseOwnershipSchema = z.object({
 export type DeclineHorseOwnershipInput = z.output<typeof declineHorseOwnershipSchema>;
 
 export const retireHorseOwnershipSchema = z.object({
-  liveryEndDate: z.string().optional(),
+  liveryEndDate: z.string().max(50).optional(),
 });
 
 export type RetireHorseOwnershipInput = z.output<typeof retireHorseOwnershipSchema>;
@@ -163,21 +163,21 @@ export type RetireHorseOwnershipInput = z.output<typeof retireHorseOwnershipSche
 // ─── Riders ────────────────────────────────────────────────────────────
 
 export const updateRiderProfileSchema = z.object({
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().max(50).optional(),
   weightKg: optionalNumeric(z.number().positive()),
   heightCm: optionalNumeric(z.number().positive()),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
   emergencyContactName: z.string().max(255).optional(),
   emergencyContactPhone: z.string().max(50).optional(),
   emergencyContactRelation: z.string().max(100).optional(),
-  medicalNotes: z.string().optional(),
+  medicalNotes: z.string().max(5000).optional(),
 });
 
 export type UpdateRiderProfileFormValues = z.input<typeof updateRiderProfileSchema>;
 export type UpdateRiderProfileInput = z.output<typeof updateRiderProfileSchema>;
 
 export const riderFiltersSchema = z.object({
-  search: z.string().optional(),
+  search: z.string().max(200).optional(),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
   ...paginationSchema.shape,
 });
@@ -188,14 +188,14 @@ export const createRiderSchema = z.object({
   displayName: z.string().min(1, 'Name is required').max(255),
   email: z.string().email('Invalid email').max(255),
   phone: z.string().max(50).optional(),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().max(50).optional(),
   weightKg: optionalNumeric(z.number().positive()),
   heightCm: optionalNumeric(z.number().positive()),
   skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
   emergencyContactName: z.string().max(255).optional(),
   emergencyContactPhone: z.string().max(50).optional(),
   emergencyContactRelation: z.string().max(100).optional(),
-  medicalNotes: z.string().optional(),
+  medicalNotes: z.string().max(5000).optional(),
 });
 
 export type CreateRiderInput = z.output<typeof createRiderSchema>;
@@ -206,7 +206,7 @@ export type CreateRiderFormValues = z.input<typeof createRiderSchema>;
 export const createLessonTypeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
   type: z.string().min(1, 'Type is required').max(100),
-  description: z.string().optional(),
+  description: z.string().max(2000).optional(),
   durationMinutes: numericField(z.number().int().min(15)).default(60),
   price: numericField(z.number().int().min(0)),
   currency: z.string().length(3).default('AED'),
@@ -242,9 +242,9 @@ export const createBookingSlotSchema = z.object({
   lessonTypeId: z.string().uuid(),
   arenaId: z.string().uuid().optional(),
   coachMemberId: z.string().uuid().optional(),
-  date: z.string().min(1, 'Date is required'),
-  startTime: z.string().min(1, 'Start time is required'),
-  endTime: z.string().min(1, 'End time is required'),
+  date: z.string().max(50).min(1, 'Date is required'),
+  startTime: z.string().max(20).min(1, 'Start time is required'),
+  endTime: z.string().max(20).min(1, 'End time is required'),
   maxRiders: numericField(z.number().int().min(1)),
 });
 
@@ -254,12 +254,12 @@ export const createRecurringSlotsSchema = z.object({
   lessonTypeId: z.string().uuid(),
   arenaId: z.string().uuid().optional(),
   coachMemberId: z.string().uuid().optional(),
-  startTime: z.string().min(1, 'Start time is required'),
-  endTime: z.string().min(1, 'End time is required'),
+  startTime: z.string().max(20).min(1, 'Start time is required'),
+  endTime: z.string().max(20).min(1, 'End time is required'),
   maxRiders: numericField(z.number().int().min(1)),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day'),
-  dateFrom: z.string().min(1, 'Start date is required'),
-  dateTo: z.string().min(1, 'End date is required'),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day').max(7),
+  dateFrom: z.string().max(50).min(1, 'Start date is required'),
+  dateTo: z.string().max(50).min(1, 'End date is required'),
 });
 
 export type CreateRecurringSlotsFormValues = z.input<typeof createRecurringSlotsSchema>;
@@ -284,7 +284,7 @@ export const createBookingSchema = z.object({
     'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
     'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
   ]).optional(),
-  couponCode: z.string().optional(),
+  couponCode: z.string().max(50).optional(),
   autoMatchHorse: z.boolean().default(true),
   // When present, this booking is for a guest (non-member). `riderMemberId`
   // still refers to the signed-in booker; the guest's contact info rides on
@@ -296,12 +296,12 @@ export const createBookingSchema = z.object({
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 
 export const cancelBookingSchema = z.object({
-  reason: z.string().min(1, 'Cancellation reason is required'),
+  reason: z.string().min(1, 'Cancellation reason is required').max(1000),
 });
 
 export const bookingFiltersSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
-  date: z.string().optional(),
+  date: z.string().max(50).optional(),
   lessonTypeId: z.string().uuid().optional(),
   riderMemberId: z.string().uuid().optional(),
   ...paginationSchema.shape,
@@ -315,15 +315,15 @@ const COMPETITION_STATUSES = ['draft', 'published', 'in_progress', 'completed', 
 
 export const createCompetitionSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
-  description: z.string().optional(),
-  startDate: z.string().min(1, 'Start date is required'),
-  endDate: z.string().min(1, 'End date is required'),
+  description: z.string().max(2000).optional(),
+  startDate: z.string().max(50).min(1, 'Start date is required'),
+  endDate: z.string().max(50).min(1, 'End date is required'),
   location: z.string().max(500).optional(),
   arenaId: z.string().uuid().optional(),
-  disciplines: z.array(z.string().max(100)).optional(),
+  disciplines: z.array(z.string().max(100)).max(50).optional(),
   entryFee: optionalNumeric(z.number().int().min(0)),
   currency: z.string().length(3).default('AED'),
-  registrationDeadline: z.string().optional(),
+  registrationDeadline: z.string().max(50).optional(),
   maxParticipants: optionalNumeric(z.number().int().positive()),
   status: z.enum(COMPETITION_STATUSES).default('draft'),
 });
@@ -336,8 +336,8 @@ export type UpdateCompetitionInput = z.output<typeof updateCompetitionSchema>;
 
 export const competitionFiltersSchema = z.object({
   status: z.enum(COMPETITION_STATUSES).optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().max(50).optional(),
+  dateTo: z.string().max(50).optional(),
   ...paginationSchema.shape,
 });
 
@@ -380,7 +380,7 @@ export const createCompetitionResultSchema = z.object({
   placing: optionalNumeric(z.number().int().positive()),
   timeSeconds: optionalNumeric(z.number().positive()),
   faults: numericField(z.number().int().min(0)).default(0),
-  notes: z.string().optional(),
+  notes: z.string().max(2000).optional(),
 });
 
 export type CreateCompetitionResultInput = z.output<typeof createCompetitionResultSchema>;
@@ -391,7 +391,7 @@ export const updateClubProfileSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   email: z.string().email().max(255).optional(),
   phone: z.string().max(50).optional(),
-  address: z.string().optional(),
+  address: z.string().max(500).optional(),
   city: z.string().max(100).optional(),
   country: z.string().max(100).optional(),
   timezone: z.string().max(50).optional(),
@@ -399,12 +399,12 @@ export const updateClubProfileSchema = z.object({
   // Nullable to match the underlying column (text, no NOT NULL) and the
   // branding schema's shape — staff need to be able to *clear* the logo
   // from the profile editor too, not just set a new one.
-  logoUrl: z.string().url().nullable().optional().or(z.literal('')),
-  websiteUrl: z.string().url().optional().or(z.literal('')),
-  socialInstagram: z.string().optional(),
-  socialFacebook: z.string().optional(),
-  socialTiktok: z.string().optional(),
-  description: z.string().optional(),
+  logoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
+  websiteUrl: z.string().url().max(2000).optional().or(z.literal('')),
+  socialInstagram: z.string().max(255).optional(),
+  socialFacebook: z.string().max(255).optional(),
+  socialTiktok: z.string().max(255).optional(),
+  description: z.string().max(2000).optional(),
 });
 
 export type UpdateClubProfileInput = z.output<typeof updateClubProfileSchema>;
@@ -417,9 +417,9 @@ const hexColor = z
 export const updateBrandingSchema = z.object({
   brandPrimaryColor: hexColor.optional(),
   brandSecondaryColor: hexColor.optional(),
-  logoUrl: z.string().url().nullable().optional().or(z.literal('')),
-  coverPhotoUrl: z.string().url().nullable().optional().or(z.literal('')),
-  faviconUrl: z.string().url().nullable().optional().or(z.literal('')),
+  logoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
+  coverPhotoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
+  faviconUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
 });
 
 export type UpdateBrandingInput = z.output<typeof updateBrandingSchema>;
@@ -489,8 +489,8 @@ export const updateStaffSchema = createStaffSchema.partial();
 export type UpdateStaffInput = z.output<typeof updateStaffSchema>;
 
 export const staffFiltersSchema = z.object({
-  search: z.string().optional(),
-  role: z.string().optional(),
+  search: z.string().max(200).optional(),
+  role: z.string().max(50).optional(),
   ...paginationSchema.shape,
 });
 
@@ -508,10 +508,10 @@ export type CreateOwnerInput = z.output<typeof createOwnerSchema>;
 
 export const createExpenseSchema = z.object({
   category: z.string().min(1).max(100),
-  description: z.string().min(1),
+  description: z.string().min(1).max(2000),
   amount: numericField(z.number().positive()),
   currency: z.string().length(3).default('AED'),
-  date: z.string().min(1, 'Date is required'),
+  date: z.string().max(50).min(1, 'Date is required'),
   horseId: z.string().uuid().optional(),
   vendorName: z.string().max(255).optional(),
 });
@@ -529,11 +529,18 @@ export type UpdateExpenseFormValues = z.input<typeof updateExpenseSchema>;
 export type UpdateExpenseInput = z.output<typeof updateExpenseSchema>;
 
 export const expenseFiltersSchema = z.object({
-  category: z.string().optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  category: z.string().max(100).optional(),
+  dateFrom: z.string().max(50).optional(),
+  dateTo: z.string().max(50).optional(),
   ...paginationSchema.shape,
 });
+
+export const invoiceFiltersSchema = z.object({
+  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).optional(),
+  ...paginationSchema.shape,
+});
+
+export type InvoiceFiltersInput = z.output<typeof invoiceFiltersSchema>;
 
 export const createCouponSchema = z.object({
   code: z.string().min(1).max(50).transform((v) => v.toUpperCase()),
@@ -545,8 +552,8 @@ export const createCouponSchema = z.object({
   maxUsesPerRider: optionalNumeric(z.number().int().positive()),
   firstTimeOnly: z.boolean().default(false),
   isStackable: z.boolean().default(false),
-  startsAt: z.string().optional(),
-  expiresAt: z.string().optional(),
+  startsAt: z.string().max(50).optional(),
+  expiresAt: z.string().max(50).optional(),
 });
 
 export type CreateCouponFormValues = z.input<typeof createCouponSchema>;
@@ -562,20 +569,20 @@ const HEALTH_RECORD_TYPES = [
 export const createHealthRecordSchema = z.object({
   recordType: z.string().min(1).max(50),
   title: z.string().min(1, 'Title is required').max(255),
-  description: z.string().optional(),
-  date: z.string().min(1, 'Date is required'),
-  nextDueDate: z.string().optional(),
+  description: z.string().max(2000).optional(),
+  date: z.string().max(50).min(1, 'Date is required'),
+  nextDueDate: z.string().max(50).optional(),
   vetName: z.string().max(255).optional(),
   vetClinic: z.string().max(255).optional(),
-  diagnosis: z.string().optional(),
-  treatment: z.string().optional(),
+  diagnosis: z.string().max(5000).optional(),
+  treatment: z.string().max(5000).optional(),
   cost: optionalNumeric(z.number().int().min(0)),
   recoveryTimeDays: optionalNumeric(z.number().int().min(0)),
   followUpNeeded: z.boolean().default(false),
-  followUpDate: z.string().optional(),
+  followUpDate: z.string().max(50).optional(),
   batchNumber: z.string().max(100).optional(),
   productUsed: z.string().max(255).optional(),
-  documentUrls: z.array(z.string().url()).optional(),
+  documentUrls: z.array(z.string().url().max(2000)).max(20).optional(),
 });
 
 export type CreateHealthRecordFormValues = z.input<typeof createHealthRecordSchema>;
@@ -585,12 +592,12 @@ export const createMedicationSchema = z.object({
   medicationName: z.string().min(1, 'Medication name is required').max(255),
   dosage: z.string().min(1, 'Dosage is required').max(100),
   frequency: z.string().min(1, 'Frequency is required').max(100),
-  timeOfDay: z.array(z.string()).optional(),
-  startDate: z.string().min(1, 'Start date is required'),
-  endDate: z.string().optional(),
+  timeOfDay: z.array(z.string().max(50)).max(10).optional(),
+  startDate: z.string().max(50).min(1, 'Start date is required'),
+  endDate: z.string().max(50).optional(),
   isActive: z.boolean().default(true),
   prescribedBy: z.string().max(255).optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(2000).optional(),
 });
 
 export type CreateMedicationInput = z.output<typeof createMedicationSchema>;
@@ -598,11 +605,11 @@ export const updateMedicationSchema = createMedicationSchema.partial();
 
 export const createMedicationLogSchema = z.object({
   medicationId: z.string().uuid(),
-  administeredAt: z.string().min(1),
+  administeredAt: z.string().max(50).min(1),
   administeredByMemberId: z.string().uuid().optional(),
   wasAdministered: z.boolean().default(true),
-  skipReason: z.string().optional(),
-  notes: z.string().optional(),
+  skipReason: z.string().max(500).optional(),
+  notes: z.string().max(2000).optional(),
 });
 
 export type CreateMedicationLogInput = z.output<typeof createMedicationLogSchema>;
@@ -611,9 +618,9 @@ export const createFeedingPlanSchema = z.object({
   mealName: z.string().min(1, 'Meal name is required').max(100),
   feedType: z.string().max(255).optional(),
   quantityKg: optionalNumeric(z.number().positive()),
-  supplements: z.array(z.string()).optional(),
-  notes: z.string().optional(),
-  timeOfDay: z.string().optional(),
+  supplements: z.array(z.string().max(100)).max(20).optional(),
+  notes: z.string().max(2000).optional(),
+  timeOfDay: z.string().max(50).optional(),
 });
 
 export type CreateFeedingPlanFormValues = z.input<typeof createFeedingPlanSchema>;
@@ -625,7 +632,7 @@ export const createExerciseScheduleSchema = z.object({
   exerciseType: z.string().min(1, 'Exercise type is required').max(100),
   durationMinutes: optionalNumeric(z.number().int().positive()),
   intensity: z.string().max(20).optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(2000).optional(),
 });
 
 export type CreateExerciseScheduleFormValues = z.input<typeof createExerciseScheduleSchema>;
@@ -639,11 +646,11 @@ const FILE_CATEGORIES = [
 
 export const createDocumentSchema = z.object({
   fileName: z.string().min(1, 'File name is required').max(255),
-  fileUrl: z.string().url('Valid URL required'),
+  fileUrl: z.string().url('Valid URL required').max(2000),
   fileSizeBytes: optionalNumeric(z.number().int().positive()),
   fileType: z.string().max(50).optional(),
   category: z.enum(FILE_CATEGORIES).default('other'),
-  description: z.string().optional(),
+  description: z.string().max(2000).optional(),
 });
 
 export type CreateDocumentInput = z.output<typeof createDocumentSchema>;

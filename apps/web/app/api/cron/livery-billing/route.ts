@@ -366,6 +366,7 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
         });
         if (refreshed) {
           await setInvoiceProviderRef(
+            inv.clubId,
             inv.invoiceId,
             refreshed.provider,
             refreshed.providerPaymentId,
@@ -375,7 +376,7 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
         }
       }
 
-      await markInvoiceOverdueAndLogReminder(inv.invoiceId);
+      await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
 
       if (inv.ownerEmail) {
         sendTriggeredEmailAsync({
