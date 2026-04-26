@@ -33,6 +33,32 @@ interface RouteParams {
  * an admin can issue a 20 AED goodwill refund today and another 30 AED
  * tomorrow, up to the original amount. The status only flips to
  * 'refunded' once the running total equals the original amount.
+ *
+ * Concurrency safety (audit B-26): the route relies on three layers of
+ * defence against admin-vs-admin and admin-vs-webhook races:
+ *
+ *   1. **Stable idempotency key**: keyed on
+ *      `refund_<bookingId>_<refundedSoFar>_<amount>`. Two concurrent
+ *      admins both reading `refundedSoFar=X` produce the same key and
+ *      the provider returns the same refund object the second time —
+ *      not a new charge.
+ *
+ *   2. **Optimistic CAS in `recordBookingRefund`**: only commits the
+ *      ledger update if `refundedAmountMinor` is still the value we
+ *      read at the start. The loser surfaces a 409 REFUND_RACE so the
+ *      operator can re-check.
+ *
+ *   3. **Surface mismatches loudly**: `booking_refund_ledger_conflict`
+ *      logs at error level (paged by the Sentry alert rules). The
+ *      narrow window where a webhook B-4 reversal lands between the
+ *      read and CAS leaves the provider with a successfully-issued
+ *      refund that the ledger needs reconciled — manual operator
+ *      action via the same provider's dashboard.
+ *
+ * The strongest fix (SELECT FOR UPDATE on the booking row, holding the
+ * lock through the provider call) would queue refunds at the cost of
+ * holding a Postgres row lock for ~1-2 seconds per call. Tracked as a
+ * future improvement.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(

@@ -10,6 +10,7 @@ import {
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
 import { mapClerkRoleToAppRole } from '@/lib/clerk-roles';
+import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 
 interface OrganizationEvent {
   data: {
@@ -60,7 +61,10 @@ function slugVariants(baseSlug: string): string[] {
 }
 
 export async function POST(request: Request) {
-  const body = await request.text();
+  const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.clerk, 'clerk');
+  if (body === null) {
+    return new Response('Payload too large', { status: 413 });
+  }
   const headersList = await headers();
 
   const svixId = headersList.get('svix-id');
@@ -116,6 +120,19 @@ export async function POST(request: Request) {
     // the stale window has elapsed and the retry can re-claim.
     logger.info('clerk_webhook_in_flight', { type: eventType, svixId });
     return new Response('Processing in progress', { status: 503 });
+  }
+
+  if (claim.status === 'permanently_failed') {
+    // The event burned through MAX_WEBHOOK_ATTEMPTS retries; further
+    // attempts won't help (likely a missing org.created sibling). Return
+    // 200 so Svix stops retrying and emit a high-priority alert so an
+    // operator runs the org-resync procedure (audit B-12).
+    logger.error('webhook_permanently_failed', {
+      provider: 'clerk',
+      svixId,
+      eventType,
+    });
+    return new Response('OK', { status: 200 });
   }
 
   try {
