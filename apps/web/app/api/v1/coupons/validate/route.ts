@@ -76,6 +76,9 @@ export async function POST(request: NextRequest) {
     },
     // failClosed: a Redis outage shouldn't let an attacker brute-force coupon
     // codes by spamming this endpoint. Legit users retry; abuse stays capped.
-    { rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true } },
+    {
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'coupons:validate',
+    },
   );
 }

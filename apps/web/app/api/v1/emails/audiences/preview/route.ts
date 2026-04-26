@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     {
       requiredPermission: 'emails:read',
       rateLimit: { maxRequests: 60, windowMs: 60_000 },
+      routeKey: 'emails:audiences:preview',
     },
   );
 }

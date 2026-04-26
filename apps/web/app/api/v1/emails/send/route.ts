@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       // Cap ad-hoc sends well below the default 60/min. Transactional email
       // flows (booking confirmation etc.) bypass this endpoint entirely.
       rateLimit: { maxRequests: 20, windowMs: 60_000 },
+      routeKey: 'emails:send',
     },
   );
 }

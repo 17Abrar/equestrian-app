@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getRedis, logRedisUnavailable } from '@/lib/redis';
+import { logger } from '@/lib/logger';
 
 /**
  * Signed OAuth state tokens. We pass these as the `state` parameter during
@@ -100,7 +101,13 @@ export async function verifyOAuthState(
     if (nonceResult === 'replay') return null;
 
     return { clubId, timestamp };
-  } catch {
+  } catch (err) {
+    // Surface internal failures (decode, HMAC compute, Redis bug, ENCRYPTION_KEY
+    // rotation gone wrong) instead of squashing them to "invalid state" — the
+    // caller renders that as a generic OAuth error with no operator visibility.
+    logger.warn('oauth_state_verify_threw', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
 }

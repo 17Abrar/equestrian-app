@@ -130,6 +130,6 @@ export async function POST(request: NextRequest) {
     // comfortably covers the legitimate flows (registration form,
     // documents tab) while bounding the abuse surface for any
     // authenticated rider in a club.
-    { rateLimit: { maxRequests: 10, windowMs: 60_000 } },
+    { rateLimit: { maxRequests: 10, windowMs: 60_000 }, routeKey: 'upload' },
   );
 }

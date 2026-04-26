@@ -18,6 +18,15 @@ interface AuditParams {
 interface ApiHandlerOptions {
   requiredPermission?: string;
   rateLimit?: RateLimitConfig;
+  /**
+   * Namespaces the rate-limit counter so a user's budget on this route doesn't
+   * pool with other routes' budgets. When unset, the limiter keys on userId
+   * alone — which means any two routes sharing a config share a counter, so a
+   * cheap noisy endpoint can starve an expensive one. Set this on every route
+   * that passes an explicit `rateLimit` (the burst-sensitive ones) and on any
+   * route where the per-user budget needs isolation.
+   */
+  routeKey?: string;
 }
 
 interface AuthenticatedContext {
@@ -132,9 +141,15 @@ export async function withAuth(
 
     const tenantCtx = await getTenantContext();
 
-    // Rate limiting (per user, default 60 req/min)
+    // Rate limiting (per user, default 60 req/min). When the caller provides
+    // a `routeKey`, namespace the counter so this route's budget doesn't pool
+    // with the user's traffic on every other endpoint that shares the same
+    // config — see ApiHandlerOptions.routeKey.
     const rateLimitConfig = options?.rateLimit ?? { maxRequests: 60, windowMs: 60_000 };
-    const rateLimitResult = await checkRateLimit(tenantCtx.userId, rateLimitConfig);
+    const rateLimitKey = options?.routeKey
+      ? `${tenantCtx.userId}:${options.routeKey}`
+      : tenantCtx.userId;
+    const rateLimitResult = await checkRateLimit(rateLimitKey, rateLimitConfig);
     if (!rateLimitResult.allowed) {
       const retryAfter = Math.ceil((rateLimitResult.retryAfterMs ?? 1000) / 1000);
       logger.warn('rate_limit_exceeded', {
@@ -142,6 +157,7 @@ export async function withAuth(
         userId: tenantCtx.userId,
         clubId: tenantCtx.clubId,
         ip,
+        routeKey: options?.routeKey ?? null,
         limit: rateLimitConfig.maxRequests,
         windowMs: rateLimitConfig.windowMs,
       });

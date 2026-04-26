@@ -55,7 +55,25 @@ function toWithCredentials(row: PaymentAccountRow): PaymentAccountWithCredential
   }
   try {
     return { ...summary, credentials: JSON.parse(plaintext) as DecryptedCredentials };
-  } catch {
+  } catch (err) {
+    // Use console.warn with a structured payload because this package can't
+    // import the app-side logger without a circular dep. Without this line, a
+    // corrupted credentials blob (e.g., ENCRYPTION_KEY rotated without
+    // re-encrypting rows, or a truncated ciphertext) silently looks like
+    // "no credentials configured" — webhook signature checks then log a
+    // misleading "secret not configured" and the operator has no path back to
+    // the real cause.
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        event: 'payment_account_credentials_unparseable',
+        timestamp: new Date().toISOString(),
+        clubId: row.clubId,
+        provider: row.provider,
+        accountId: row.id,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
     return { ...summary, credentials: null };
   }
 }
