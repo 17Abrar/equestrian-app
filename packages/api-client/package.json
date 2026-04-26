@@ -4,8 +4,7 @@
   "private": true,
   "license": "MIT",
   "exports": {
-    ".": "./src/client.ts",
-    "./endpoints": "./src/endpoints/index.ts"
+    ".": "./src/client.ts"
   },
   "dependencies": {
     "@equestrian/shared": "workspace:*",
