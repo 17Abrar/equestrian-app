@@ -63,6 +63,22 @@ jobs:
       - name: Test
         run: pnpm turbo test --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
+      # Catches Next 15 route-export validation errors and other build-
+      # time failures that `tsc --noEmit` misses (e.g. invalid named
+      # exports on a route file). Without this, broken route files land
+      # on main and only surface at `pnpm cf:deploy` time.
+      - name: Build web app
+        run: pnpm --filter @equestrian/web exec next build
+        env:
+          NEXT_PUBLIC_APP_URL: https://cavaliq.com
+          # `next build`'s "Collecting page data" phase imports every
+          # route module, which transitively imports `@equestrian/db`.
+          # The db package throws at module load if DATABASE_URL is
+          # missing. The build never connects — we just need a
+          # syntactically valid string so module init doesn't error.
+          DATABASE_URL: postgres://ci:ci@localhost/ci_unused
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+
   neon-smoke:
     # Spins up an ephemeral Neon branch from `main`, applies all
     # migrations, and runs `scripts/test-neon-smoke.mjs` against it via
