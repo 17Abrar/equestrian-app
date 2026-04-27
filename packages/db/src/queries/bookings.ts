@@ -781,6 +781,17 @@ export async function setBookingPaymentRef(
       sql`(${bookings.providerPaymentId} IS NULL OR ${bookings.providerPaymentId} = ${data.providerPaymentId})`,
     );
   }
+  // Terminal-state guard for paymentStatus (audit E-11). Once a booking is
+  // in `refunded` / `partial`, subsequent setBookingPaymentRef calls must
+  // NOT downgrade to `pending` / `failed` / `paid` — webhooks arriving
+  // out of order would otherwise rewrite the rider's settled state. The
+  // route-level guard in webhook-helpers.ts:148-162 catches this for the
+  // current call sites; this DB-level gate covers any future caller.
+  if (data.paymentStatus && data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
+    conditions.push(
+      sql`${bookings.paymentStatus} NOT IN ('refunded', 'partial')`,
+    );
+  }
 
   const result = await db
     .update(bookings)

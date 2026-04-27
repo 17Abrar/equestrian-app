@@ -11,6 +11,16 @@ interface ApiClientConfig {
   baseUrl: string;
   getToken: () => Promise<string | null>;
   getOrganizationId: () => string | null;
+  /**
+   * Hook called when a request fails — invoked for both network errors
+   * (fetch threw) and shape errors (server returned a body that didn't
+   * match the API envelope). Mobile callers wire this to
+   * `Sentry.captureException` so the silent-toast pattern in
+   * apps/mobile/hooks/use-booking-payment.ts has visibility (audit D-8).
+   * Web callers can pass undefined since their fetchJson uses Sentry
+   * directly via reportMutationError.
+   */
+  onError?: (error: unknown, context: { code: string; path: string }) => void;
 }
 
 /**
@@ -75,6 +85,10 @@ export function createApiClient(config: ApiClientConfig) {
       const raw: unknown = await response.json();
       const envelope = parseEnvelope<T>(raw);
       if (!envelope) {
+        config.onError?.(
+          new Error(`Invalid response shape from ${path}`),
+          { code: 'INVALID_RESPONSE', path },
+        );
         return {
           success: false,
           error: {
@@ -85,6 +99,7 @@ export function createApiClient(config: ApiClientConfig) {
       }
       return envelope;
     } catch (error) {
+      config.onError?.(error, { code: 'NETWORK_ERROR', path });
       return {
         success: false,
         error: {

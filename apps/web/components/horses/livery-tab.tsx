@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { fetchJson } from '@/lib/fetch-json';
 import {
   Archive,
   User,
@@ -68,20 +69,17 @@ interface LiveryInvoice {
   createdAt: string;
 }
 
+// Audit E-7: switched from inline `fetch+throw-on-non-2xx` to the shared
+// fetchJson helper so this component drifts in lockstep with every other
+// hook (matching error-message extraction, envelope-shape guard, future
+// error-envelope additions).
 function useHorseLiveryInvoices(horseId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['livery-invoices', 'horse', horseId],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/horses/${horseId}/livery-invoices`);
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to load invoices',
-        );
-      }
-      return data as ApiSuccessResponse<LiveryInvoice[]>;
-    },
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<LiveryInvoice[]>>(
+        `/api/v1/horses/${horseId}/livery-invoices`,
+      ),
     enabled,
     staleTime: STALE_TIME_FREQUENT,
   });
@@ -90,19 +88,11 @@ function useHorseLiveryInvoices(horseId: string, enabled: boolean) {
 function useMarkInvoicePaid(horseId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (invoiceId: string) => {
-      const res = await fetch(`/api/v1/livery-invoices/${invoiceId}/mark-paid`, {
-        method: 'PATCH',
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to mark paid',
-        );
-      }
-      return data;
-    },
+    mutationFn: (invoiceId: string) =>
+      fetchJson<ApiSuccessResponse<unknown>>(
+        `/api/v1/livery-invoices/${invoiceId}/mark-paid`,
+        { method: 'PATCH' },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
     },
@@ -112,19 +102,11 @@ function useMarkInvoicePaid(horseId: string) {
 function useCancelInvoice(horseId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (invoiceId: string) => {
-      const res = await fetch(`/api/v1/livery-invoices/${invoiceId}/cancel`, {
-        method: 'PATCH',
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to cancel',
-        );
-      }
-      return data;
-    },
+    mutationFn: (invoiceId: string) =>
+      fetchJson<ApiSuccessResponse<unknown>>(
+        `/api/v1/livery-invoices/${invoiceId}/cancel`,
+        { method: 'PATCH' },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
     },
@@ -335,7 +317,7 @@ function InvoicesCard({
                       <span className="text-muted-foreground"> → {inv.periodEnd}</span>
                     </TableCell>
                     <TableCell className="text-sm font-medium">
-                      {formatAmount(inv.amountMinorUnits, inv.currency)}
+                      {formatCurrency(inv.amountMinorUnits, inv.currency)}
                     </TableCell>
                     <TableCell>
                       <InvoiceStatusBadge status={inv.status} />
@@ -518,12 +500,13 @@ function InvoiceStatusBadge({ status }: { status: LiveryInvoice['status'] }) {
   );
 }
 
+// Tiny adapter over formatCurrency that surfaces "No fee" for zero
+// monthly-livery rows. The plain `formatAmount` helper from the previous
+// revision was a literal alias to formatCurrency and got inlined — see
+// audit E-10. If a 3-decimal currency display issue surfaces, fix it in
+// the shared formatMoney helper, not here.
 function formatFee(minor: number | null, currency: string): string {
   if (minor == null) return '—';
   if (minor === 0) return 'No fee';
-  return formatCurrency(minor, currency);
-}
-
-function formatAmount(minor: number, currency: string): string {
   return formatCurrency(minor, currency);
 }

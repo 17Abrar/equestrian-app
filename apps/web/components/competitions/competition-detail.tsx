@@ -11,7 +11,7 @@ import {
   createCompetitionEntrySchema,
   createCompetitionResultSchema,
 } from '@equestrian/shared/schemas';
-import { toMinorUnits, formatMoney } from '@equestrian/shared/utils';
+import { toMinorUnits, formatMoney, formatDate } from '@equestrian/shared/utils';
 import {
   useCompetition,
   useCompetitionClasses,
@@ -368,7 +368,7 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
               <Badge variant="outline">{entry.paymentStatus}</Badge>
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {new Date(entry.registeredAt).toLocaleDateString()}
+              {formatDate(entry.registeredAt)}
             </TableCell>
           </TableRow>
         ))}

@@ -7,9 +7,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { updateRiderProfileSchema, type UpdateRiderProfileFormValues, type UpdateRiderProfileInput } from '@equestrian/shared/schemas';
-import { useRider, useUpdateRider, type Rider } from '@/hooks/use-riders';
+import { useRider, useUpdateRider } from '@/hooks/use-riders';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatMoney } from '@equestrian/shared/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,7 +86,9 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
   const updateRider = useUpdateRider(riderId);
   const [isEditing, setIsEditing] = useState(false);
 
-  const rider = data && 'data' in data && data.success ? (data as ApiSuccessResponse<Rider>).data : null;
+  // fetchJson throws on non-2xx; the single `data.success` check is the
+  // minimal guard TypeScript needs to narrow the union — see audit E-5.
+  const rider = data?.success ? data.data : null;
 
   const form = useForm<UpdateRiderProfileFormValues, unknown, UpdateRiderProfileInput>({
     resolver: zodResolver(updateRiderProfileSchema),

@@ -24,7 +24,7 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import { formatCurrency } from '@equestrian/shared/utils';
+import { formatCurrency, formatDate } from '@equestrian/shared/utils';
 import { STALE_TIME_MEDIUM } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
@@ -304,7 +304,7 @@ function HorseCard({
             <p className="mt-2 text-xs text-muted-foreground">
               Submitted{' '}
               {horse.ownershipSubmittedAt
-                ? new Date(horse.ownershipSubmittedAt).toLocaleDateString()
+                ? formatDate(horse.ownershipSubmittedAt)
                 : '—'}
               . Waiting for the stable to review.
             </p>

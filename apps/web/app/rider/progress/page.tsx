@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, Award, BookOpen, Target } from 'lucide-react';
 import { useBookings } from '@/hooks/use-bookings';
+import { fetchJson } from '@/lib/fetch-json';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,17 +27,12 @@ interface RiderProfile {
   displayName: string | null;
 }
 
+// Audit E-7: use the shared fetchJson helper rather than re-implementing
+// the throw-on-non-2xx + error-message-extraction shape.
 function useRiderProfile() {
   return useQuery({
     queryKey: ['me', 'profile'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/me/profile');
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error((data as { error?: { message?: string } }).error?.message ?? 'Failed to fetch profile');
-      }
-      return data as ApiSuccessResponse<RiderProfile | null>;
-    },
+    queryFn: () => fetchJson<ApiSuccessResponse<RiderProfile | null>>('/api/v1/me/profile'),
     staleTime: STALE_TIME_STABLE,
   });
 }
@@ -77,7 +73,10 @@ export default function RiderProgressPage() {
   const { data: profileData, isLoading: profileLoading, isError: profileError, error: profileErr, refetch: refetchProfile } = useRiderProfile();
   const { data: completedData, isLoading: completedLoading, isError: completedError, error: completedErr, refetch: refetchCompleted } = useBookings({ status: 'completed', pageSize: 10 });
   const { data: upcomingData } = useBookings({ status: 'confirmed', pageSize: 1 });
-  const upcomingCount = upcomingData?.pagination?.total ?? 0;
+  // PaginatedResponse<T>.pagination is non-optional once `data` is loaded —
+  // the extra `?.` was defensive theater (audit E-9). The first `?.` covers
+  // the initial-loading undefined case; nothing past that.
+  const upcomingCount = upcomingData?.pagination.total ?? 0;
 
   const profile = profileData?.data;
   const completedBookings = completedData?.data ?? [];

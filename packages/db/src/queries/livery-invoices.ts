@@ -433,6 +433,13 @@ export async function manualMarkLiveryInvoicePaid(
     .set({
       status: 'paid',
       paidAt,
+      // Reset reminder cadence so an admin re-issuing this invoice (via a
+      // future void+reissue tool) doesn't inherit a stale reminder_count
+      // that would skip the day-7 nudge — see audit E-15. Setting to 0
+      // / null is safe even on a paid invoice; the reminder query won't
+      // pick it up since status='paid' is excluded.
+      lastReminderAt: null,
+      reminderCount: 0,
       updatedAt: new Date(),
     })
     .where(

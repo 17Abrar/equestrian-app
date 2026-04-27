@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { getCapacityInfo } from '@/lib/capacity';
 import { useBookingSlots, useCreateBooking, type BookingSlot } from '@/hooks/use-bookings';
 import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -81,8 +82,10 @@ interface SlotCardProps {
 }
 
 function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
-  const isFull = slot.currentRiders >= slot.maxRiders;
-  const spotsLeft = slot.maxRiders - slot.currentRiders;
+  // Shared with the calendar's getCapacityInfo so a future tweak to
+  // capacity policy (e.g. waitlist semantics) lands everywhere — see
+  // audit E-6.
+  const { isFull, spotsLeft } = getCapacityInfo(slot.currentRiders, slot.maxRiders);
 
   return (
     <Card

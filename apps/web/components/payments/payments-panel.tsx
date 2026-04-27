@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { CheckCircle2, AlertCircle, Loader2, Link2, Unlink } from 'lucide-react';
+import { formatDate } from '@equestrian/shared/utils';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -184,7 +185,7 @@ function ProviderCard({ info, account }: ProviderCardProps) {
         )}
         {account?.connectedAt && (
           <div className="text-xs text-muted-foreground">
-            Connected {new Date(account.connectedAt).toLocaleDateString()}
+            Connected {formatDate(account.connectedAt)}
           </div>
         )}
         {hasError && account.lastError && (

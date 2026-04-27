@@ -26,6 +26,14 @@ export function useApiClient(): ApiClient {
         baseUrl: API_BASE_URL,
         getToken: () => getToken(),
         getOrganizationId: () => organization?.id ?? null,
+        // Surface NETWORK_ERROR / INVALID_RESPONSE failures to the device
+        // console so a Cloudflare blip or a misrouted HTML body has a
+        // diagnostic trail (audit D-8). Once @sentry/react-native lands
+        // in mobile, swap this for Sentry.captureException.
+        onError: (error, context) => {
+          // eslint-disable-next-line no-console
+          console.error('[api-client]', context.code, context.path, error);
+        },
       }),
     [getToken, organization?.id],
   );
