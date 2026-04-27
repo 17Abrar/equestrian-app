@@ -94,6 +94,38 @@ export function validateInput<S extends ZodTypeAny>(
 }
 
 /**
+ * Default request-body cap (1 MB). Any authenticated JSON route should
+ * comfortably fit — Zod schemas have field-level `.max()` caps under
+ * 5KB anywhere in the codebase. The Cloudflare Worker's outer 100 MB
+ * limit is a fallback; this is the per-route guard so a 50 MB hostile
+ * body doesn't burn JSON.parse + isolate memory before validation
+ * sees it. See audit G-32.
+ */
+export const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
+
+export class PayloadTooLargeError extends Error {
+  constructor() {
+    super('Request body exceeds the maximum allowed size');
+    this.name = 'PayloadTooLargeError';
+  }
+}
+
+async function readBodyTextWithCap(request: Request, maxBytes: number): Promise<string> {
+  const contentLength = request.headers.get('content-length');
+  if (contentLength) {
+    const declared = Number(contentLength);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      throw new PayloadTooLargeError();
+    }
+  }
+  const text = await request.text();
+  if (text.length > maxBytes) {
+    throw new PayloadTooLargeError();
+  }
+  return text;
+}
+
+/**
  * Parses a JSON request body for routes that accept an optional body
  * (i.e. all schema fields are optional or have defaults). An empty body
  * validates against the schema as `{}`, letting defaults kick in;
@@ -109,10 +141,30 @@ export async function parseOptionalBody<S extends ZodTypeAny>(
   request: Request,
   schema: S,
 ): Promise<S['_output']> {
-  const text = await request.text();
+  const text = await readBodyTextWithCap(request, MAX_REQUEST_BODY_BYTES);
   if (text.length === 0) {
     return validateInput(schema, {});
   }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new SyntaxError('Request body contains invalid JSON');
+  }
+  return validateInput(schema, raw);
+}
+
+/**
+ * Required-body sibling of parseOptionalBody — validates against the
+ * schema (no empty-body fallback). Use for routes that mandate a body
+ * payload. Throws PayloadTooLargeError when the request body exceeds
+ * MAX_REQUEST_BODY_BYTES; withAuth catches it and returns 413.
+ */
+export async function parseRequiredBody<S extends ZodTypeAny>(
+  request: Request,
+  schema: S,
+): Promise<S['_output']> {
+  const text = await readBodyTextWithCap(request, MAX_REQUEST_BODY_BYTES);
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -148,14 +200,18 @@ export async function withAuth(
 
     const tenantCtx = await getTenantContext();
 
-    // Rate limiting (per user, default 60 req/min). When the caller provides
-    // a `routeKey`, namespace the counter so this route's budget doesn't pool
-    // with the user's traffic on every other endpoint that shares the same
-    // config — see ApiHandlerOptions.routeKey.
+    // Rate limiting (per user, default 60 req/min). When the caller doesn't
+    // pass a routeKey, fall back to the request pathname (set on the
+    // headers by middleware) so each route gets its own bucket — without
+    // this, all endpoints share a single 60/min budget per user and a
+    // 3-tab admin polling 5 endpoints starves itself with spurious 429s.
+    // Audit G-21.
     const rateLimitConfig = options?.rateLimit ?? { maxRequests: 60, windowMs: 60_000 };
+    const pathname = headerStore.get('x-pathname') ?? '';
+    const fallbackKey = pathname ? `${tenantCtx.userId}:${pathname}` : tenantCtx.userId;
     const rateLimitKey = options?.routeKey
       ? `${tenantCtx.userId}:${options.routeKey}`
-      : tenantCtx.userId;
+      : fallbackKey;
     const rateLimitResult = await checkRateLimit(rateLimitKey, rateLimitConfig);
     if (!rateLimitResult.allowed) {
       const retryAfter = Math.ceil((rateLimitResult.retryAfterMs ?? 1000) / 1000);
@@ -233,6 +289,10 @@ export async function withAuth(
 
     if (error instanceof SyntaxError) {
       return errorResponse('INVALID_JSON', 'Request body contains invalid JSON', 400);
+    }
+
+    if (error instanceof PayloadTooLargeError) {
+      return errorResponse('PAYLOAD_TOO_LARGE', error.message, 413);
     }
 
     const headerStore = await headers().catch(() => null);

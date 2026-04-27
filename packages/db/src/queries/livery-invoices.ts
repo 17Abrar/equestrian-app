@@ -1,4 +1,4 @@
-import { and, eq, sql, lte, inArray, desc, isNull, gt, type SQL } from 'drizzle-orm';
+import { and, asc, eq, sql, lte, inArray, desc, isNull, gt, type SQL } from 'drizzle-orm';
 import { db, rawDb } from '../index';
 import { liveryInvoices } from '../schema/livery-invoices';
 import { horses } from '../schema/horses';
@@ -24,6 +24,9 @@ export interface BillableHorse {
   clubId: string;
   clubName: string;
   clubCurrency: string;
+  /** Club IANA timezone — used by the cron to derive a per-club "today"
+   * so non-GCC clubs aren't billed on the wrong calendar date (audit G-3). */
+  clubTimezone: string;
   ownerMemberId: string;
   ownerEmail: string | null;
   ownerName: string | null;
@@ -57,6 +60,7 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
       clubId: horses.clubId,
       clubName: clubs.name,
       clubCurrency: clubs.currency,
+      clubTimezone: clubs.timezone,
       ownerMemberId: horses.ownerMemberId,
       ownerEmail: clubMembers.email,
       ownerName: clubMembers.displayName,
@@ -76,6 +80,9 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
         lte(horses.liveryStartDate, today),
         gt(horses.monthlyLiveryFeeMinor, 0),
         isNull(horses.deletedAt),
+        // Soft-deleted clubs (Clerk org.deleted webhook flips this) must
+        // stop billing — see audit B-29 / F-1.
+        isNull(clubs.deletedAt),
       ),
     );
 
@@ -217,6 +224,7 @@ export async function findOverdueInvoicesForReminders(today: string) {
     .select({
       invoiceId: liveryInvoices.id,
       clubId: liveryInvoices.clubId,
+      clubTimezone: clubs.timezone,
       horseId: liveryInvoices.horseId,
       ownerMemberId: liveryInvoices.ownerMemberId,
       invoiceNumber: liveryInvoices.invoiceNumber,
@@ -240,8 +248,19 @@ export async function findOverdueInvoicesForReminders(today: string) {
       and(
         inArray(liveryInvoices.status, ['pending', 'overdue']),
         lte(liveryInvoices.dueDate, today),
+        // Don't keep reminding owners of a club that's been deleted —
+        // see audit F-1.
+        isNull(clubs.deletedAt),
+        isNull(horses.deletedAt),
       ),
-    );
+    )
+    // Bounded run-time so the cron can't hit Workers' wall-clock budget on
+    // a sustained backlog. Earliest reminder_count first so the day-7 nudge
+    // doesn't get systematically skipped while the cron processes day-30s
+    // (audit G-13). Operators monitoring `cron_capacity_hit` should bump
+    // this if it pegs.
+    .orderBy(asc(liveryInvoices.reminderCount), asc(liveryInvoices.dueDate))
+    .limit(200);
   return rows;
 }
 
@@ -261,6 +280,32 @@ export async function markInvoiceOverdueAndLogReminder(clubId: string, invoiceId
       updatedAt: new Date(),
     })
     .where(and(eq(liveryInvoices.id, invoiceId), eq(liveryInvoices.clubId, clubId)))
+    .returning();
+  return result[0] ?? null;
+}
+
+/**
+ * One-shot `pending → overdue` transition that leaves `reminder_count`
+ * untouched. Used by the cron when an invoice is past due but the owner
+ * has no email on file (audit G-2): bumping the counter would burn through
+ * the 7/14/30-day cadence on rows that never sent anything, leaving them
+ * permanently silent once the admin patches the email later. Idempotent
+ * — a second call after the row is already overdue is a no-op.
+ */
+export async function markInvoiceOverdueOnly(clubId: string, invoiceId: string) {
+  const result = await rawDb
+    .update(liveryInvoices)
+    .set({
+      status: 'overdue',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(liveryInvoices.id, invoiceId),
+        eq(liveryInvoices.clubId, clubId),
+        eq(liveryInvoices.status, 'pending'),
+      ),
+    )
     .returning();
   return result[0] ?? null;
 }
@@ -326,9 +371,17 @@ export async function getLiveryInvoicesOwnedByUser(clerkUserId: string) {
       and(
         eq(clubMembers.clerkUserId, clerkUserId),
         eq(clubMembers.isActive, true),
+        // Hide tombstoned clubs / soft-deleted horses from the rider's
+        // "My horses" invoices view — see audit F-1 / F-2.
+        isNull(clubs.deletedAt),
+        isNull(horses.deletedAt),
       ),
     )
-    .orderBy(desc(liveryInvoices.periodStart));
+    .orderBy(desc(liveryInvoices.periodStart))
+    // Defensive cap (audit G-12) — at one invoice per horse per month
+    // for a multi-club power user, this caps at ~5 years of history
+    // before the cap bites; explicit pagination should ship before then.
+    .limit(300);
 }
 
 /**
@@ -364,6 +417,9 @@ export async function getLiveryInvoiceForEmail(clubId: string, invoiceId: string
       and(
         eq(liveryInvoices.id, invoiceId),
         eq(liveryInvoices.clubId, clubId),
+        // Don't render emails for deleted clubs / archived horses — F-1 / F-2.
+        isNull(clubs.deletedAt),
+        isNull(horses.deletedAt),
       ),
     )
     .limit(1);
@@ -381,6 +437,13 @@ export async function manualMarkLiveryInvoicePaid(
     .set({
       status: 'paid',
       paidAt,
+      // Reset reminder cadence so an admin re-issuing this invoice (via a
+      // future void+reissue tool) doesn't inherit a stale reminder_count
+      // that would skip the day-7 nudge — see audit E-15. Setting to 0
+      // / null is safe even on a paid invoice; the reminder query won't
+      // pick it up since status='paid' is excluded.
+      lastReminderAt: null,
+      reminderCount: 0,
       updatedAt: new Date(),
     })
     .where(
@@ -397,11 +460,13 @@ export async function manualMarkLiveryInvoicePaid(
 /**
  * Cancels every pending/overdue invoice for a horse. Called when ownership
  * is retired so the billing cron stops chasing the departed owner. Uses
- * `rawDb` because the owner-initiated retire path isn't in a tenant
- * transaction — the clubId scope is still applied in the WHERE clause.
+ * `db` (not `rawDb`) so the retire route can wrap this together with
+ * `retireHorseOwnership` in a single `writeTransaction` — see audit G-6.
+ * Standalone callers outside a transaction get HTTP semantics via the
+ * proxy fallback.
  */
 export async function cancelPendingInvoicesForHorse(clubId: string, horseId: string) {
-  const result = await rawDb
+  const result = await db
     .update(liveryInvoices)
     .set({
       status: 'cancelled',
@@ -441,9 +506,12 @@ export async function cancelLiveryInvoice(clubId: string, invoiceId: string) {
 
 /**
  * Simple sequential invoice number per club. Format: `LIV-{clubSlug}-{n}`
- * where n is the current count of livery invoices for that club + 1. Good
- * enough for human readability; uniqueness is still guaranteed by the
- * (horse_id, period_start) constraint, not by the number itself.
+ * where n is the current count of livery invoices for that club + 1.
+ *
+ * Concurrent callers can both compute the same `n`; the
+ * `livery_invoices_club_number_unique` index ensures only one wins, and
+ * `createLiveryInvoiceWithGeneratedNumber` retries on the resulting
+ * 23505 with a fresh number — see audit G-4.
  */
 export async function nextLiveryInvoiceNumber(clubId: string) {
   const result = await rawDb
@@ -452,5 +520,51 @@ export async function nextLiveryInvoiceNumber(clubId: string) {
     .where(eq(liveryInvoices.clubId, clubId));
   const n = (result[0]?.count ?? 0) + 1;
   return `LIV-${clubId.slice(0, 6)}-${String(n).padStart(5, '0')}`;
+}
+
+/**
+ * Issue a livery invoice with a freshly-generated unique number, retrying
+ * on the per-club (club_id, invoice_number) unique-index collision that
+ * concurrent cron runs would otherwise produce. The (horse_id,
+ * period_start) idempotency conflict is still handled by createLiveryInvoice's
+ * onConflictDoNothing — that path returns null (already issued).
+ *
+ * Returns the issued invoice (with its allocated number) or null if the
+ * (horse, period) idempotency caught it.
+ */
+type CreateLiveryInvoiceWithoutNumber = Omit<CreateInvoiceInput, 'invoiceNumber'>;
+
+export async function createLiveryInvoiceWithGeneratedNumber(
+  input: CreateLiveryInvoiceWithoutNumber,
+): Promise<NonNullable<Awaited<ReturnType<typeof createLiveryInvoice>>> | null> {
+  const MAX_ATTEMPTS = 8;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const invoiceNumber = await nextLiveryInvoiceNumber(input.clubId);
+    try {
+      const invoice = await createLiveryInvoice({ ...input, invoiceNumber });
+      return invoice;
+    } catch (err) {
+      // Postgres 23505 unique-violation. Drizzle bubbles the underlying
+      // PG error so we inspect `.code`. Only retry on the per-club number
+      // index — any other 23505 is a real bug we shouldn't paper over.
+      const code =
+        err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+      const constraint =
+        err && typeof err === 'object' && 'constraint' in err
+          ? String((err as { constraint: unknown }).constraint)
+          : '';
+      if (code === '23505' && constraint === 'livery_invoices_club_number_unique') {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(
+    `Failed to allocate unique livery invoice number after ${MAX_ATTEMPTS} attempts (clubId=${input.clubId}): ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
 }
 

@@ -3,18 +3,31 @@ import { type NextRequest } from 'next/server';
 import {
   findHorsesDueForBilling,
   findHorseBillingAnchor,
-  createLiveryInvoice,
-  nextLiveryInvoiceNumber,
+  createLiveryInvoiceWithGeneratedNumber,
   findOverdueInvoicesForReminders,
   markInvoiceOverdueAndLogReminder,
+  markInvoiceOverdueOnly,
   setInvoiceProviderRef,
   adminGetActivePaymentAccount,
+  pruneAuditLog,
   type BillableHorse,
   type PaymentAccountWithCredentials,
 } from '@equestrian/db/queries';
+import { getTodayDateString } from '@equestrian/shared/utils';
 import { getAdapter } from '@/lib/payments/registry';
-import { sendTriggeredEmailAsync } from '@/lib/email';
+import { PaymentProviderError } from '@/lib/payments/types';
+import { sendTriggeredEmail, sendTriggeredEmailAsync } from '@/lib/email';
 import { logger } from '@/lib/logger';
+
+// Errors that mean the operator needs to do something (reconnect a provider,
+// fix an env var) rather than retry — escalate to error level so they page
+// instead of getting lost in warn-noise.
+const OPERATOR_ACTIONABLE_PAY_ERROR_CODES = new Set([
+  'ACCOUNT_NOT_CONNECTED',
+  'AUTH_FAILED',
+  'PROVIDER_NOT_CONFIGURED',
+  'MISSING_CREDENTIALS',
+]);
 import { errorResponse, successResponse } from '@/lib/api-utils';
 import { LiveryInvoiceIssued } from '@equestrian/email-templates/livery-invoice-issued';
 import { LiveryInvoiceOverdue } from '@equestrian/email-templates/livery-invoice-overdue';
@@ -48,12 +61,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Constant-time compare so an attacker can't learn the secret
-  // byte-by-byte via response timing. Length check first — timingSafeEqual
-  // throws on length mismatch.
+  // byte-by-byte via response timing. timingSafeEqual throws on length
+  // mismatch — we pad the shorter buffer to the expected length so a
+  // wrong-length header still pays the full O(n) compare and doesn't
+  // short-circuit faster than the right-length-but-wrong-value path
+  // (audit B-15).
   const provided = Buffer.from(headerSecret ?? '', 'utf8');
   const target = Buffer.from(expected, 'utf8');
-  const secretOk =
-    provided.length === target.length && timingSafeEqual(provided, target);
+  const sameLength = provided.length === target.length;
+  const padded = sameLength ? provided : Buffer.alloc(target.length);
+  const compareResult = timingSafeEqual(padded, target);
+  const secretOk = sameLength && compareResult;
   if (!secretOk) {
     // Enrich so an operator hitting the alert can tell who's calling: a
     // stale Cloudflare scheduled trigger from a previous deploy, internet
@@ -71,26 +89,67 @@ export async function POST(request: NextRequest) {
     return errorResponse('UNAUTHORIZED', 'Bad cron secret', 401);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // UTC `today` is used as the SQL upper bound on candidates — it's a
+  // conservative filter that catches every horse/invoice whose club-local
+  // today is at or past the due/start date. The cron then filters per club
+  // using `getTodayDateString(club.timezone)` so non-GCC clubs don't bill a
+  // calendar day early/late (audit G-3). Rolling at 02:00 UTC means most
+  // GCC clubs see a same-day match; Pacific clubs see their local today
+  // resolve correctly via the JS filter.
+  const utcToday = new Date().toISOString().slice(0, 10);
 
-  const issued = await issueDueInvoices(today);
-  const reminded = await sendReminders(today);
+  // Top-level try/catch so an unexpected throw in issueDueInvoices /
+  // sendReminders surfaces through the structured logger and reaches
+  // Sentry via the alert pipeline. Without this, an uncaught exception
+  // bubbles out of the route, the scheduled() wrapper logs raw
+  // `cron_scheduled_non_ok` to Cloudflare's tail (no Sentry tag), and
+  // the operator misses the alert — see audit H-6. Per-iteration
+  // catches inside the helpers already report their own row failures;
+  // this guard catches everything else.
+  try {
+    const issued = await issueDueInvoices(utcToday);
+    const reminded = await sendReminders(utcToday);
 
-  logger.info('livery_cron_completed', {
-    today,
-    invoicesIssued: issued.issued,
-    invoicesSkipped: issued.skipped,
-    remindersSent: reminded.sent,
-    remindersSkipped: reminded.skipped,
-  });
+    // Audit F-9: piggyback on the daily cron to prune old audit_log rows
+    // (90-day retention, capped at 5000 rows per run so a sustained
+    // backlog won't blow the wall-clock budget). Wrapped in a separate
+    // catch so a failure here doesn't suppress the issuance + reminder
+    // result the operator actually cares about.
+    let auditPruned = 0;
+    try {
+      const result = await pruneAuditLog();
+      auditPruned = result.pruned;
+    } catch (err) {
+      logger.warn('audit_log_prune_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
-  return successResponse({
-    date: today,
-    invoicesIssued: issued.issued,
-    invoicesSkipped: issued.skipped,
-    remindersSent: reminded.sent,
-    remindersSkipped: reminded.skipped,
-  });
+    logger.info('livery_cron_completed', {
+      utcToday,
+      invoicesIssued: issued.issued,
+      invoicesSkipped: issued.skipped,
+      remindersSent: reminded.sent,
+      remindersSkipped: reminded.skipped,
+      auditLogPruned: auditPruned,
+    });
+
+    return successResponse({
+      date: utcToday,
+      invoicesIssued: issued.issued,
+      invoicesSkipped: issued.skipped,
+      remindersSent: reminded.sent,
+      remindersSkipped: reminded.skipped,
+      auditLogPruned: auditPruned,
+    });
+  } catch (err) {
+    logger.error('livery_cron_failed', {
+      utcToday,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    return errorResponse('CRON_FAILED', 'Cron run failed', 500);
+  }
 }
 
 // GET mirrors POST for wiring variants that prefer GET (some cron wrappers).
@@ -173,34 +232,55 @@ async function createPayIntent(args: {
       payLink: result.flow === 'redirect' ? result.paymentUrl : undefined,
     };
   } catch (err) {
-    logger.warn('livery_payment_intent_failed', {
+    // Operator-actionable failures (provider disconnected, missing/expired
+    // credentials, env var unset) won't fix themselves on retry — log at
+    // error level so they page. Generic adapter throws stay at warn so a
+    // transient provider 5xx during a cron run doesn't wake anyone up.
+    const code = err instanceof PaymentProviderError ? err.code : undefined;
+    const isOperatorActionable = !!code && OPERATOR_ACTIONABLE_PAY_ERROR_CODES.has(code);
+    const fields = {
       horseId: args.horseId,
       clubId: args.clubId,
       provider: args.account.provider,
+      code,
       error: err instanceof Error ? err.message : 'unknown',
-    });
+    };
+    if (isOperatorActionable) {
+      logger.error('livery_payment_intent_failed', fields);
+    } else {
+      logger.warn('livery_payment_intent_failed', fields);
+    }
     return null;
   }
 }
 
 // ─── Invoice generation ───────────────────────────────────────────────
 
-async function issueDueInvoices(today: string): Promise<{ issued: number; skipped: number }> {
-  const horses = await findHorsesDueForBilling(today);
+async function issueDueInvoices(utcToday: string): Promise<{ issued: number; skipped: number }> {
+  const horses = await findHorsesDueForBilling(utcToday);
   const accountCache: AccountCache = new Map();
   let issued = 0;
   let skipped = 0;
 
   for (const horse of horses) {
     try {
+      // Per-club today — non-UTC zones see this resolve to a different
+      // calendar date than `utcToday`. The SQL filter over-fetches by up
+      // to 24h; we trim here.
+      const clubToday = getTodayDateString(horse.clubTimezone);
+      if (horse.liveryStartDate > clubToday) {
+        skipped += 1;
+        continue;
+      }
       const anchor = await findHorseBillingAnchor(horse.horseId);
-      const period = nextBillingPeriod(horse, anchor, today);
+      const period = nextBillingPeriod(horse, anchor, clubToday);
       if (!period) {
         skipped += 1;
         continue;
       }
 
-      const invoiceNumber = await nextLiveryInvoiceNumber(horse.clubId);
+      // Number is allocated atomically inside createLiveryInvoiceWith
+      // GeneratedNumber so a concurrent run can't mint a duplicate (G-4).
 
       // Amount at time of invoice — snapshotted so a later fee change doesn't
       // retro-alter past invoices.
@@ -224,11 +304,10 @@ async function issueDueInvoices(today: string): Promise<{ issued: number; skippe
           })
         : null;
 
-      const invoice = await createLiveryInvoice({
+      const invoice = await createLiveryInvoiceWithGeneratedNumber({
         clubId: horse.clubId,
         horseId: horse.horseId,
         ownerMemberId: horse.ownerMemberId,
-        invoiceNumber,
         periodStart: period.periodStart,
         periodEnd: period.periodEnd,
         amountMinorUnits: amountMinor,
@@ -258,7 +337,7 @@ async function issueDueInvoices(today: string): Promise<{ issued: number; skippe
             ownerName: horse.ownerName ?? 'there',
             horseName: horse.horseName,
             clubName: horse.clubName,
-            invoiceNumber,
+            invoiceNumber: invoice.invoiceNumber,
             periodStart: period.periodStart,
             periodEnd: period.periodEnd,
             amountMinorUnits: amountMinor,
@@ -315,14 +394,22 @@ function nextBillingPeriod(
 
 const REMINDER_THRESHOLDS = [7, 14, 30];
 
-async function sendReminders(today: string): Promise<{ sent: number; skipped: number }> {
-  const invoices = await findOverdueInvoicesForReminders(today);
+async function sendReminders(utcToday: string): Promise<{ sent: number; skipped: number }> {
+  const invoices = await findOverdueInvoicesForReminders(utcToday);
   const accountCache: AccountCache = new Map();
   let sent = 0;
   let skipped = 0;
 
   for (const inv of invoices) {
-    const daysOverdue = daysBetween(inv.dueDate, today);
+    // Resolve "today" in the invoice's own club timezone — for non-UTC
+    // zones, `utcToday` may be one calendar day ahead/behind, leading to
+    // reminder slots being skipped or doubled. See audit G-3.
+    const clubToday = getTodayDateString(inv.clubTimezone);
+    if (inv.dueDate > clubToday) {
+      skipped += 1;
+      continue;
+    }
+    const daysOverdue = daysBetween(inv.dueDate, clubToday);
     if (daysOverdue < REMINDER_THRESHOLDS[0]!) {
       skipped += 1;
       continue;
@@ -376,10 +463,22 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
         }
       }
 
-      await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
-
+      // Send the email FIRST and only increment reminder_count on a
+      // successful send. The previous order incremented before sending, so a
+      // transient Resend outage on day 7 would burn the day-7 reminder slot
+      // — the next cron pass keys off reminder_count and would jump straight
+      // to the day-14 cadence, leaving the owner without the day-7 nudge.
+      // Synchronous send (sendTriggeredEmail, not sendTriggeredEmailAsync) so
+      // failures throw and we can skip the increment.
+      //
+      // Owners with no email on file get a one-shot `pending → overdue`
+      // status flip (no counter bump) so a future email patch resumes the
+      // 7/14/30-day cadence from scratch — see audit G-2. Without this
+      // fix, three reminder slots got burned on null-email rows and the
+      // invoice went permanently silent even after the admin added a
+      // contact address.
       if (inv.ownerEmail) {
-        sendTriggeredEmailAsync({
+        await sendTriggeredEmail({
           clubId: inv.clubId,
           trigger: 'livery_invoice_overdue',
           to: inv.ownerEmail,
@@ -396,8 +495,12 @@ async function sendReminders(today: string): Promise<{ sent: number; skipped: nu
             payLink,
           }),
         });
+        await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
+        sent += 1;
+      } else {
+        await markInvoiceOverdueOnly(inv.clubId, inv.invoiceId);
+        skipped += 1;
       }
-      sent += 1;
     } catch (err) {
       logger.error('livery_reminder_send_failed', {
         invoiceId: inv.invoiceId,

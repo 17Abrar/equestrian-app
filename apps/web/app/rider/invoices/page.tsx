@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Receipt, ExternalLink, CheckCircle2, Clock, AlertCircle, Ban } from 'lucide-react';
+import { fetchJson } from '@/lib/fetch-json';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import { formatCurrency } from '@equestrian/shared/utils';
+import { formatCurrency, formatDate } from '@equestrian/shared/utils';
+import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 
 type InvoiceStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
@@ -30,21 +32,13 @@ interface MyLiveryInvoice {
   payLink: string | null;
 }
 
+// Audit E-7: shared fetchJson helper.
 function useMyLiveryInvoices() {
   return useQuery({
     queryKey: ['me', 'livery-invoices'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/me/livery-invoices');
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          (data as { error?: { message?: string } }).error?.message ??
-            'Failed to load invoices',
-        );
-      }
-      return data as ApiSuccessResponse<MyLiveryInvoice[]>;
-    },
-    staleTime: 30_000,
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<MyLiveryInvoice[]>>('/api/v1/me/livery-invoices'),
+    staleTime: STALE_TIME_FREQUENT,
   });
 }
 
@@ -146,7 +140,7 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
           </p>
           {invoice.status === 'paid' && invoice.paidAt && (
             <p className="text-xs text-muted-foreground">
-              Paid {new Date(invoice.paidAt).toLocaleDateString()}
+              Paid {formatDate(invoice.paidAt)}
             </p>
           )}
           {payable && (

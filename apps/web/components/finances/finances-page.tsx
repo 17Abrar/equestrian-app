@@ -11,7 +11,7 @@ import {
   type UpdateExpenseFormValues, type UpdateExpenseInput,
   type CreateCouponFormValues, type CreateCouponInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney, toMajorUnits } from '@equestrian/shared/utils';
+import { formatMoney, toMajorUnits, formatDate } from '@equestrian/shared/utils';
 import {
   useFinanceOverview, useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense,
   usePayments, useInvoices, useCoupons, useCreateCoupon,
@@ -206,7 +206,7 @@ function PaymentsTab() {
             <TableCell>{formatMoney(p.amount, p.currency)}</TableCell>
             <TableCell className="capitalize">{p.paymentMethod?.replace('_', ' ')}</TableCell>
             <TableCell><Badge className={PAYMENT_STATUS_COLORS[p.status] ?? ''}>{p.status}</Badge></TableCell>
-            <TableCell className="text-muted-foreground">{p.paidAt ? new Date(p.paidAt).toLocaleDateString() : '—'}</TableCell>
+            <TableCell className="text-muted-foreground">{p.paidAt ? formatDate(p.paidAt) : '—'}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -275,7 +275,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
     defaultValues: {
       category: expense.category,
       description: expense.description,
-      amount: toMajorUnits(expense.amount),
+      amount: toMajorUnits(expense.amount, expense.currency),
       currency: expense.currency,
       date: expense.date,
       vendorName: expense.vendorName ?? undefined,
@@ -287,7 +287,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
       form.reset({
         category: expense.category,
         description: expense.description,
-        amount: toMajorUnits(expense.amount),
+        amount: toMajorUnits(expense.amount, expense.currency),
         currency: expense.currency,
         date: expense.date,
         vendorName: expense.vendorName ?? undefined,
@@ -531,7 +531,7 @@ function CouponsTab() {
                 </TableCell>
                 <TableCell>{c.usageCount}{c.maxUses ? ` / ${c.maxUses}` : ''}</TableCell>
                 <TableCell><Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge></TableCell>
-                <TableCell className="text-muted-foreground">{c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : 'Never'}</TableCell>
+                <TableCell className="text-muted-foreground">{c.expiresAt ? formatDate(c.expiresAt) : 'Never'}</TableCell>
               </TableRow>
             ))}
           </TableBody>

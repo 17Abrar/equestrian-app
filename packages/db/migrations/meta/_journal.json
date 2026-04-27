@@ -47,57 +47,106 @@
     {
       "idx": 6,
       "version": "7",
+      "when": 1776823000000,
+      "tag": "0006_branding_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776824000000,
+      "tag": "0007_audiences",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776825000000,
+      "tag": "0008_club_discovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776826000000,
+      "tag": "0009_horse_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776827000000,
+      "tag": "0010_livery_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
       "when": 1777248000000,
       "tag": "0011_drop_rls",
       "breakpoints": true
     },
     {
-      "idx": 7,
+      "idx": 12,
       "version": "7",
       "when": 1777248000001,
       "tag": "0012_webhook_events",
       "breakpoints": true
     },
     {
-      "idx": 8,
+      "idx": 13,
       "version": "7",
       "when": 1777248000002,
       "tag": "0013_webhook_events_status",
       "breakpoints": true
     },
     {
-      "idx": 9,
+      "idx": 14,
       "version": "7",
       "when": 1777248000003,
       "tag": "0014_booking_refunded_amount",
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 15,
       "version": "7",
       "when": 1777248000004,
       "tag": "0015_booking_guest_fields",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 16,
       "version": "7",
       "when": 1777248000005,
       "tag": "0016_rider_profiles_unique",
       "breakpoints": true
     },
     {
-      "idx": 12,
+      "idx": 17,
       "version": "7",
       "when": 1777248000006,
       "tag": "0017_horse_composite_fks",
       "breakpoints": true
     },
     {
-      "idx": 13,
+      "idx": 18,
       "version": "7",
       "when": 1777248000007,
       "tag": "0018_competition_results_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1777248000008,
+      "tag": "0019_member_composite_fks",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1777248000009,
+      "tag": "0020_webhook_events_status_default",
       "breakpoints": true
     }
   ]

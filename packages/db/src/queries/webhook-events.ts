@@ -9,6 +9,9 @@ import { webhookEvents } from '../schema/webhook-events';
  *     on failure. Respond 200/5xx accordingly.
  *   - `already_processed`: the event was previously processed. The
  *     caller should respond 200 and skip the work.
+ *   - `permanently_failed`: the event was tried `MAX_WEBHOOK_ATTEMPTS`
+ *     times and a human needs to intervene. Caller should respond 200
+ *     so the provider stops retrying and fire an alert (audit B-12).
  *   - `in_flight`: another worker is currently processing this event
  *     (within the stale window). The caller should respond 5xx so the
  *     provider retries later, at which point the in-flight worker will
@@ -18,16 +21,37 @@ import { webhookEvents } from '../schema/webhook-events';
 export type WebhookClaim =
   | { status: 'claimed'; attempt: number }
   | { status: 'already_processed' }
+  | { status: 'permanently_failed' }
   | { status: 'in_flight' };
+
+/**
+ * Maximum number of failed attempts before a webhook is parked in
+ * `permanently_failed`. Picked to absorb transient blips (DB outage,
+ * out-of-order Svix delivery for the org.created/membership.created race)
+ * without burying operators under retry-noise alerts. See audit B-12.
+ */
+export const MAX_WEBHOOK_ATTEMPTS = 3;
 
 /**
  * How long a `received` claim is trusted before another worker can
  * re-claim it. Must be a comfortable upper bound on normal processing
  * time; ours is sub-second. Too short = double-processing risk when a
  * slow worker gets overtaken. Too long = events sit stuck after a
- * genuine crash until the threshold elapses.
+ * genuine crash until the threshold elapses. Audit B-18 — env-tunable
+ * because environments with reliable worker-timeout enforcement can
+ * safely shave the recovery window down.
  */
-const STALE_AFTER_MS = 5 * 60 * 1000;
+const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
+
+function resolveStaleAfterMs(): number {
+  const raw = process.env.WEBHOOK_STALE_AFTER_MS;
+  if (!raw) return DEFAULT_STALE_AFTER_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_STALE_AFTER_MS;
+  return parsed;
+}
+
+const STALE_AFTER_MS = resolveStaleAfterMs();
 
 /**
  * Claim a webhook event for processing. The unique (provider, event_id)
@@ -80,6 +104,28 @@ export async function claimWebhookEvent(
 
   if (row.status === 'processed') {
     return { status: 'already_processed' };
+  }
+
+  if (row.status === 'permanently_failed') {
+    return { status: 'permanently_failed' };
+  }
+
+  // `failed` rows are re-claimable, but only if we haven't already burned
+  // through `MAX_WEBHOOK_ATTEMPTS` retries (audit B-12). The route handler
+  // can also short-circuit earlier by calling
+  // `markWebhookEventPermanentlyFailed` directly (used by the Clerk
+  // org-not-found race so each retry doesn't re-fire the alert).
+  if (row.status === 'failed' && row.attemptCount >= MAX_WEBHOOK_ATTEMPTS) {
+    await db
+      .update(webhookEvents)
+      .set({ status: 'permanently_failed' })
+      .where(
+        and(
+          eq(webhookEvents.provider, provider),
+          eq(webhookEvents.eventId, eventId),
+        ),
+      );
+    return { status: 'permanently_failed' };
   }
 
   const staleCutoff = new Date(Date.now() - STALE_AFTER_MS);
@@ -144,11 +190,45 @@ export async function markWebhookEventFailed(
   eventId: string,
   errorMessage: string,
 ): Promise<void> {
+  // Bump `lastAttemptedAt` so the staleness check in claimWebhookEvent has
+  // a meaningful timestamp on the failed row (audit B-27). Without this,
+  // every retry instantly re-claims a `failed` row regardless of how many
+  // attempts ago it failed — making the attempt-count cap (B-12) the only
+  // brake on permanent-retry-loop alert storms.
   await db
     .update(webhookEvents)
     .set({
       status: 'failed',
       lastError: errorMessage.slice(0, 1000),
+      lastAttemptedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(webhookEvents.provider, provider),
+        eq(webhookEvents.eventId, eventId),
+      ),
+    );
+}
+
+/**
+ * Hard-fail the event — Svix/Stripe/N-Genius will stop retrying once the
+ * route returns 200, and a high-priority alert fires from
+ * `webhook_permanently_failed` so an operator picks it up. Used when the
+ * route knows further retries can't succeed (e.g. Clerk
+ * organization.created delivery permanently lost; cron-reconcile would
+ * close the gap, retry would not).
+ */
+export async function markWebhookEventPermanentlyFailed(
+  provider: string,
+  eventId: string,
+  errorMessage: string,
+): Promise<void> {
+  await db
+    .update(webhookEvents)
+    .set({
+      status: 'permanently_failed',
+      lastError: errorMessage.slice(0, 1000),
+      lastAttemptedAt: new Date(),
     })
     .where(
       and(

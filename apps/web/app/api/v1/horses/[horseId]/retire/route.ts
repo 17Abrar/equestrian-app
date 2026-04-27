@@ -1,8 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { retireHorseOwnershipSchema } from '@equestrian/shared/schemas';
-import { retireHorseOwnership, cancelPendingInvoicesForHorse } from '@equestrian/db/queries';
+import {
+  retireHorseOwnership,
+  cancelPendingInvoicesForHorse,
+} from '@equestrian/db/queries';
+import { writeTransaction } from '@equestrian/db';
 import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
-import { logger } from '@/lib/logger';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -21,9 +24,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { horseId } = await params;
       const data = await parseOptionalBody(request, retireHorseOwnershipSchema);
 
-      const horse = await retireHorseOwnership(ctx.clubId, horseId, data.liveryEndDate);
+      // Atomic: retire-ownership and cancel-pending-invoices commit together
+      // or roll back together. Without this, a failure of the second write
+      // left the horse marked retired while the cron kept billing —
+      // see audit G-6.
+      const result = await writeTransaction(async () => {
+        const horse = await retireHorseOwnership(ctx.clubId, horseId, data.liveryEndDate);
+        if (!horse) return null;
+        const cancelled = await cancelPendingInvoicesForHorse(ctx.clubId, horseId);
+        return { horse, cancelled };
+      });
 
-      if (!horse) {
+      if (!result) {
         return errorResponse(
           'NOT_ACTIVE',
           'Horse not found or is not an active ownership',
@@ -31,34 +43,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      // Cancel any invoices the cron would otherwise keep chasing.
-      // Non-fatal — if this fails, the retire itself still succeeds and
-      // the admin can manually cancel lingering invoices from the livery tab.
-      // Log the error so a sustained DB problem is visible in Sentry rather
-      // than silently leaving phantom invoices for the cron to bill.
-      const cancelled = await cancelPendingInvoicesForHorse(ctx.clubId, horseId)
-        .catch((err) => {
-          logger.error('cancel_pending_invoices_failed', {
-            clubId: ctx.clubId,
-            horseId,
-            error: err instanceof Error ? err.message : String(err),
-            stack: err instanceof Error ? err.stack : undefined,
-          });
-          return 0;
-        });
-
       void ctx.audit({
         action: 'horse.retire_ownership',
         resourceType: 'horse',
         resourceId: horseId,
         changes: {
           ownershipStatus: { from: 'active', to: 'retired' },
-          liveryEndDate: { from: null, to: horse.liveryEndDate },
-          invoicesCancelled: { from: null, to: cancelled },
+          liveryEndDate: { from: null, to: result.horse.liveryEndDate },
+          invoicesCancelled: { from: null, to: result.cancelled },
         },
       });
 
-      return successResponse(horse);
+      return successResponse(result.horse);
     },
     { requiredPermission: 'horses:update' },
   );

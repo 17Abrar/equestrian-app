@@ -2,6 +2,7 @@ import {
   Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
+import { safeHref } from './util/safe-href';
 
 interface HorseRegistrationApprovedProps {
   ownerName: string;
@@ -56,7 +57,7 @@ export function HorseRegistrationApproved({
           )}
 
           <Section style={{ textAlign: 'center' as const, margin: '24px 0' }}>
-            <Button href={portalUrl} style={styles.button}>
+            <Button href={safeHref(portalUrl)} style={styles.button}>
               View in portal
             </Button>
           </Section>

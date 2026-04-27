@@ -22,9 +22,14 @@ export async function GET(request: NextRequest) {
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     request.headers.get('x-real-ip') ??
     'unknown';
+  // Tight per-IP cap because this endpoint is unauthenticated and the obvious
+  // scrape target — competitor crawls, phishing-list builders. failClosed so a
+  // Redis blip doesn't downgrade us to per-isolate counters (which on Workers
+  // is barely a throttle); a real user can retry, an attacker is bounced.
   const rl = await checkRateLimit(`discover:list:${ip}`, {
-    maxRequests: 60,
+    maxRequests: 20,
     windowMs: 60_000,
+    failClosed: true,
   });
   if (!rl.allowed) {
     const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);

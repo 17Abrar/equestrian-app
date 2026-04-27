@@ -1,6 +1,7 @@
 import {
   Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
 } from '@react-email/components';
+import { safeHref } from './util/safe-href';
 
 interface HorseRegistrationSubmittedProps {
   adminName: string;
@@ -46,7 +47,7 @@ export function HorseRegistrationSubmitted({
           </Text>
 
           <Section style={{ textAlign: 'center' as const, margin: '24px 0' }}>
-            <Button href={reviewUrl} style={styles.button}>
+            <Button href={safeHref(reviewUrl)} style={styles.button}>
               Review registration
             </Button>
           </Section>

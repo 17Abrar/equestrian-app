@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { ArrowLeft, Rabbit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { FileUpload } from '@/components/ui/file-upload';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { STALE_TIME_MEDIUM } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
@@ -44,7 +46,7 @@ function useMemberships() {
   return useQuery({
     queryKey: ['me', 'horses'],
     queryFn: () => fetchJson<ApiSuccessResponse<MyHorsesResponse>>('/api/v1/me/horses'),
-    staleTime: 60 * 1000,
+    staleTime: STALE_TIME_MEDIUM,
   });
 }
 
@@ -135,6 +137,7 @@ export default function RegisterHorsePage() {
       toast.success('Horse submitted for approval');
       router.push('/rider/horses');
     } catch (err) {
+      reportMutationError('rider.horse.register', err);
       toast.error(err instanceof Error ? err.message : 'Failed to register');
     }
   }

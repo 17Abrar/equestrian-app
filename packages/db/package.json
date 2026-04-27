@@ -19,16 +19,16 @@
   },
   "dependencies": {
     "@equestrian/shared": "workspace:*",
-    "@neondatabase/serverless": "^0.10.4",
-    "drizzle-orm": "^0.40.0",
+    "@neondatabase/serverless": "0.10.4",
+    "drizzle-orm": "0.45.2",
     "ws": "^8.20.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.4.4",
+    "@electric-sql/pglite": "0.4.4",
     "@equestrian/typescript-config": "workspace:*",
     "@types/ws": "^8.18.1",
     "dotenv": "^16.5.0",
-    "drizzle-kit": "^0.30.5",
+    "drizzle-kit": "0.31.10",
     "typescript": "^5.8.2",
     "vitest": "^4.1.2"
   }

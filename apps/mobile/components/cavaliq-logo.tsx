@@ -1,12 +1,11 @@
 import { Image, type ImageStyle } from 'expo-image';
 import type { StyleProp } from 'react-native';
+import lightLogo from '../assets/brand/cavaliq-logo.png';
+import darkLogo from '../assets/brand/cavaliq-logo-dark.png';
+import lightMark from '../assets/brand/cavaliq-mark.png';
+import darkMark from '../assets/brand/cavaliq-mark-dark.png';
 
 type Variant = 'light' | 'dark';
-
-const lightLogo = require('../assets/brand/cavaliq-logo.png');
-const darkLogo = require('../assets/brand/cavaliq-logo-dark.png');
-const lightMark = require('../assets/brand/cavaliq-mark.png');
-const darkMark = require('../assets/brand/cavaliq-mark-dark.png');
 
 const LOCKUP_ASPECT = 704 / 256;
 

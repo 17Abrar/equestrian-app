@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserButton } from '@clerk/nextjs';
 import { User, Shield, Scale, Ruler, Pencil, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,6 +23,7 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { fetchJson } from '@/lib/fetch-json';
 
@@ -59,7 +61,7 @@ function useRiderProfile() {
   return useQuery({
     queryKey: ['me', 'profile'],
     queryFn: () => fetchJson<ApiSuccessResponse<RiderProfile | null>>('/api/v1/me/profile'),
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME_STABLE,
   });
 }
 
@@ -275,6 +277,7 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
       toast.success('Profile saved');
       onSaved();
     } catch (err) {
+      reportMutationError('rider.profile.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
   }

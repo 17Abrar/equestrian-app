@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  MAX_MONTHLY_LIVERY_FEE_MINOR,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from '../constants';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -19,11 +24,27 @@ function optionalNumeric(schema: z.ZodNumber = z.number()) {
   return numericField(schema).optional();
 }
 
+// URL fields where the form treats `''` as "not set". Without `.or(z.literal(''))`
+// the empty string from a cleared input fails `.url()` validation and the form
+// surfaces a misleading "invalid url" error.
+//   `optionalUrl`         — undefined | '' | https?://…
+//   `nullableOptionalUrl` — undefined | null | '' | https?://…   (used when
+//                           the underlying column is nullable so admins can
+//                           explicitly clear the value, not just leave it
+//                           unchanged)
+const optionalUrl = z.union([z.string().url().max(2000), z.literal('')]).optional();
+const nullableOptionalUrl = z
+  .union([z.string().url().max(2000), z.literal('')])
+  .nullable()
+  .optional();
+
 // ─── Common ────────────────────────────────────────────────────────────
 
 export const paginationSchema = z.object({
   page: numericField(z.number().int().min(1)).default(1),
-  pageSize: numericField(z.number().int().min(1).max(100)).default(25),
+  pageSize: numericField(
+    z.number().int().min(1).max(MAX_PAGE_SIZE),
+  ).default(DEFAULT_PAGE_SIZE),
 });
 
 export type PaginationInput = z.infer<typeof paginationSchema>;
@@ -53,9 +74,11 @@ export const createHorseSchema = z.object({
   mandatoryRestDays: numericField(z.number().int().min(0)).default(1),
 
   saleStatus: z.enum(['not_for_sale', 'for_sale', 'sold']).default('not_for_sale'),
-  purchasePrice: optionalNumeric(z.number().int()),
-  currentValue: optionalNumeric(z.number().int()),
-  salePrice: optionalNumeric(z.number().int()),
+  // Asset prices are minor-unit integers ≥ 0. Negative values would slip
+  // through the prior `.int()` and surface as nonsense in the finance UI.
+  purchasePrice: optionalNumeric(z.number().int().min(0)),
+  currentValue: optionalNumeric(z.number().int().min(0)),
+  salePrice: optionalNumeric(z.number().int().min(0)),
 
   saddleSize: z.string().max(50).optional(),
   girthSize: z.string().max(50).optional(),
@@ -87,9 +110,18 @@ export type CreateHorseInput = z.output<typeof createHorseSchema>;
 // recorded in the audit log. Keeping `ownerMemberId` on this schema would
 // let any caller with `horses:update` reassign ownership to an arbitrary
 // UUID via a vanilla PATCH — a mass-assignment hole.
-export const updateHorseSchema = createHorseSchema.partial().omit({
-  ownerMemberId: true,
-});
+//
+// `.strict()` rejects unknown keys at parse time. Without it, a request
+// body that smuggled in `totalLessonsCompleted: 9999` or `clubId: 'X'`
+// would silently strip those fields — fine today (Drizzle ignores them),
+// but a future widening of the queries' SET clause would silently
+// expose mass-assignment. See audit G-5.
+export const updateHorseSchema = createHorseSchema
+  .partial()
+  .omit({
+    ownerMemberId: true,
+  })
+  .strict();
 
 export type UpdateHorseInput = z.infer<typeof updateHorseSchema>;
 
@@ -139,10 +171,15 @@ export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnership
 /**
  * Admin approval. Fee is in minor units (AED fils). A zero fee is legal —
  * it means the stable is housing the owner's horse gratis or billing
- * off-platform — and still flips the record to `active`.
+ * off-platform — and still flips the record to `active`. The upper cap
+ * (`MAX_MONTHLY_LIVERY_FEE_MINOR`) catches order-of-magnitude typos
+ * (50000 fils intended, 5000000 entered) before the cron issues a
+ * 5-lakh AED invoice; see audit finding B-14.
  */
 export const approveHorseOwnershipSchema = z.object({
-  monthlyLiveryFeeMinor: numericField(z.number().int().min(0)),
+  monthlyLiveryFeeMinor: numericField(
+    z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR),
+  ),
   liveryStartDate: z.string().max(50).min(1, 'Start date is required'),
 });
 
@@ -162,16 +199,21 @@ export type RetireHorseOwnershipInput = z.output<typeof retireHorseOwnershipSche
 
 // ─── Riders ────────────────────────────────────────────────────────────
 
-export const updateRiderProfileSchema = z.object({
-  dateOfBirth: z.string().max(50).optional(),
-  weightKg: optionalNumeric(z.number().positive()),
-  heightCm: optionalNumeric(z.number().positive()),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
-  emergencyContactName: z.string().max(255).optional(),
-  emergencyContactPhone: z.string().max(50).optional(),
-  emergencyContactRelation: z.string().max(100).optional(),
-  medicalNotes: z.string().max(5000).optional(),
-});
+// `.strict()` — see audit G-5. Without it, a body containing
+// `totalLessonsCompleted` or `parentMemberId` would be silently stripped;
+// a future widening of the queries' SET clause would expose mass-assignment.
+export const updateRiderProfileSchema = z
+  .object({
+    dateOfBirth: z.string().max(50).optional(),
+    weightKg: optionalNumeric(z.number().positive()),
+    heightCm: optionalNumeric(z.number().positive()),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+    emergencyContactName: z.string().max(255).optional(),
+    emergencyContactPhone: z.string().max(50).optional(),
+    emergencyContactRelation: z.string().max(100).optional(),
+    medicalNotes: z.string().max(5000).optional(),
+  })
+  .strict();
 
 export type UpdateRiderProfileFormValues = z.input<typeof updateRiderProfileSchema>;
 export type UpdateRiderProfileInput = z.output<typeof updateRiderProfileSchema>;
@@ -220,7 +262,8 @@ export const createLessonTypeSchema = z.object({
 export type CreateLessonTypeFormValues = z.input<typeof createLessonTypeSchema>;
 export type CreateLessonTypeInput = z.output<typeof createLessonTypeSchema>;
 
-export const updateLessonTypeSchema = createLessonTypeSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateLessonTypeSchema = createLessonTypeSchema.partial().strict();
 
 // ─── Arenas ────────────────────────────────────────────────────────────
 
@@ -234,7 +277,8 @@ export const createArenaSchema = z.object({
 
 export type CreateArenaInput = z.infer<typeof createArenaSchema>;
 
-export const updateArenaSchema = createArenaSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateArenaSchema = createArenaSchema.partial().strict();
 
 // ─── Booking Slots ─────────────────────────────────────────────────────
 
@@ -250,6 +294,16 @@ export const createBookingSlotSchema = z.object({
 
 export type CreateBookingSlotInput = z.infer<typeof createBookingSlotSchema>;
 
+// Audit G-16: dateFrom / dateTo are calendar-date strings (YYYY-MM-DD).
+// The bulk-slots route's day-of-week loop uses `new Date(...).getDay()`
+// which interprets a bare YYYY-MM-DD as UTC midnight; that's safe ONLY
+// for calendar-date input (UTC midnight Sunday is local Sunday in any
+// reasonable timezone). The previous schema accepted `z.string().max(50)`,
+// which would have admitted ISO datetimes with offsets and silently
+// shifted day-of-week to the wrong calendar day. Locking to the regex
+// here means a future frontend change can't widen the contract.
+const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const createRecurringSlotsSchema = z.object({
   lessonTypeId: z.string().uuid(),
   arenaId: z.string().uuid().optional(),
@@ -258,8 +312,8 @@ export const createRecurringSlotsSchema = z.object({
   endTime: z.string().max(20).min(1, 'End time is required'),
   maxRiders: numericField(z.number().int().min(1)),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day').max(7),
-  dateFrom: z.string().max(50).min(1, 'Start date is required'),
-  dateTo: z.string().max(50).min(1, 'End date is required'),
+  dateFrom: z.string().regex(CALENDAR_DATE_RE, 'Start date must be YYYY-MM-DD'),
+  dateTo: z.string().regex(CALENDAR_DATE_RE, 'End date must be YYYY-MM-DD'),
 });
 
 export type CreateRecurringSlotsFormValues = z.input<typeof createRecurringSlotsSchema>;
@@ -331,7 +385,8 @@ export const createCompetitionSchema = z.object({
 export type CreateCompetitionFormValues = z.input<typeof createCompetitionSchema>;
 export type CreateCompetitionInput = z.output<typeof createCompetitionSchema>;
 
-export const updateCompetitionSchema = createCompetitionSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateCompetitionSchema = createCompetitionSchema.partial().strict();
 export type UpdateCompetitionInput = z.output<typeof updateCompetitionSchema>;
 
 export const competitionFiltersSchema = z.object({
@@ -399,8 +454,8 @@ export const updateClubProfileSchema = z.object({
   // Nullable to match the underlying column (text, no NOT NULL) and the
   // branding schema's shape — staff need to be able to *clear* the logo
   // from the profile editor too, not just set a new one.
-  logoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
-  websiteUrl: z.string().url().max(2000).optional().or(z.literal('')),
+  logoUrl: nullableOptionalUrl,
+  websiteUrl: optionalUrl,
   socialInstagram: z.string().max(255).optional(),
   socialFacebook: z.string().max(255).optional(),
   socialTiktok: z.string().max(255).optional(),
@@ -417,9 +472,9 @@ const hexColor = z
 export const updateBrandingSchema = z.object({
   brandPrimaryColor: hexColor.optional(),
   brandSecondaryColor: hexColor.optional(),
-  logoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
-  coverPhotoUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
-  faviconUrl: z.string().url().max(2000).nullable().optional().or(z.literal('')),
+  logoUrl: nullableOptionalUrl,
+  coverPhotoUrl: nullableOptionalUrl,
+  faviconUrl: nullableOptionalUrl,
 });
 
 export type UpdateBrandingInput = z.output<typeof updateBrandingSchema>;
@@ -485,7 +540,8 @@ export const createStaffSchema = z.object({
 
 export type CreateStaffInput = z.output<typeof createStaffSchema>;
 
-export const updateStaffSchema = createStaffSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateStaffSchema = createStaffSchema.partial().strict();
 export type UpdateStaffInput = z.output<typeof updateStaffSchema>;
 
 export const staffFiltersSchema = z.object({
@@ -504,6 +560,12 @@ export const createOwnerSchema = z.object({
 
 export type CreateOwnerInput = z.output<typeof createOwnerSchema>;
 
+// `.strict()` — see audit G-5. Caller must use this rather than
+// `createOwnerSchema.partial()` so unknown keys 422 instead of being
+// silently stripped (e.g. `role: 'club_admin'` mass-assignment).
+export const updateOwnerSchema = createOwnerSchema.partial().strict();
+export type UpdateOwnerInput = z.output<typeof updateOwnerSchema>;
+
 // ─── Finances ─────────────────────────────────────────────────────────
 
 export const createExpenseSchema = z.object({
@@ -519,8 +581,11 @@ export const createExpenseSchema = z.object({
 export type CreateExpenseFormValues = z.input<typeof createExpenseSchema>;
 export type CreateExpenseInput = z.output<typeof createExpenseSchema>;
 
+// `.strict()` — see audit G-5. Combined with the non-empty refine so a
+// body with `{}` 422s rather than running an updatedAt-only UPDATE.
 export const updateExpenseSchema = createExpenseSchema
   .partial()
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided',
   });
@@ -601,7 +666,8 @@ export const createMedicationSchema = z.object({
 });
 
 export type CreateMedicationInput = z.output<typeof createMedicationSchema>;
-export const updateMedicationSchema = createMedicationSchema.partial();
+// `.strict()` — see audit G-5.
+export const updateMedicationSchema = createMedicationSchema.partial().strict();
 
 export const createMedicationLogSchema = z.object({
   medicationId: z.string().uuid(),

@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { BOOKING_STATUS_COLORS } from '@/lib/ui-constants';
-import { formatMoney } from '@equestrian/shared/utils';
+import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -23,20 +23,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-function formatDate(dateStr: string): string {
-  const date = new Date(`${dateStr}T00:00:00`);
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
-function formatTime(timeStr: string): string {
-  const parts = timeStr.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 || 12;
-  return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
-}
 
 function formatAmount(amount: number | null, currency: string): string {
   if (amount === null) return '';

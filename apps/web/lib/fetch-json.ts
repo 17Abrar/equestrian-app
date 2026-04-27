@@ -8,14 +8,35 @@
  *
  * Behaviour:
  *  - parses the response as JSON
- *  - throws an `Error` whose message is the server's
- *    `{ error: { message } }` payload when the response is non-2xx
- *  - returns the parsed JSON typed as `T` on success
- *
- * The thrown `Error` is what `mutation.onError` and `query.error.message`
- * read; if a caller needs the structured error code/details, it can
- * upgrade to a custom error class. Today no caller needs that.
+ *  - throws on non-2xx (Error message = server's `error.message` if
+ *    available, generic fallback otherwise)
+ *  - throws when the body doesn't match the `{ success, data | error }`
+ *    envelope contract — without this guard, a route accidentally
+ *    returning bare data would silently propagate as `null`/`undefined`
+ *    through TanStack Query and surface as an empty-state UI rather
+ *    than a parseable error (audit C-5)
+ *  - returns the parsed envelope typed as `T` on success
  */
+export class ResponseShapeError extends Error {
+  public readonly url: string;
+  public readonly status: number;
+
+  constructor(url: string, status: number) {
+    super('Server returned a body that does not match the API envelope');
+    this.name = 'ResponseShapeError';
+    this.url = url;
+    this.status = status;
+  }
+}
+
+function looksLikeEnvelope(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  if (obj.success === true) return true;
+  if (obj.success === false && typeof obj.error === 'object' && obj.error !== null) return true;
+  return false;
+}
+
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const data = (await res.json().catch(() => null)) as
@@ -24,6 +45,13 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     throw new Error(data?.error?.message ?? 'Request failed');
+  }
+
+  // Routes returning HTML / a 502 gateway page / bare data fall through to
+  // here. Surface as a typed throw so the caller's catch can react instead
+  // of dereferencing `data.data?.foo` on undefined later.
+  if (!looksLikeEnvelope(data)) {
+    throw new ResponseShapeError(url, res.status);
   }
 
   return data as T;

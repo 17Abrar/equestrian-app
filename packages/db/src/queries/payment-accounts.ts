@@ -1,4 +1,4 @@
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { clubPaymentAccounts } from '../schema/finances';
 import { bookings } from '../schema/bookings';
@@ -51,6 +51,23 @@ function toWithCredentials(row: PaymentAccountRow): PaymentAccountWithCredential
   }
   const plaintext = decryptField(row.encryptedCredentials);
   if (!plaintext) {
+    // AES-GCM auth-tag verification failed (or the row predates the v1: prefix
+    // and isn't valid plaintext either). Without this log, a key rotation
+    // without re-encryption surfaces downstream as the misleading "secret not
+    // configured" 503 from webhook routes — the operator wastes hours hunting
+    // a config issue while every signature check fails. Use console.warn for
+    // the same reason as the JSON.parse branch below: this package can't
+    // import the app-side logger without a circular dep.
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        event: 'payment_account_credentials_decrypt_failed',
+        timestamp: new Date().toISOString(),
+        clubId: row.clubId,
+        provider: row.provider,
+        accountId: row.id,
+      }),
+    );
     return { ...summary, credentials: null };
   }
   try {
@@ -283,6 +300,13 @@ export async function recordPaymentAccountError(
  *
  * Only call this from webhook routes; in-app code should use the tenant-scoped
  * `getPaymentAccountByProvider`.
+ *
+ * Filters out `disabled` accounts (audit B-25): a club that disconnected
+ * but whose row remained will keep receiving Stripe webhooks for in-flight
+ * sessions, and we should NOT apply those payments to bookings — the
+ * club no longer wants this provider, and the row stays only as an audit
+ * trail. Returning null here pushes the webhook handler down the
+ * "no booking matched" branch, which acks 200 silently.
  */
 export async function findPaymentAccountByExternalId(
   externalAccountId: string,
@@ -295,6 +319,7 @@ export async function findPaymentAccountByExternalId(
       and(
         eq(clubPaymentAccounts.externalAccountId, externalAccountId),
         eq(clubPaymentAccounts.provider, provider),
+        sql`${clubPaymentAccounts.status} != 'disabled'`,
       ),
     )
     .limit(1);
@@ -424,4 +449,113 @@ export async function findBookingByIdForWebhook(
         currentProviderPaymentId: row.providerPaymentId,
       }
     : null;
+}
+
+/**
+ * Webhook-only view of a payment account — the minimum needed to verify
+ * an inbound webhook signature, without surfacing the provider's full
+ * API key. Audit B-9: the previous webhook routes loaded the full
+ * decrypted credentials blob (which includes the API key, outletId,
+ * realmName) just to read one webhook secret. A future
+ * `logger.error('webhook_failed', { account })` would have leaked the
+ * API key into Cloudflare Logs / Sentry. By returning only the webhook
+ * fields, that leak primitive is gone.
+ *
+ * The DB column for the webhook secret hasn't been split yet
+ * (deliberate — that's a follow-up data-migration). For now the helper
+ * extracts ONLY the webhook fields out of the credentials blob and
+ * never returns the rest. Callers that need the API key (payment
+ * route, refund route) keep using the full-credentials helpers.
+ */
+export interface WebhookSecretConfig {
+  clubId: string;
+  externalAccountId: string | null;
+  status: PaymentAccountStatus;
+  /** Stored under credentials.webhookSigningSecret today (Ziina). */
+  webhookSigningSecret: string | null;
+  /** N-Genius pair — stored under credentials.{webhookHeaderName,webhookHeaderValue}. */
+  webhookHeaderName: string | null;
+  webhookHeaderValue: string | null;
+}
+
+function rowToWebhookSecretConfig(row: PaymentAccountRow): WebhookSecretConfig {
+  // Touch credentials in this isolated scope only; the surrounding
+  // function returns a narrower object so no caller ever sees the
+  // provider API key.
+  let creds: Record<string, unknown> | null = null;
+  if (row.encryptedCredentials) {
+    const plaintext = decryptField(row.encryptedCredentials);
+    if (plaintext) {
+      try {
+        creds = JSON.parse(plaintext) as Record<string, unknown>;
+      } catch {
+        creds = null;
+      }
+    }
+  }
+  return {
+    clubId: row.clubId,
+    externalAccountId: row.externalAccountId,
+    status: row.status,
+    webhookSigningSecret:
+      typeof creds?.webhookSigningSecret === 'string'
+        ? (creds.webhookSigningSecret as string)
+        : null,
+    webhookHeaderName:
+      typeof creds?.webhookHeaderName === 'string'
+        ? (creds.webhookHeaderName as string)
+        : null,
+    webhookHeaderValue:
+      typeof creds?.webhookHeaderValue === 'string'
+        ? (creds.webhookHeaderValue as string)
+        : null,
+  };
+}
+
+/**
+ * Webhook-secret-only view of `findPaymentAccountByExternalId`. Use this
+ * from N-Genius / Stripe Connect webhook routes that match by
+ * external account id.
+ */
+export async function findWebhookConfigByExternalId(
+  externalAccountId: string,
+  provider: PaymentProvider,
+): Promise<WebhookSecretConfig | null> {
+  const rows = await rawDb
+    .select()
+    .from(clubPaymentAccounts)
+    .where(
+      and(
+        eq(clubPaymentAccounts.externalAccountId, externalAccountId),
+        eq(clubPaymentAccounts.provider, provider),
+        sql`${clubPaymentAccounts.status} != 'disabled'`,
+      ),
+    )
+    .limit(1);
+  const row = rows[0];
+  return row ? rowToWebhookSecretConfig(row) : null;
+}
+
+/**
+ * Webhook-secret-only view of `adminGetPaymentAccountByProvider`. Use
+ * this from per-club webhook routes (Ziina) that resolve clubId from
+ * the URL.
+ */
+export async function getWebhookConfigByClubProvider(
+  clubId: string,
+  provider: PaymentProvider,
+): Promise<WebhookSecretConfig | null> {
+  const rows = await rawDb
+    .select()
+    .from(clubPaymentAccounts)
+    .where(
+      and(
+        eq(clubPaymentAccounts.clubId, clubId),
+        eq(clubPaymentAccounts.provider, provider),
+        sql`${clubPaymentAccounts.status} != 'disabled'`,
+      ),
+    )
+    .limit(1);
+  const row = rows[0];
+  return row ? rowToWebhookSecretConfig(row) : null;
 }

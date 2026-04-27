@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
+  getCompetitionClassById,
   getCompetitionEntryById,
   withdrawCompetitionEntry,
 } from '@equestrian/db/queries';
@@ -18,7 +19,15 @@ interface RouteParams {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
-    const { entryId } = await params;
+    const { competitionId, classId, entryId } = await params;
+    // Audit A-4: bind URL's classId to URL's competitionId so a stale link
+    // (`/competitions/X/classes/Y/...` where X is not Y's parent) returns
+    // 404 instead of silently mutating an entry under the wrong audit
+    // breadcrumb.
+    const cls = await getCompetitionClassById(ctx.clubId, classId);
+    if (!cls || cls.competitionId !== competitionId) {
+      return errorResponse('NOT_FOUND', 'Class does not belong to this competition', 404);
+    }
     const body = await request.json();
     const data = validateInput(withdrawSchema, body);
 

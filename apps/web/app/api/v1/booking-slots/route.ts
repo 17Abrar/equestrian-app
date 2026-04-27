@@ -7,6 +7,7 @@ import {
   getBookingSlotsByClub,
   createBookingSlot,
   getArenaById,
+  getLessonTypeById,
   getMemberById,
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
@@ -21,13 +22,30 @@ import { hasPermission } from '@/lib/permissions';
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
-const bookingSlotFiltersSchema = z.object({
-  date: z.string().regex(datePattern, 'Date must be YYYY-MM-DD format').optional(),
-  dateFrom: z.string().regex(datePattern, 'dateFrom must be YYYY-MM-DD format').optional(),
-  dateTo: z.string().regex(datePattern, 'dateTo must be YYYY-MM-DD format').optional(),
-  lessonTypeId: z.string().uuid('Invalid lesson type ID').optional(),
-  coachMemberId: z.string().uuid('Invalid coach member ID').optional(),
-});
+// Cap the requested window so a malicious / careless caller can't ask for
+// every slot the club has ever created. The DB query also has a defensive
+// .limit(2000) — see audit G-8.
+const MAX_SLOT_RANGE_DAYS = 90;
+
+const bookingSlotFiltersSchema = z
+  .object({
+    date: z.string().regex(datePattern, 'Date must be YYYY-MM-DD format').optional(),
+    dateFrom: z.string().regex(datePattern, 'dateFrom must be YYYY-MM-DD format').optional(),
+    dateTo: z.string().regex(datePattern, 'dateTo must be YYYY-MM-DD format').optional(),
+    lessonTypeId: z.string().uuid('Invalid lesson type ID').optional(),
+    coachMemberId: z.string().uuid('Invalid coach member ID').optional(),
+  })
+  .refine(
+    (data) => {
+      if (!data.dateFrom || !data.dateTo) return true;
+      const from = Date.parse(data.dateFrom);
+      const to = Date.parse(data.dateTo);
+      if (Number.isNaN(from) || Number.isNaN(to)) return true;
+      const days = (to - from) / 86_400_000;
+      return days <= MAX_SLOT_RANGE_DAYS;
+    },
+    { message: `Date range cannot exceed ${MAX_SLOT_RANGE_DAYS} days` },
+  );
 
 export async function GET(request: NextRequest) {
   return withAuth(
@@ -74,10 +92,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // arenaId / coachMemberId reference tables that have no compound
-      // (id, club_id) FK, so a forged UUID from another club would
-      // otherwise insert cleanly and surface that club's arena/coach name
-      // to riders here. Verify both are scoped to the caller's club.
+      // lessonTypeId / arenaId / coachMemberId reference tables that have no
+      // compound (id, club_id) FK, so a forged UUID from another club would
+      // otherwise insert cleanly and surface that club's lesson type / arena
+      // / coach name to riders here. Verify all three are scoped to the
+      // caller's club. (audit A-2)
+      const lessonType = await getLessonTypeById(ctx.clubId, data.lessonTypeId);
+      if (!lessonType) {
+        return errorResponse('INVALID_LESSON_TYPE', 'Lesson type not found in this club', 400);
+      }
       if (data.arenaId) {
         const arena = await getArenaById(ctx.clubId, data.arenaId);
         if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);

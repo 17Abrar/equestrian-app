@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type HorseFiltersInput, type CreateHorseInput, type UpdateHorseInput } from '@equestrian/shared/schemas';
 import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 export interface Horse {
@@ -72,10 +73,10 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
   return useQuery({
     queryKey: ['horses', filters],
     queryFn: () => fetchJson<PaginatedResponse<Horse>>(`/api/v1/horses?${params.toString()}`),
-    // 30s is enough to dedupe back-to-back fetches (tab switches, nav badges)
-    // while still feeling live. Mutations explicitly invalidate so approvals
-    // reflect immediately without waiting on this window.
-    staleTime: 30_000,
+    // STALE_TIME_FREQUENT (30s) dedupes back-to-back fetches (tab switches,
+    // nav badges) while still feeling live. Mutations explicitly invalidate so
+    // approvals reflect immediately without waiting on this window.
+    staleTime: STALE_TIME_FREQUENT,
   });
 }
 

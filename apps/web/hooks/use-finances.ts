@@ -85,6 +85,15 @@ export function useExpenses(filters: { category?: string; dateFrom?: string; dat
   });
 }
 
+// Expense mutations affect both the expenses list AND the overview totals
+// (expenses subtract from net revenue), so both keys are invalidated. The
+// payments / invoices / coupons keys aren't touched — surgical invalidation
+// keeps unrelated tabs from refetching every time someone adds a fuel receipt.
+function invalidateExpenseQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['finances', 'expenses'] });
+  queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
+}
+
 export function useCreateExpense() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -94,9 +103,7 @@ export function useCreateExpense() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finances'] });
-    },
+    onSuccess: () => invalidateExpenseQueries(queryClient),
   });
 }
 
@@ -109,9 +116,7 @@ export function useUpdateExpense() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finances'] });
-    },
+    onSuccess: () => invalidateExpenseQueries(queryClient),
   });
 }
 
@@ -122,9 +127,7 @@ export function useDeleteExpense() {
       fetchJson<ApiResponse<{ id: string }>>(`/api/v1/finances/expenses/${id}`, {
         method: 'DELETE',
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finances'] });
-    },
+    onSuccess: () => invalidateExpenseQueries(queryClient),
   });
 }
 

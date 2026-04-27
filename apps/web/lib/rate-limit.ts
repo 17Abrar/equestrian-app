@@ -1,5 +1,5 @@
 import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
+import { getRedis as getSharedRedis } from './redis';
 import { logger } from './logger';
 
 export interface RateLimitConfig {
@@ -28,31 +28,24 @@ const DEFAULT_CONFIG: RateLimitConfig = {
 
 // ─── Upstash path ────────────────────────────────────────────────────
 
-function isUpstashConfigured(): boolean {
-  return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
-}
-
-let redisClient: Redis | null = null;
-function getRedis(): Redis {
-  if (redisClient) return redisClient;
-  redisClient = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  });
-  return redisClient;
-}
+// Reuse the shared Redis client from lib/redis.ts (audit C-2). The previous
+// module-private client opened a SECOND TCP keep-alive pool to the same
+// Upstash endpoint per Worker isolate and bypassed the test-reset escape
+// hatch.
 
 // One Ratelimit instance per unique (maxRequests, windowMs) pair. Creating
 // a new Ratelimit for every request is cheap but caching avoids recomputing
 // the sliding-window Lua script on each construction.
 const limiterCache = new Map<string, Ratelimit>();
 
-function getLimiter(config: RateLimitConfig): Ratelimit {
+function getLimiter(config: RateLimitConfig): Ratelimit | null {
+  const redis = getSharedRedis();
+  if (!redis) return null;
   const key = `${config.maxRequests}:${config.windowMs}`;
   let limiter = limiterCache.get(key);
   if (!limiter) {
     limiter = new Ratelimit({
-      redis: getRedis(),
+      redis,
       // Sliding window is more accurate than fixed window under bursty traffic
       // — costs two counter lookups per check but keeps burst leakage bounded.
       limiter: Ratelimit.slidingWindow(
@@ -71,8 +64,10 @@ function getLimiter(config: RateLimitConfig): Ratelimit {
 async function upstashCheck(
   key: string,
   config: RateLimitConfig,
-): Promise<RateLimitResult> {
-  const result = await getLimiter(config).limit(key);
+): Promise<RateLimitResult | null> {
+  const limiter = getLimiter(config);
+  if (!limiter) return null;
+  const result = await limiter.limit(key);
   const retryAfterMs = result.success ? null : Math.max(0, result.reset - Date.now());
   return {
     allowed: result.success,
@@ -103,6 +98,7 @@ if (!g[STORE_KEY]) {
 const store = g[STORE_KEY];
 
 function inMemoryCheck(key: string, config: RateLimitConfig): RateLimitResult {
+  ensureCleanupStarted();
   const now = Date.now();
   const windowStart = now - config.windowMs;
 
@@ -128,20 +124,24 @@ function inMemoryCheck(key: string, config: RateLimitConfig): RateLimitResult {
 const CLEANUP_INTERVAL_MS = 300_000;
 const MAX_WINDOW_MS = 120_000;
 
-if (g[INTERVAL_KEY]) {
-  clearInterval(g[INTERVAL_KEY]);
-}
-g[INTERVAL_KEY] = setInterval(() => {
-  const now = Date.now();
-  for (const [key, timestamps] of store) {
-    const filtered = timestamps.filter((t) => t > now - MAX_WINDOW_MS);
-    if (filtered.length === 0) {
-      store.delete(key);
-    } else {
-      store.set(key, filtered);
+// Lazy: the cleanup interval starts on first in-memory check rather than at
+// module init. A previous module-init `setInterval` fired for every Worker
+// isolate cold-start, including isolates that only ever serve Upstash-backed
+// production routes — wasted CPU + kept isolates alive longer than necessary.
+function ensureCleanupStarted(): void {
+  if (g[INTERVAL_KEY]) return;
+  g[INTERVAL_KEY] = setInterval(() => {
+    const now = Date.now();
+    for (const [key, timestamps] of store) {
+      const filtered = timestamps.filter((t) => t > now - MAX_WINDOW_MS);
+      if (filtered.length === 0) {
+        store.delete(key);
+      } else {
+        store.set(key, filtered);
+      }
     }
-  }
-}, CLEANUP_INTERVAL_MS);
+  }, CLEANUP_INTERVAL_MS);
+}
 
 // ─── Public API ──────────────────────────────────────────────────────
 
@@ -155,10 +155,21 @@ export async function checkRateLimit(
   key: string,
   config: RateLimitConfig = DEFAULT_CONFIG,
 ): Promise<RateLimitResult> {
-  if (isUpstashConfigured()) {
-    try {
-      return await upstashCheck(key, config);
-    } catch (err) {
+  const upstashResult = await tryUpstash(key, config);
+  if (upstashResult !== undefined) return upstashResult;
+  return inMemoryCheck(key, config);
+}
+
+async function tryUpstash(
+  key: string,
+  config: RateLimitConfig,
+): Promise<RateLimitResult | undefined> {
+  const redis = getSharedRedis();
+  if (!redis) return undefined;
+  try {
+    const result = await upstashCheck(key, config);
+    if (result) return result;
+  } catch (err) {
       // Surface the outage so a sustained Redis problem isn't silent. Logged
       // at warn so it lights up Sentry without paging.
       logger.warn('rate_limit_fallback_to_memory', {
@@ -179,8 +190,7 @@ export async function checkRateLimit(
       // Default: fall back to per-isolate in-memory. On Cloudflare Workers
       // this barely throttles (each isolate has its own counter) but it
       // beats locking out every customer over a transient outage.
-      return inMemoryCheck(key, config);
+      return undefined;
     }
-  }
-  return inMemoryCheck(key, config);
+  return undefined;
 }

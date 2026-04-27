@@ -129,30 +129,28 @@ export async function isUserMember(clubId: string, clerkUserId: string): Promise
   return rows.length > 0;
 }
 
-/**
- * Checks for an existing pending join request. Prevents spam.
- */
-export async function hasPendingJoinRequest(
-  clubId: string,
-  clerkUserId: string,
-): Promise<boolean> {
-  const rows = await rawDb
-    .select({ id: clubJoinRequests.id })
-    .from(clubJoinRequests)
-    .where(
-      and(
-        eq(clubJoinRequests.clubId, clubId),
-        eq(clubJoinRequests.clerkUserId, clerkUserId),
-        eq(clubJoinRequests.status, 'pending'),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
-}
+// `club_join_requests` (the schema + queries below) are scaffolding for an
+// admin-approval join policy that was deliberately removed in favour of
+// instant-join / invite-only. Audit F-13 + the join-route comment at
+// /api/v1/clubs/[slug]/join/route.ts:67–69. Kept here only so the schema
+// import compiles; nothing in apps/* references these helpers. If you add
+// the approval queue back, restore the helpers below from git history.
 
 /**
  * Open-policy path: rider is instantly added as a club_member with role=rider.
  * Must be called only when the club's joinPolicy is 'open'.
+ *
+ * Idempotent on (club_id, clerk_user_id): a duplicate INSERT (double-click,
+ * concurrent retries) maps via ON CONFLICT DO UPDATE so the second caller
+ * gets the existing row back instead of a 23505 → 500. A previously-left
+ * member (`is_active=false`) is reactivated in the same path — the audit
+ * race E-4 manifested as a permanent 500 for users who tried to rejoin
+ * after leaving, because `isUserMember` filtered on `isActive=true` while
+ * the unique index spans both states.
+ *
+ * `email` and `displayName` are written even on conflict so a fresh
+ * Clerk profile (renamed user, updated email) re-syncs to the membership
+ * row on rejoin.
  */
 export async function joinClubInstantly(input: {
   clubId: string;
@@ -170,109 +168,17 @@ export async function joinClubInstantly(input: {
       displayName: input.displayName,
       isActive: true,
     })
-    .returning();
-  return rows[0];
-}
-
-/**
- * Approval-policy path: creates a pending join request. Club admins review
- * these from the admin queue.
- */
-export async function createJoinRequest(input: {
-  clubId: string;
-  clerkUserId: string;
-  email: string | null;
-  displayName: string | null;
-  message: string | null;
-}) {
-  const rows = await rawDb
-    .insert(clubJoinRequests)
-    .values({
-      clubId: input.clubId,
-      clerkUserId: input.clerkUserId,
-      email: input.email,
-      displayName: input.displayName,
-      message: input.message,
-      status: 'pending',
+    .onConflictDoUpdate({
+      target: [clubMembers.clubId, clubMembers.clerkUserId],
+      set: {
+        isActive: true,
+        email: input.email,
+        displayName: input.displayName,
+        updatedAt: new Date(),
+      },
     })
     .returning();
   return rows[0];
-}
-
-// ─── Admin-side queue (tenant-scoped via `db`) ────────────────────────
-
-export async function listJoinRequestsByClub(clubId: string, status: string = 'pending') {
-  return db
-    .select()
-    .from(clubJoinRequests)
-    .where(and(eq(clubJoinRequests.clubId, clubId), eq(clubJoinRequests.status, status)))
-    .orderBy(desc(clubJoinRequests.createdAt));
-}
-
-export async function approveJoinRequest(
-  clubId: string,
-  requestId: string,
-  reviewerMemberId: string | null,
-) {
-  // Flip to approved, then insert the member row. Using rawDb for the member
-  // insert since club_members is exempt from RLS (tenant resolution lookups).
-  const updated = await db
-    .update(clubJoinRequests)
-    .set({
-      status: 'approved',
-      reviewedByMemberId: reviewerMemberId ?? null,
-      reviewedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(clubJoinRequests.id, requestId),
-        eq(clubJoinRequests.clubId, clubId),
-        eq(clubJoinRequests.status, 'pending'),
-      ),
-    )
-    .returning();
-
-  if (!updated[0]) return null;
-
-  const req = updated[0];
-  const member = await rawDb
-    .insert(clubMembers)
-    .values({
-      clubId,
-      clerkUserId: req.clerkUserId,
-      role: 'rider',
-      email: req.email,
-      displayName: req.displayName,
-      isActive: true,
-    })
-    .returning();
-
-  return { request: req, member: member[0] };
-}
-
-export async function declineJoinRequest(
-  clubId: string,
-  requestId: string,
-  reviewerMemberId: string | null,
-) {
-  const rows = await db
-    .update(clubJoinRequests)
-    .set({
-      status: 'declined',
-      reviewedByMemberId: reviewerMemberId ?? null,
-      reviewedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(clubJoinRequests.id, requestId),
-        eq(clubJoinRequests.clubId, clubId),
-        eq(clubJoinRequests.status, 'pending'),
-      ),
-    )
-    .returning();
-  return rows[0] ?? null;
 }
 
 // Exported for tests / type inference. Not currently used inline but kept
@@ -282,3 +188,8 @@ export type PublicClubProfile = NonNullable<Awaited<ReturnType<typeof getPublicC
 
 // Silence unused-import for barrel re-exports that may go unused in Workers bundle.
 export type _DiscoveryInArrayUnused = typeof inArray;
+// `clubJoinRequests` is held by the schema for the dropped approval-queue
+// flow (audit F-13); referencing the symbol here keeps the import live so
+// the schema package's `export *` still emits the table type for any
+// future re-introduction of the feature.
+export type _DiscoveryJoinRequestsUnused = typeof clubJoinRequests;

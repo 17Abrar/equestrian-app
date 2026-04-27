@@ -12,7 +12,16 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
+// Keys whose values are never safe to land in stdout/Logpush/Sentry. Lower-
+// cased on lookup so callers don't have to think about casing. PII fields
+// (email/phone/etc.) are included because CLAUDE.md explicitly forbids them
+// in logs and several email/audit paths used to carry them through to Sentry
+// extras — see audit D-1 / G-20. If a route legitimately needs to log a
+// recipient identity for debugging, hash it (e.g. `hashEmail(...)`) before
+// passing — the redactor matches on key name, so a `recipientHash` field
+// passes through cleanly.
 const SENSITIVE_KEYS = new Set([
+  // Auth / secrets
   'password',
   'token',
   'cardnumber',
@@ -28,6 +37,32 @@ const SENSITIVE_KEYS = new Set([
   'credit_card',
   'ssn',
   'cvv',
+  // PII — addressing identity, contact info, sensitive personal data
+  'email',
+  'recipient',
+  'to',
+  'cc',
+  'bcc',
+  'subject',
+  'phone',
+  'phonenumber',
+  'phone_number',
+  'dateofbirth',
+  'date_of_birth',
+  'displayname',
+  'display_name',
+  'medicalnotes',
+  'medical_notes',
+  'emergencycontactphone',
+  'emergency_contact_phone',
+  'emergencycontactname',
+  'emergency_contact_name',
+  'guestemail',
+  'guest_email',
+  'guestphone',
+  'guest_phone',
+  'guestname',
+  'guest_name',
 ]);
 
 function sanitize(data: unknown, depth = 0): unknown {
@@ -63,6 +98,11 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
 
   const output = JSON.stringify(entry);
 
+  // The logger is the one place where direct `console` calls are intentional —
+  // this is what writes the structured JSON to stdout/stderr that Cloudflare
+  // tails into Logpush. Suppress no-console for the whole switch rather than
+  // line-by-line so future cases (e.g., 'fatal') don't sneak past lint.
+  /* eslint-disable no-console */
   switch (level) {
     case 'error':
       console.error(output);
@@ -73,10 +113,39 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
       forwardToSentry('warning', event, sanitized);
       break;
     default:
-      // Using console methods intentionally for structured logging
-      // eslint-disable-next-line no-console
       console.log(output);
   }
+  /* eslint-enable no-console */
+}
+
+// Audit H-12: cap Sentry forward rate per (level, event) tuple. An
+// infinite-retry loop firing `logger.error('booking_refund_provider_error')`
+// 1000 times in a minute used to make 1000 synchronous Sentry network
+// round-trips, burning Worker CPU and Sentry quota. Now: 1 event/sec
+// per tuple — Sentry's grouping still counts the dropped events via
+// alert-rule frequency conditions, and the first event in a window
+// always lands so the operator still gets paged.
+const FORWARD_BUCKET_WINDOW_MS = 1_000;
+const sentryForwardLastAt = new Map<string, number>();
+
+function shouldForwardToSentry(level: string, event: string): boolean {
+  const key = `${level}:${event}`;
+  const now = Date.now();
+  const last = sentryForwardLastAt.get(key);
+  if (last !== undefined && now - last < FORWARD_BUCKET_WINDOW_MS) {
+    return false;
+  }
+  sentryForwardLastAt.set(key, now);
+  // Bound map size — at one entry per (level, event) tuple we
+  // shouldn't exceed a few hundred, but a runaway tag value would
+  // grow it without limit. Trim on every miss.
+  if (sentryForwardLastAt.size > 1000) {
+    const cutoff = now - FORWARD_BUCKET_WINDOW_MS * 60;
+    for (const [k, t] of sentryForwardLastAt) {
+      if (t < cutoff) sentryForwardLastAt.delete(k);
+    }
+  }
+  return true;
 }
 
 function forwardToSentry(
@@ -86,6 +155,7 @@ function forwardToSentry(
 ) {
   // Skip when Sentry isn't configured — avoids meaningless traffic in dev.
   if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) return;
+  if (!shouldForwardToSentry(level, event)) return;
 
   // Pull the error object out if present so Sentry renders a real stack
   // trace instead of a one-line message.

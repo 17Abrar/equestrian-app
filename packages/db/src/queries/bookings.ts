@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
 import { clubMembers } from '../schema/club-members';
@@ -96,7 +96,12 @@ export async function getBookingSlotsByClub(clubId: string, filters: BookingSlot
       and(eq(bookingSlots.coachMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
     .where(and(...conditions))
-    .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime));
+    .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime))
+    // Defensive cap (audit G-8). Without it, a `dateFrom=1970-01-01&dateTo=
+    // 2099-12-31` request returns every slot the club ever created — a
+    // 5MB+ JSON payload on a busy stable. The route enforces a 90-day
+    // window via Zod, but the DB cap is the last line of defence.
+    .limit(2000);
 }
 
 export async function getBookingSlotById(clubId: string, slotId: string) {
@@ -307,7 +312,13 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
         clubMembers,
         and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
       )
-      .leftJoin(horses, and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId)))
+      // Soft-deleted horses shouldn't surface their name in historical bookings —
+      // F-2. The leftJoin stays a leftJoin (NULL is fine; the name just becomes
+      // unavailable, matching what a hard delete would show).
+      .leftJoin(
+        horses,
+        and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId), isNull(horses.deletedAt)),
+      )
       .where(where)
       .orderBy(desc(bookingSlots.date), desc(bookingSlots.startTime))
       .limit(filters.pageSize)
@@ -344,6 +355,7 @@ export async function getBookingById(clubId: string, bookingId: string) {
       currency: bookings.currency,
       discountAmount: bookings.discountAmount,
       refundedAmountMinor: bookings.refundedAmountMinor,
+      applicationFeeMinor: bookings.applicationFeeMinor,
       horseMatchScore: bookings.horseMatchScore,
       horseMatchAuto: bookings.horseMatchAuto,
       coachNotes: bookings.coachNotes,
@@ -381,7 +393,10 @@ export async function getBookingById(clubId: string, bookingId: string) {
       clubMembers,
       and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
-    .leftJoin(horses, and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId)))
+    .leftJoin(
+      horses,
+      and(eq(bookings.horseId, horses.id), eq(horses.clubId, clubId), isNull(horses.deletedAt)),
+    )
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
     .limit(1);
 
@@ -515,6 +530,12 @@ export async function createBooking(clubId: string, data: BookingCreate) {
 
 /**
  * Cancels a booking and atomically decrements the slot's rider count.
+ *
+ * `no_show` is included in the terminal-state guard alongside `cancelled` and
+ * `completed` (audit E-1) — a no-show booking already records its own
+ * `cancellationFee` (the no-show penalty) and keeps the slot's rider count
+ * intact for attendance reporting; allowing a follow-up cancel would clobber
+ * both. Use a dedicated reversal endpoint if a no-show ever needs revisiting.
  */
 export async function cancelBooking(
   clubId: string,
@@ -538,7 +559,7 @@ export async function cancelBooking(
         and(
           eq(bookings.id, bookingId),
           eq(bookings.clubId, clubId),
-          sql`${bookings.status} NOT IN ('cancelled', 'completed')`,
+          sql`${bookings.status} NOT IN ('cancelled', 'completed', 'no_show')`,
         ),
       )
       .returning();
@@ -659,9 +680,90 @@ export async function recordBookingRefund(
 }
 
 /**
+ * Reverses a previously-recorded refund — used when a provider webhook
+ * reports the refund transitioned `pending → failed` after we already
+ * incremented the ledger (audit B-4). Decrements `refundedAmountMinor` by
+ * `amountMinor` and recomputes `paymentStatus`:
+ *   * back to `'partial'` if some refund total remains
+ *   * back to `'paid'` if the running total drops to zero
+ *
+ * Returns `null` if the booking can't be found, the running total is
+ * already smaller than `amountMinor` (shouldn't happen — webhook arrived
+ * for a refund we never recorded; webhook handler logs and ignores), or
+ * an optimistic-concurrency conflict means another caller mutated the
+ * ledger in the meantime.
+ */
+export async function reverseBookingRefund(
+  clubId: string,
+  bookingId: string,
+  amountMinor: number,
+): Promise<{
+  id: string;
+  paymentStatus: string;
+  refundedAmountMinor: number;
+} | null> {
+  if (amountMinor <= 0) return null;
+
+  const existing = await db
+    .select({
+      amount: bookings.amount,
+      refundedAmountMinor: bookings.refundedAmountMinor,
+    })
+    .from(bookings)
+    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .limit(1);
+
+  const current = existing[0];
+  if (!current || current.amount == null) return null;
+
+  // Don't drive the ledger negative — the webhook arrived for a refund we
+  // didn't record (e.g. the original recordBookingRefund failed but the
+  // provider call succeeded, then later failed). Leave it to the operator.
+  if (current.refundedAmountMinor < amountMinor) return null;
+
+  const newRefunded = current.refundedAmountMinor - amountMinor;
+  const newStatus = newRefunded === 0 ? 'paid' : 'partial';
+
+  const result = await db
+    .update(bookings)
+    .set({
+      refundedAmountMinor: newRefunded,
+      paymentStatus: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        eq(bookings.refundedAmountMinor, current.refundedAmountMinor),
+      ),
+    )
+    .returning({
+      id: bookings.id,
+      paymentStatus: bookings.paymentStatus,
+      refundedAmountMinor: bookings.refundedAmountMinor,
+    });
+
+  return result[0] ?? null;
+}
+
+/**
  * Attaches (or updates) the payment-provider reference on a booking. Called
  * after the active provider returns a PaymentIntent / order / equivalent.
  * Idempotent — calling again with the same values is a no-op.
+ *
+ * `applicationFeeMinor` is the Stripe Connect platform-fee snapshot. The
+ * route writes it once on first PI create; the persisted value is then
+ * read on retries so a later change to `clubs.platform_fee_percent` can't
+ * make finance reports diverge from what Stripe captured (see audit B-3).
+ *
+ * CAS guard on `providerPaymentId` (audit B-19): when this call is
+ * setting/updating providerPaymentId, the WHERE only matches if the
+ * existing column is either NULL (first attach) or already equal to the
+ * new value (idempotent re-write). Without this, a stale webhook for a
+ * previously-abandoned PaymentIntent could overwrite the live PI's id —
+ * subsequent webhooks for the live PI would then miss the booking and
+ * the rider's payment status would never settle.
  */
 export async function setBookingPaymentRef(
   clubId: string,
@@ -670,17 +772,39 @@ export async function setBookingPaymentRef(
     paymentProvider?: 'stripe' | 'n_genius' | 'ziina';
     providerPaymentId?: string;
     paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed' | 'overdue';
+    applicationFeeMinor?: number;
   },
 ) {
+  const conditions = [eq(bookings.id, bookingId), eq(bookings.clubId, clubId)];
+  if (data.providerPaymentId) {
+    conditions.push(
+      sql`(${bookings.providerPaymentId} IS NULL OR ${bookings.providerPaymentId} = ${data.providerPaymentId})`,
+    );
+  }
+  // Terminal-state guard for paymentStatus (audit E-11). Once a booking is
+  // in `refunded` / `partial`, subsequent setBookingPaymentRef calls must
+  // NOT downgrade to `pending` / `failed` / `paid` — webhooks arriving
+  // out of order would otherwise rewrite the rider's settled state. The
+  // route-level guard in webhook-helpers.ts:148-162 catches this for the
+  // current call sites; this DB-level gate covers any future caller.
+  if (data.paymentStatus && data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
+    conditions.push(
+      sql`${bookings.paymentStatus} NOT IN ('refunded', 'partial')`,
+    );
+  }
+
   const result = await db
     .update(bookings)
     .set({
       ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
       ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
       ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
+      ...(data.applicationFeeMinor !== undefined
+        ? { applicationFeeMinor: data.applicationFeeMinor }
+        : {}),
       updatedAt: new Date(),
     })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .where(and(...conditions))
     .returning();
 
   return result[0] ?? null;

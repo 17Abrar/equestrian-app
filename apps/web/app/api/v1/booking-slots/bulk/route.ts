@@ -6,6 +6,7 @@ import { isDateInPast } from '@equestrian/shared/utils';
 import {
   createBulkBookingSlots,
   getArenaById,
+  getLessonTypeById,
   getMemberById,
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
@@ -37,7 +38,13 @@ export async function POST(request: NextRequest) {
       }
 
       // Verify cross-club FKs before fan-out — a single bad UUID would
-      // otherwise be repeated on up to 365 inserted rows.
+      // otherwise be repeated on up to 365 inserted rows. lessonTypeId is
+      // included alongside arena/coach because lesson_types has the same
+      // single-column FK shape (audit A-2).
+      const lessonType = await getLessonTypeById(ctx.clubId, data.lessonTypeId);
+      if (!lessonType) {
+        return errorResponse('INVALID_LESSON_TYPE', 'Lesson type not found in this club', 400);
+      }
       if (data.arenaId) {
         const arena = await getArenaById(ctx.clubId, data.arenaId);
         if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);

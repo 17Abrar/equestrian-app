@@ -71,6 +71,12 @@ export default clerkMiddleware(async (auth, request) => {
   response.headers.set('x-request-id', requestId);
 
   // Dynamic CORS: echo back origin only if it's in the allowlist
+  // Stash the request pathname so api-utils' withAuth can default the
+  // rate-limit bucket key per-route — see audit G-21. Request headers are
+  // mutable here (NextRequest's headers are a copy of the incoming
+  // Headers object); withAuth reads via headers().get('x-pathname').
+  request.headers.set('x-pathname', request.nextUrl.pathname);
+
   if (request.nextUrl.pathname.startsWith('/api/v1/')) {
     const origin = request.headers.get('origin');
     if (isAllowedOrigin(origin)) {

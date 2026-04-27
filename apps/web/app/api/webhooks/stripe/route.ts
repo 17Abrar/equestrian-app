@@ -7,6 +7,7 @@ import {
 import { stripeAdapter } from '@/lib/payments/stripe';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
+import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { logger } from '@/lib/logger';
 
 /**
@@ -33,7 +34,10 @@ const HANDLED_EVENTS = new Set<string>([
 ]);
 
 export async function POST(request: NextRequest) {
-  const body = await request.text();
+  const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.stripe, 'stripe');
+  if (body === null) {
+    return new Response('Payload too large', { status: 413 });
+  }
   const signature = request.headers.get('stripe-signature');
 
   if (!signature) {
@@ -90,6 +94,18 @@ export async function POST(request: NextRequest) {
       type: event.eventType,
     });
     return new Response('Processing in progress', { status: 503 });
+  }
+
+  if (claim.status === 'permanently_failed') {
+    // Burned through MAX_WEBHOOK_ATTEMPTS retries. Return 200 so Stripe
+    // stops retrying; alert is emitted via the structured logger event
+    // so operators can investigate (audit B-12).
+    logger.error('webhook_permanently_failed', {
+      provider: 'stripe',
+      eventId: event.eventId,
+      eventType: event.eventType,
+    });
+    return new Response('OK', { status: 200 });
   }
 
   try {

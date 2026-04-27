@@ -10,6 +10,7 @@ import {
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
 import { mapClerkRoleToAppRole } from '@/lib/clerk-roles';
+import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 
 interface OrganizationEvent {
   data: {
@@ -60,7 +61,10 @@ function slugVariants(baseSlug: string): string[] {
 }
 
 export async function POST(request: Request) {
-  const body = await request.text();
+  const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.clerk, 'clerk');
+  if (body === null) {
+    return new Response('Payload too large', { status: 413 });
+  }
   const headersList = await headers();
 
   const svixId = headersList.get('svix-id');
@@ -116,6 +120,19 @@ export async function POST(request: Request) {
     // the stale window has elapsed and the retry can re-claim.
     logger.info('clerk_webhook_in_flight', { type: eventType, svixId });
     return new Response('Processing in progress', { status: 503 });
+  }
+
+  if (claim.status === 'permanently_failed') {
+    // The event burned through MAX_WEBHOOK_ATTEMPTS retries; further
+    // attempts won't help (likely a missing org.created sibling). Return
+    // 200 so Svix stops retrying and emit a high-priority alert so an
+    // operator runs the org-resync procedure (audit B-12).
+    logger.error('webhook_permanently_failed', {
+      provider: 'clerk',
+      svixId,
+      eventType,
+    });
+    return new Response('OK', { status: 200 });
   }
 
   try {
@@ -224,8 +241,16 @@ export async function POST(request: Request) {
 
         const foundClub = club[0];
         if (!foundClub) {
-          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId });
-          break;
+          // Svix delivery is best-effort, not strictly ordered. The
+          // membership event can arrive before its `organization.created`
+          // sibling. Silently swallowing this here would leave the club
+          // with no `club_members` row for the admin who just signed up.
+          // Mark the claim as failed so the next Svix retry can re-claim,
+          // and return 503 so Svix actually retries instead of treating
+          // the 200 as success.
+          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId, eventType });
+          await markWebhookEventFailed('clerk', svixId, 'club_not_found_retry');
+          return new Response('Club not found, retry pending', { status: 503 });
         }
 
         const displayName = [userData.first_name, userData.last_name]
@@ -271,7 +296,13 @@ export async function POST(request: Request) {
           .limit(1);
 
         const foundClub = club[0];
-        if (!foundClub) break;
+        if (!foundClub) {
+          // Same race as `created` above. Retry instead of dropping the
+          // role change silently.
+          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId, eventType });
+          await markWebhookEventFailed('clerk', svixId, 'club_not_found_retry');
+          return new Response('Club not found, retry pending', { status: 503 });
+        }
 
         await db
           .update(clubMembers)
@@ -304,7 +335,13 @@ export async function POST(request: Request) {
           .limit(1);
 
         const foundClub = club[0];
-        if (!foundClub) break;
+        if (!foundClub) {
+          // Same race as above. Retry instead of leaving the member
+          // active in our DB after Clerk has removed them.
+          logger.warn('clerk_webhook_club_not_found', { clerkOrgId: orgId, eventType });
+          await markWebhookEventFailed('clerk', svixId, 'club_not_found_retry');
+          return new Response('Club not found, retry pending', { status: 503 });
+        }
 
         await db
           .update(clubMembers)

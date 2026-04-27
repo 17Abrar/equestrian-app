@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
+import { getCapacityInfo } from '@/lib/capacity';
 import { useLessonTypes, useBookingSlots, useCreateBooking } from '@/hooks/use-bookings';
 import { useRiders } from '@/hooks/use-riders';
 import { useHorses } from '@/hooks/use-horses';
@@ -147,14 +148,18 @@ export function AddBookingDialog() {
                     <SelectValue placeholder="Select time slot" />
                   </SelectTrigger>
                   <SelectContent>
-                    {slots.map((slot) => (
-                      <SelectItem key={slot.id} value={slot.id} disabled={slot.currentRiders >= slot.maxRiders}>
-                        {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
-                        {' '}({slot.currentRiders}/{slot.maxRiders} riders)
-                        {slot.arenaName ? ` • ${slot.arenaName}` : ''}
-                        {slot.currentRiders >= slot.maxRiders ? ' — FULL' : ''}
-                      </SelectItem>
-                    ))}
+                    {slots.map((slot) => {
+                      // Shared with calendar + rider/book — see audit E-6.
+                      const cap = getCapacityInfo(slot.currentRiders, slot.maxRiders);
+                      return (
+                        <SelectItem key={slot.id} value={slot.id} disabled={cap.isFull}>
+                          {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
+                          {' '}({slot.currentRiders}/{slot.maxRiders} riders)
+                          {slot.arenaName ? ` • ${slot.arenaName}` : ''}
+                          {cap.isFull ? ' — FULL' : ''}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               )}
@@ -247,14 +252,28 @@ export function AddBookingDialog() {
                         }),
                       });
                       const json = await res.json();
+                      // 422 INVALID_COUPON returns `{success:false,error:{message,...}}`
+                      // — the previous code only checked `json.data?.valid`,
+                      // which silently swapped the server's "expired"/"min spend"
+                      // detail for a generic "Invalid code". See audit D-7 / E-8.
+                      if (!res.ok) {
+                        const message =
+                          (json as { error?: { message?: string } }).error?.message ??
+                          'Failed to validate code';
+                        setCouponError(message);
+                        return;
+                      }
                       if (json.data?.valid) {
                         setCouponDiscount(json.data.discount);
                         toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
                       } else {
                         setCouponError(json.data?.error ?? 'Invalid code');
                       }
-                    } catch {
-                      setCouponError('Failed to validate code');
+                    } catch (err) {
+                      reportMutationError('coupon.validate', err, { code: couponCode, riderMemberId });
+                      setCouponError(
+                        err instanceof Error ? err.message : 'Failed to validate code',
+                      );
                     }
                   }}
                 >

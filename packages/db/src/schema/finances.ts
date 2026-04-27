@@ -10,6 +10,7 @@ import {
   jsonb,
   unique,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import {
   liveryTypeEnum,
@@ -104,9 +105,9 @@ export const invoices = pgTable(
     clubId: uuid('club_id')
       .notNull()
       .references(() => clubs.id, { onDelete: 'cascade' }),
-    memberId: uuid('member_id')
-      .notNull()
-      .references(() => clubMembers.id),
+    // FK is composite (member_id, club_id) -> club_members(id, club_id),
+    // declared in the table extras below. See migration 0019.
+    memberId: uuid('member_id').notNull(),
 
     invoiceNumber: varchar('invoice_number', { length: 50 }).notNull(),
     status: invoiceStatusEnum('status').notNull().default('draft'),
@@ -131,6 +132,11 @@ export const invoices = pgTable(
     index('idx_invoices_club').on(table.clubId),
     index('idx_invoices_member').on(table.memberId),
     index('idx_invoices_status').on(table.clubId, table.status),
+    foreignKey({
+      name: 'invoices_member_club_fk',
+      columns: [table.memberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
   ],
 );
 
@@ -139,9 +145,9 @@ export const payments = pgTable('payments', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  memberId: uuid('member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // FK is composite (member_id, club_id) -> club_members(id, club_id),
+  // declared in the table extras below. See migration 0019.
+  memberId: uuid('member_id').notNull(),
 
   amount: integer('amount').notNull(),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
@@ -170,6 +176,11 @@ export const payments = pgTable('payments', {
   index('idx_payments_status').on(table.clubId, table.status),
   index('idx_payments_stripe').on(table.stripePaymentIntentId),
   index('idx_payments_date').on(table.clubId, table.paidAt),
+  foreignKey({
+    name: 'payments_member_club_fk',
+    columns: [table.memberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const expenses = pgTable('expenses', {

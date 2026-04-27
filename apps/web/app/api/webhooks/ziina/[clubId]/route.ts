@@ -1,14 +1,15 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
-  adminGetPaymentAccountByProvider,
   claimWebhookEvent,
+  getWebhookConfigByClubProvider,
   markWebhookEventFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { ziinaAdapter } from '@/lib/payments/ziina';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
+import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { logger } from '@/lib/logger';
 
 /**
@@ -43,7 +44,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
   const clubId = parsedClubId.data;
 
-  const body = await request.text();
+  const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.ziina, 'ziina');
+  if (body === null) {
+    return new Response('Payload too large', { status: 413 });
+  }
   const signature = request.headers.get('x-hmac-signature');
 
   if (!signature) {
@@ -51,15 +55,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('Missing signature', { status: 400 });
   }
 
-  const account = await adminGetPaymentAccountByProvider(clubId, 'ziina');
+  // Audit B-9: getWebhookConfigByClubProvider returns ONLY the webhook
+  // fields, never the Ziina API key. A future logger.error here can't
+  // accidentally surface the API key into observability.
+  const account = await getWebhookConfigByClubProvider(clubId, 'ziina');
   if (!account) {
     logger.warn('ziina_webhook_club_not_connected', { clubId });
     return new Response('OK', { status: 200 });
   }
 
-  const creds = account.credentials as { webhookSigningSecret?: string } | null;
-  const webhookSecret = creds?.webhookSigningSecret;
-
+  const webhookSecret = account.webhookSigningSecret;
   if (!webhookSecret) {
     logger.error('ziina_webhook_secret_not_configured', { clubId });
     return new Response('Webhook secret not configured', { status: 503 });
@@ -89,6 +94,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('OK', { status: 200 });
   }
 
+  // Bind the event's account_id to the URL's clubId. The signature check
+  // above already proved the body was signed with this club's secret — but
+  // if the same secret were ever pasted into two clubs' connect flows
+  // (operator misconfiguration), a webhook for Club A's payment posted to
+  // /api/webhooks/ziina/<clubB-uuid> would otherwise be applied to Club B.
+  // Defence in depth.
+  if (
+    event.providerAccountId &&
+    account.externalAccountId &&
+    event.providerAccountId !== account.externalAccountId
+  ) {
+    logger.warn('ziina_webhook_account_mismatch', {
+      clubId,
+      expected: account.externalAccountId,
+      got: event.providerAccountId,
+    });
+    return new Response('Account mismatch', { status: 400 });
+  }
+
   const claim = await claimWebhookEvent('ziina', event.eventId);
 
   if (claim.status === 'already_processed') {
@@ -107,6 +131,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       clubId,
     });
     return new Response('Processing in progress', { status: 503 });
+  }
+
+  if (claim.status === 'permanently_failed') {
+    logger.error('webhook_permanently_failed', {
+      provider: 'ziina',
+      eventId: event.eventId,
+      eventType: event.eventType,
+      clubId,
+    });
+    return new Response('OK', { status: 200 });
   }
 
   try {

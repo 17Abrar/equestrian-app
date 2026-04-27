@@ -1,4 +1,5 @@
 import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
+import { calculateCouponDiscount } from '@equestrian/shared/utils';
 import { db } from '../index';
 import { invoices } from '../schema/finances';
 import { expenses } from '../schema/finances';
@@ -78,6 +79,15 @@ export async function getExpensesByClub(clubId: string, filters: ExpenseFilters)
   return { data, total: countResult[0]?.count ?? 0 };
 }
 
+export async function getExpenseById(clubId: string, expenseId: string) {
+  const result = await db
+    .select()
+    .from(expenses)
+    .where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function createExpense(clubId: string, data: ExpenseCreate, memberId?: string) {
   const result = await db.insert(expenses).values({
     ...data,
@@ -145,7 +155,15 @@ export async function getPaymentsByClub(clubId: string, filters: PaymentFilters)
         memberName: clubMembers.displayName,
       })
       .from(payments)
-      .innerJoin(clubMembers, eq(payments.memberId, clubMembers.id))
+      // Bind the join to `clubId` as well as `memberId`. The FK on
+      // `payments.member_id` is single-column, so without this a row pointing
+      // at a foreign tenant's member (planted by an unrelated bug) would
+      // surface that tenant's `displayName`. Migration 0019 closes this at
+      // the schema level via composite FK; the join binding is defence in depth.
+      .innerJoin(
+        clubMembers,
+        and(eq(payments.memberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
       .where(where)
       .orderBy(desc(payments.createdAt))
       .limit(filters.pageSize)
@@ -329,7 +347,11 @@ export async function getInvoicesByClub(clubId: string, filters: InvoiceFilters)
         memberName: clubMembers.displayName,
       })
       .from(invoices)
-      .innerJoin(clubMembers, eq(invoices.memberId, clubMembers.id))
+      // Same defence-in-depth tenant binding as `getPaymentsByClub` above.
+      .innerJoin(
+        clubMembers,
+        and(eq(invoices.memberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
       .where(where)
       .orderBy(desc(invoices.createdAt))
       .limit(filters.pageSize)

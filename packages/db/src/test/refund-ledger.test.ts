@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb, withTestDb } from './harness';
-import { recordBookingRefund } from '../queries/bookings';
+import { recordBookingRefund, reverseBookingRefund } from '../queries/bookings';
 import { bookings, bookingSlots, lessonTypes } from '../schema/bookings';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
@@ -164,6 +164,63 @@ describe('recordBookingRefund', () => {
       // caller returns 409 (see refund route's REFUND_RACE branch).
       const successes = [a, b].filter((r) => r !== null);
       expect(successes.length).toBe(1);
+    });
+  });
+});
+
+// Audit B-4 / H-10 — reverseBookingRefund is the failed-refund webhook
+// counter-balance. Decrementing must restore the right paymentStatus
+// and the right ledger value, and must refuse to drive the running
+// total negative.
+describe('reverseBookingRefund', () => {
+  it('partial reversal flips status from refunded back to partial', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      // Get to fully-refunded.
+      await recordBookingRefund(clubId, bookingId, 10_000);
+      // Reverse half — webhook reports the second refund attempt failed.
+      const reversed = await reverseBookingRefund(clubId, bookingId, 5_000);
+      expect(reversed?.paymentStatus).toBe('partial');
+      expect(reversed?.refundedAmountMinor).toBe(5_000);
+    });
+  });
+
+  it('full reversal flips status all the way back to paid', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      await recordBookingRefund(clubId, bookingId, 4_000);
+      const reversed = await reverseBookingRefund(clubId, bookingId, 4_000);
+      expect(reversed?.paymentStatus).toBe('paid');
+      expect(reversed?.refundedAmountMinor).toBe(0);
+    });
+  });
+
+  it('refuses to drive the ledger negative', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      await recordBookingRefund(clubId, bookingId, 2_000);
+      // Webhook claims to reverse 5_000 but only 2_000 was recorded —
+      // that's a stale webhook or out-of-band ledger drift; refuse.
+      const reversed = await reverseBookingRefund(clubId, bookingId, 5_000);
+      expect(reversed).toBeNull();
+    });
+  });
+
+  it('rejects zero or negative reversal amounts', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      expect(await reverseBookingRefund(clubId, bookingId, 0)).toBeNull();
+      expect(await reverseBookingRefund(clubId, bookingId, -1)).toBeNull();
+    });
+  });
+
+  it('refuses to reverse a refund for a booking in another club (tenant isolation)', async () => {
+    const first = await seedPaidBooking(testDb.db, 10_000);
+    const second = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      await recordBookingRefund(second.clubId, second.bookingId, 5_000);
+      const result = await reverseBookingRefund(first.clubId, second.bookingId, 1_000);
+      expect(result).toBeNull();
     });
   });
 });

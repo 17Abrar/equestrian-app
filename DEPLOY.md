@@ -59,9 +59,20 @@ wrangler secret put UPSTASH_REDIS_REST_TOKEN
 # Resend (email)
 wrangler secret put RESEND_API_KEY
 
+# Default From address for transactional email — must be a verified Resend
+# sender. lib/email refuses to send in production when this is unset (the
+# previous fallback to onboarding@resend.dev silently spam-trapped Gmail).
+# Format: `Cavaliq <hello@cavaliq.com>`.
+wrangler secret put EMAIL_FROM
+
 # Sentry (error tracking)
 wrangler secret put SENTRY_DSN
 wrangler secret put NEXT_PUBLIC_SENTRY_DSN
+
+# Daily livery-billing cron secret (REQUIRED — without it the cron route
+# 503s every fire). worker-entry.mjs sends this header when invoking the
+# scheduled handler at 02:00 UTC. Generate with: openssl rand -hex 32.
+wrangler secret put CRON_SECRET
 
 # Encryption key for horse medical data
 # Generate with: openssl rand -hex 32
@@ -308,3 +319,166 @@ under `env.staging` with:
 - the `-staging` / `test` versions of every secret
 
 Deploy via `pnpm --filter @equestrian/web exec wrangler deploy --env staging`.
+
+---
+
+## Backup + restore (Neon Postgres)
+
+Cavaliq's authoritative data — bookings, payment ledger, audit log, encrypted
+horse medical records — lives entirely in Neon. **Verify retention before
+relying on it**: Neon's free + Pro tiers come with a 7-day branch retention
+default; the Scale tier extends it. Confirm via the Neon console:
+
+```
+Settings → Project settings → "Branch retention period"
+```
+
+### Point-in-time restore
+
+Neon stores WAL for the retention window, so any timestamp in that range
+can be restored as a fresh branch. Useful for recovering from a botched
+migration / accidental DELETE.
+
+```sh
+# Install neonctl once (per machine)
+npm install -g neonctl
+
+# Authenticate
+neonctl auth
+
+# Create a recovery branch from a specific moment
+neonctl branches create \
+  --project-id <NEON_PROJECT_ID> \
+  --name recovery-2026-04-26-15h \
+  --parent main \
+  --timestamp 2026-04-26T15:00:00Z
+
+# Print its connection string (use the unpooled one for read-only diagnosis)
+neonctl connection-string recovery-2026-04-26-15h --pooled false
+```
+
+Connect to the recovery branch via `psql` or Drizzle Studio and verify the
+data matches expectations. The recovery branch is a full read/write copy,
+so SELECTs work without setting `app.current_club_id` (we dropped RLS in
+migration 0011).
+
+### Promotion (only after smoke testing the recovery branch)
+
+```sh
+# Make the recovery branch the new primary. THIS IS DESTRUCTIVE — the
+# current `main` becomes a sibling branch, not gone, but every running
+# Worker will start writing against the new primary on its next query.
+neonctl branches set-primary recovery-2026-04-26-15h
+```
+
+After promoting, run the standard smoke-test checklist above against the
+new primary BEFORE telling customers the system is back online. Common
+gotchas: deleted rows that were referenced by FKs in still-active rows
+will fail to insert; check for orphaned references with
+`packages/db/src/test/cross-tenant-binding.test.ts`'s spirit (run a few
+spot SELECTs).
+
+### Last tested
+
+Document the date you last actually performed a restore. Untested backups
+are not backups.
+
+> Last restore drill: **TODO** — schedule one within the first quarter
+> of operation.
+
+---
+
+## CI / branch protection (DONE — audit H-3)
+
+Active rule on `main` as of audit closeout:
+
+- `required_status_checks.strict = true` with both contexts:
+  - `typecheck · lint · test`
+  - `neon test branch · smoke`
+- `enforce_admins = true`
+- `allow_force_pushes = false`
+- `allow_deletions = false`
+
+`required_pull_request_reviews` is intentionally NOT set — one-founder
+shop. Re-add when there's a second engineer.
+
+To inspect or modify:
+
+```sh
+gh api /repos/17Abrar/equestrian-app/branches/main/protection
+gh api -X PUT /repos/17Abrar/equestrian-app/branches/main/protection --input <body.json>
+```
+
+---
+
+## Deploy automation (workflow committed — needs API-token secret)
+
+`.github/workflows/deploy.yml` runs on `workflow_run` after CI passes
+on main, applies pending Neon migrations, then deploys via
+`cloudflare/wrangler-action@v3`. Concurrency-locked so two pushes
+queue rather than collide.
+
+Required secrets (set with `gh secret set`):
+
+- `CLOUDFLARE_ACCOUNT_ID` ✓ already set (`343dc071...`)
+- `CLOUDFLARE_API_TOKEN` ✗ **TODO** — mint at
+  https://dash.cloudflare.com/profile/api-tokens with **Workers Scripts:Edit
+  + Account Logs:Edit + Workers R2 Storage:Edit + Account Settings:Read**.
+  The wrangler OAuth token doesn't expose the API-token-mint scope, so
+  this is one of the few items that must be done in the dashboard.
+- `DATABASE_URL_UNPOOLED` ✗ TODO — Neon prod unpooled URL.
+
+Once these land, the next push to main auto-deploys. Until then, fall
+back to manual `pnpm cf:deploy` from a clean main checkout.
+
+---
+
+## Sentry alerts (workflow committed)
+
+`.github/workflows/sentry-alerts.yml` triggers on push-to-main when
+`OBSERVABILITY.md` or `scripts/setup-sentry-alerts.mjs` changes, plus
+manual dispatch. Required repo secrets (already set per the audit
+prep):
+
+- `SENTRY_ALERTS_AUTH_TOKEN` ✓
+- `SENTRY_ORG_SLUG` / `SENTRY_PROJECT_SLUG` / `SENTRY_BASE_URL` —
+  repo *variables*.
+
+Optional Slack delivery — install the Sentry → Slack integration in
+Sentry's UI, then set repo variables:
+
+- `SENTRY_SLACK_WORKSPACE`
+- `SENTRY_SLACK_CHANNEL_WARN`
+- `SENTRY_SLACK_CHANNEL_CRIT`
+
+Without these, alerts fall back to email-only. Audit H-11.
+
+---
+
+## Cloudflare Logpush (R2 bucket created — needs API-token to wire)
+
+R2 bucket `cavaliq-logs` is provisioned (`wrangler r2 bucket list`
+confirms it). The Logpush job needs an API token with
+`Account Logs:Edit`:
+
+```sh
+# Mint at https://dash.cloudflare.com/profile/api-tokens, then:
+ACCOUNT_ID=343dc071ad865a59094c44c79be38ccc
+CF_API_TOKEN=<your-token>
+
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/logpush/jobs" \
+  -H "Authorization: Bearer $CF_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "cavaliq-workers-trace-events",
+    "destination_conf": "r2://cavaliq-logs/{DATE}/{HH}?account-id='"$ACCOUNT_ID"'&access-key-id=<R2_ACCESS_KEY>&secret-access-key=<R2_SECRET>",
+    "dataset": "workers_trace_events",
+    "enabled": true,
+    "filter": "{\"where\":{\"key\":\"ScriptName\",\"operator\":\"eq\",\"value\":\"cavaliq\"}}",
+    "output_options": {
+      "field_names": ["EventTimestampMs", "Outcome", "ScriptName", "Logs", "Exceptions"]
+    }
+  }'
+```
+
+Document the resulting job id in this section after creation. Audit H-17.

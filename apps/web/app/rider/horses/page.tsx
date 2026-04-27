@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { Plus, Clock, CheckCircle2, XCircle, Archive, Rabbit, Receipt } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +24,8 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import { formatCurrency } from '@equestrian/shared/utils';
+import { formatCurrency, formatDate } from '@equestrian/shared/utils';
+import { STALE_TIME_MEDIUM } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 type OwnershipStatus = 'pending' | 'active' | 'retired' | 'declined';
@@ -68,7 +70,7 @@ function useMyHorses() {
   return useQuery({
     queryKey: ['me', 'horses'],
     queryFn: () => fetchJson<ApiSuccessResponse<MyHorsesResponse>>('/api/v1/me/horses'),
-    staleTime: 60 * 1000,
+    staleTime: STALE_TIME_MEDIUM,
   });
 }
 
@@ -115,6 +117,7 @@ export default function RiderHorsesPage() {
       toast.success(`${retiring.name} retired`);
       setRetiring(null);
     } catch (err) {
+      reportMutationError('rider.horse.retire', err, { horseId: retiring.id });
       toast.error(err instanceof Error ? err.message : 'Failed to retire');
     }
   }
@@ -301,7 +304,7 @@ function HorseCard({
             <p className="mt-2 text-xs text-muted-foreground">
               Submitted{' '}
               {horse.ownershipSubmittedAt
-                ? new Date(horse.ownershipSubmittedAt).toLocaleDateString()
+                ? formatDate(horse.ownershipSubmittedAt)
                 : '—'}
               . Waiting for the stable to review.
             </p>

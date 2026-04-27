@@ -3,6 +3,7 @@ import {
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
   recordPaymentAccountError,
+  reverseBookingRefund,
   setBookingPaymentRef,
   findLiveryInvoiceByProviderPayment,
   markLiveryInvoicePaid,
@@ -11,7 +12,7 @@ import { sendTriggeredEmailAsync } from '@/lib/email';
 import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
 import { rawDb } from '@equestrian/db';
 import { clubs, clubMembers, horses } from '@equestrian/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import type { PaymentIntentStatus, WebhookEvent } from './types';
 import type { ProviderName } from './types';
@@ -81,9 +82,9 @@ export async function applyPaymentWebhook({
     return null;
   }
 
-  if (!bookingRef && event.providerPaymentId) {
-    bookingRef = await findBookingByProviderPaymentId(event.providerPaymentId, provider);
-  }
+  // (Removed a duplicate findBookingByProviderPaymentId call here that
+  // re-ran the same query with the same args — the lookup at line 70
+  // already covers it. Audit E-14.)
 
   // TOCTOU fallback. The route stores `providerPaymentId` on the booking
   // AFTER calling the adapter; a fast-succeed webhook (Apple Pay, 3DS
@@ -121,6 +122,43 @@ export async function applyPaymentWebhook({
       bookingId: event.bookingId ?? null,
     });
     return null;
+  }
+
+  // A `pending → failed` refund transition (Stripe `charge.refund.updated`
+  // with refund.status = 'failed') means money the rider thought they got
+  // back actually never returned. Reverse the ledger entry so finance reports
+  // and future refund attempts see the correct running total — see audit
+  // B-4. Refund amount comes from the refund object directly (not the
+  // charge's cumulative `amount_refunded`).
+  if (isRefundEvent && event.refundStatus === 'failed' && event.refundAmountMinor) {
+    const reversed = await reverseBookingRefund(
+      clubId,
+      bookingRef.bookingId,
+      event.refundAmountMinor,
+    );
+    if (reversed) {
+      logger.warn('booking_refund_reversed', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        refundAmountMinor: event.refundAmountMinor,
+        newPaymentStatus: reversed.paymentStatus,
+        newRefundedAmountMinor: reversed.refundedAmountMinor,
+      });
+    } else {
+      // The webhook arrived for a refund we never recorded, OR the running
+      // total is smaller than the amount we'd reverse, OR an optimistic-
+      // concurrency conflict landed. Surface as warn so operators can
+      // reconcile from the provider dashboard.
+      logger.warn('booking_refund_reverse_skipped', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        refundAmountMinor: event.refundAmountMinor,
+        currentPaymentStatus: bookingRef.currentPaymentStatus,
+      });
+    }
+    return { clubId, bookingId: bookingRef.bookingId };
   }
 
   // Refund events on an already-'partial' booking: the refund route is the
@@ -241,6 +279,9 @@ export async function applyLiveryInvoiceWebhook({
 
   // Fetch what we need for the email — owner contact, club name, horse name.
   // One round-trip, rawDb because we're outside any tenant transaction.
+  // Defence-in-depth: bind clubId on every join so a malformed invoice (one
+  // whose ownerMemberId/horseId points at a foreign club) can't render an
+  // email to the wrong person. Audit A-3.
   const detail = await rawDb
     .select({
       clubName: clubs.name,
@@ -249,8 +290,14 @@ export async function applyLiveryInvoiceWebhook({
       horseName: horses.name,
     })
     .from(clubs)
-    .innerJoin(clubMembers, eq(clubMembers.id, invoice.ownerMemberId))
-    .innerJoin(horses, eq(horses.id, invoice.horseId))
+    .innerJoin(
+      clubMembers,
+      and(eq(clubMembers.id, invoice.ownerMemberId), eq(clubMembers.clubId, invoice.clubId)),
+    )
+    .innerJoin(
+      horses,
+      and(eq(horses.id, invoice.horseId), eq(horses.clubId, invoice.clubId)),
+    )
     .where(eq(clubs.id, invoice.clubId))
     .limit(1);
 

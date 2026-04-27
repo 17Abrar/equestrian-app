@@ -6,8 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useHorse, useDeleteHorse, type Horse } from '@/hooks/use-horses';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import { useHorse, useDeleteHorse } from '@/hooks/use-horses';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -96,7 +95,13 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
     );
   }
 
-  const horse = data && 'data' in data && data.success ? (data as ApiSuccessResponse<Horse>).data : null;
+  // fetchJson throws on non-2xx, so once `data` is non-undefined it must
+  // be a successful envelope. The narrowing was defensive theater
+  // (audit E-5) — this single `data.success` check is the minimal guard
+  // TypeScript needs to discriminate the union; the previous triple-guard
+  // (`data && 'data' in data && data.success ? (data as …).data`) was
+  // redundant.
+  const horse = data?.success ? data.data : null;
   if (!horse) {
     return <ErrorState message="Horse not found" />;
   }

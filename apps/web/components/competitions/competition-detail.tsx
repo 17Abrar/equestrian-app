@@ -11,7 +11,7 @@ import {
   createCompetitionEntrySchema,
   createCompetitionResultSchema,
 } from '@equestrian/shared/schemas';
-import { toMinorUnits, formatMoney } from '@equestrian/shared/utils';
+import { toMinorUnits, formatMoney, formatDate } from '@equestrian/shared/utils';
 import {
   useCompetition,
   useCompetitionClasses,
@@ -232,7 +232,7 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
 
         <TabsContent value="classes" className="mt-4">
           <div className="mb-4 flex justify-end">
-            <AddClassForm competitionId={competitionId} />
+            <AddClassForm competitionId={competitionId} currency={competition.currency} />
           </div>
 
           {classesQuery.isLoading && (
@@ -368,7 +368,7 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
               <Badge variant="outline">{entry.paymentStatus}</Badge>
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {new Date(entry.registeredAt).toLocaleDateString()}
+              {formatDate(entry.registeredAt)}
             </TableCell>
           </TableRow>
         ))}
@@ -440,7 +440,7 @@ function ResultsSection({ competitionId, classId }: { competitionId: string; cla
 
 // ─── Add Class Form ──────────────────────────────────────────────────
 
-function AddClassForm({ competitionId }: { competitionId: string }) {
+function AddClassForm({ competitionId, currency }: { competitionId: string; currency: string }) {
   const [open, setOpen] = useState(false);
   const createClass = useCreateCompetitionClass(competitionId);
   const form = useForm({ resolver: zodResolver(createCompetitionClassSchema), defaultValues: { name: '', discipline: '', level: '', sortOrder: 0 } });
@@ -449,7 +449,7 @@ function AddClassForm({ competitionId }: { competitionId: string }) {
     try {
       const apiData = {
         ...data,
-        entryFee: data.entryFee != null ? toMinorUnits(data.entryFee as number) : undefined,
+        entryFee: data.entryFee != null ? toMinorUnits(data.entryFee as number, currency) : undefined,
       };
       await createClass.mutateAsync(apiData as Parameters<typeof createClass.mutateAsync>[0]);
       toast.success('Class added');

@@ -132,13 +132,44 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // computed off the net charge because that's what we actually settle.
       // N-Genius and Ziina don't support split payments — their adapters
       // ignore applicationFeeMinorUnits.
+      //
+      // The fee is snapshotted on FIRST PI create (audit B-3). Stripe honours
+      // `application_fee_amount` only on the first call; recomputing from a
+      // live `clubs.platform_fee_percent` on retries would silently let
+      // finance reports diverge from what Stripe captured if an admin lowered
+      // the fee mid-flight.
       const bookingAmount = booking.amount;
       let applicationFeeMinorUnits: number | undefined;
+      let persistFeeSnapshot = false;
       if (account.provider === 'stripe') {
-        const club = await getClubById(ctx.clubId);
-        const feePercent = club ? Number(club.platformFeePercent) : 0;
-        if (Number.isFinite(feePercent) && feePercent > 0) {
-          applicationFeeMinorUnits = Math.round(bookingAmount * (feePercent / 100));
+        if (booking.applicationFeeMinor != null) {
+          applicationFeeMinorUnits = booking.applicationFeeMinor;
+        } else {
+          const club = await getClubById(ctx.clubId);
+          const feePercent = club ? Number(club.platformFeePercent) : 0;
+          if (Number.isFinite(feePercent) && feePercent > 0) {
+            applicationFeeMinorUnits = Math.round(bookingAmount * (feePercent / 100));
+            persistFeeSnapshot = true;
+          }
+        }
+        // Stripe rejects PaymentIntents where application_fee_amount +
+        // Stripe's processing fee (~2.9% + 30c) exceeds the captured
+        // amount. Clamp to ~70% of the booking so a misconfigured high
+        // platform fee + a small booking doesn't surface as a Stripe
+        // 400 with an unhelpful "amount too small" error to the rider.
+        // Audit B-28.
+        if (applicationFeeMinorUnits !== undefined) {
+          const cap = Math.floor(bookingAmount * 0.7);
+          if (applicationFeeMinorUnits > cap) {
+            logger.warn('booking_payment_application_fee_clamped', {
+              bookingId,
+              clubId: ctx.clubId,
+              requested: applicationFeeMinorUnits,
+              cap,
+              bookingAmount,
+            });
+            applicationFeeMinorUnits = Math.max(0, cap);
+          }
         }
       }
 
@@ -174,6 +205,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const updated = await setBookingPaymentRef(ctx.clubId, bookingId, {
           paymentProvider: account.provider,
           providerPaymentId: result.providerPaymentId,
+          // Persist the fee snapshot on the first successful PI create so
+          // retries read the same value (audit B-3).
+          ...(persistFeeSnapshot && applicationFeeMinorUnits !== undefined
+            ? { applicationFeeMinor: applicationFeeMinorUnits }
+            : {}),
         });
 
         logger.info('booking_payment_initialized', {

@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateExpenseSchema } from '@equestrian/shared/schemas';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import { updateExpense, deleteExpense } from '@equestrian/db/queries';
+import { getExpenseById, updateExpense, deleteExpense } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
 interface RouteParams {
@@ -16,9 +16,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const data = validateInput(updateExpenseSchema, body);
 
       const { amount, ...rest } = data;
+
+      // Need the row's currency to scale the new amount correctly when the
+      // PATCH only changes amount (no `currency` in the body) — KWD/BHD/JOD
+      // etc. are 3-decimal so scaling the wrong way silently 10×s the value.
+      let amountMinor: number | undefined;
+      if (amount !== undefined) {
+        const targetCurrency = data.currency ?? (await getExpenseById(ctx.clubId, expenseId))?.currency;
+        if (!targetCurrency) {
+          return errorResponse('NOT_FOUND', 'Expense not found', 404);
+        }
+        amountMinor = toMinorUnits(amount, targetCurrency);
+      }
+
       const expense = await updateExpense(ctx.clubId, expenseId, {
         ...rest,
-        ...(amount !== undefined ? { amount: toMinorUnits(amount) } : {}),
+        ...(amountMinor !== undefined ? { amount: amountMinor } : {}),
       });
 
       if (!expense) {

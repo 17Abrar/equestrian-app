@@ -130,10 +130,26 @@ export async function createCompetition(clubId: string, data: CompetitionCreate)
 
 export async function updateCompetition(clubId: string, competitionId: string, data: CompetitionUpdate) {
   const values = { ...toCompetitionValues(data), updatedAt: new Date() } as Partial<NewCompetition>;
+
+  // `cancelled` and `completed` are terminal — once entries are finalised
+  // and refunds have been issued, a generic PATCH must not flip the
+  // competition back to `published`/`draft` (audit E-3). That would
+  // re-open registration against a stale capacity that already counts
+  // withdrawn entries, with no rebroadcast to the riders who were
+  // refunded. Editing a name / location / sponsorship blurb on a
+  // cancelled comp still works.
+  const conditions = [
+    eq(competitions.id, competitionId),
+    eq(competitions.clubId, clubId),
+  ];
+  if (values.status !== undefined) {
+    conditions.push(sql`${competitions.status} NOT IN ('cancelled', 'completed')`);
+  }
+
   const result = await db
     .update(competitions)
     .set(values)
-    .where(and(eq(competitions.id, competitionId), eq(competitions.clubId, clubId)))
+    .where(and(...conditions))
     .returning();
   return result[0] ?? null;
 }
@@ -218,14 +234,25 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
       clubMembers,
       and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
-    .leftJoin(horses, and(eq(competitionEntries.horseId, horses.id), eq(horses.clubId, clubId)))
+    // Hide tombstoned horses' names in the entries list — F-2.
+    .leftJoin(
+      horses,
+      and(
+        eq(competitionEntries.horseId, horses.id),
+        eq(horses.clubId, clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
     .where(
       and(
         eq(competitionEntries.clubId, clubId),
         eq(competitionEntries.classId, classId),
       ),
     )
-    .orderBy(asc(competitionEntries.registeredAt));
+    .orderBy(asc(competitionEntries.registeredAt))
+    // Defensive cap (audit G-10). competitionClasses.maxEntries is the
+    // business-rule cap; this is the wall-clock cap.
+    .limit(500);
 }
 
 /**
@@ -392,6 +419,11 @@ export async function withdrawCompetitionEntry(
   entryId: string,
   reason: string,
 ) {
+  // Don't overwrite a `withdrawn` or `scratched` row — the latter is a
+  // judge's call (e.g. failed check-in) and idempotently re-applying
+  // withdrawal would replace the scratch reason with the rider's. See
+  // audit E-12. Routes that hit a no-op transition surface 422 to the
+  // caller via the `null` return.
   const result = await db
     .update(competitionEntries)
     .set({
@@ -400,7 +432,13 @@ export async function withdrawCompetitionEntry(
       withdrawalReason: reason,
       updatedAt: new Date(),
     })
-    .where(and(eq(competitionEntries.id, entryId), eq(competitionEntries.clubId, clubId)))
+    .where(
+      and(
+        eq(competitionEntries.id, entryId),
+        eq(competitionEntries.clubId, clubId),
+        sql`${competitionEntries.status} NOT IN ('withdrawn', 'scratched')`,
+      ),
+    )
     .returning();
   return result[0] ?? null;
 }
@@ -431,14 +469,24 @@ export async function getCompetitionResults(clubId: string, classId: string) {
       clubMembers,
       and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
-    .leftJoin(horses, and(eq(competitionEntries.horseId, horses.id), eq(horses.clubId, clubId)))
+    // Hide tombstoned horses' names in the results list — F-2.
+    .leftJoin(
+      horses,
+      and(
+        eq(competitionEntries.horseId, horses.id),
+        eq(horses.clubId, clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
     .where(
       and(
         eq(competitionResults.clubId, clubId),
         eq(competitionEntries.classId, classId),
       ),
     )
-    .orderBy(asc(competitionResults.placing));
+    .orderBy(asc(competitionResults.placing))
+    // Defensive cap (audit G-10).
+    .limit(500);
 }
 
 export async function createCompetitionResult(clubId: string, data: ResultCreate) {
@@ -472,5 +520,8 @@ export async function getCompetitionsForCalendar(clubId: string, dateFrom: strin
         sql`${competitions.endDate} >= ${dateFrom}`,
       ),
     )
-    .orderBy(asc(competitions.startDate));
+    .orderBy(asc(competitions.startDate))
+    // Defensive cap (audit G-9). The route's Zod refine caps the date
+    // window at 90 days; this cap survives a future schema relaxation.
+    .limit(500);
 }

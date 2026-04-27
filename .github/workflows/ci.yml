@@ -52,13 +52,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm turbo typecheck --filter='./apps/web' --filter='./packages/*'
+        run: pnpm turbo typecheck --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
       - name: Lint
-        run: pnpm turbo lint --filter='./apps/web' --filter='./packages/*'
+        run: pnpm turbo lint --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
+      # Mobile has no `test` script today — turbo silently skips packages
+      # without the requested task, so this is a no-op for apps/mobile until
+      # a test suite lands there.
       - name: Test
-        run: pnpm turbo test --filter='./apps/web' --filter='./packages/*'
+        run: pnpm turbo test --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
   neon-smoke:
     # Spins up an ephemeral Neon branch from `main`, applies all
@@ -105,11 +108,12 @@ jobs:
         id: create-branch
         uses: neondatabase/create-branch-action@v5
         with:
-          # Project + auth come from repo secrets / variables. Set
-          # NEON_PROJECT_ID under Settings → Secrets and variables →
-          # Actions → Variables; NEON_API_KEY under Secrets. Generate
-          # the API key at console.neon.tech → Account → API keys.
-          project_id: ${{ vars.NEON_PROJECT_ID }}
+          # Both NEON_PROJECT_ID and NEON_API_KEY are repo secrets — see
+          # Settings → Secrets and variables → Actions → Secrets. The
+          # project id is masked from logs for the same reason as an
+          # API key (audit H-21): together they're targeting info for
+          # an attacker who got hold of a stolen Neon key elsewhere.
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
           branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
           api_key: ${{ secrets.NEON_API_KEY }}
           # Neon Auth adds `authenticator` / `anonymous` / `authenticated`
@@ -135,6 +139,6 @@ jobs:
         if: always() && steps.create-branch.outputs.branch_id != ''
         uses: neondatabase/delete-branch-action@v3
         with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
           branch: ${{ steps.create-branch.outputs.branch_id }}
           api_key: ${{ secrets.NEON_API_KEY }}

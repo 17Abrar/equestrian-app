@@ -54,11 +54,16 @@ export async function getHealthRecords(clubId: string, horseId: string, recordTy
     conditions.push(sql`${horseHealthRecords.recordType} = ${recordType}`);
   }
 
+  // Defensive cap (audit G-11). Long-lived horses can accumulate
+  // hundreds of records; the route renders all in one tab. 500 is well
+  // beyond any realistic dataset and keeps a malicious admin loop from
+  // OOMing the Worker isolate.
   const rows = await db
     .select()
     .from(horseHealthRecords)
     .where(and(...conditions))
-    .orderBy(desc(horseHealthRecords.date));
+    .orderBy(desc(horseHealthRecords.date))
+    .limit(500);
 
   return rows.map((row) => decryptFields(row, HEALTH_ENCRYPTED_FIELDS));
 }
@@ -99,11 +104,13 @@ export async function getMedications(clubId: string, horseId: string, activeOnly
     conditions.push(eq(horseMedications.isActive, true));
   }
 
+  // Defensive cap (audit G-11).
   const rows = await db
     .select()
     .from(horseMedications)
     .where(and(...conditions))
-    .orderBy(desc(horseMedications.createdAt));
+    .orderBy(desc(horseMedications.createdAt))
+    .limit(500);
 
   return rows.map((row) => decryptFields(row, MEDICATION_ENCRYPTED_FIELDS));
 }
@@ -166,6 +173,9 @@ export async function getMedicationByIds(clubId: string, horseId: string, medica
 }
 
 export async function getMedicationLogs(clubId: string, horseId: string, medicationId: string) {
+  // Defensive cap (audit G-11) — a horse on a long-term medication
+  // accumulates one log entry per administration; over years that's
+  // thousands of rows even at one-per-week.
   return db
     .select()
     .from(horseMedicationLogs)
@@ -176,7 +186,8 @@ export async function getMedicationLogs(clubId: string, horseId: string, medicat
         eq(horseMedicationLogs.medicationId, medicationId),
       ),
     )
-    .orderBy(desc(horseMedicationLogs.administeredAt));
+    .orderBy(desc(horseMedicationLogs.administeredAt))
+    .limit(500);
 }
 
 export async function createMedicationLog(clubId: string, horseId: string, data: MedicationLogCreate) {
@@ -190,11 +201,14 @@ export async function createMedicationLog(clubId: string, horseId: string, data:
 // ─── Feeding Plans ────────────────────────────────────────────────────
 
 export async function getFeedingPlans(clubId: string, horseId: string) {
+  // Defensive cap (audit G-11) — feeding plans are meal-times-per-day,
+  // realistically <10 rows. 100 is generous defensive bound.
   return db
     .select()
     .from(horseFeedingPlans)
     .where(and(eq(horseFeedingPlans.clubId, clubId), eq(horseFeedingPlans.horseId, horseId)))
-    .orderBy(asc(horseFeedingPlans.timeOfDay));
+    .orderBy(asc(horseFeedingPlans.timeOfDay))
+    .limit(100);
 }
 
 export async function createFeedingPlan(clubId: string, horseId: string, data: FeedingPlanCreate) {
@@ -250,11 +264,13 @@ export async function deleteFeedingPlan(clubId: string, horseId: string, planId:
 // ─── Exercise Schedules ───────────────────────────────────────────────
 
 export async function getExerciseSchedules(clubId: string, horseId: string) {
+  // Defensive cap (audit G-11) — at most 7 days × 24 hour blocks ~= 168.
   return db
     .select()
     .from(horseExerciseSchedules)
     .where(and(eq(horseExerciseSchedules.clubId, clubId), eq(horseExerciseSchedules.horseId, horseId)))
-    .orderBy(asc(horseExerciseSchedules.dayOfWeek));
+    .orderBy(asc(horseExerciseSchedules.dayOfWeek))
+    .limit(200);
 }
 
 export async function createExerciseSchedule(clubId: string, horseId: string, data: ExerciseCreate) {
@@ -311,11 +327,14 @@ export async function getDocuments(clubId: string, horseId: string, category?: s
     conditions.push(sql`${horseDocuments.category} = ${category}`);
   }
 
+  // Defensive cap (audit G-11). Vet records, x-rays, and horse passports
+  // accumulate over time; 500 is comfortably above any realistic horse.
   return db
     .select()
     .from(horseDocuments)
     .where(and(...conditions))
-    .orderBy(desc(horseDocuments.createdAt));
+    .orderBy(desc(horseDocuments.createdAt))
+    .limit(500);
 }
 
 export async function createDocument(clubId: string, horseId: string, data: DocumentCreate) {

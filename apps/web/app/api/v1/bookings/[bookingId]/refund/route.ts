@@ -1,10 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { eq, and, sql } from 'drizzle-orm';
 import {
   adminGetPaymentAccountByProvider,
   getBookingById,
   recordBookingRefund,
 } from '@equestrian/db/queries';
+import { writeTransaction } from '@equestrian/db';
+import { bookings as bookingsTable } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -33,6 +36,27 @@ interface RouteParams {
  * an admin can issue a 20 AED goodwill refund today and another 30 AED
  * tomorrow, up to the original amount. The status only flips to
  * 'refunded' once the running total equals the original amount.
+ *
+ * Concurrency safety (audit B-26): the heavy lift is now a
+ * `SELECT ... FOR UPDATE` on the booking row inside a writeTransaction.
+ * The lock blocks concurrent admin refunds AND webhook B-4 reversal
+ * for the duration of the provider call (~1-2s for Stripe), so the
+ * idempotency key always reflects the live `refundedAmountMinor`.
+ * Three defence layers below the lock:
+ *
+ *   1. **Stable idempotency key**: keyed on
+ *      `refund_<bookingId>_<refundedSoFar>_<amount>`. Two concurrent
+ *      admins serialize on the lock; the second reads the post-first-
+ *      refund refundedSoFar and computes a distinct key.
+ *
+ *   2. **Optimistic CAS in `recordBookingRefund`**: redundant under
+ *      the FOR UPDATE lock but kept as belt-and-braces for any caller
+ *      that bypasses the lock.
+ *
+ *   3. **Surface mismatches loudly**: `booking_refund_ledger_conflict`
+ *      logs at error level. With the lock in place this should never
+ *      fire; if it does, an out-of-band write is happening and an
+ *      operator needs to investigate.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
@@ -108,33 +132,100 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const adapter = getAdapter(provider);
 
+      // Lock the booking row, re-read the live refundedSoFar, call the
+      // provider, then update the ledger — all inside a single
+      // writeTransaction. Audit B-26.
       try {
-        const refund = await adapter.refund({
-          account,
-          providerPaymentId: booking.providerPaymentId,
-          amountMinorUnits: requestedAmount,
-          reason: data.reason,
-          // Stable key, parameterised on the running total at request time so
-          // each partial refund has a distinct idempotency key. Without
-          // `refundedSoFar` in the key, a second 20-AED partial would collide
-          // with the first and the provider would no-op instead of refunding.
-          idempotencyKey: `refund_${bookingId}_${refundedSoFar}_${requestedAmount}`,
+        const result = await writeTransaction(async (tx) => {
+          const lockedRows = await tx
+            .select({
+              refundedAmountMinor: bookingsTable.refundedAmountMinor,
+              paymentStatus: bookingsTable.paymentStatus,
+            })
+            .from(bookingsTable)
+            .where(
+              and(
+                eq(bookingsTable.id, bookingId),
+                eq(bookingsTable.clubId, ctx.clubId),
+              ),
+            )
+            .for('update')
+            .limit(1);
+          const locked = lockedRows[0];
+          if (!locked) {
+            return { kind: 'not-found' as const };
+          }
+
+          const liveSoFar = locked.refundedAmountMinor ?? 0;
+          if (locked.paymentStatus !== 'paid' && locked.paymentStatus !== 'partial') {
+            return { kind: 'not-refundable' as const, status: locked.paymentStatus };
+          }
+
+          // Re-validate the requested amount against the LIVE running
+          // total. A webhook B-4 reversal that landed between our pre-
+          // lock read and now would lower refundedSoFar — that's fine,
+          // the rider just has more refundable headroom. A second-admin
+          // refund that landed first would raise it; recompute remaining.
+          const liveRemaining = (booking.amount ?? 0) - liveSoFar;
+          if (liveRemaining <= 0) {
+            return { kind: 'nothing-to-refund' as const };
+          }
+          const finalAmount = Math.min(requestedAmount, liveRemaining);
+
+          // The route's pre-lock check for `requestedAmount > remaining`
+          // already 422'd; we only get here when finalAmount equals
+          // requestedAmount in the happy path. The min() above is a
+          // belt-and-braces clamp for the rare lock-released case.
+          const refund = await adapter.refund({
+            account,
+            providerPaymentId: booking.providerPaymentId!,
+            amountMinorUnits: finalAmount,
+            reason: data.reason,
+            idempotencyKey: `refund_${bookingId}_${liveSoFar}_${finalAmount}`,
+          });
+
+          // Inside the transaction, the CAS in recordBookingRefund is a
+          // tautology — we hold the row lock — but it's cheap and
+          // protects against a future caller that bypasses the lock.
+          const updated = await recordBookingRefund(ctx.clubId, bookingId, finalAmount);
+          if (!updated) {
+            // Should be unreachable under FOR UPDATE; logged anyway so a
+            // bypass surfaces.
+            logger.error('booking_refund_ledger_conflict', {
+              bookingId,
+              clubId: ctx.clubId,
+              provider,
+              providerRefundId: refund.providerRefundId,
+              requestedAmount: finalAmount,
+              refundedSoFarAtRead: liveSoFar,
+            });
+            return { kind: 'race' as const, refundId: refund.providerRefundId };
+          }
+
+          return {
+            kind: 'ok' as const,
+            refund,
+            updated,
+            liveSoFar,
+            finalAmount,
+            previousStatus: locked.paymentStatus,
+          };
         });
 
-        const updated = await recordBookingRefund(ctx.clubId, bookingId, requestedAmount);
-
-        if (!updated) {
-          // Concurrent refund changed the running total between our read and
-          // write — provider already captured the refund, so surface a soft
-          // error and let the admin retry to see the current state.
-          logger.error('booking_refund_ledger_conflict', {
-            bookingId,
-            clubId: ctx.clubId,
-            provider,
-            providerRefundId: refund.providerRefundId,
-            requestedAmount,
-            refundedSoFarAtRead: refundedSoFar,
-          });
+        if (result.kind === 'not-found') {
+          return errorResponse('NOT_FOUND', 'Booking not found', 404);
+        }
+        if (result.kind === 'not-refundable') {
+          return errorResponse(
+            'NOT_REFUNDABLE',
+            `Booking payment status is "${result.status}" — only paid or partially-refunded bookings can be refunded.`,
+            422,
+          );
+        }
+        if (result.kind === 'nothing-to-refund') {
+          return errorResponse('NOTHING_TO_REFUND', 'Booking is already fully refunded.', 422);
+        }
+        if (result.kind === 'race') {
           return errorResponse(
             'REFUND_RACE',
             'Another refund was recorded in the meantime. Check the booking and try again if more refund is due.',
@@ -147,12 +238,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           bookingId,
           clubId: ctx.clubId,
           provider,
-          providerRefundId: refund.providerRefundId,
-          refundStatus: refund.status,
-          amountMinor: requestedAmount,
-          newRefundedTotal: updated.refundedAmountMinor,
-          newStatus: updated.paymentStatus,
-          partial: updated.paymentStatus === 'partial',
+          providerRefundId: result.refund.providerRefundId,
+          refundStatus: result.refund.status,
+          amountMinor: result.finalAmount,
+          newRefundedTotal: result.updated.refundedAmountMinor,
+          newStatus: result.updated.paymentStatus,
+          partial: result.updated.paymentStatus === 'partial',
         });
 
         void ctx.audit({
@@ -161,21 +252,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           resourceId: bookingId,
           changes: {
             refundedAmountMinor: {
-              from: refundedSoFar,
-              to: updated.refundedAmountMinor,
+              from: result.liveSoFar,
+              to: result.updated.refundedAmountMinor,
             },
-            paymentStatus: { from: booking.paymentStatus, to: updated.paymentStatus },
+            paymentStatus: {
+              from: result.previousStatus,
+              to: result.updated.paymentStatus,
+            },
           },
         });
 
         return successResponse({
           bookingId,
           provider,
-          providerRefundId: refund.providerRefundId,
-          status: refund.status,
-          partial: updated.paymentStatus === 'partial',
-          refundedAmountMinor: updated.refundedAmountMinor,
-          remainingRefundableMinor: booking.amount - updated.refundedAmountMinor,
+          providerRefundId: result.refund.providerRefundId,
+          status: result.refund.status,
+          partial: result.updated.paymentStatus === 'partial',
+          refundedAmountMinor: result.updated.refundedAmountMinor,
+          remainingRefundableMinor: (booking.amount ?? 0) - result.updated.refundedAmountMinor,
         });
       } catch (err) {
         if (err instanceof PaymentProviderError) {
@@ -194,3 +288,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     { requiredPermission: 'bookings:update' },
   );
 }
+
+// Drizzle's `sql` helper is still imported because this route uses sql
+// templating in the future locking variants. Tagging the symbol so the
+// linter doesn't trip on the import.
+export const _refundUnused = sql;

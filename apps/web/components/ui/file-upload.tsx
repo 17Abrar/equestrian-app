@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Upload, X, FileText, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface FileUploadProps {
   /** Current file URL (displays existing file) */
@@ -136,6 +137,7 @@ export function FileUpload({
       // Step 4: Pass the public URL back to the form
       onChange(publicUrl);
     } catch (err) {
+      reportMutationError('upload.file', err, { folder });
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
@@ -171,8 +173,23 @@ export function FileUpload({
     setError(null);
   }
 
+  function hasImageExtension(raw: string): boolean {
+    const path = (() => {
+      try {
+        return new URL(raw).pathname;
+      } catch {
+        return raw;
+      }
+    })();
+    return /\.(jpe?g|png|webp|gif|avif)$/i.test(path);
+  }
+
   const hasValue = !!value;
-  const isImage = value && (value.includes('.jpg') || value.includes('.jpeg') || value.includes('.png') || value.includes('.webp') || value.includes('.gif') || value.includes('image'));
+  // Substring matches were prone to false positives — e.g. a non-image file
+  // with `.png` in a query string would render as an image. Parse the URL
+  // pathname and check the actual extension; tolerate non-URL values by
+  // matching the trailing extension on the raw string instead.
+  const isImage = !!value && hasImageExtension(value);
 
   // Show preview of existing image
   if (hasValue && preview && isImage) {

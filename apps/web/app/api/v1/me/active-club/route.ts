@@ -11,11 +11,38 @@ import {
   ValidationError,
 } from '@/lib/api-utils';
 import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
+import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
 import { logger } from '@/lib/logger';
 
 const setActiveClubSchema = z.object({
   clubId: z.string().uuid(),
 });
+
+// Same allowlist the CORS middleware reads. We re-check at the route level
+// so a cookie-mutating request from a non-cavaliq origin is refused even
+// if Clerk's session validation lets the request through (audit G-18).
+// Today Clerk's allowed-origins config catches this for browsers, but the
+// extra layer survives a Clerk config change and is cheap.
+const CSRF_ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
+);
+
+function isSameOriginRequest(request: NextRequest): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) {
+    // Server-to-server callers (no Origin header — e.g. wrangler dev curl,
+    // monitoring probes) are never the CSRF threat model: a browser
+    // attacker can't strip Origin from a fetch with credentials. Allow.
+    return true;
+  }
+  // Always-allow the request's own URL origin (handles localhost, preview
+  // domains) plus the explicit allowlist for production.
+  if (origin === request.nextUrl.origin) return true;
+  return CSRF_ALLOWED_ORIGINS.has(origin);
+}
 
 /**
  * Rider-facing stable switcher. Sets a cookie that `getTenantContext()`
@@ -30,6 +57,13 @@ const setActiveClubSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    if (!isSameOriginRequest(request)) {
+      logger.warn('active_club_cross_origin_blocked', {
+        origin: request.headers.get('origin'),
+      });
+      return errorResponse('FORBIDDEN', 'Cross-origin request blocked', 403);
+    }
+
     const { userId } = await auth();
     if (!userId) {
       return errorResponse('UNAUTHORIZED', 'Authentication required', 401);
@@ -70,7 +104,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: ACTIVE_CLUB_COOKIE_TTL_SECONDS,
     });
     return response;
   } catch (error) {

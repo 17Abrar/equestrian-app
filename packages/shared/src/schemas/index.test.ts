@@ -12,25 +12,33 @@ describe('updateHorseSchema — mass-assignment guard', () => {
   // weight/gear changes. Ownership transfers go through the dedicated
   // endpoint, which validates the new owner is a club member and writes
   // an audit log. Weakening this schema would re-open the
-  // 2026-04 audit's CRITICAL #2 finding.
-  it('strips ownerMemberId from accepted input', () => {
-    const result = updateHorseSchema.parse({
-      name: 'Buttercup',
-      weightKg: 480,
-      ownerMemberId: '00000000-0000-0000-0000-000000000001',
-    });
-    expect(result).not.toHaveProperty('ownerMemberId');
-    expect(result).toMatchObject({ name: 'Buttercup', weightKg: 480 });
+  // 2026-04 audit's CRITICAL #2 finding. Audit G-5 added `.strict()`
+  // so unknown keys now THROW rather than being silently stripped.
+  it('rejects ownerMemberId alongside other fields', () => {
+    expect(() =>
+      updateHorseSchema.parse({
+        name: 'Buttercup',
+        weightKg: 480,
+        ownerMemberId: '00000000-0000-0000-0000-000000000001',
+      }),
+    ).toThrow();
   });
 
   it('rejects a body where ownerMemberId is the only field', () => {
-    // Strict-by-omission: the field doesn't exist on the schema, so it
-    // gets stripped (Zod's default). The empty result is still a valid
-    // partial — test that we don't accidentally widen later.
-    const result = updateHorseSchema.parse({
-      ownerMemberId: '00000000-0000-0000-0000-000000000001',
-    });
-    expect(result).toEqual({});
+    expect(() =>
+      updateHorseSchema.parse({
+        ownerMemberId: '00000000-0000-0000-0000-000000000001',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects unknown / mass-assignment keys (totalLessonsCompleted, clubId, …)', () => {
+    expect(() =>
+      updateHorseSchema.parse({
+        name: 'Buttercup',
+        clubId: '00000000-0000-0000-0000-000000000002',
+      }),
+    ).toThrow();
   });
 
   it('still accepts every other field that createHorseSchema accepts', () => {

@@ -6,6 +6,7 @@ import {
   isUserMember,
   joinClubInstantly,
 } from '@equestrian/db/queries';
+import { successResponse, errorResponse } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { sendTriggeredEmail } from '@/lib/email';
@@ -29,13 +30,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: 'Please sign in to join a club' },
-        },
-        { status: 401 },
-      );
+      return errorResponse('UNAUTHORIZED', 'Please sign in to join a club', 401);
     }
 
     // Rate-limit join attempts per user — without this, a signed-in attacker
@@ -51,6 +46,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     });
     if (!rl.allowed) {
       const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
+      // `errorResponse` doesn't take custom headers, so build this one
+      // by hand — Retry-After is part of the rate-limit contract.
       return NextResponse.json(
         {
           success: false,
@@ -63,10 +60,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const { slug } = await params;
     const club = await getPublicClubBySlug(slug);
     if (!club) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: 'Club not found' } },
-        { status: 404 },
-      );
+      return errorResponse('NOT_FOUND', 'Club not found', 404);
     }
 
     // Only two join states now: open (instant) or not-open (403). The old
@@ -74,27 +68,15 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     // gatekeeping. Any legacy 'approval' value in the DB is treated as
     // invite_only until the admin flips the toggle.
     if (club.joinPolicy !== 'open') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'INVITE_ONLY',
-            message:
-              'This stable is private and joins by invitation only. Contact them directly.',
-          },
-        },
-        { status: 403 },
+      return errorResponse(
+        'INVITE_ONLY',
+        'This stable is private and joins by invitation only. Contact them directly.',
+        403,
       );
     }
 
     if (await isUserMember(club.id, userId)) {
-      return NextResponse.json(
-        {
-          success: true,
-          data: { status: 'already_member', clubId: club.id, slug: club.slug },
-        },
-        { status: 200 },
-      );
+      return successResponse({ status: 'already_member', clubId: club.id, slug: club.slug });
     }
 
     const clerkUser = await currentUser();
@@ -111,13 +93,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       displayName,
     });
     if (!member) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'JOIN_FAILED', message: 'Could not add you to the stable.' },
-        },
-        { status: 500 },
-      );
+      return errorResponse('JOIN_FAILED', 'Could not add you to the stable.', 500);
     }
 
     logger.info('rider_joined_club_instantly', {
@@ -154,24 +130,15 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: { status: 'joined', clubId: club.id, slug: club.slug, memberId: member.id },
-      },
-      { status: 201 },
+    return successResponse(
+      { status: 'joined', clubId: club.id, slug: club.slug, memberId: member.id },
+      201,
     );
   } catch (error) {
     logger.error('join_club_failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' },
-      },
-      { status: 500 },
-    );
+    return errorResponse('INTERNAL_ERROR', 'Something went wrong. Please try again.', 500);
   }
 }

@@ -130,6 +130,11 @@ export async function POST(request: NextRequest) {
           const availableHorses = await getAvailableHorsesForMatching(
             ctx.clubId,
             slot.date,
+            // Filter pairing history to this rider only (audit G-14) —
+            // the matching algorithm only scores against the calling
+            // rider's prior pairings, so loading every (rider, horse,
+            // rating) tuple in the club's history was wasted work.
+            data.riderMemberId,
           );
 
           const age = rider.dateOfBirth
@@ -334,7 +339,9 @@ export async function POST(request: NextRequest) {
               clubLogo: '',
               amount: fullBooking.amount ? String(fullBooking.amount) : undefined,
               currency: fullBooking.currency ?? 'AED',
-              addToCalendarUrl: '#',
+              // addToCalendarUrl omitted until the ICS-generation feature
+              // ships — see audit D-4. Template now hides the button when
+              // unset rather than rendering it with a dead `#` href.
             }),
           });
         } catch (emailErr) {
@@ -348,6 +355,17 @@ export async function POST(request: NextRequest) {
 
       return successResponse(booking, 201);
     },
-    { requiredPermission: 'bookings:create' },
+    {
+      requiredPermission: 'bookings:create',
+      // Rate-limit booking creation per user. The /coupons/validate route
+      // is rate-limited (10/min, failClosed) to defeat coupon-code
+      // enumeration, but a brute-forcer could otherwise just hit this
+      // endpoint with `{ slotId, couponCode: 'GUESS_X' }` 1000× and read
+      // the success/failure on the booking — see audit B-23. 30/min lets
+      // legitimate burst-booking through (e.g. an admin batch-creating)
+      // while still capping the brute-force surface.
+      rateLimit: { maxRequests: 30, windowMs: 60_000 },
+      routeKey: 'bookings:create',
+    },
   );
 }

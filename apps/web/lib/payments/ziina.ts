@@ -247,13 +247,27 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     const expected = createHmac('sha256', input.webhookSecret)
       .update(input.body)
       .digest('hex');
-    const provided = input.signatureHeader.trim().toLowerCase();
+    // Tolerate a leading `sha256=` prefix that some HMAC pipelines prepend,
+    // and normalise case (audit B-8). `expected` is always lowercase per
+    // Node's crypto API; `provided` may arrive uppercase from clients that
+    // copied the value verbatim.
+    const providedRaw = input.signatureHeader.trim();
+    const provided = providedRaw
+      .replace(/^sha256=/i, '')
+      .toLowerCase();
 
     const a = Buffer.from(expected, 'utf8');
     const b = Buffer.from(provided, 'utf8');
 
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      logger.warn('ziina_webhook_signature_mismatch');
+      // Length info is useful for distinguishing a format mismatch
+      // (recoverable by upgrading the adapter) from a real attacker —
+      // never log the actual signature value.
+      logger.warn('ziina_webhook_signature_mismatch', {
+        expectedLength: a.length,
+        providedLength: b.length,
+        hasSha256Prefix: /^sha256=/i.test(providedRaw),
+      });
       throw new PaymentProviderError(
         'INVALID_SIGNATURE',
         'Ziina webhook signature verification failed',
@@ -289,10 +303,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     const intentId = payload.data?.id;
     const statusKey = payload.data?.status ?? 'nostatus';
     const eventName = payload.event ?? 'ziina.event';
+    // 32 hex chars = 128 bits of entropy on the SHA-256 — collision is
+    // astronomically unlikely for any practical webhook volume but cheap
+    // to extend from the prior 24 (96 bits).
     const eventId = intentId
       ? `${eventName}:${intentId}:${statusKey}`
       : `${eventName}:` +
-        createHash('sha256').update(input.body).digest('hex').slice(0, 24);
+        createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 
     return {
       eventId,
