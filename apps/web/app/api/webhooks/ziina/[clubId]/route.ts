@@ -1,8 +1,8 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
-  adminGetPaymentAccountByProvider,
   claimWebhookEvent,
+  getWebhookConfigByClubProvider,
   markWebhookEventFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
@@ -55,15 +55,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('Missing signature', { status: 400 });
   }
 
-  const account = await adminGetPaymentAccountByProvider(clubId, 'ziina');
+  // Audit B-9: getWebhookConfigByClubProvider returns ONLY the webhook
+  // fields, never the Ziina API key. A future logger.error here can't
+  // accidentally surface the API key into observability.
+  const account = await getWebhookConfigByClubProvider(clubId, 'ziina');
   if (!account) {
     logger.warn('ziina_webhook_club_not_connected', { clubId });
     return new Response('OK', { status: 200 });
   }
 
-  const creds = account.credentials as { webhookSigningSecret?: string } | null;
-  const webhookSecret = creds?.webhookSigningSecret;
-
+  const webhookSecret = account.webhookSigningSecret;
   if (!webhookSecret) {
     logger.error('ziina_webhook_secret_not_configured', { clubId });
     return new Response('Webhook secret not configured', { status: 503 });

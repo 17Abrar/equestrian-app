@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import {
   claimWebhookEvent,
-  findPaymentAccountByExternalId,
+  findWebhookConfigByExternalId,
   markWebhookEventFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
@@ -83,8 +83,12 @@ export async function POST(request: NextRequest) {
     return new Response('Missing outletId', { status: 400 });
   }
 
-  // Look up the club + its stored webhook header config.
-  const account = await findPaymentAccountByExternalId(outletId, 'n_genius');
+  // Look up the club + its stored webhook header config. Audit B-9: the
+  // narrowed `findWebhookConfigByExternalId` returns ONLY the webhook
+  // fields, never the full credentials blob — a future
+  // `logger.error(..., { account })` here can't accidentally leak the
+  // N-Genius API key.
+  const account = await findWebhookConfigByExternalId(outletId, 'n_genius');
   if (!account) {
     // `error` (not `warn`) so the alert rule fires — an unknown outlet is
     // almost always a misconfiguration (the merchant connected with one
@@ -103,11 +107,8 @@ export async function POST(request: NextRequest) {
     return new Response('Unknown outlet', { status: 401 });
   }
 
-  const creds = account.credentials as
-    | { webhookHeaderName?: string; webhookHeaderValue?: string }
-    | null;
-  const headerName = creds?.webhookHeaderName;
-  const headerValue = creds?.webhookHeaderValue;
+  const headerName = account.webhookHeaderName;
+  const headerValue = account.webhookHeaderValue;
 
   if (!headerName || !headerValue) {
     logger.error('n_genius_webhook_header_not_configured', {
