@@ -444,9 +444,14 @@ Required secrets (set with `gh secret set`):
   Once minted: `gh secret set CLOUDFLARE_API_TOKEN`.
 - `DATABASE_URL_UNPOOLED` ✓ set 2026-04-27 (Neon prod unpooled URL,
   used by `db:migrate:neon` in deploy.yml).
+- `SENTRY_AUTH_TOKEN` ✓ set 2026-04-27 (optional — enables source-map
+  upload for production stack traces).
 
-Once `CLOUDFLARE_API_TOKEN` lands, the next push to main auto-deploys.
-Until then, fall back to manual `pnpm cf:deploy` from a clean main checkout.
+Status: every step in the workflow is verified against main except
+the final `wrangler deploy` (it's the only one that needs
+`CLOUDFLARE_API_TOKEN`). Once the token lands, the next push auto-
+deploys end-to-end. Until then, fall back to manual `pnpm cf:deploy`
+from a clean main checkout — the same command the deploy step uses.
 
 ---
 
