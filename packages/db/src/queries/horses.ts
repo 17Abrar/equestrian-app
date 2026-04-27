@@ -516,7 +516,10 @@ export async function getHorsesOwnedByUser(clerkUserId: string) {
         isNull(clubs.deletedAt),
       ),
     )
-    .orderBy(desc(horses.createdAt));
+    .orderBy(desc(horses.createdAt))
+    // Defensive cap (audit G-12) — a multi-club power user accumulating
+    // horses over years sees a paginated UI; the DB cap stops a runaway.
+    .limit(200);
 }
 
 /** Clubs the signed-in rider belongs to — used to populate the registration form's stable selector. */

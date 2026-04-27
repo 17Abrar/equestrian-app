@@ -9,6 +9,7 @@ import {
   markInvoiceOverdueOnly,
   setInvoiceProviderRef,
   adminGetActivePaymentAccount,
+  pruneAuditLog,
   type BillableHorse,
   type PaymentAccountWithCredentials,
 } from '@equestrian/db/queries';
@@ -109,12 +110,28 @@ export async function POST(request: NextRequest) {
     const issued = await issueDueInvoices(utcToday);
     const reminded = await sendReminders(utcToday);
 
+    // Audit F-9: piggyback on the daily cron to prune old audit_log rows
+    // (90-day retention, capped at 5000 rows per run so a sustained
+    // backlog won't blow the wall-clock budget). Wrapped in a separate
+    // catch so a failure here doesn't suppress the issuance + reminder
+    // result the operator actually cares about.
+    let auditPruned = 0;
+    try {
+      const result = await pruneAuditLog();
+      auditPruned = result.pruned;
+    } catch (err) {
+      logger.warn('audit_log_prune_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     logger.info('livery_cron_completed', {
       utcToday,
       invoicesIssued: issued.issued,
       invoicesSkipped: issued.skipped,
       remindersSent: reminded.sent,
       remindersSkipped: reminded.skipped,
+      auditLogPruned: auditPruned,
     });
 
     return successResponse({
@@ -123,6 +140,7 @@ export async function POST(request: NextRequest) {
       invoicesSkipped: issued.skipped,
       remindersSent: reminded.sent,
       remindersSkipped: reminded.skipped,
+      auditLogPruned: auditPruned,
     });
   } catch (err) {
     logger.error('livery_cron_failed', {

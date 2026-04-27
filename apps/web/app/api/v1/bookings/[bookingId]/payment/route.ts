@@ -152,6 +152,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             persistFeeSnapshot = true;
           }
         }
+        // Stripe rejects PaymentIntents where application_fee_amount +
+        // Stripe's processing fee (~2.9% + 30c) exceeds the captured
+        // amount. Clamp to ~70% of the booking so a misconfigured high
+        // platform fee + a small booking doesn't surface as a Stripe
+        // 400 with an unhelpful "amount too small" error to the rider.
+        // Audit B-28.
+        if (applicationFeeMinorUnits !== undefined) {
+          const cap = Math.floor(bookingAmount * 0.7);
+          if (applicationFeeMinorUnits > cap) {
+            logger.warn('booking_payment_application_fee_clamped', {
+              bookingId,
+              clubId: ctx.clubId,
+              requested: applicationFeeMinorUnits,
+              cap,
+              bookingAmount,
+            });
+            applicationFeeMinorUnits = Math.max(0, cap);
+          }
+        }
       }
 
       try {

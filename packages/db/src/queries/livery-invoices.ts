@@ -377,7 +377,11 @@ export async function getLiveryInvoicesOwnedByUser(clerkUserId: string) {
         isNull(horses.deletedAt),
       ),
     )
-    .orderBy(desc(liveryInvoices.periodStart));
+    .orderBy(desc(liveryInvoices.periodStart))
+    // Defensive cap (audit G-12) — at one invoice per horse per month
+    // for a multi-club power user, this caps at ~5 years of history
+    // before the cap bites; explicit pagination should ship before then.
+    .limit(300);
 }
 
 /**

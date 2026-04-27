@@ -294,6 +294,16 @@ export const createBookingSlotSchema = z.object({
 
 export type CreateBookingSlotInput = z.infer<typeof createBookingSlotSchema>;
 
+// Audit G-16: dateFrom / dateTo are calendar-date strings (YYYY-MM-DD).
+// The bulk-slots route's day-of-week loop uses `new Date(...).getDay()`
+// which interprets a bare YYYY-MM-DD as UTC midnight; that's safe ONLY
+// for calendar-date input (UTC midnight Sunday is local Sunday in any
+// reasonable timezone). The previous schema accepted `z.string().max(50)`,
+// which would have admitted ISO datetimes with offsets and silently
+// shifted day-of-week to the wrong calendar day. Locking to the regex
+// here means a future frontend change can't widen the contract.
+const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const createRecurringSlotsSchema = z.object({
   lessonTypeId: z.string().uuid(),
   arenaId: z.string().uuid().optional(),
@@ -302,8 +312,8 @@ export const createRecurringSlotsSchema = z.object({
   endTime: z.string().max(20).min(1, 'End time is required'),
   maxRiders: numericField(z.number().int().min(1)),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day').max(7),
-  dateFrom: z.string().max(50).min(1, 'Start date is required'),
-  dateTo: z.string().max(50).min(1, 'End date is required'),
+  dateFrom: z.string().regex(CALENDAR_DATE_RE, 'Start date must be YYYY-MM-DD'),
+  dateTo: z.string().regex(CALENDAR_DATE_RE, 'End date must be YYYY-MM-DD'),
 });
 
 export type CreateRecurringSlotsFormValues = z.input<typeof createRecurringSlotsSchema>;

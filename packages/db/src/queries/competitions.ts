@@ -249,7 +249,10 @@ export async function getCompetitionEntries(clubId: string, classId: string) {
         eq(competitionEntries.classId, classId),
       ),
     )
-    .orderBy(asc(competitionEntries.registeredAt));
+    .orderBy(asc(competitionEntries.registeredAt))
+    // Defensive cap (audit G-10). competitionClasses.maxEntries is the
+    // business-rule cap; this is the wall-clock cap.
+    .limit(500);
 }
 
 /**
@@ -481,7 +484,9 @@ export async function getCompetitionResults(clubId: string, classId: string) {
         eq(competitionEntries.classId, classId),
       ),
     )
-    .orderBy(asc(competitionResults.placing));
+    .orderBy(asc(competitionResults.placing))
+    // Defensive cap (audit G-10).
+    .limit(500);
 }
 
 export async function createCompetitionResult(clubId: string, data: ResultCreate) {

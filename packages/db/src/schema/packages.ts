@@ -75,6 +75,13 @@ export const coupons = pgTable(
 
     code: varchar('code', { length: 50 }).notNull(),
     discountType: couponDiscountTypeEnum('discount_type').notNull(),
+    // Units are tied to `discount_type` — see audit B-17:
+    //   * percentage: integer 0–100 representing percent points (e.g. 33
+    //     means 33% off; `validateCoupon` divides by 100 at compute time)
+    //   * fixed: integer in minor currency units (fils for AED), applied
+    //     directly as the deduction
+    // `max_discount` (when set) caps the percentage path's output in the
+    // same minor-unit units as `fixed`.
     discountValue: integer('discount_value').notNull(),
     maxDiscount: integer('max_discount'),
     applicableTypes: text('applicable_types').array(),

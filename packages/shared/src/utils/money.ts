@@ -19,10 +19,37 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
   'JPY', 'KRW', 'VND', 'CLP', 'PYG', 'RWF', 'UGX', 'VUV', 'XAF', 'XOF', 'XPF',
 ]);
 
+// Cache Intl probes so a hot path doesn't pay the constructor cost per
+// call. Map values are 0/2/3 (or null for "Intl rejects this code, fall
+// back to 2").
+const intlDecimalCache = new Map<string, number | null>();
+
+function decimalsFromIntl(upper: string): number | null {
+  if (intlDecimalCache.has(upper)) return intlDecimalCache.get(upper) ?? null;
+  let result: number | null;
+  try {
+    const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: upper });
+    const min = fmt.resolvedOptions().minimumFractionDigits;
+    result = typeof min === 'number' ? min : null;
+  } catch {
+    // Currency code Intl doesn't recognize — return null so the caller
+    // falls back to the safe 2-decimal default.
+    result = null;
+  }
+  intlDecimalCache.set(upper, result);
+  return result;
+}
+
 function currencyDecimals(currency: string): number {
   const upper = currency.toUpperCase();
   if (ZERO_DECIMAL_CURRENCIES.has(upper)) return 0;
   if (THREE_DECIMAL_CURRENCIES.has(upper)) return 3;
+  // Audit B-20: defer to Intl.NumberFormat for currencies the explicit
+  // sets don't cover (e.g. BIF, GNF, ISK are 0-decimal but only become
+  // relevant if a club ever picks them). Still falls back to 2 if Intl
+  // rejects the code so the previous behaviour is preserved.
+  const intl = decimalsFromIntl(upper);
+  if (intl !== null) return intl;
   return 2;
 }
 

@@ -25,6 +25,8 @@ export const tokenCache: TokenCache = {
     try {
       return await SecureStore.getItemAsync(key);
     } catch (err) {
+      // eslint-disable-next-line no-console -- diagnostic before
+      // @sentry/react-native lands; keychain failures need to surface.
       console.error('[clerk-token-cache] getToken failed', {
         key,
         message: err instanceof Error ? err.message : String(err),
@@ -39,6 +41,8 @@ export const tokenCache: TokenCache = {
     try {
       await SecureStore.setItemAsync(key, value);
     } catch (err) {
+      // eslint-disable-next-line no-console -- diagnostic before
+      // @sentry/react-native lands; persist failures need to surface.
       console.error('[clerk-token-cache] saveToken failed', {
         key,
         message: err instanceof Error ? err.message : String(err),

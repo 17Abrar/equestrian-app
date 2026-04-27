@@ -37,9 +37,21 @@ export const MAX_WEBHOOK_ATTEMPTS = 3;
  * re-claim it. Must be a comfortable upper bound on normal processing
  * time; ours is sub-second. Too short = double-processing risk when a
  * slow worker gets overtaken. Too long = events sit stuck after a
- * genuine crash until the threshold elapses.
+ * genuine crash until the threshold elapses. Audit B-18 — env-tunable
+ * because environments with reliable worker-timeout enforcement can
+ * safely shave the recovery window down.
  */
-const STALE_AFTER_MS = 5 * 60 * 1000;
+const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
+
+function resolveStaleAfterMs(): number {
+  const raw = process.env.WEBHOOK_STALE_AFTER_MS;
+  if (!raw) return DEFAULT_STALE_AFTER_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_STALE_AFTER_MS;
+  return parsed;
+}
+
+const STALE_AFTER_MS = resolveStaleAfterMs();
 
 /**
  * Claim a webhook event for processing. The unique (provider, event_id)

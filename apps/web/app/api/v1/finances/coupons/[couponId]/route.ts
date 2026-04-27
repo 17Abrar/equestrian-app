@@ -1,7 +1,31 @@
 import { type NextRequest } from 'next/server';
+import { eq } from 'drizzle-orm';
 import { createCouponSchema } from '@equestrian/shared/schemas';
+import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { updateCoupon } from '@equestrian/db/queries';
+import { db } from '@equestrian/db';
+import { clubs } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+
+const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+
+// Same timezone-resolve flow as the create route — see audit G-26.
+async function resolveCouponDate(
+  clubId: string,
+  value: string | undefined,
+): Promise<Date | undefined> {
+  if (!value) return undefined;
+  if (DATETIME_LOCAL_RE.test(value)) {
+    const club = await db
+      .select({ timezone: clubs.timezone })
+      .from(clubs)
+      .where(eq(clubs.id, clubId))
+      .limit(1);
+    const tz = club[0]?.timezone ?? 'Asia/Dubai';
+    return parseDateTimeLocal(value, tz);
+  }
+  return new Date(value);
+}
 
 interface RouteParams {
   params: Promise<{ couponId: string }>;
@@ -20,12 +44,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(updateCouponSchema, body);
 
+      const [startsAt, expiresAt] = await Promise.all([
+        resolveCouponDate(ctx.clubId, data.startsAt),
+        resolveCouponDate(ctx.clubId, data.expiresAt),
+      ]);
+
       const coupon = await updateCoupon(ctx.clubId, couponId, {
         ...data,
-        // Zod returns ISO strings for `.string().optional()`; Drizzle
-        // timestamp columns want Date objects.
-        startsAt: data.startsAt ? new Date(data.startsAt) : undefined,
-        expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+        startsAt,
+        expiresAt,
       });
 
       if (!coupon) {

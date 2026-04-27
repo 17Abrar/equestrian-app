@@ -1,4 +1,5 @@
 import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
+import { calculateCouponDiscount } from '@equestrian/shared/utils';
 import { db } from '../index';
 import { invoices } from '../schema/finances';
 import { expenses } from '../schema/finances';
