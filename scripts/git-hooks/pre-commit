@@ -15,6 +15,12 @@
 # Bypass options (use sparingly):
 #   git commit --no-verify        # skip ALL hooks
 #   BYPASS_SECRET_SCAN=1 git ...  # skip pattern check, keep env-file check
+#
+# Audit H-18 — `--no-verify` defeats this entirely. The defence-in-depth
+# layer is GitHub's native push-protection (Settings → Code security and
+# analysis → Secret scanning → Push protection). Enable it once per repo;
+# the flag survives a developer skipping local hooks. Document the bypass
+# trail in commit messages when it's used so a future audit can review.
 
 set -euo pipefail
 

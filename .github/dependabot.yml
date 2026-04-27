@@ -1,0 +1,38 @@
+# Audit H-15: scheduled dependency updates so security patches don't sit
+# in upstream waiting for the founder to remember to run `pnpm up`. Weekly
+# cadence with grouped minor+patch PRs to keep noise low. Major bumps
+# come as separate PRs so the diff is reviewable.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    # Ignore the providers Cavaliq depends on at the major level — those
+    # need manual smoke-test passes (Stripe API rev, Clerk v6 → v7,
+    # Drizzle 0.x → 1.x, Next 15 → 16). Dependabot can still propose them
+    # but won't auto-batch into the minor-and-patch group.
+    ignore:
+      - dependency-name: "stripe"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@clerk/nextjs"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "drizzle-orm"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3

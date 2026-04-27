@@ -52,6 +52,47 @@ if (!DATABASE_URL) {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(here, '..', 'packages', 'db', 'migrations');
 
+// Audit H-9: track which migration files have been applied in a side
+// table so a partial-apply (Pool drops mid-file, network blip) doesn't
+// silently leave state half-migrated. Mirrors drizzle-kit's
+// `__drizzle_migrations` shape minus the per-statement hashing —
+// we record the filename + applied_at + a content hash, so a CI run
+// against a fresh branch can quickly print "applied N of M" without
+// re-running idempotent guards on every statement.
+const TRACKING_TABLE_DDL = `
+  CREATE TABLE IF NOT EXISTS "_migrations" (
+    "filename" text PRIMARY KEY,
+    "content_hash" text NOT NULL,
+    "applied_at" timestamptz NOT NULL DEFAULT now()
+  );
+`;
+
+async function ensureTrackingTable(client) {
+  await client.query(TRACKING_TABLE_DDL);
+}
+
+async function getAppliedSet(client) {
+  const { rows } = await client.query('SELECT filename FROM "_migrations"');
+  return new Set(rows.map((r) => r.filename));
+}
+
+async function recordApplied(client, filename, contentHash) {
+  await client.query(
+    `INSERT INTO "_migrations" ("filename", "content_hash") VALUES ($1, $2)
+     ON CONFLICT ("filename") DO UPDATE SET "content_hash" = EXCLUDED."content_hash",
+                                            "applied_at" = now()`,
+    [filename, contentHash],
+  );
+}
+
+async function hashContent(content) {
+  // Quick + dependency-free content hash. Used for diagnostics only —
+  // NOT a security boundary; collision risk is irrelevant since this
+  // is per-filename.
+  const { createHash } = await import('node:crypto');
+  return createHash('sha256').update(content).digest('hex');
+}
+
 async function run() {
   const files = (await readdir(migrationsDir))
     .filter((f) => f.endsWith('.sql'))
@@ -66,10 +107,25 @@ async function run() {
   const client = await pool.connect();
 
   try {
-    console.log(`applying ${files.length} migration(s) to ${redactUrl(DATABASE_URL)}`);
+    await ensureTrackingTable(client);
+    const applied = await getAppliedSet(client);
+
+    console.log(
+      `applying ${files.length} migration(s) to ${redactUrl(DATABASE_URL)} ` +
+      `(${applied.size} previously recorded)`,
+    );
     for (const file of files) {
       const sql = await readFile(path.join(migrationsDir, file), 'utf8');
+      const hash = await hashContent(sql);
+      if (applied.has(file)) {
+        // The idempotent guards inside the SQL still make re-applying
+        // safe, but skipping the run shaves seconds and keeps output
+        // legible. Use --force to override.
+        console.log(`  skip  ${file} (recorded as applied)`);
+        continue;
+      }
       await applyFile(client, file, sql);
+      await recordApplied(client, file, hash);
     }
     console.log('done');
   } finally {

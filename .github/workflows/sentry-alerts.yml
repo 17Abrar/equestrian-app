@@ -1,0 +1,64 @@
+name: Sentry alerts sync
+
+# Audit H-11: keeps the alert-rules table in OBSERVABILITY.md in sync
+# with Sentry's own alert configuration. Without this, a new
+# `logger.event` tag added in code wouldn't get a paging rule until
+# someone remembered to run `pnpm sentry:alerts` from a laptop.
+# Idempotent — re-running with no changes is safe; the script reads
+# existing rules and only creates missing ones.
+#
+# Required repo secrets:
+#   SENTRY_ALERTS_AUTH_TOKEN — Sentry user auth token with
+#   `alerts:write` + `project:read` scope. Generate at Sentry →
+#   Settings → Account → API → Auth Tokens.
+#   Optional: SENTRY_SLACK_WORKSPACE / CHANNEL_WARN / CHANNEL_CRIT
+#   for Slack delivery; without these the script creates email-only
+#   rules.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'OBSERVABILITY.md'
+      - 'scripts/setup-sentry-alerts.mjs'
+  workflow_dispatch:
+
+concurrency:
+  group: sentry-alerts-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync alert rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync alert rules
+        env:
+          SENTRY_ALERTS_AUTH_TOKEN: ${{ secrets.SENTRY_ALERTS_AUTH_TOKEN }}
+          SENTRY_ORG_SLUG: ${{ vars.SENTRY_ORG_SLUG }}
+          SENTRY_PROJECT_SLUG: ${{ vars.SENTRY_PROJECT_SLUG }}
+          SENTRY_BASE_URL: ${{ vars.SENTRY_BASE_URL }}
+          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
+          SENTRY_SLACK_WORKSPACE: ${{ vars.SENTRY_SLACK_WORKSPACE }}
+          SENTRY_SLACK_CHANNEL_WARN: ${{ vars.SENTRY_SLACK_CHANNEL_WARN }}
+          SENTRY_SLACK_CHANNEL_CRIT: ${{ vars.SENTRY_SLACK_CHANNEL_CRIT }}
+        run: pnpm sentry:alerts

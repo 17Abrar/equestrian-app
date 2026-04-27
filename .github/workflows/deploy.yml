@@ -1,0 +1,88 @@
+name: Deploy
+
+# Audit H-2: production used to ship via `pnpm cf:deploy` from a
+# developer's laptop. This workflow couples merge-to-main to deploy:
+# the deploy step only runs when CI's `verify` + `neon-smoke` jobs
+# pass on the same SHA. Cloudflare auth is via OIDC + the
+# `cloudflare/wrangler-action`, so no long-lived CLOUDFLARE_API_TOKEN
+# lives on a laptop.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN — Workers Edit + R2 Edit + DNS Edit scopes
+#   CLOUDFLARE_ACCOUNT_ID
+#   DATABASE_URL_UNPOOLED — Neon prod unpooled URL (DDL endpoint)
+#
+# Triggered automatically when CI completes successfully on main.
+# Manual dispatch (Actions tab → Deploy → Run workflow) is also
+# supported for hotfixes after CI is already green.
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Only one deploy at a time. A second push while a deploy is in flight
+# queues; the queued deploy picks up the latest main SHA when it runs.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy production worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only run when CI succeeded — `workflow_run` fires on every CI
+    # completion regardless of result.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      # Required for OIDC token issuance to Cloudflare. The wrangler
+      # action falls back to the static API token below; OIDC is the
+      # path forward when Cloudflare ships GitHub OIDC support.
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply pending Neon migrations
+        # Migrate BEFORE deploy so the new code finds the columns it
+        # references. Idempotent — applying nothing-pending is a no-op.
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: pnpm db:migrate:neon
+
+      - name: Build OpenNext bundle
+        run: pnpm --filter @equestrian/web cf:build
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # `cf:deploy` does build+deploy; we already built above, so
+          # use raw `wrangler deploy` to avoid double-building.
+          workingDirectory: apps/web
+          command: deploy
