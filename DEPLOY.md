@@ -383,8 +383,23 @@ spot SELECTs).
 Document the date you last actually performed a restore. Untested backups
 are not backups.
 
-> Last restore drill: **TODO** — schedule one within the first quarter
-> of operation.
+A self-contained drill script lives at `scripts/restore-drill.mjs` —
+mint a Neon API key, then:
+
+```sh
+NEON_API_KEY=neon_... NEON_PROJECT_ID=sweet-boat-90778968 \
+  pnpm restore:drill
+# Restore further back (default is 1h):
+PITR_HOURS_AGO=24 NEON_API_KEY=... NEON_PROJECT_ID=... pnpm restore:drill
+```
+
+The script creates a PITR branch, runs sanity queries (`_migrations`,
+`clubs`, `bookings` row counts), tears the branch down, and prints the
+target time on success. NEON_API_KEY is intentionally not stored —
+mint a scoped one at console.neon.tech → Account → API.
+
+> Last restore drill: **TODO** — run `pnpm restore:drill` within the
+> first quarter of operation and update this line with the date.
 
 ---
 
@@ -421,15 +436,17 @@ queue rather than collide.
 Required secrets (set with `gh secret set`):
 
 - `CLOUDFLARE_ACCOUNT_ID` ✓ already set (`343dc071...`)
-- `CLOUDFLARE_API_TOKEN` ✗ **TODO** — mint at
+- `CLOUDFLARE_API_TOKEN` ✗ **TODO (dashboard-only)** — mint at
   https://dash.cloudflare.com/profile/api-tokens with **Workers Scripts:Edit
   + Account Logs:Edit + Workers R2 Storage:Edit + Account Settings:Read**.
   The wrangler OAuth token doesn't expose the API-token-mint scope, so
-  this is one of the few items that must be done in the dashboard.
-- `DATABASE_URL_UNPOOLED` ✗ TODO — Neon prod unpooled URL.
+  this is the one item that must be done in the Cloudflare dashboard.
+  Once minted: `gh secret set CLOUDFLARE_API_TOKEN`.
+- `DATABASE_URL_UNPOOLED` ✓ set 2026-04-27 (Neon prod unpooled URL,
+  used by `db:migrate:neon` in deploy.yml).
 
-Once these land, the next push to main auto-deploys. Until then, fall
-back to manual `pnpm cf:deploy` from a clean main checkout.
+Once `CLOUDFLARE_API_TOKEN` lands, the next push to main auto-deploys.
+Until then, fall back to manual `pnpm cf:deploy` from a clean main checkout.
 
 ---
 
