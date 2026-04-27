@@ -1,0 +1,59 @@
+name: E2E nightly smoke
+
+# Audit H-19. Runs the API-only `*.smoke.spec.ts` Playwright suite
+# against production every night at 03:00 UTC and fails loudly on any
+# regression. Doesn't mutate prod state — only reads /health and
+# /discover/clubs. Manual dispatch supports running against an
+# arbitrary base URL for one-off validation (e.g. after a manual
+# wrangler rollback to confirm the rolled-back version is live).
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL to test against'
+        required: false
+        default: 'https://cavaliq.com'
+
+jobs:
+  smoke:
+    name: API smoke (${{ inputs.base_url || 'cavaliq.com' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Playwright smoke suite
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ inputs.base_url || 'https://cavaliq.com' }}
+          CI: true
+        # `--project=api-smoke` filters to the API-only project that
+        # doesn't need browser binaries — saves ~2 minutes of cold-
+        # start vs. a full chromium install.
+        run: pnpm --filter @equestrian/web exec playwright test --project=api-smoke
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 14
