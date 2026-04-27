@@ -75,6 +75,19 @@ jobs:
         run: pnpm db:migrate:neon
 
       - name: Build OpenNext bundle
+        # `next build`'s "Collecting page data" phase imports every
+        # route module, which transitively imports @equestrian/db. The
+        # db package throws at module load if DATABASE_URL is unset.
+        # Build never opens a connection — Workers injects the real
+        # DATABASE_URL at runtime via wrangler secrets. The stub just
+        # lets module init succeed.
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost/ci_unused
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+          NEXT_PUBLIC_APP_URL: https://cavaliq.com
+          # Real Sentry token enables source-map upload for production
+          # stack traces. Optional — the build still succeeds without it.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: pnpm --filter @equestrian/web cf:build
 
       - name: Deploy to Cloudflare Workers
