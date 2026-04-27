@@ -66,14 +66,18 @@ jobs:
       # Catches Next 15 route-export validation errors and other build-
       # time failures that `tsc --noEmit` misses (e.g. invalid named
       # exports on a route file). Without this, broken route files land
-      # on main and only surface at `pnpm cf:deploy` time. ~2min on a
-      # cold cache; turbo caches subsequent runs.
+      # on main and only surface at `pnpm cf:deploy` time.
       - name: Build web app
         run: pnpm --filter @equestrian/web exec next build
         env:
-          # Build-time only; doesn't connect to Neon during the build.
-          # OpenNext/Next.js will read this for typed-route generation.
           NEXT_PUBLIC_APP_URL: https://cavaliq.com
+          # `next build`'s "Collecting page data" phase imports every
+          # route module, which transitively imports `@equestrian/db`.
+          # The db package throws at module load if DATABASE_URL is
+          # missing. The build never connects — we just need a
+          # syntactically valid string so module init doesn't error.
+          DATABASE_URL: postgres://ci:ci@localhost/ci_unused
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
 
   neon-smoke:
     # Spins up an ephemeral Neon branch from `main`, applies all
