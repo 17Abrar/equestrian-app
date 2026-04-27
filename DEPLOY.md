@@ -388,46 +388,97 @@ are not backups.
 
 ---
 
-## CI / branch protection (action required)
+## CI / branch protection (DONE — audit H-3)
 
-`main` should be protected against force-push and direct commits, with
-the `verify` and `neon test branch · smoke` checks required before merge.
-Today the repo has no protection rule — the only enforcement that tests
-must pass is social. Run this once per repo:
+Active rule on `main` as of audit closeout:
+
+- `required_status_checks.strict = true` with both contexts:
+  - `typecheck · lint · test`
+  - `neon test branch · smoke`
+- `enforce_admins = true`
+- `allow_force_pushes = false`
+- `allow_deletions = false`
+
+`required_pull_request_reviews` is intentionally NOT set — one-founder
+shop. Re-add when there's a second engineer.
+
+To inspect or modify:
 
 ```sh
-gh api -X PUT /repos/<owner>/<repo>/branches/main/protection \
-  -f required_status_checks='{"strict":true,"contexts":["typecheck · lint · test","neon test branch · smoke"]}' \
-  -F enforce_admins=true \
-  -F required_pull_request_reviews='{"required_approving_review_count":1}' \
-  -F allow_force_pushes=false \
-  -F allow_deletions=false
+gh api /repos/17Abrar/equestrian-app/branches/main/protection
+gh api -X PUT /repos/17Abrar/equestrian-app/branches/main/protection --input <body.json>
 ```
 
-For a one-founder shop, drop `required_pull_request_reviews` if review
-isn't realistic — but `required_status_checks` and `allow_force_pushes=false`
-are non-negotiable. Audit H-3.
+---
+
+## Deploy automation (workflow committed — needs API-token secret)
+
+`.github/workflows/deploy.yml` runs on `workflow_run` after CI passes
+on main, applies pending Neon migrations, then deploys via
+`cloudflare/wrangler-action@v3`. Concurrency-locked so two pushes
+queue rather than collide.
+
+Required secrets (set with `gh secret set`):
+
+- `CLOUDFLARE_ACCOUNT_ID` ✓ already set (`343dc071...`)
+- `CLOUDFLARE_API_TOKEN` ✗ **TODO** — mint at
+  https://dash.cloudflare.com/profile/api-tokens with **Workers Scripts:Edit
+  + Account Logs:Edit + Workers R2 Storage:Edit + Account Settings:Read**.
+  The wrangler OAuth token doesn't expose the API-token-mint scope, so
+  this is one of the few items that must be done in the dashboard.
+- `DATABASE_URL_UNPOOLED` ✗ TODO — Neon prod unpooled URL.
+
+Once these land, the next push to main auto-deploys. Until then, fall
+back to manual `pnpm cf:deploy` from a clean main checkout.
 
 ---
 
-## Deploy automation (action required)
+## Sentry alerts (workflow committed)
 
-Production is currently deployed manually via `pnpm cf:deploy` from a
-developer's laptop. Anyone with `wrangler login` can ship code that
-didn't pass CI; there's no atomic merge → deploy coupling. The fix is a
-GitHub Actions workflow triggered on push to `main` after CI passes via
-`workflow_run`, using OIDC + `cloudflare/wrangler-action` so no
-long-lived `CLOUDFLARE_API_TOKEN` lives on a laptop. Audit H-2.
+`.github/workflows/sentry-alerts.yml` triggers on push-to-main when
+`OBSERVABILITY.md` or `scripts/setup-sentry-alerts.mjs` changes, plus
+manual dispatch. Required repo secrets (already set per the audit
+prep):
 
-Until that lands: deploy ONLY from a clean `main` checkout that has
-green CI on the same SHA, never from a feature branch.
+- `SENTRY_ALERTS_AUTH_TOKEN` ✓
+- `SENTRY_ORG_SLUG` / `SENTRY_PROJECT_SLUG` / `SENTRY_BASE_URL` —
+  repo *variables*.
+
+Optional Slack delivery — install the Sentry → Slack integration in
+Sentry's UI, then set repo variables:
+
+- `SENTRY_SLACK_WORKSPACE`
+- `SENTRY_SLACK_CHANNEL_WARN`
+- `SENTRY_SLACK_CHANNEL_CRIT`
+
+Without these, alerts fall back to email-only. Audit H-11.
 
 ---
 
-## Sentry alerts (action required)
+## Cloudflare Logpush (R2 bucket created — needs API-token to wire)
 
-`pnpm sentry:alerts` syncs the alert-rules table in OBSERVABILITY.md
-into Sentry. The script is idempotent. It must be run after every
-edit to OBSERVABILITY.md or OBSERVABILITY's added `logger.event` tags
-won't get an alert until someone remembers. Wire it as a CI job on
-push to `main`. Audit H-11.
+R2 bucket `cavaliq-logs` is provisioned (`wrangler r2 bucket list`
+confirms it). The Logpush job needs an API token with
+`Account Logs:Edit`:
+
+```sh
+# Mint at https://dash.cloudflare.com/profile/api-tokens, then:
+ACCOUNT_ID=343dc071ad865a59094c44c79be38ccc
+CF_API_TOKEN=<your-token>
+
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/logpush/jobs" \
+  -H "Authorization: Bearer $CF_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "cavaliq-workers-trace-events",
+    "destination_conf": "r2://cavaliq-logs/{DATE}/{HH}?account-id='"$ACCOUNT_ID"'&access-key-id=<R2_ACCESS_KEY>&secret-access-key=<R2_SECRET>",
+    "dataset": "workers_trace_events",
+    "enabled": true,
+    "filter": "{\"where\":{\"key\":\"ScriptName\",\"operator\":\"eq\",\"value\":\"cavaliq\"}}",
+    "output_options": {
+      "field_names": ["EventTimestampMs", "Outcome", "ScriptName", "Logs", "Exceptions"]
+    }
+  }'
+```
+
+Document the resulting job id in this section after creation. Audit H-17.
