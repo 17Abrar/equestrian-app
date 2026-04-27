@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import {
   adminGetPaymentAccountByProvider,
   getBookingById,
@@ -289,7 +289,3 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   );
 }
 
-// Drizzle's `sql` helper is still imported because this route uses sql
-// templating in the future locking variants. Tagging the symbol so the
-// linter doesn't trip on the import.
-export const _refundUnused = sql;
