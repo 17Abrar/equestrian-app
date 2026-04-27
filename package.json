@@ -38,6 +38,7 @@
     "db:push": "turbo run db:push --filter=@equestrian/db",
     "db:studio": "turbo run db:studio --filter=@equestrian/db",
     "test:neon": "node scripts/test-neon-smoke.mjs",
+    "restore:drill": "node --env-file-if-exists=.env.local scripts/restore-drill.mjs",
     "sentry:alerts": "node --env-file-if-exists=.env.local scripts/setup-sentry-alerts.mjs",
     "sentry:alerts:dry": "DRY_RUN=1 node --env-file-if-exists=.env.local scripts/setup-sentry-alerts.mjs",
     "clean": "turbo run clean && rm -rf node_modules"
