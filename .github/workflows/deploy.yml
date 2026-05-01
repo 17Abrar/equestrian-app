@@ -1,25 +1,39 @@
 name: Deploy
 
 # Production ships via `wrangler-action` triggered by successful CI on
-# main. Authentication uses Cloudflare's federated-identity flow:
-# GitHub mints a short-lived OIDC JWT, Cloudflare validates the `sub`
-# claim against the federated-identity binding (`repo:<org>/equestrian-
-# app:ref:refs/heads/main`) and exchanges it for a scoped API token
-# bound to this repo's main branch.
+# main. Authentication uses the static `CLOUDFLARE_API_TOKEN` repo
+# secret because `cloudflare/wrangler-action` does not (yet) accept
+# GitHub OIDC tokens — verified against the action's README and
+# Cloudflare's CI/CD docs on 2026-05-01. An earlier OIDC scaffold
+# `core.getIDToken('cloudflare')` was tried; the Cloudflare API
+# rejected the JWT with code 9106 (federated-identity binding doesn't
+# exist for this account/repo and Cloudflare hasn't shipped that
+# feature for `wrangler-action`). Audit C-5 documented this — the
+# previous `|| secrets.CLOUDFLARE_API_TOKEN` fallback was dead code
+# (`core.getIDToken` always returns a non-empty JWT regardless of
+# whether the receiving service accepts it).
 #
-# Audit C-5: the previous workflow had a `${{ steps.cf-oidc.outputs.token
-# || secrets.CLOUDFLARE_API_TOKEN }}` fallback. `core.getIDToken('cloudflare')`
-# always returns a non-empty JWT (regardless of whether Cloudflare's
-# binding accepts it), so the `||` fallback never selected the static
-# token — it was dead code that masked deploy-time failures. Removed.
-# If the OIDC binding ever fails, the deploy now 401s loudly instead of
-# silently degrading.
+# Switching to OIDC later requires three things in order:
+#   1. Cloudflare ships an OIDC-trust feature for `wrangler-action`
+#      (track `cloudflare/wrangler-action` releases for this).
+#   2. Configure the federated-identity binding in the Cloudflare
+#      dashboard at the audience `cloudflare`, subject
+#      `repo:17Abrar/equestrian-app:ref:refs/heads/main`.
+#   3. Verify a deploy run succeeds end-to-end before dropping the
+#      static secret. CI green is NOT a proof that deploy works.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
-#   CLOUDFLARE_ACCOUNT_ID — needed by wrangler regardless of auth method.
-#   DATABASE_URL_UNPOOLED — Neon prod unpooled URL (DDL endpoint).
-#   SENTRY_AUTH_TOKEN — build-time source-map upload (optional; build
-#                       still succeeds without it).
+#   CLOUDFLARE_API_TOKEN — MUST be scoped to the deployed Worker only:
+#                          Account → Workers Scripts: Edit
+#                          Account → Workers Routes: Edit
+#                          Account → R2 Storage: Edit (cavaliq-uploads bucket only)
+#                        DO NOT grant Account-wide `User: Memberships:Read`
+#                        or `User: User Details:Read` — these widen the
+#                        blast radius of token compromise to other accounts
+#                        the team owns.
+#   CLOUDFLARE_ACCOUNT_ID
+#   DATABASE_URL_UNPOOLED — Neon prod unpooled URL (DDL endpoint)
+#   SENTRY_AUTH_TOKEN — build-time source-map upload (optional)
 #
 # Triggered automatically when CI completes successfully on main.
 # Manual dispatch (Actions tab → Deploy → Run workflow) is also
@@ -50,10 +64,8 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
 
     permissions:
-      # Required for `core.getIDToken('cloudflare')` to mint a JWT that
-      # Cloudflare's federated-identity provider validates. Removing this
-      # line breaks the deploy.
-      id-token: write
+      # Static-token auth doesn't need `id-token: write`. Restore it
+      # if/when the OIDC migration above ships.
       contents: read
 
     steps:
@@ -99,20 +111,6 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: pnpm --filter @equestrian/web cf:build
 
-      # Mint a GitHub OIDC token scoped to the "cloudflare" audience.
-      # Cloudflare's federated-identity provider validates the JWT against
-      # token.actions.githubusercontent.com and only mints a scoped API
-      # token when the `sub` claim matches the bound subject — locking
-      # deploys to the main branch of this repo.
-      - name: Request Cloudflare OIDC token
-        id: cf-oidc
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
-        with:
-          script: |
-            const token = await core.getIDToken('cloudflare');
-            core.setSecret(token);
-            core.setOutput('token', token);
-
       - name: Deploy to Cloudflare Workers
         # Pinned to a commit SHA. Floating major-version tags can be
         # re-pointed by a compromised maintainer to a malicious commit;
@@ -122,12 +120,7 @@ jobs:
         # SHA below is `cloudflare/wrangler-action@v3` (resolved 2026-04-30).
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
         with:
-          # Audit C-5: OIDC-only — the previous `|| secrets.CLOUDFLARE_API_TOKEN`
-          # fallback was dead code (`core.getIDToken` always returns a
-          # non-empty JWT) and masked deploy-time auth failures. If the
-          # federated-identity binding ever rejects the JWT, this 401s
-          # loudly instead of silently falling through.
-          apiToken: ${{ steps.cf-oidc.outputs.token }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # `cf:deploy` does build+deploy; we already built above, so
           # use raw `wrangler deploy` to avoid double-building.
