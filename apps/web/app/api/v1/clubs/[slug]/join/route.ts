@@ -86,15 +86,30 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       clerkUser?.username ||
       null;
 
-    const member = await joinClubInstantly({
+    const result = await joinClubInstantly({
       clubId: club.id,
       clerkUserId: userId,
       email,
       displayName,
     });
-    if (!member) {
-      return errorResponse('JOIN_FAILED', 'Could not add you to the stable.', 500);
+
+    // Audit J-1: an admin-deactivated rider can't rejoin via this path.
+    // The query left the row inactive; surface as 403 with a customer-
+    // service message so the rider doesn't loop on retry.
+    if (result.status === 'kicked') {
+      logger.warn('rider_join_refused_admin_deactivated', {
+        clubId: club.id,
+        slug: club.slug,
+        userId,
+      });
+      return errorResponse(
+        'JOIN_REFUSED',
+        'Your membership at this stable was previously cancelled. Please contact the stable directly to be reinstated.',
+        403,
+      );
     }
+
+    const { member } = result;
 
     logger.info('rider_joined_club_instantly', {
       clubId: club.id,

@@ -18,10 +18,13 @@ import { logger } from '@/lib/logger';
 export async function GET() {
   return withAuth(
     async (ctx) => {
+      // Onboarding only needs existence + count. Page through the first
+      // record only — the count query in each helper still returns the full
+      // total regardless of pageSize, so this stays cheap.
       const [club, arenas, lessonTypes] = await Promise.all([
         getClubById(ctx.clubId),
-        getArenasByClub(ctx.clubId),
-        getLessonTypesByClub(ctx.clubId),
+        getArenasByClub(ctx.clubId, { page: 1, pageSize: 1 }),
+        getLessonTypesByClub(ctx.clubId, { page: 1, pageSize: 1 }),
       ]);
 
       if (!club) {
@@ -30,10 +33,10 @@ export async function GET() {
 
       return successResponse({
         completed: !!club.onboardingCompletedAt,
-        hasArenas: arenas.length > 0,
-        hasLessonTypes: lessonTypes.length > 0,
-        arenaCount: arenas.length,
-        lessonTypeCount: lessonTypes.length,
+        hasArenas: arenas.total > 0,
+        hasLessonTypes: lessonTypes.total > 0,
+        arenaCount: arenas.total,
+        lessonTypeCount: lessonTypes.total,
       });
     },
     { requiredPermission: 'settings:read' },

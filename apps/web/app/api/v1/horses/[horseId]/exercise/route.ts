@@ -1,18 +1,28 @@
 import { type NextRequest } from 'next/server';
-import { createExerciseScheduleSchema } from '@equestrian/shared/schemas';
+import { createExerciseScheduleSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getExerciseSchedules, createExerciseSchedule, getHorseById } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  paginatedResponse,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
-      const schedules = await getExerciseSchedules(ctx.clubId, horseId);
-      return successResponse(schedules);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: request.nextUrl.searchParams.get('page') ?? undefined,
+        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await getExerciseSchedules(ctx.clubId, horseId, { page, pageSize });
+      return paginatedResponse(items, { page, pageSize, total });
     },
     { requiredPermission: 'horses:read' },
   );

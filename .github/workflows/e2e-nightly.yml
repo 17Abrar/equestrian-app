@@ -57,3 +57,31 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 14
+
+      # Audit M-2: surface failures to the operator. Without a notification
+      # path the founder won't see a degraded prod state until they check
+      # the Actions tab manually. Open a GitHub issue tagged `incident,nightly`
+      # so the standing notification rules light up.
+      - name: Open incident issue on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Nightly E2E smoke failed — ${new Date().toISOString().slice(0, 10)}`,
+              labels: ['incident', 'nightly'],
+              body: [
+                'The nightly E2E smoke run against prod failed.',
+                '',
+                `Run: ${runUrl}`,
+                '',
+                '## What to check',
+                '- `/api/v1/health?deep=1` — DB + Redis subsystems',
+                '- `/api/v1/discover/clubs` — paginated envelope',
+                '',
+                'Playwright report artifact is attached to the failed run.',
+              ].join('\n'),
+            });

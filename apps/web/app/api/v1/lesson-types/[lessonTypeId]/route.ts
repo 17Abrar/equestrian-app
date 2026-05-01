@@ -7,6 +7,7 @@ import {
   errorResponse,
   validateInput,
 } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
   params: Promise<{ lessonTypeId: string }>;
@@ -15,6 +16,18 @@ interface RouteParams {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
+      // Audit S-1: same as the list endpoint — accept any booking-related
+      // read/create grant so riders/parents can render the booking form.
+      const canRead =
+        hasPermission(ctx.orgRole, 'bookings:read') ||
+        hasPermission(ctx.orgRole, 'bookings:read_own') ||
+        hasPermission(ctx.orgRole, 'bookings:read_child') ||
+        hasPermission(ctx.orgRole, 'bookings:create') ||
+        hasPermission(ctx.orgRole, 'bookings:create_child');
+      if (!canRead) {
+        return errorResponse('FORBIDDEN', 'You do not have permission to view lesson types', 403);
+      }
+
       const { lessonTypeId } = await params;
       const lessonType = await getLessonTypeById(ctx.clubId, lessonTypeId);
 
@@ -24,7 +37,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
       return successResponse(lessonType);
     },
-    { requiredPermission: 'bookings:read' },
   );
 }
 

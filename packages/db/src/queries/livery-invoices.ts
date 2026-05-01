@@ -162,8 +162,14 @@ export async function createLiveryInvoice(input: CreateInvoiceInput) {
 /**
  * Marks an invoice paid idempotently. Won't move a terminal `cancelled`
  * invoice back to paid — call `clearCancellation` first if that's intended.
+ *
+ * `clubId` is mandatory (audit AI-22 / CLAUDE.md): the invoice id alone
+ * isn't enough — a webhook routing bug or a future caller that derives
+ * `invoiceId` from a less-trusted source could otherwise mark a foreign
+ * tenant's invoice paid.
  */
 export async function markLiveryInvoicePaid(
+  clubId: string,
   invoiceId: string,
   paid: { paidAt: Date; paymentProvider?: string; providerPaymentId?: string },
 ) {
@@ -179,6 +185,7 @@ export async function markLiveryInvoicePaid(
     .where(
       and(
         eq(liveryInvoices.id, invoiceId),
+        eq(liveryInvoices.clubId, clubId),
         inArray(liveryInvoices.status, ['pending', 'overdue']),
       ),
     )
@@ -241,9 +248,21 @@ export async function findOverdueInvoicesForReminders(today: string) {
       ownerName: clubMembers.displayName,
     })
     .from(liveryInvoices)
-    .innerJoin(horses, eq(horses.id, liveryInvoices.horseId))
+    // Bind clubId on every join (audit AI-22). Without this, a row with a
+    // mis-tenanted owner_member_id or horse_id (planted by a future bug)
+    // would surface that tenant's display name on this club's reminder.
+    .innerJoin(
+      horses,
+      and(eq(horses.id, liveryInvoices.horseId), eq(horses.clubId, liveryInvoices.clubId)),
+    )
     .innerJoin(clubs, eq(clubs.id, liveryInvoices.clubId))
-    .innerJoin(clubMembers, eq(clubMembers.id, liveryInvoices.ownerMemberId))
+    .innerJoin(
+      clubMembers,
+      and(
+        eq(clubMembers.id, liveryInvoices.ownerMemberId),
+        eq(clubMembers.clubId, liveryInvoices.clubId),
+      ),
+    )
     .where(
       and(
         inArray(liveryInvoices.status, ['pending', 'overdue']),
@@ -332,56 +351,101 @@ export async function setInvoiceProviderRef(
 }
 
 /** Admin-facing listing on the horse detail page. */
-export async function getLiveryInvoicesByHorse(clubId: string, horseId: string) {
+export async function getLiveryInvoicesByHorse(
+  clubId: string,
+  horseId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const offset = (page - 1) * pageSize;
   const conditions: SQL[] = [
     eq(liveryInvoices.clubId, clubId),
     eq(liveryInvoices.horseId, horseId),
   ];
-  return db
-    .select()
-    .from(liveryInvoices)
-    .where(and(...conditions))
-    .orderBy(desc(liveryInvoices.periodStart));
+  const where = and(...conditions);
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(liveryInvoices)
+      .where(where)
+      .orderBy(desc(liveryInvoices.periodStart))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(liveryInvoices)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 /** Owner-facing listing for the rider portal. */
-export async function getLiveryInvoicesOwnedByUser(clerkUserId: string) {
-  return rawDb
-    .select({
-      id: liveryInvoices.id,
-      clubId: liveryInvoices.clubId,
-      horseId: liveryInvoices.horseId,
-      horseName: horses.name,
-      clubName: clubs.name,
-      invoiceNumber: liveryInvoices.invoiceNumber,
-      periodStart: liveryInvoices.periodStart,
-      periodEnd: liveryInvoices.periodEnd,
-      amountMinorUnits: liveryInvoices.amountMinorUnits,
-      currency: liveryInvoices.currency,
-      status: liveryInvoices.status,
-      dueDate: liveryInvoices.dueDate,
-      paidAt: liveryInvoices.paidAt,
-      payLink: liveryInvoices.payLink,
-    })
-    .from(liveryInvoices)
-    .innerJoin(horses, eq(horses.id, liveryInvoices.horseId))
-    .innerJoin(clubs, eq(clubs.id, liveryInvoices.clubId))
-    .innerJoin(clubMembers, eq(clubMembers.id, liveryInvoices.ownerMemberId))
-    .where(
-      and(
-        eq(clubMembers.clerkUserId, clerkUserId),
-        eq(clubMembers.isActive, true),
-        // Hide tombstoned clubs / soft-deleted horses from the rider's
-        // "My horses" invoices view — see audit F-1 / F-2.
-        isNull(clubs.deletedAt),
-        isNull(horses.deletedAt),
-      ),
-    )
-    .orderBy(desc(liveryInvoices.periodStart))
-    // Defensive cap (audit G-12) — at one invoice per horse per month
-    // for a multi-club power user, this caps at ~5 years of history
-    // before the cap bites; explicit pagination should ship before then.
-    .limit(300);
+export async function getLiveryInvoicesOwnedByUser(
+  clerkUserId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const offset = (page - 1) * pageSize;
+  const where = and(
+    eq(clubMembers.clerkUserId, clerkUserId),
+    eq(clubMembers.isActive, true),
+    // Hide tombstoned clubs / soft-deleted horses from the rider's
+    // "My horses" invoices view — see audit F-1 / F-2.
+    isNull(clubs.deletedAt),
+    isNull(horses.deletedAt),
+  );
+  const [items, count] = await Promise.all([
+    rawDb
+      .select({
+        id: liveryInvoices.id,
+        clubId: liveryInvoices.clubId,
+        horseId: liveryInvoices.horseId,
+        horseName: horses.name,
+        clubName: clubs.name,
+        invoiceNumber: liveryInvoices.invoiceNumber,
+        periodStart: liveryInvoices.periodStart,
+        periodEnd: liveryInvoices.periodEnd,
+        amountMinorUnits: liveryInvoices.amountMinorUnits,
+        currency: liveryInvoices.currency,
+        status: liveryInvoices.status,
+        dueDate: liveryInvoices.dueDate,
+        paidAt: liveryInvoices.paidAt,
+        payLink: liveryInvoices.payLink,
+      })
+      .from(liveryInvoices)
+      // Bind clubId on every join (audit AI-22).
+      .innerJoin(
+        horses,
+        and(eq(horses.id, liveryInvoices.horseId), eq(horses.clubId, liveryInvoices.clubId)),
+      )
+      .innerJoin(clubs, eq(clubs.id, liveryInvoices.clubId))
+      .innerJoin(
+        clubMembers,
+        and(
+          eq(clubMembers.id, liveryInvoices.ownerMemberId),
+          eq(clubMembers.clubId, liveryInvoices.clubId),
+        ),
+      )
+      .where(where)
+      .orderBy(desc(liveryInvoices.periodStart))
+      .limit(pageSize)
+      .offset(offset),
+    rawDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(liveryInvoices)
+      .innerJoin(
+        horses,
+        and(eq(horses.id, liveryInvoices.horseId), eq(horses.clubId, liveryInvoices.clubId)),
+      )
+      .innerJoin(clubs, eq(clubs.id, liveryInvoices.clubId))
+      .innerJoin(
+        clubMembers,
+        and(
+          eq(clubMembers.id, liveryInvoices.ownerMemberId),
+          eq(clubMembers.clubId, liveryInvoices.clubId),
+        ),
+      )
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 /**
@@ -410,9 +474,19 @@ export async function getLiveryInvoiceForEmail(clubId: string, invoiceId: string
       ownerName: clubMembers.displayName,
     })
     .from(liveryInvoices)
-    .innerJoin(horses, eq(horses.id, liveryInvoices.horseId))
+    // Bind clubId on every join (audit AI-22).
+    .innerJoin(
+      horses,
+      and(eq(horses.id, liveryInvoices.horseId), eq(horses.clubId, liveryInvoices.clubId)),
+    )
     .innerJoin(clubs, eq(clubs.id, liveryInvoices.clubId))
-    .innerJoin(clubMembers, eq(clubMembers.id, liveryInvoices.ownerMemberId))
+    .innerJoin(
+      clubMembers,
+      and(
+        eq(clubMembers.id, liveryInvoices.ownerMemberId),
+        eq(clubMembers.clubId, liveryInvoices.clubId),
+      ),
+    )
     .where(
       and(
         eq(liveryInvoices.id, invoiceId),

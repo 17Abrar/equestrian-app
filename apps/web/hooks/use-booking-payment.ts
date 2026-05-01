@@ -39,8 +39,8 @@ export function usePaymentForBooking() {
     onSuccess: (_data, bookingId) => {
       // The booking row's payment_provider / provider_payment_id columns
       // were just written — refresh anything that might display them.
-      queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
     },
   });
 }

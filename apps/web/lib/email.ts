@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { Resend } from 'resend';
 import { render } from '@react-email/components';
 import { after } from 'next/server';
@@ -172,7 +174,16 @@ export function sendEmailAsync(params: SendEmailParams): void {
     });
   try {
     after(task);
-  } catch {
+  } catch (err) {
+    // `after()` throws when called outside a request lifecycle (e.g. from
+    // a cron run or background job that didn't establish one). Log so a
+    // Worker-isolate kill is observable instead of silently dropping the
+    // email — audit AI-32l.
+    logger.warn('email_after_unavailable_falling_back_to_void', {
+      to: params.to,
+      subject: params.subject,
+      error: err instanceof Error ? err.message : String(err),
+    });
     void task();
   }
 }
@@ -281,7 +292,15 @@ export function sendTriggeredEmailAsync(params: TriggeredEmailParams): void {
     });
   try {
     after(task);
-  } catch {
+  } catch (err) {
+    // Same fallback rationale as the parent helper — audit AI-32l.
+    logger.warn('email_after_unavailable_falling_back_to_void', {
+      clubId: params.clubId,
+      trigger: params.trigger,
+      to: params.to,
+      subject: params.subject,
+      error: err instanceof Error ? err.message : String(err),
+    });
     void task();
   }
 }

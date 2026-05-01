@@ -94,7 +94,7 @@ function useMarkInvoicePaid(horseId: string) {
         { method: 'PATCH' },
       ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
+      void qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
     },
   });
 }
@@ -108,7 +108,7 @@ function useCancelInvoice(horseId: string) {
         { method: 'PATCH' },
       ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
+      void qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
     },
   });
 }
@@ -348,15 +348,19 @@ function InvoicesCard({
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
-                                markPaid
-                                  .mutateAsync(inv.id)
-                                  .then(() => toast.success('Marked paid'))
-                                  .catch((err) =>
-                                    toast.error(
-                                      err instanceof Error ? err.message : 'Failed',
-                                    ),
-                                  );
+                              onClick={async () => {
+                                // Audit F-9: convert from .then/.catch to
+                                // await + try/catch and call reportMutationError
+                                // so Sentry sees financial-action failures.
+                                try {
+                                  await markPaid.mutateAsync(inv.id);
+                                  toast.success('Marked paid');
+                                } catch (err) {
+                                  reportMutationError('livery_invoice.mark_paid', err, {
+                                    invoiceId: inv.id,
+                                  });
+                                  toast.error(err instanceof Error ? err.message : 'Failed');
+                                }
                               }}
                               disabled={markPaid.isPending}
                               title="Mark paid"

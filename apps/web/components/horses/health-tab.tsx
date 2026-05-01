@@ -245,7 +245,7 @@ function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currenc
                 <FormItem><FormLabel>Vet Name</FormLabel><FormControl><Input placeholder="Dr. Smith" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="cost" render={({ field }) => (
-                <FormItem><FormLabel>Cost (AED)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Cost</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <div className="grid grid-cols-2 gap-4">

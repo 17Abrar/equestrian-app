@@ -17,13 +17,18 @@ export async function register() {
 // up and 500s the request. Swallowing here preserves availability; worst
 // case is a dropped error report.
 // See https://github.com/getsentry/sentry-javascript/issues/18842
-export const onRequestError: typeof Sentry.captureRequestError = async (
+//
+// `captureRequestError` returns synchronously despite having an async
+// signature — wrapping it as `(...args) => { try {...} catch }` keeps the
+// type compatibility while letting lint reason about the void-return
+// shape correctly.
+export const onRequestError: typeof Sentry.captureRequestError = (
   err,
   request,
   context,
 ) => {
   try {
-    return await Sentry.captureRequestError(err, request, context);
+    Sentry.captureRequestError(err, request, context);
   } catch (sentryErr) {
     // Don't re-throw — masking the original error is worse than dropping the
     // report. But log via raw console so the failure surfaces in Cloudflare

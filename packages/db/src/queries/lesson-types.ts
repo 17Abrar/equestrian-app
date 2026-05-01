@@ -1,4 +1,4 @@
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { db } from '../index';
 import { lessonTypes } from '../schema/bookings';
 
@@ -6,12 +6,26 @@ type NewLessonType = typeof lessonTypes.$inferInsert;
 type LessonTypeCreate = Omit<NewLessonType, 'id' | 'clubId' | 'createdAt' | 'updatedAt'>;
 type LessonTypeUpdate = Partial<LessonTypeCreate>;
 
-export async function getLessonTypesByClub(clubId: string) {
-  return db
-    .select()
-    .from(lessonTypes)
-    .where(and(eq(lessonTypes.clubId, clubId), eq(lessonTypes.isActive, true)))
-    .orderBy(asc(lessonTypes.name));
+export async function getLessonTypesByClub(
+  clubId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const offset = (page - 1) * pageSize;
+  const where = and(eq(lessonTypes.clubId, clubId), eq(lessonTypes.isActive, true));
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(lessonTypes)
+      .where(where)
+      .orderBy(asc(lessonTypes.name))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(lessonTypes)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function getLessonTypeById(clubId: string, lessonTypeId: string) {

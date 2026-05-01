@@ -1,20 +1,41 @@
 import { type NextRequest } from 'next/server';
-import { createLessonTypeSchema } from '@equestrian/shared/schemas';
+import { createLessonTypeSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getLessonTypesByClub, createLessonType } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
   errorResponse,
   validateInput,
+  paginatedResponse,
 } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const data = await getLessonTypesByClub(ctx.clubId);
-      return successResponse(data);
+      // Audit S-1: lesson types are pricing data riders need to render
+      // the booking form. Accept any of the booking-related read grants
+      // — staff (`bookings:read`), riders (`bookings:read_own`), parents
+      // (`bookings:read_child`), or anyone allowed to create bookings
+      // (`bookings:create` / `bookings:create_child`).
+      const canRead =
+        hasPermission(ctx.orgRole, 'bookings:read') ||
+        hasPermission(ctx.orgRole, 'bookings:read_own') ||
+        hasPermission(ctx.orgRole, 'bookings:read_child') ||
+        hasPermission(ctx.orgRole, 'bookings:create') ||
+        hasPermission(ctx.orgRole, 'bookings:create_child');
+      if (!canRead) {
+        return errorResponse('FORBIDDEN', 'You do not have permission to view lesson types', 403);
+      }
+
+      const url = new URL(request.url);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: url.searchParams.get('page') ?? undefined,
+        pageSize: url.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await getLessonTypesByClub(ctx.clubId, { page, pageSize });
+      return paginatedResponse(items, { page, pageSize, total });
     },
-    { requiredPermission: 'bookings:read' },
   );
 }
 

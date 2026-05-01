@@ -1,12 +1,20 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { getMemberById, validateCoupon } from '@equestrian/db/queries';
+import {
+  getBookingSlotById,
+  getMemberById,
+  validateCoupon,
+} from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
+// `slotId` is the canonical pricing source — we read amount + currency from
+// the slot's lesson type rather than trust client-supplied values. Without
+// this, a rider could probe a coupon's behaviour at any amount and binary-
+// search the maxDiscount cap. Audit AI-21.
 const validateCouponRequestSchema = z.object({
   code: z.string().min(1),
-  amount: z.number().int().min(0),
+  slotId: z.string().uuid(),
   riderMemberId: z.string().uuid(),
   lessonType: z.string().optional(),
 });
@@ -32,10 +40,11 @@ export async function POST(request: NextRequest) {
       const body = await request.json();
       const data = validateInput(validateCouponRequestSchema, body);
 
-      // Riders/parents may only validate for themselves or the child they booked for.
-      const canValidateForOthers =
-        hasPermission(ctx.orgRole, 'bookings:read') ||
-        hasPermission(ctx.orgRole, 'bookings:*');
+      // Riders/parents may only validate for themselves or the child they
+      // booked for. `bookings:read` already covers staff via the wildcard
+      // expansion in `hasPermission` — the explicit `bookings:*` check
+      // below was dead code (audit F-2) and has been removed.
+      const canValidateForOthers = hasPermission(ctx.orgRole, 'bookings:read');
 
       if (!canValidateForOthers) {
         if (!ctx.memberId) {
@@ -64,12 +73,22 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const slot = await getBookingSlotById(ctx.clubId, data.slotId);
+      if (!slot) {
+        return errorResponse('SLOT_NOT_FOUND', 'Slot not found', 404);
+      }
+
       const result = await validateCoupon({
         clubId: ctx.clubId,
         code: data.code,
-        amount: data.amount,
+        amount: slot.lessonTypePrice,
+        currency: slot.lessonTypeCurrency,
         riderMemberId: data.riderMemberId,
-        lessonType: data.lessonType,
+        // Prefer the slot's authoritative lesson type over a client-supplied
+        // value. Audit H-4: this lets coupon `applicableTypes` enforce on
+        // validate-only previews without needing the caller to thread
+        // the type through.
+        lessonType: slot.lessonTypeType ?? data.lessonType,
       });
 
       return successResponse(result);

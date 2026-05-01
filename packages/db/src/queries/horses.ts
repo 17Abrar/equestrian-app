@@ -238,14 +238,20 @@ export async function getAvailableHorsesForMatching(
       ),
     );
 
-  // Get today's booking counts AND actual booked time slots per horse
+  // Get today's booking counts AND actual booked time slots per horse.
+  // Bind the join to bookingSlots.clubId as well as slotId — without it,
+  // a (mis)booking row pointing at a foreign club's slot would surface
+  // that slot's time as occupying this club's horse. Audit H-4.
   const todayBookingRows = await db
     .select({
       horseId: bookings.horseId,
       startTime: bookingSlots.startTime,
     })
     .from(bookings)
-    .innerJoin(bookingSlots, eq(bookings.slotId, bookingSlots.id))
+    .innerJoin(
+      bookingSlots,
+      and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+    )
     .where(
       and(
         eq(bookings.clubId, clubId),
@@ -266,6 +272,11 @@ export async function getAvailableHorsesForMatching(
     }
   }
 
+  // Inner-join `horses` and gate on `isNull(horses.deletedAt)` so pairings
+  // belonging to soft-deleted horses don't surface — audit C-10. The
+  // soft-delete is the GDPR/right-to-be-forgotten signal; without this
+  // gate, a pairing for a transferred or retired horse would still leak
+  // rider history into the matching engine.
   const pairingHistory = await db
     .select({
       horseId: horsePairingHistory.horseId,
@@ -273,9 +284,14 @@ export async function getAvailableHorsesForMatching(
       rating: horsePairingHistory.rating,
     })
     .from(horsePairingHistory)
+    .innerJoin(
+      horses,
+      and(eq(horses.id, horsePairingHistory.horseId), eq(horses.clubId, clubId)),
+    )
     .where(
       and(
         eq(horsePairingHistory.clubId, clubId),
+        isNull(horses.deletedAt),
         riderMemberId ? eq(horsePairingHistory.riderMemberId, riderMemberId) : undefined,
       ),
     );
@@ -312,6 +328,23 @@ export async function softDeleteHorse(clubId: string, horseId: string) {
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)))
     .returning({ id: horses.id });
+
+  if (result[0]) {
+    // Audit C-10 — soft-delete should erase rider/horse pairing history so a
+    // GDPR-style erasure obligation is met. The schema's
+    // `references(..., onDelete: 'cascade')` only fires on hard delete.
+    // Run as a separate statement against the same HTTP connection; on
+    // failure log and continue (the horse is still deleted; pairing rows
+    // are a follow-up the operator can run via a backfill).
+    await db
+      .delete(horsePairingHistory)
+      .where(
+        and(
+          eq(horsePairingHistory.clubId, clubId),
+          eq(horsePairingHistory.horseId, horseId),
+        ),
+      );
+  }
 
   return result[0] ?? null;
 }
@@ -479,47 +512,58 @@ export async function retireHorseOwnership(
  * Rider-facing "My Horses". Returns every horse the Clerk user owns across
  * every club they're a member of — riders can own horses at multiple stables.
  */
-export async function getHorsesOwnedByUser(clerkUserId: string) {
-  return db
-    .select({
-      id: horses.id,
-      clubId: horses.clubId,
-      clubName: clubs.name,
-      clubSlug: clubs.slug,
-      clubCurrency: clubs.currency,
-      name: horses.name,
-      breed: horses.breed,
-      gender: horses.gender,
-      color: horses.color,
-      heightHands: horses.heightHands,
-      weightKg: horses.weightKg,
-      skillLevel: horses.skillLevel,
-      primaryPhotoUrl: horses.primaryPhotoUrl,
-      status: horses.status,
-      ownershipStatus: horses.ownershipStatus,
-      monthlyLiveryFeeMinor: horses.monthlyLiveryFeeMinor,
-      liveryStartDate: horses.liveryStartDate,
-      liveryEndDate: horses.liveryEndDate,
-      ownershipDeclineReason: horses.ownershipDeclineReason,
-      ownershipSubmittedAt: horses.ownershipSubmittedAt,
-      createdAt: horses.createdAt,
-    })
-    .from(horses)
-    .innerJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
-    .innerJoin(clubs, eq(horses.clubId, clubs.id))
-    .where(
-      and(
-        eq(clubMembers.clerkUserId, clerkUserId),
-        eq(clubMembers.isActive, true),
-        isNull(horses.deletedAt),
-        // Don't surface a tombstoned club's horses in "My horses" — F-1.
-        isNull(clubs.deletedAt),
-      ),
-    )
-    .orderBy(desc(horses.createdAt))
-    // Defensive cap (audit G-12) — a multi-club power user accumulating
-    // horses over years sees a paginated UI; the DB cap stops a runaway.
-    .limit(200);
+export async function getHorsesOwnedByUser(
+  clerkUserId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const offset = (page - 1) * pageSize;
+  const where = and(
+    eq(clubMembers.clerkUserId, clerkUserId),
+    eq(clubMembers.isActive, true),
+    isNull(horses.deletedAt),
+    // Don't surface a tombstoned club's horses in "My horses" — F-1.
+    isNull(clubs.deletedAt),
+  );
+  const [items, count] = await Promise.all([
+    db
+      .select({
+        id: horses.id,
+        clubId: horses.clubId,
+        clubName: clubs.name,
+        clubSlug: clubs.slug,
+        clubCurrency: clubs.currency,
+        name: horses.name,
+        breed: horses.breed,
+        gender: horses.gender,
+        color: horses.color,
+        heightHands: horses.heightHands,
+        weightKg: horses.weightKg,
+        skillLevel: horses.skillLevel,
+        primaryPhotoUrl: horses.primaryPhotoUrl,
+        status: horses.status,
+        ownershipStatus: horses.ownershipStatus,
+        monthlyLiveryFeeMinor: horses.monthlyLiveryFeeMinor,
+        liveryStartDate: horses.liveryStartDate,
+        liveryEndDate: horses.liveryEndDate,
+        ownershipDeclineReason: horses.ownershipDeclineReason,
+        ownershipSubmittedAt: horses.ownershipSubmittedAt,
+        createdAt: horses.createdAt,
+      })
+      .from(horses)
+      .innerJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
+      .innerJoin(clubs, eq(horses.clubId, clubs.id))
+      .where(where)
+      .orderBy(desc(horses.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horses)
+      .innerJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
+      .innerJoin(clubs, eq(horses.clubId, clubs.id))
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 /** Clubs the signed-in rider belongs to — used to populate the registration form's stable selector. */

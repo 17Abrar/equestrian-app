@@ -25,6 +25,17 @@ function loadKey(): Buffer {
     );
   }
 
+  // Audit H-1: refuse the textbook all-zeros placeholder in production. CI
+  // and test harnesses use `'0'.repeat(64)` because the build never opens
+  // a connection / never encrypts; a future code path that derives a
+  // build-time constant from the key would otherwise silently inherit
+  // a known-test value into the production bundle.
+  if (process.env.NODE_ENV === 'production' && /^0+$/.test(raw)) {
+    throw new Error(
+      'ENCRYPTION_KEY in production is the all-zeros placeholder. Set a real key generated with `openssl rand -hex 32` in the deploy environment.',
+    );
+  }
+
   let key: Buffer;
   if (/^[0-9a-f]{64}$/i.test(raw)) {
     key = Buffer.from(raw, 'hex');

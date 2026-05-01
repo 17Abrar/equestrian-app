@@ -1,11 +1,18 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { paginationSchema } from '@equestrian/shared/schemas';
 import {
   createAudience,
   listAudiences,
   countAudienceMembersBatch,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  paginatedResponse,
+} from '@/lib/api-utils';
 
 const audienceFiltersSchema = z
   .object({
@@ -23,22 +30,26 @@ const createAudienceSchema = z.object({
   filters: audienceFiltersSchema.default({}),
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const rows = await listAudiences(ctx.clubId);
-      // One round-trip to compute every audience's member count, regardless
-      // of how many audiences the club has. Replaces the previous
-      // Promise.all(rows.map(countAudienceMembers)) — same shape, single query.
+      const url = new URL(request.url);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: url.searchParams.get('page') ?? undefined,
+        pageSize: url.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await listAudiences(ctx.clubId, { page, pageSize });
+      // One round-trip to compute every audience's member count for the
+      // current page only — replaces the previous all-rows enrichment.
       const counts = await countAudienceMembersBatch(
         ctx.clubId,
-        rows.map((a) => a.filters ?? {}),
+        items.map((a) => a.filters ?? {}),
       );
-      const withCounts = rows.map((a, i) => ({
+      const withCounts = items.map((a, i) => ({
         ...a,
         memberCount: counts[i] ?? 0,
       }));
-      return successResponse(withCounts);
+      return paginatedResponse(withCounts, { page, pageSize, total });
     },
     { requiredPermission: 'emails:read' },
   );

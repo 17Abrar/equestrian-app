@@ -23,6 +23,23 @@ import {
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 import { horses } from './horses';
+
+// Audit AI-43 — typed jsonb shapes for the finance tables.
+/** A single line on an issued invoice. Quantity defaults to 1 if omitted
+ *  by the issuer; unit/total amounts are minor units to match the parent
+ *  invoice's `amount`. */
+export interface InvoiceLineItem {
+  description: string;
+  quantity?: number;
+  /** Per-unit price in minor currency units. */
+  unitAmount: number;
+  /** Total for this line in minor currency units (quantity × unitAmount). */
+  totalAmount: number;
+}
+/** Free-form payment metadata stamped by the adapter (provider session id,
+ *  refund reason, etc.). `Record<string, JsonValue>` would over-tighten —
+ *  every adapter records different keys. */
+export type PaymentMetadata = Record<string, unknown>;
 import { bookings } from './bookings';
 
 /**
@@ -54,6 +71,8 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
 
   // Provider-specific metadata: display name, currency support, capabilities,
   // charges_enabled flag, webhook endpoint URL, etc. Never store secrets here.
+  // Intentionally untyped — each provider records different keys; consumers
+  // narrow at read time using the `provider` discriminator.
   metadata: jsonb('metadata'),
 
   // Most recent error surfaced during a payment or webhook, for UI display.
@@ -116,7 +135,10 @@ export const invoices = pgTable(
     totalAmount: integer('total_amount').notNull(),
     currency: varchar('currency', { length: 3 }).notNull().default('AED'),
     description: text('description'),
-    lineItems: jsonb('line_items').notNull().default('[]'),
+    // Audit AI-43 — typed jsonb. Default `'[]'` stays as a stringified
+    // empty array because Drizzle's default-marker is the SQL literal,
+    // not the parsed value.
+    lineItems: jsonb('line_items').$type<InvoiceLineItem[]>().notNull().default([]),
     dueDate: date('due_date'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),

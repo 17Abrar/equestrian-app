@@ -15,7 +15,12 @@ export type PaymentIntentStatus =
   // Post-settlement refund. Adapters that surface refund events through the
   // webhook stream (N-Genius `REFUNDED`, Ziina `refund.status.updated`) map
   // to this directly; Stripe handles refunds through a separate code path.
-  | 'refunded';
+  | 'refunded'
+  // Partial post-settlement refund. Distinct from `refunded` so the webhook
+  // handler can call `recordBookingRefund(amount)` with the correct delta
+  // and leave the booking in `partial` state — overwriting to `refunded`
+  // when the rider is owed more would corrupt the ledger (audit C-1).
+  | 'partial_refunded';
 
 export interface CreatePaymentInput {
   account: PaymentAccountWithCredentials;
@@ -71,7 +76,12 @@ export interface PaymentStatusInput {
 
 export interface PaymentStatusResult {
   status: PaymentIntentStatus;
-  amountReceivedMinorUnits: number;
+  /** Captured amount in minor units. `undefined` when the intent is in a
+   * non-terminal state (pending/requires_action) — a future booking-
+   * reconciliation path that compares this against booking.amount would
+   * otherwise treat requires_action as "0 received" and downgrade the
+   * booking ledger. Audit AI-32e. */
+  amountReceivedMinorUnits: number | undefined;
 }
 
 // ─── Connection (OAuth) — Stripe ──────────────────────────────────────
@@ -142,6 +152,14 @@ export interface WebhookEvent {
   bookingId?: string;
   status?: PaymentIntentStatus;
   amountReceivedMinorUnits?: number;
+  /**
+   * ISO-4217 code reported by the provider for this charge. Compared
+   * against booking.currency in webhook-helpers.ts before flipping
+   * paymentStatus='paid'. Required on succeeded events for stripe/ziina/
+   * n_genius adapters; undefined on refund-only charge.refund.updated
+   * events. Audit AI-21.
+   */
+  currency?: string;
   /**
    * For refund events that carry a refund-object lifecycle (Stripe
    * `charge.refund.updated`), the refund's own status. Distinct from

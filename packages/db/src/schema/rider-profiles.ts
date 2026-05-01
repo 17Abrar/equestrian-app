@@ -23,7 +23,12 @@ export const riderProfiles = pgTable(
     emergencyContactRelation: varchar('emergency_contact_relation', { length: 100 }),
     medicalNotes: text('medical_notes'),
     totalLessonsCompleted: integer('total_lessons_completed').notNull().default(0),
-    parentMemberId: uuid('parent_member_id').references(() => clubMembers.id),
+    // ON DELETE SET NULL (audit H-7). Without this, deleting a parent member
+    // is FK-blocked by their child's profile. A child's profile survives the
+    // parent leaving the club; the field becomes informational.
+    parentMemberId: uuid('parent_member_id').references(() => clubMembers.id, {
+      onDelete: 'set null',
+    }),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

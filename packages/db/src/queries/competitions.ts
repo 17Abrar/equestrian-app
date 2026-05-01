@@ -201,7 +201,41 @@ export async function updateCompetitionClass(clubId: string, classId: string, da
   return result[0] ?? null;
 }
 
+/**
+ * Sentinel error thrown by deleteCompetitionClass when active entries
+ * exist. Callers (route handler) catch and return 409 to the admin so
+ * the UI can prompt them to withdraw entries first. Audit AI-24.
+ */
+export class CompetitionClassHasEntriesError extends Error {
+  public readonly code = 'CLASS_HAS_ENTRIES';
+  constructor() {
+    super(
+      'Cannot delete a class with active registrations. Withdraw all entries first.',
+    );
+    this.name = 'CompetitionClassHasEntriesError';
+  }
+}
+
 export async function deleteCompetitionClass(clubId: string, classId: string) {
+  // Refuse to delete a class with any non-withdrawn entries — the schema's
+  // ON DELETE CASCADE on competition_entries (and through to results)
+  // would otherwise wipe paid registrations and orphan their payments.
+  // Audit AI-24.
+  const liveEntries = await db
+    .select({ id: competitionEntries.id })
+    .from(competitionEntries)
+    .where(
+      and(
+        eq(competitionEntries.classId, classId),
+        eq(competitionEntries.clubId, clubId),
+        sql`${competitionEntries.status} NOT IN ('withdrawn', 'scratched', 'cancelled')`,
+      ),
+    )
+    .limit(1);
+  if (liveEntries.length > 0) {
+    throw new CompetitionClassHasEntriesError();
+  }
+
   const result = await db
     .delete(competitionClasses)
     .where(and(eq(competitionClasses.id, classId), eq(competitionClasses.clubId, clubId)))
@@ -211,48 +245,58 @@ export async function deleteCompetitionClass(clubId: string, classId: string) {
 
 // ─── Competition Entries ──────────────────────────────────────────────
 
-export async function getCompetitionEntries(clubId: string, classId: string) {
-  return db
-    .select({
-      id: competitionEntries.id,
-      classId: competitionEntries.classId,
-      riderMemberId: competitionEntries.riderMemberId,
-      horseId: competitionEntries.horseId,
-      status: competitionEntries.status,
-      paymentStatus: competitionEntries.paymentStatus,
-      amount: competitionEntries.amount,
-      currency: competitionEntries.currency,
-      registeredAt: competitionEntries.registeredAt,
-      riderName: clubMembers.displayName,
-      horseName: horses.name,
-    })
-    .from(competitionEntries)
-    // Defence-in-depth: tenant-owned joined tables also carry club_id, but
-    // FK chains alone don't enforce it. Mirror the clubId condition into
-    // each join so a stale row can't leak into the leaderboard.
-    .innerJoin(
-      clubMembers,
-      and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
-    )
-    // Hide tombstoned horses' names in the entries list — F-2.
-    .leftJoin(
-      horses,
-      and(
-        eq(competitionEntries.horseId, horses.id),
-        eq(horses.clubId, clubId),
-        isNull(horses.deletedAt),
-      ),
-    )
-    .where(
-      and(
-        eq(competitionEntries.clubId, clubId),
-        eq(competitionEntries.classId, classId),
-      ),
-    )
-    .orderBy(asc(competitionEntries.registeredAt))
-    // Defensive cap (audit G-10). competitionClasses.maxEntries is the
-    // business-rule cap; this is the wall-clock cap.
-    .limit(500);
+export async function getCompetitionEntries(
+  clubId: string,
+  classId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const offset = (page - 1) * pageSize;
+  const where = and(
+    eq(competitionEntries.clubId, clubId),
+    eq(competitionEntries.classId, classId),
+  );
+  const [items, count] = await Promise.all([
+    db
+      .select({
+        id: competitionEntries.id,
+        classId: competitionEntries.classId,
+        riderMemberId: competitionEntries.riderMemberId,
+        horseId: competitionEntries.horseId,
+        status: competitionEntries.status,
+        paymentStatus: competitionEntries.paymentStatus,
+        amount: competitionEntries.amount,
+        currency: competitionEntries.currency,
+        registeredAt: competitionEntries.registeredAt,
+        riderName: clubMembers.displayName,
+        horseName: horses.name,
+      })
+      .from(competitionEntries)
+      // Defence-in-depth: tenant-owned joined tables also carry club_id, but
+      // FK chains alone don't enforce it. Mirror the clubId condition into
+      // each join so a stale row can't leak into the leaderboard.
+      .innerJoin(
+        clubMembers,
+        and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
+      // Hide tombstoned horses' names in the entries list — F-2.
+      .leftJoin(
+        horses,
+        and(
+          eq(competitionEntries.horseId, horses.id),
+          eq(horses.clubId, clubId),
+          isNull(horses.deletedAt),
+        ),
+      )
+      .where(where)
+      .orderBy(asc(competitionEntries.registeredAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(competitionEntries)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 /**

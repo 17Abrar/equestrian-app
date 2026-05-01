@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
               horseBreed: horse.breed ?? undefined,
               ownerName: horse.ownerDisplayName ?? horse.ownerEmail ?? 'A rider',
               clubName: club.name,
-              reviewUrl: `https://cavaliq.com/horses?ownershipStatus=pending`,
+              reviewUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/horses?ownershipStatus=pending`,
             }),
           });
         }
@@ -101,6 +101,13 @@ export async function POST(request: NextRequest) {
 
       return successResponse(horse, 201);
     },
-    { requiredPermission: 'horses:register_own' },
+    {
+      requiredPermission: 'horses:register_own',
+      // Audit AI-22 — admins must review every pending registration.
+      // Cap at 5/hour per rider so a runaway form can't backlog the
+      // admin queue with hundreds of pending rows.
+      rateLimit: { maxRequests: 5, windowMs: 3_600_000 },
+      routeKey: 'register_ownership',
+    },
   );
 }

@@ -75,8 +75,17 @@ export function PayBookingDialog({
       .mutateAsync(bookingId)
       .then((res) => {
         if (cancelled) return;
+        // Audit F-8: `fetchJson` throws on `!res.ok` — `res` is always a
+        // success envelope here. Don't drop the response into a silent
+        // dead-end if the server ever returns `{success:false}` with
+        // a 200 (legacy/edge case): surface as an error toast.
         if (res.success) {
           setPayment(res.data);
+        } else {
+          const message =
+            (res as { error?: { message?: string } }).error?.message ??
+            'Could not start payment';
+          setError(message);
         }
       })
       .catch((err: unknown) => {

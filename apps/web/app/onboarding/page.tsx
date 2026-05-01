@@ -15,7 +15,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Plus,
-  Loader2,
   Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -287,7 +286,7 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
       await createArena.mutateAsync(data as CreateArenaInput);
       toast.success(`Arena "${data.name}" added`);
       form.reset();
-      refetch();
+      void refetch();
     } catch (err) {
       reportMutationError('onboarding.arena.create', err, { name: data.name });
       toast.error(err instanceof Error ? err.message : 'Failed to add arena');
@@ -405,16 +404,26 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
 
 // ─── Step 3: Lesson Types ────────────────────────────────────────────
 
-interface QuickLessonValues {
-  name: string;
-  type: string;
-  durationMinutes: number;
-  price: number;
-  currency: string;
-  maxRiders: number;
-  minRiders: number;
-  color: string;
-}
+// Audit F-7: mirror quickArenaSchema/quickStaffSchema — Zod resolver enforces
+// min/max bounds and refines `maxRiders >= minRiders`. The previous bare
+// `useForm` allowed clearing the price input to submit `NaN`.
+const quickLessonSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    type: z.string().min(1, 'Type is required').max(100),
+    durationMinutes: z.coerce.number().int().min(15, 'Min 15 minutes'),
+    price: z.coerce.number().min(0, 'Price cannot be negative'),
+    currency: z.string().length(3),
+    maxRiders: z.coerce.number().int().min(1, 'At least 1'),
+    minRiders: z.coerce.number().int().min(1, 'At least 1'),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Pick a color'),
+  })
+  .refine((d) => d.maxRiders >= d.minRiders, {
+    message: 'Max riders must be ≥ min riders',
+    path: ['maxRiders'],
+  });
+type QuickLessonValues = z.input<typeof quickLessonSchema>;
+type QuickLessonOutput = z.output<typeof quickLessonSchema>;
 
 interface LessonsStepProps {
   onNext: () => void;
@@ -426,7 +435,8 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
   const createLessonType = useCreateLessonType();
   const lessonTypes: LessonType[] = ltData?.data ?? [];
 
-  const form = useForm<QuickLessonValues>({
+  const form = useForm<QuickLessonValues, unknown, QuickLessonOutput>({
+    resolver: zodResolver(quickLessonSchema),
     defaultValues: {
       name: '',
       type: '',
@@ -446,23 +456,16 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
     form.setValue('color', LESSON_TYPE_COLORS[suggestion] ?? '#6366f1');
   }
 
-  async function onSubmit(data: QuickLessonValues) {
-    if (!data.name.trim() || !data.type.trim()) {
-      toast.error('Name and type are required');
-      return;
-    }
+  async function onSubmit(data: QuickLessonOutput) {
     try {
       await createLessonType.mutateAsync({
         ...data,
-        durationMinutes: Number(data.durationMinutes),
         // User enters AED (major units); DB stores fils (minor units).
-        price: Math.round(Number(data.price) * 100),
-        maxRiders: Number(data.maxRiders),
-        minRiders: Number(data.minRiders),
+        price: Math.round(data.price * 100),
       } as CreateLessonTypeInput);
       toast.success(`Lesson type "${data.name}" added`);
       form.reset();
-      refetch();
+      void refetch();
     } catch (err) {
       reportMutationError('onboarding.lesson_type.create', err, { name: data.name });
       toast.error(err instanceof Error ? err.message : 'Failed to add lesson type');
@@ -577,7 +580,7 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
                 name="price"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Price (AED)</FormLabel>
+                    <FormLabel>Price</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -880,12 +883,25 @@ export default function OnboardingPage() {
           <StepIndicator currentStep={step} />
         </div>
 
-        {/* Loading overlay for completion */}
+        {/* Loading overlay for completion. Audit AI-32d — skeleton card
+            previewing the next dashboard view rather than a generic
+            spinner; CLAUDE.md mandates skeleton-over-spinner. */}
         {completing && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Setting up your dashboard...</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4">
+            <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-md">
+              <div className="space-y-3">
+                <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-full animate-pulse rounded bg-muted" />
+                <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+                <div className="grid grid-cols-3 gap-3 pt-2">
+                  <div className="h-16 animate-pulse rounded bg-muted" />
+                  <div className="h-16 animate-pulse rounded bg-muted" />
+                  <div className="h-16 animate-pulse rounded bg-muted" />
+                </div>
+              </div>
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Setting up your dashboard...
+              </p>
             </div>
           </div>
         )}

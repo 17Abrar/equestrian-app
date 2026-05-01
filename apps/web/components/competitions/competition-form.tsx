@@ -168,7 +168,7 @@ export function CompetitionForm() {
                   name="entryFee"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Default Entry Fee (AED)</FormLabel>
+                      <FormLabel>Default Entry Fee</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="e.g. 15000" {...field} value={(field.value as number | undefined) ?? ''} />
                       </FormControl>

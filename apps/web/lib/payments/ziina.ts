@@ -234,8 +234,10 @@ export const ziinaAdapter: PaymentProviderAdapter = {
 
     const status = mapIntentStatus(json.status);
     // Ziina doesn't expose `amount_received`; treat `amount` as received only
-    // once the intent reaches a terminal success state.
-    const amountReceived = status === 'succeeded' ? (json.amount ?? 0) : 0;
+    // once the intent reaches a terminal success state. `undefined` for
+    // non-terminal so callers don't conflate it with a 0-amount capture
+    // (audit AI-32e).
+    const amountReceived = status === 'succeeded' ? (json.amount ?? 0) : undefined;
 
     return { status, amountReceivedMinorUnits: amountReceived };
   },
@@ -276,20 +278,57 @@ export const ziinaAdapter: PaymentProviderAdapter = {
 
     // Ziina webhook payloads are { event, data }. Known events:
     //   - payment_intent.status.updated
-    //   - refund.status.updated
+    //   - refund.status.updated  (data carries refund.id, payment_intent_id,
+    //     amount, status — see https://docs.ziina.com/api-reference/refund)
     const payload = JSON.parse(input.body) as {
       event?: string;
       data?: {
         id?: string;
         status?: string;
         amount?: number;
+        currency_code?: string;
         account_id?: string;
+        created_at?: string;
+        // Ziina refund events carry the parent payment_intent's id here
+        // when the event is `refund.status.updated`. Pull it so the
+        // webhook handler can find the booking by its provider id.
+        payment_intent_id?: string;
       };
     };
 
+    // Replay defence is provided exclusively by `webhook_events` dedup
+    // (PRIMARY KEY on (provider, event_id)) — a captured (body, signature)
+    // pair will be rejected as "already processed" the second time it
+    // lands. The previous freshness window compared `Date.now()` to
+    // `payload.data.created_at`, which is the **PaymentIntent resource's
+    // creation time**, not the event's send time. A user who clicks the
+    // redirect link, opens their bank app, completes 3-D-Secure, and
+    // returns can easily take 6-10 minutes between intent creation and
+    // the `completed` event — legitimate webhooks were being rejected
+    // (audit C-4). Drop the check entirely; dedup catches replays.
+
+    const isRefundEvent = payload.event?.startsWith('refund.') ?? false;
     const status = mapIntentStatus(payload.data?.status);
     const amountReceived =
-      status === 'succeeded' ? (payload.data?.amount ?? 0) : undefined;
+      status === 'succeeded' && !isRefundEvent ? (payload.data?.amount ?? 0) : undefined;
+    const currency = payload.data?.currency_code?.toUpperCase();
+    // For refund events, the `data.amount` is the refund delta and
+    // `data.payment_intent_id` carries the parent PI. The webhook handler
+    // uses these to call `recordBookingRefund(amount)` so the booking
+    // ledger tracks the rider's actual refunded total — see audit C-1.
+    const refundAmountMinor =
+      isRefundEvent && typeof payload.data?.amount === 'number'
+        ? payload.data.amount
+        : undefined;
+    const refundStatus: WebhookEvent['refundStatus'] | undefined = isRefundEvent
+      ? status === 'succeeded'
+        ? 'succeeded'
+        : status === 'failed'
+          ? 'failed'
+          : status === 'pending' || status === 'requires_action'
+            ? 'pending'
+            : undefined
+      : undefined;
 
     // Compose the eventId from `(event, payment_intent_id, status)` so the
     // pending → completed transition stream produces distinct ids. Without
@@ -311,13 +350,23 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       : `${eventName}:` +
         createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 
+    // For refund events the `id` is the refund's id, not the booking's PI.
+    // The booking is keyed by `payment_intent_id`, so surface that as the
+    // `providerPaymentId` so `findBookingByProviderPaymentId` can resolve it.
+    const providerPaymentId = isRefundEvent
+      ? payload.data?.payment_intent_id ?? payload.data?.id
+      : payload.data?.id;
+
     return {
       eventId,
       eventType: payload.event ?? 'unknown',
-      providerPaymentId: payload.data?.id,
+      providerPaymentId,
       providerAccountId: payload.data?.account_id,
       status,
       amountReceivedMinorUnits: amountReceived,
+      currency,
+      refundStatus,
+      refundAmountMinor,
       data: payload,
     };
   },

@@ -137,6 +137,17 @@ export async function isUserMember(clubId: string, clerkUserId: string): Promise
 // the approval queue back, restore the helpers below from git history.
 
 /**
+ * Result of a `joinClubInstantly` attempt:
+ *  - `joined`: caller is now an active member (fresh insert OR voluntary-
+ *    leaver reactivated). Route returns 200.
+ *  - `kicked`: an admin previously deactivated this user via the staff
+ *    moderation UI; the row stays inactive and the route returns 403.
+ */
+export type JoinResult =
+  | { status: 'joined'; member: typeof clubMembers.$inferSelect }
+  | { status: 'kicked' };
+
+/**
  * Open-policy path: rider is instantly added as a club_member with role=rider.
  * Must be called only when the club's joinPolicy is 'open'.
  *
@@ -148,6 +159,12 @@ export async function isUserMember(clubId: string, clerkUserId: string): Promise
  * after leaving, because `isUserMember` filtered on `isActive=true` while
  * the unique index spans both states.
  *
+ * Audit J-1: an admin-kicked member (deactivatedByAdminAt IS NOT NULL)
+ * canNOT rejoin via this path. The function returns `{status: 'kicked'}`
+ * and leaves the row untouched so the existing inactive state persists
+ * — the route caller surfaces a 403 to the rider. Voluntary-leave is
+ * still allowed (no admin stamp on the row).
+ *
  * `email` and `displayName` are written even on conflict so a fresh
  * Clerk profile (renamed user, updated email) re-syncs to the membership
  * row on rejoin.
@@ -157,7 +174,30 @@ export async function joinClubInstantly(input: {
   clerkUserId: string;
   email: string | null;
   displayName: string | null;
-}) {
+}): Promise<JoinResult> {
+  // Pre-check: refuse rejoin if a previous admin DELETE stamped
+  // `deactivatedByAdminAt`. Cheap point lookup hitting the partial index
+  // (only kicked rows are stored). The narrow race between this check and
+  // the upsert is closed by the conditional ON CONFLICT below — the
+  // upsert itself only flips is_active when the column is null.
+  const existing = await rawDb
+    .select({
+      isActive: clubMembers.isActive,
+      deactivatedByAdminAt: clubMembers.deactivatedByAdminAt,
+    })
+    .from(clubMembers)
+    .where(
+      and(
+        eq(clubMembers.clubId, input.clubId),
+        eq(clubMembers.clerkUserId, input.clerkUserId),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]?.deactivatedByAdminAt) {
+    return { status: 'kicked' };
+  }
+
   const rows = await rawDb
     .insert(clubMembers)
     .values({
@@ -170,15 +210,25 @@ export async function joinClubInstantly(input: {
     })
     .onConflictDoUpdate({
       target: [clubMembers.clubId, clubMembers.clerkUserId],
+      // Only flip `is_active` to true when the row was NOT
+      // admin-deactivated. The pre-check above already returned for that
+      // case, but a TOCTOU between the SELECT and INSERT could let a
+      // concurrent admin DELETE land in between. The CASE expression
+      // closes that window by re-evaluating the column at upsert time.
       set: {
-        isActive: true,
+        isActive: sql`CASE WHEN ${clubMembers.deactivatedByAdminAt} IS NULL THEN true ELSE ${clubMembers.isActive} END`,
         email: input.email,
         displayName: input.displayName,
         updatedAt: new Date(),
       },
     })
     .returning();
-  return rows[0];
+
+  const member = rows[0];
+  if (!member || !member.isActive) {
+    return { status: 'kicked' };
+  }
+  return { status: 'joined', member };
 }
 
 // Exported for tests / type inference. Not currently used inline but kept

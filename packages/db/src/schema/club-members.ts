@@ -15,6 +15,13 @@ export const clubMembers = pgTable(
     email: varchar('email', { length: 255 }),
     phone: varchar('phone', { length: 50 }),
     isActive: boolean('is_active').notNull().default(true),
+    // Audit J-1: distinguishes "admin kicked this member" from "member
+    // left voluntarily". Both produce `is_active = false`, but only the
+    // former should refuse rejoin via `joinClubInstantly`. Set by the
+    // staff DELETE handler; null on voluntary-leave or normal members.
+    deactivatedByAdminAt: timestamp('deactivated_by_admin_at', {
+      withTimezone: true,
+    }),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

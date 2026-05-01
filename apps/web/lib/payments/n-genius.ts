@@ -119,13 +119,15 @@ function mapState(state: string | undefined): PaymentIntentStatus {
     case 'AWAITING_PARTIAL_AUTH_APPROVAL':
       return 'requires_action';
     case 'REFUNDED':
-    case 'PARTIALLY_REFUNDED':
-      // Post-settlement refund. Mapped directly to `refunded` so the
-      // type system enforces correct downstream handling — previously
-      // this returned `succeeded` and depended on the webhook route
-      // passing `isRefundEvent: true` to override, which silently broke
-      // if anyone refactored the override path.
+      // Full refund — webhook handler maps to `paymentStatus='refunded'`.
       return 'refunded';
+    case 'PARTIALLY_REFUNDED':
+      // Partial refund — distinct from full so the webhook handler can
+      // increment `refundedAmountMinor` by the actual refund delta and
+      // leave the booking in `partial` state. Audit C-1: previously this
+      // mapped to `refunded` and overwrote the booking's running refund
+      // total, making future refund attempts believe nothing was owed.
+      return 'partial_refunded';
     case 'STARTED':
     default:
       return 'pending';
@@ -133,13 +135,23 @@ function mapState(state: string | undefined): PaymentIntentStatus {
 }
 
 // Orders and payments are the same nested shape in create/lookup/webhook
-// responses. Extract the hosted payment page URL, reference, and state.
+// responses. Extract the hosted payment page URL, reference, state, and —
+// for refund-bearing events — the residual / total refunded amount.
 function extractOrderFields(order: unknown): {
   reference: string | undefined;
   paymentUrl: string | undefined;
   state: string | undefined;
   amountValue: number | undefined;
   amountCurrency: string | undefined;
+  /** Total refunded so far on this payment leg, in minor units. Present on
+   *  REFUNDED / PARTIALLY_REFUNDED webhooks via `_embedded.payment[0].refunds`
+   *  (sum) or `payment.amount.value - payment.outstandingAmount` per N-Genius
+   *  docs. Undefined when not surfaced by the payload. */
+  refundedTotalMinor: number | undefined;
+  /** The most recent refund delta on this event, when N-Genius surfaces a
+   *  per-refund object (REFUNDED events embed the refund as the latest
+   *  entry in `payment.refunds`). Undefined for non-refund events. */
+  lastRefundAmountMinor: number | undefined;
 } {
   if (!order || typeof order !== 'object') {
     return {
@@ -148,6 +160,8 @@ function extractOrderFields(order: unknown): {
       state: undefined,
       amountValue: undefined,
       amountCurrency: undefined,
+      refundedTotalMinor: undefined,
+      lastRefundAmountMinor: undefined,
     };
   }
   const o = order as {
@@ -156,17 +170,72 @@ function extractOrderFields(order: unknown): {
       payment?: Array<{
         state?: string;
         amount?: { value?: number; currencyCode?: string };
+        outstandingAmount?: { value?: number };
+        refundedAmount?: { value?: number };
         _links?: { payment?: { href?: string } };
+        _embedded?: {
+          // N-Genius nests refunds under 'cnp:refund' (or just 'refund' on
+          // some payloads). Each entry has its own amount.value + state.
+          'cnp:refund'?: Array<{
+            state?: string;
+            amount?: { value?: number };
+            createdDate?: string;
+          }>;
+          refund?: Array<{
+            state?: string;
+            amount?: { value?: number };
+            createdDate?: string;
+          }>;
+        };
       }>;
     };
   };
   const payment = o._embedded?.payment?.[0];
+  const refunds =
+    payment?._embedded?.['cnp:refund'] ?? payment?._embedded?.refund ?? [];
+
+  // Sum of all successful (or pending) refund amounts on the payment leg.
+  // N-Genius surfaces this via `payment.refundedAmount.value` on some
+  // gateway versions; fall back to summing the embedded refunds list.
+  let refundedTotalMinor: number | undefined;
+  if (typeof payment?.refundedAmount?.value === 'number') {
+    refundedTotalMinor = payment.refundedAmount.value;
+  } else if (
+    typeof payment?.amount?.value === 'number' &&
+    typeof payment?.outstandingAmount?.value === 'number'
+  ) {
+    // outstanding = amount - refunded, when both are present.
+    refundedTotalMinor = payment.amount.value - payment.outstandingAmount.value;
+  } else if (refunds.length > 0) {
+    refundedTotalMinor = refunds.reduce(
+      (acc, r) => acc + (typeof r.amount?.value === 'number' ? r.amount.value : 0),
+      0,
+    );
+  }
+
+  // The most recently appended refund — by createdDate when available, else
+  // the last array entry.
+  let lastRefundAmountMinor: number | undefined;
+  if (refunds.length > 0) {
+    const sorted = [...refunds].sort((a, b) => {
+      const at = a.createdDate ? Date.parse(a.createdDate) : 0;
+      const bt = b.createdDate ? Date.parse(b.createdDate) : 0;
+      return bt - at;
+    });
+    const latest = sorted[0];
+    if (typeof latest?.amount?.value === 'number') {
+      lastRefundAmountMinor = latest.amount.value;
+    }
+  }
+
   return {
     reference: o.reference,
     paymentUrl: payment?._links?.payment?.href,
     state: payment?.state,
     amountValue: payment?.amount?.value,
     amountCurrency: payment?.amount?.currencyCode,
+    refundedTotalMinor,
+    lastRefundAmountMinor,
   };
 }
 
@@ -300,7 +369,18 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       throw new PaymentProviderError('NO_PAYMENT_LEG', 'N-Genius order has no capturable payment');
     }
 
-    const refundAmount = input.amountMinorUnits ?? payment.amount.value ?? 0;
+    // Audit H-7: refuse the silent zero-amount fallback. Either an explicit
+    // refund amount was passed, or N-Genius returned the original payment
+    // amount on the order lookup. Anything else is a malformed lookup
+    // response and must surface as a hard error rather than process a 0
+    // refund (which N-Genius would accept, returning 200 with a $0 refund).
+    const refundAmount = input.amountMinorUnits ?? payment.amount.value;
+    if (refundAmount === undefined || refundAmount <= 0) {
+      throw new PaymentProviderError(
+        'INVALID_REFUND_AMOUNT',
+        'N-Genius refund: no amount specified and original payment amount unavailable',
+      );
+    }
 
     const refundRes = await fetch(
       `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}/payments/${encodeURIComponent(payment._id)}/refund`,
@@ -398,7 +478,32 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       eventId?: string;
       eventName?: string;
       order?: unknown;
+      // The webhook delivery time per N-Genius portal docs. Used as a
+      // replay-window anchor so a captured (body, headerSecret) pair
+      // can't be replayed weeks later. Audit B-13.
+      paymentDate?: string;
+      createdDateTime?: string;
     };
+
+    // Replay-window enforcement (audit B-13). Reject events older than
+    // ~10 minutes — N-Genius retries on bounded backoff so a legitimate
+    // event won't take that long to land. The constant-time secret
+    // compare is the primary defence; this is belt-and-braces against
+    // a leaked secret + captured-body replay.
+    const eventTime = payload.paymentDate ?? payload.createdDateTime;
+    if (eventTime) {
+      const eventMs = Date.parse(eventTime);
+      if (Number.isFinite(eventMs)) {
+        const ageMs = Date.now() - eventMs;
+        if (ageMs > 10 * 60_000 || ageMs < -5 * 60_000) {
+          logger.warn('n_genius_webhook_outside_freshness_window', { ageMs });
+          throw new PaymentProviderError(
+            'WEBHOOK_REPLAY',
+            `N-Genius webhook outside freshness window (age=${ageMs}ms)`,
+          );
+        }
+      }
+    }
 
     const fields = extractOrderFields(payload.order);
 
@@ -416,6 +521,17 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           .digest('hex')
           .slice(0, 24);
 
+    const status = mapState(payload.eventName ?? fields.state);
+    // For partial-refund events, surface the actual refund delta so the
+    // webhook handler can call `recordBookingRefund(amount)` and increment
+    // the running total — see audit C-1. The most recent refund entry
+    // is the delta of THIS event; total refunded gives a defensive lower
+    // bound when the latest entry isn't surfaced.
+    const refundAmountMinor =
+      status === 'partial_refunded' || status === 'refunded'
+        ? fields.lastRefundAmountMinor ?? fields.refundedTotalMinor
+        : undefined;
+
     return {
       eventId: derivedEventId,
       eventType: payload.eventName ?? 'order.update',
@@ -425,8 +541,14 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       providerAccountId: payload.outletId,
       // Map from the event name when present (more authoritative than
       // payment.state for transition events like REFUNDED).
-      status: mapState(payload.eventName ?? fields.state),
+      status,
       amountReceivedMinorUnits: fields.amountValue,
+      currency: fields.amountCurrency?.toUpperCase(),
+      refundAmountMinor,
+      // For partial refunds, signal `succeeded` so the webhook helper
+      // can use `recordBookingRefund` (mirrors Stripe's path). Full
+      // refund still goes through the existing `'refunded'` mapping.
+      refundStatus: status === 'partial_refunded' ? 'succeeded' : undefined,
       data: payload,
     };
   },

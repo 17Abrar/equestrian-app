@@ -315,7 +315,7 @@ function EditArenaDialog({ arena, open, onOpenChange }: { arena: Arena; open: bo
     try {
       await updateArena.mutateAsync(formData);
       toast.success('Arena updated');
-      queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
       onOpenChange(false);
     } catch (err) {
       reportMutationError('arena.update', err);

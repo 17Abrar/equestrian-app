@@ -145,3 +145,56 @@ export const paymentAccountStatusEnum = pgEnum('payment_account_status', [
   'disabled',
   'error',
 ]);
+
+// ─── Audit AI-36 — varchar status columns promoted to pgEnum ─────────
+
+export const competitionStatusEnum = pgEnum('competition_status', [
+  'draft',
+  'published',
+  'in_progress',
+  'completed',
+  'cancelled',
+]);
+
+export const competitionEntryStatusEnum = pgEnum('competition_entry_status', [
+  'registered',
+  'withdrawn',
+  'scratched',
+  'cancelled',
+]);
+
+export const subscriptionTierEnum = pgEnum('subscription_tier', [
+  'trial',
+  'starter',
+  'growing',
+  'professional',
+]);
+
+export const joinPolicyEnum = pgEnum('join_policy', [
+  'open',
+  'invite_only',
+  'approval',
+]);
+
+export const joinRequestStatusEnum = pgEnum('join_request_status', [
+  'pending',
+  'approved',
+  'declined',
+  'cancelled',
+]);
+
+export const waitlistStatusEnum = pgEnum('waitlist_status', [
+  'waiting',
+  'notified',
+  'expired',
+  'claimed',
+  'cancelled',
+]);
+
+export const webhookEventStatusEnum = pgEnum('webhook_event_status', [
+  'received',
+  'processing',
+  'processed',
+  'failed',
+  'permanently_failed',
+]);

@@ -1,44 +1,106 @@
-import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
-import { calculateCouponDiscount } from '@equestrian/shared/utils';
+import { eq, and, asc, desc, ne, sql, SQL } from 'drizzle-orm';
+import { calculateCouponDiscount, formatMoney } from '@equestrian/shared/utils';
 import { db } from '../index';
 import { invoices } from '../schema/finances';
 import { expenses } from '../schema/finances';
 import { payments } from '../schema/finances';
+import { bookings } from '../schema/bookings';
+import { liveryInvoices } from '../schema/livery-invoices';
 import { coupons, couponUsages } from '../schema/packages';
 import { clubMembers } from '../schema/club-members';
 
 // ─── Overview ─────────────────────────────────────────────────────────
 
 export async function getFinanceOverview(clubId: string) {
-  const [revenueResult, expenseResult, outstandingResult, paymentMethodBreakdown] = await Promise.all([
+  // Aggregate from `bookings` and `livery_invoices` — those are the tables
+  // that webhook handlers + the cancel/refund route actually write to. The
+  // legacy `payments` table is modelled but no code writes to it, so the
+  // previous query returned 0 indefinitely (audit C-3). When we eventually
+  // populate `payments` (via webhook helpers backfilling row-per-payment),
+  // this can be replaced with the simpler SUM over that table.
+  const [
+    bookingRevenueResult,
+    liveryRevenueResult,
+    expenseResult,
+    bookingsOutstandingResult,
+    liveryOutstandingResult,
+    bookingMethodBreakdown,
+  ] = await Promise.all([
     db
-      .select({ total: sql<number>`coalesce(sum(${payments.amount}), 0)::int` })
-      .from(payments)
-      .where(and(eq(payments.clubId, clubId), sql`${payments.status} = 'paid'`)),
+      .select({
+        total: sql<number>`coalesce(sum(${bookings.amount} - coalesce(${bookings.refundedAmountMinor}, 0)), 0)::int`,
+      })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.clubId, clubId),
+          sql`${bookings.paymentStatus} IN ('paid', 'partial')`,
+        ),
+      ),
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${liveryInvoices.amountMinorUnits}), 0)::int`,
+      })
+      .from(liveryInvoices)
+      .where(
+        and(eq(liveryInvoices.clubId, clubId), eq(liveryInvoices.status, 'paid')),
+      ),
     db
       .select({ total: sql<number>`coalesce(sum(${expenses.amount}), 0)::int` })
       .from(expenses)
       .where(eq(expenses.clubId, clubId)),
     db
-      .select({ total: sql<number>`coalesce(sum(${invoices.totalAmount}), 0)::int` })
-      .from(invoices)
-      .where(and(eq(invoices.clubId, clubId), sql`${invoices.status} IN ('sent', 'overdue')`)),
+      .select({
+        total: sql<number>`coalesce(sum(${bookings.amount} - coalesce(${bookings.refundedAmountMinor}, 0)), 0)::int`,
+      })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.clubId, clubId),
+          sql`${bookings.paymentStatus} = 'pending'`,
+          sql`${bookings.status} != 'cancelled'`,
+          sql`${bookings.amount} IS NOT NULL`,
+        ),
+      ),
     db
       .select({
-        method: payments.paymentMethod,
-        total: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+        total: sql<number>`coalesce(sum(${liveryInvoices.amountMinorUnits}), 0)::int`,
+      })
+      .from(liveryInvoices)
+      .where(
+        and(
+          eq(liveryInvoices.clubId, clubId),
+          sql`${liveryInvoices.status} IN ('pending', 'overdue')`,
+        ),
+      ),
+    db
+      .select({
+        method: bookings.paymentMethod,
+        total: sql<number>`coalesce(sum(${bookings.amount} - coalesce(${bookings.refundedAmountMinor}, 0)), 0)::int`,
         count: sql<number>`count(*)::int`,
       })
-      .from(payments)
-      .where(and(eq(payments.clubId, clubId), sql`${payments.status} = 'paid'`))
-      .groupBy(payments.paymentMethod),
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.clubId, clubId),
+          sql`${bookings.paymentStatus} IN ('paid', 'partial')`,
+          sql`${bookings.paymentMethod} IS NOT NULL`,
+        ),
+      )
+      .groupBy(bookings.paymentMethod),
   ]);
 
+  const totalRevenue =
+    (bookingRevenueResult[0]?.total ?? 0) + (liveryRevenueResult[0]?.total ?? 0);
+  const outstandingBalance =
+    (bookingsOutstandingResult[0]?.total ?? 0) +
+    (liveryOutstandingResult[0]?.total ?? 0);
+
   return {
-    totalRevenue: revenueResult[0]?.total ?? 0,
+    totalRevenue,
     totalExpenses: expenseResult[0]?.total ?? 0,
-    outstandingBalance: outstandingResult[0]?.total ?? 0,
-    paymentMethodBreakdown: paymentMethodBreakdown,
+    outstandingBalance,
+    paymentMethodBreakdown: bookingMethodBreakdown.filter((b) => b.method != null),
   };
 }
 
@@ -239,6 +301,10 @@ interface ValidateCouponParams {
   clubId: string;
   code: string;
   amount: number;
+  /** Required for the minimum-spend message — currency-aware formatting
+   * (KWD has 3 decimals, JPY has 0). Defaults to AED when omitted so the
+   * legacy callers stay correct for the dominant tenant. Audit AI-21. */
+  currency?: string;
   riderMemberId: string;
   lessonType?: string;
 }
@@ -291,23 +357,69 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
     }
   }
 
-  if (coupon.minimumAmount && params.amount < coupon.minimumAmount) {
-    return { valid: false, discount: 0, error: `Minimum spend of ${(coupon.minimumAmount / 100).toFixed(2)} required` };
+  if (coupon.minimumAmount != null && params.amount < coupon.minimumAmount) {
+    // Currency-aware formatting (audit AI-21). The previous /100 .toFixed(2)
+    // was wrong by 10× for KWD/BHD (3-decimal) and 100× for JPY (0-decimal)
+    // and never showed the currency code.
+    return {
+      valid: false,
+      discount: 0,
+      error: `Minimum spend of ${formatMoney(coupon.minimumAmount, params.currency ?? 'AED')} required`,
+    };
   }
 
-  // Calculate discount
-  let discount: number;
-  if (coupon.discountType === 'percentage') {
-    discount = Math.round(params.amount * (coupon.discountValue / 100));
-    if (coupon.maxDiscount) {
-      discount = Math.min(discount, coupon.maxDiscount);
+  // Audit H-4: enforce coupon.firstTimeOnly. Coupon admins set this on
+  // promo codes restricted to new riders; without enforcement here, every
+  // returning rider with the code can use it. "First-time" = the rider has
+  // no non-cancelled bookings prior to this attempt.
+  if (coupon.firstTimeOnly) {
+    const priorBookings = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.clubId, params.clubId),
+          eq(bookings.riderMemberId, params.riderMemberId),
+          ne(bookings.status, 'cancelled'),
+        ),
+      )
+      .limit(1);
+    if (priorBookings.length > 0) {
+      return {
+        valid: false,
+        discount: 0,
+        error: 'This promo is for first-time riders only',
+      };
     }
-  } else {
-    discount = coupon.discountValue;
   }
 
-  // Discount cannot exceed order total
-  discount = Math.min(discount, params.amount);
+  // Audit H-4: enforce coupon.applicableTypes. When the admin restricts a
+  // promo to specific lesson-type slugs (e.g. ['dressage', 'jumping']),
+  // reject it on bookings against any other type. `lessonType` is passed
+  // by the booking creation path; legacy callers that omit it skip this
+  // gate (preserves backwards-compat with the API contract).
+  if (
+    coupon.applicableTypes &&
+    coupon.applicableTypes.length > 0 &&
+    params.lessonType &&
+    !coupon.applicableTypes.includes(params.lessonType)
+  ) {
+    return {
+      valid: false,
+      discount: 0,
+      error: 'This promo code is not valid for this lesson type',
+    };
+  }
+
+  // Single source of truth for the math (audit AI-9). The shared helper
+  // also enforces the order-total cap so a percentage coupon can never
+  // refund more than was charged.
+  const discount = calculateCouponDiscount({
+    amount: params.amount,
+    discountType: coupon.discountType as 'percentage' | 'fixed',
+    discountValue: coupon.discountValue,
+    maxDiscount: coupon.maxDiscount,
+  });
 
   return { valid: true, discount, couponId: coupon.id };
 }

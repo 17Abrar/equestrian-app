@@ -30,6 +30,32 @@ interface BookingFilters {
   pageSize: number;
 }
 
+// ─── Booking lifecycle ────────────────────────────────────────────────
+
+/**
+ * Allowed booking-status transitions. Audit AI-31 — surfacing the matrix
+ * here means future write paths can call `canTransitionBookingStatus`
+ * instead of open-coding `WHERE status = 'X'` clauses (and risk
+ * forgetting one). The SQL guards in `markBookingComplete`,
+ * `markBookingNoShow`, and `cancelBooking` mirror this matrix exactly;
+ * a future unit test should validate the parity.
+ *
+ * Terminal states (`completed`, `no_show`, `cancelled`) carry no outgoing
+ * edges — undoing a no-show or completed booking requires a dedicated
+ * reversal endpoint, not a generic status flip.
+ */
+export const BOOKING_STATUS_TRANSITIONS: Readonly<Record<string, ReadonlyArray<string>>> = {
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['completed', 'no_show', 'cancelled'],
+  completed: [],
+  no_show: [],
+  cancelled: [],
+} as const;
+
+export function canTransitionBookingStatus(from: string, to: string): boolean {
+  return BOOKING_STATUS_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
 // ─── Booking Slots ────────────────────────────────────────────────────
 
 export async function getBookingSlotsByClub(clubId: string, filters: BookingSlotFilters) {
@@ -356,6 +382,7 @@ export async function getBookingById(clubId: string, bookingId: string) {
       discountAmount: bookings.discountAmount,
       refundedAmountMinor: bookings.refundedAmountMinor,
       applicationFeeMinor: bookings.applicationFeeMinor,
+      cancellationFee: bookings.cancellationFee,
       horseMatchScore: bookings.horseMatchScore,
       horseMatchAuto: bookings.horseMatchAuto,
       coachNotes: bookings.coachNotes,
@@ -640,6 +667,7 @@ export async function recordBookingRefund(
     .select({
       amount: bookings.amount,
       refundedAmountMinor: bookings.refundedAmountMinor,
+      applicationFeeMinor: bookings.applicationFeeMinor,
     })
     .from(bookings)
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
@@ -653,11 +681,34 @@ export async function recordBookingRefund(
 
   const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
 
+  // Proportional fee decrement (audit AI-21). When the Stripe adapter
+  // calls refunds.create with refund_application_fee=true, Stripe reverses
+  // the application fee proportionally; mirror that here so the booking's
+  // recorded fee snapshot matches the platform's actual retained revenue.
+  // For a full refund (newRefunded === amount) the fee zeroes out.
+  let nextApplicationFeeMinor = current.applicationFeeMinor;
+  if (current.applicationFeeMinor != null) {
+    if (newRefunded >= current.amount) {
+      nextApplicationFeeMinor = 0;
+    } else {
+      const proportionalFeeRefund = Math.round(
+        (current.applicationFeeMinor * amountMinor) / current.amount,
+      );
+      nextApplicationFeeMinor = Math.max(
+        0,
+        current.applicationFeeMinor - proportionalFeeRefund,
+      );
+    }
+  }
+
   const result = await db
     .update(bookings)
     .set({
       refundedAmountMinor: newRefunded,
       paymentStatus: newStatus,
+      ...(current.applicationFeeMinor != null
+        ? { applicationFeeMinor: nextApplicationFeeMinor }
+        : {}),
       updatedAt: new Date(),
     })
     .where(
@@ -771,7 +822,9 @@ export async function setBookingPaymentRef(
   data: {
     paymentProvider?: 'stripe' | 'n_genius' | 'ziina';
     providerPaymentId?: string;
-    paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed' | 'overdue';
+    // 'overdue' is a livery-invoice-only status; bookings never go there.
+    // Removing it from the union (audit L-4) reflects the actual call sites.
+    paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed';
     applicationFeeMinor?: number;
   },
 ) {

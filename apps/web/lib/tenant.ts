@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import { db } from '@equestrian/db';
@@ -94,11 +96,24 @@ export async function getTenantContext(): Promise<TenantContext> {
 
       const foundMember = member[0];
 
+      // Audit auth-5: previously fell open to `'rider'` when neither a
+      // club_members row nor an orgRole was present — a Clerk-org-exists-
+      // but-our-DB-hasn't-caught-up race window let an unproven principal
+      // book lessons. Now we throw NO_MEMBERSHIP so the user lands on a
+      // "your account is being set up" page instead. The narrow gap
+      // between Clerk's `organizationMembership.created` webhook delivery
+      // and our handler writing `club_members` is bounded; legitimate
+      // users retry within seconds.
+      if (!foundMember && !orgRole) {
+        throw new TenantError(
+          'NO_MEMBERSHIP',
+          'Your account is being set up — please refresh in a moment.',
+        );
+      }
+
       const appRole: UserRole = foundMember
         ? foundMember.role
-        : orgRole
-          ? mapClerkRoleToAppRole(orgRole)
-          : 'rider';
+        : mapClerkRoleToAppRole(orgRole!);
 
       return {
         clubId: foundClub.id,

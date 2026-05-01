@@ -1,16 +1,25 @@
 name: Deploy
 
-# Audit H-2: production used to ship via `pnpm cf:deploy` from a
-# developer's laptop. This workflow couples merge-to-main to deploy:
-# the deploy step only runs when CI's `verify` + `neon-smoke` jobs
-# pass on the same SHA. Cloudflare auth is via OIDC + the
-# `cloudflare/wrangler-action`, so no long-lived CLOUDFLARE_API_TOKEN
-# lives on a laptop.
+# Production ships via `wrangler-action` triggered by successful CI on
+# main. Authentication uses Cloudflare's federated-identity flow:
+# GitHub mints a short-lived OIDC JWT, Cloudflare validates the `sub`
+# claim against the federated-identity binding (`repo:<org>/equestrian-
+# app:ref:refs/heads/main`) and exchanges it for a scoped API token
+# bound to this repo's main branch.
+#
+# Audit C-5: the previous workflow had a `${{ steps.cf-oidc.outputs.token
+# || secrets.CLOUDFLARE_API_TOKEN }}` fallback. `core.getIDToken('cloudflare')`
+# always returns a non-empty JWT (regardless of whether Cloudflare's
+# binding accepts it), so the `||` fallback never selected the static
+# token — it was dead code that masked deploy-time failures. Removed.
+# If the OIDC binding ever fails, the deploy now 401s loudly instead of
+# silently degrading.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
-#   CLOUDFLARE_API_TOKEN — Workers Edit + R2 Edit + DNS Edit scopes
-#   CLOUDFLARE_ACCOUNT_ID
-#   DATABASE_URL_UNPOOLED — Neon prod unpooled URL (DDL endpoint)
+#   CLOUDFLARE_ACCOUNT_ID — needed by wrangler regardless of auth method.
+#   DATABASE_URL_UNPOOLED — Neon prod unpooled URL (DDL endpoint).
+#   SENTRY_AUTH_TOKEN — build-time source-map upload (optional; build
+#                       still succeeds without it).
 #
 # Triggered automatically when CI completes successfully on main.
 # Manual dispatch (Actions tab → Deploy → Run workflow) is also
@@ -41,9 +50,9 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
 
     permissions:
-      # Required for OIDC token issuance to Cloudflare. The wrangler
-      # action falls back to the static API token below; OIDC is the
-      # path forward when Cloudflare ships GitHub OIDC support.
+      # Required for `core.getIDToken('cloudflare')` to mint a JWT that
+      # Cloudflare's federated-identity provider validates. Removing this
+      # line breaks the deploy.
       id-token: write
       contents: read
 
@@ -90,10 +99,35 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: pnpm --filter @equestrian/web cf:build
 
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+      # Mint a GitHub OIDC token scoped to the "cloudflare" audience.
+      # Cloudflare's federated-identity provider validates the JWT against
+      # token.actions.githubusercontent.com and only mints a scoped API
+      # token when the `sub` claim matches the bound subject — locking
+      # deploys to the main branch of this repo.
+      - name: Request Cloudflare OIDC token
+        id: cf-oidc
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          script: |
+            const token = await core.getIDToken('cloudflare');
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Deploy to Cloudflare Workers
+        # Pinned to a commit SHA. Floating major-version tags can be
+        # re-pointed by a compromised maintainer to a malicious commit;
+        # SHA pinning ties this workflow to a specific immutable tree.
+        # Update by checking the action's release notes and bumping the
+        # SHA + comment together.
+        # SHA below is `cloudflare/wrangler-action@v3` (resolved 2026-04-30).
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
+        with:
+          # Audit C-5: OIDC-only — the previous `|| secrets.CLOUDFLARE_API_TOKEN`
+          # fallback was dead code (`core.getIDToken` always returns a
+          # non-empty JWT) and masked deploy-time auth failures. If the
+          # federated-identity binding ever rejects the JWT, this 401s
+          # loudly instead of silently falling through.
+          apiToken: ${{ steps.cf-oidc.outputs.token }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # `cf:deploy` does build+deploy; we already built above, so
           # use raw `wrangler deploy` to avoid double-building.

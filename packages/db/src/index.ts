@@ -11,18 +11,33 @@ if (!process.env.DATABASE_URL) {
 
 // Only polyfill WebSocket for Node < 22 where it's not global. On Cloudflare
 // Workers the native `globalThis.WebSocket` is used by `@neondatabase/
-// serverless`; `require('ws')` must not be evaluated there (it pulls in
-// node:net/tls which the Workers bundler cannot satisfy).
-if (
-  typeof globalThis.WebSocket === 'undefined' &&
-  typeof process !== 'undefined' &&
-  process.versions?.node
-) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const wsModule = require('ws') as { default?: typeof WebSocket } | typeof WebSocket;
-  const ctor =
-    (wsModule as { default?: typeof WebSocket }).default ?? (wsModule as typeof WebSocket);
-  neonConfig.webSocketConstructor = ctor;
+// serverless`; the `ws` module must not be statically referenced there (it
+// pulls in node:net/tls which the Workers bundler cannot satisfy). Audit
+// AI-32j — switched from `require('ws')` to a lazy dynamic import inside
+// the runtime guard so bundlers can tree-shake it out cleanly. The
+// `webSocketConstructor` only matters for `writeTransaction` (the WS
+// driver), which is async and awaits `wsPolyfillReady` before connecting.
+let wsPolyfillReady: Promise<void> | null = null;
+async function ensureWsPolyfill(): Promise<void> {
+  if (
+    typeof globalThis.WebSocket !== 'undefined' ||
+    typeof process === 'undefined' ||
+    !process.versions?.node
+  ) {
+    return;
+  }
+  if (wsPolyfillReady) return wsPolyfillReady;
+  wsPolyfillReady = (async () => {
+    // The `ws` module's exported type doesn't structurally match the DOM
+    // `WebSocket` constructor type (no `dispatchEvent`), but neon's driver
+    // only calls `new ctor(url)` and reads MessageEvent — both supported
+    // by `ws`. Cast through `unknown` per TS hint so the assignment
+    // type-checks without lying about the wider shape.
+    const wsModule = await import('ws');
+    const ctor = (wsModule.default ?? wsModule) as unknown as typeof WebSocket;
+    neonConfig.webSocketConstructor = ctor;
+  })();
+  return wsPolyfillReady;
 }
 
 // ─── HTTP driver (the default path) ───────────────────────────────────
@@ -94,6 +109,26 @@ export const db = new Proxy({} as HttpDb, {
 export async function writeTransaction<T>(
   fn: (tx: WsTx) => Promise<T>,
 ): Promise<T> {
+  // When a test harness has installed an ambient executor (via
+  // `__runWithExecutorForTest`), join its transaction instead of opening
+  // a real Postgres connection. The pglite-backed test executor exposes
+  // the same `.transaction()` shape, and this lets us test
+  // writeTransaction-wrapped queries (createBooking, cancelBooking, etc.)
+  // without a live Neon pool. Audit AI-22.
+  const testExecutor = executorStore.getStore();
+  if (testExecutor && typeof (testExecutor as { transaction?: unknown }).transaction === 'function') {
+    const txFn = (testExecutor as {
+      transaction: (cb: (tx: unknown) => Promise<T>) => Promise<T>;
+    }).transaction;
+    return txFn.call(testExecutor, (tx: unknown) => {
+      return executorStore.run(tx as AnyExecutor, () => fn(tx as WsTx));
+    });
+  }
+
+  // Audit AI-32j — the ws polyfill is needed before Pool tries to connect
+  // (Node < 22 only). On Workers `globalThis.WebSocket` exists and this
+  // resolves to a no-op on first call.
+  await ensureWsPolyfill();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const wsDb = drizzleWs(pool, { schema });
   try {

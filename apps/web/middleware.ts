@@ -1,13 +1,21 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
+// Audit auth-2: Public-route matcher locked to specific paths (NOT
+// `/api/cron(.*)` or `/api/webhooks(.*)` blanket prefixes) so a future
+// route added under those prefixes can't be unintentionally exposed
+// without an explicit secret check. Add new public routes here
+// deliberately.
 const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/api/webhooks(.*)',
+  '/api/webhooks/stripe',
+  '/api/webhooks/clerk',
+  '/api/webhooks/n-genius',
+  '/api/webhooks/ziina/(.*)',
   // Cron endpoints authenticate via x-cron-secret header, not Clerk session.
   // Cloudflare's scheduled() invocation has no user context.
-  '/api/cron(.*)',
+  '/api/cron/livery-billing',
   '/api/v1/health',
   // Sentry's tunnel route — forwards client-side errors through our origin
   // so they aren't blocked by ad-blockers. Must be reachable unauthenticated.
@@ -57,6 +65,35 @@ export default clerkMiddleware(async (auth, request) => {
   }
 
   request.headers.set('x-request-id', requestId);
+
+  // Audit X-1 / B-2: enforce a 1 MB body cap on every /api/v1/* mutation
+  // BEFORE handlers run. Per-route helpers (`parseRequiredBody`) cap as
+  // well, but ~55 routes still call `request.json()` directly. The
+  // Content-Length pre-check rejects oversized bodies before the worker
+  // isolate parses anything. Webhooks have their own per-provider caps
+  // in `lib/payments/webhook-body.ts` (smaller than this default).
+  if (
+    request.nextUrl.pathname.startsWith('/api/v1/') &&
+    request.method !== 'GET' &&
+    request.method !== 'HEAD'
+  ) {
+    const contentLength = request.headers.get('content-length');
+    if (contentLength) {
+      const declared = Number(contentLength);
+      if (Number.isFinite(declared) && declared > 1 * 1024 * 1024) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 1 MB cap' },
+          }),
+          {
+            status: 413,
+            headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+          },
+        );
+      }
+    }
+  }
 
   if (!isPublicRoute(request)) {
     await auth.protect({

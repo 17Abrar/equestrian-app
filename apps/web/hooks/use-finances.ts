@@ -90,8 +90,8 @@ export function useExpenses(filters: { category?: string; dateFrom?: string; dat
 // payments / invoices / coupons keys aren't touched — surgical invalidation
 // keeps unrelated tabs from refetching every time someone adds a fuel receipt.
 function invalidateExpenseQueries(queryClient: ReturnType<typeof useQueryClient>) {
-  queryClient.invalidateQueries({ queryKey: ['finances', 'expenses'] });
-  queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
+  void queryClient.invalidateQueries({ queryKey: ['finances', 'expenses'] });
+  void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
 }
 
 export function useCreateExpense() {
@@ -177,22 +177,25 @@ export function useCreateCoupon() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finances', 'coupons'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'coupons'] });
     },
   });
 }
 
 export function useUpdateCoupon(couponId: string) {
   const queryClient = useQueryClient();
+  // Audit AI-25 — `Partial<CreateCouponInput>` matches the PATCH route's
+  // `couponBaseSchema.partial()` shape; replaces the previous
+  // `Record<string, unknown>` that lost type safety on the payload.
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+    mutationFn: (data: Partial<CreateCouponInput>) =>
       fetchJson<ApiResponse<Coupon>>(`/api/v1/finances/coupons/${couponId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finances', 'coupons'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'coupons'] });
     },
   });
 }

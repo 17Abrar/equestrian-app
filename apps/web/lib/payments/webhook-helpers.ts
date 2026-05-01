@@ -2,6 +2,7 @@ import {
   findBookingByIdForWebhook,
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
+  recordBookingRefund,
   recordPaymentAccountError,
   reverseBookingRefund,
   setBookingPaymentRef,
@@ -24,11 +25,12 @@ import type { ProviderName } from './types';
  */
 function toBookingPaymentStatus(
   intent: PaymentIntentStatus | undefined,
-): 'pending' | 'paid' | 'failed' | 'refunded' | undefined {
+): 'pending' | 'paid' | 'failed' | 'refunded' | 'partial' | undefined {
   if (!intent) return undefined;
   if (intent === 'succeeded') return 'paid';
   if (intent === 'failed' || intent === 'cancelled') return 'failed';
   if (intent === 'refunded') return 'refunded';
+  if (intent === 'partial_refunded') return 'partial';
   return 'pending';
 }
 
@@ -65,7 +67,14 @@ export async function applyPaymentWebhook({
 
   // 2. Fallback: match the provider_payment_id against an existing booking.
   //    Useful for Ziina where account_id isn't always in the payload.
-  let bookingRef: { clubId: string; bookingId: string; currentPaymentStatus: string } | null = null;
+  let bookingRef: {
+    clubId: string;
+    bookingId: string;
+    currentPaymentStatus: string;
+    bookingStatus: string;
+    amount: number | null;
+    currency: string;
+  } | null = null;
   if (event.providerPaymentId) {
     bookingRef = await findBookingByProviderPaymentId(event.providerPaymentId, provider);
     if (!clubId) clubId = bookingRef?.clubId;
@@ -108,6 +117,9 @@ export async function applyPaymentWebhook({
         clubId: fallback.clubId,
         bookingId: fallback.bookingId,
         currentPaymentStatus: fallback.currentPaymentStatus,
+        bookingStatus: fallback.bookingStatus,
+        amount: fallback.amount,
+        currency: fallback.currency,
       };
     }
   }
@@ -161,10 +173,75 @@ export async function applyPaymentWebhook({
     return { clubId, bookingId: bookingRef.bookingId };
   }
 
+  // Successful refund event with a known delta — increment the booking's
+  // running refund total via `recordBookingRefund`. This handles three
+  // important cases (audit C-1, H-3):
+  //
+  // 1. Out-of-band refund issued from the provider dashboard (Stripe / Ziina)
+  //    that the admin refund route never saw. The refund delta is on the
+  //    event; the route's own call would have already incremented the ledger
+  //    if it had run, so the optimistic-CAS in `recordBookingRefund` makes
+  //    this a safe no-op when there's no delta to apply.
+  // 2. N-Genius partial refund (`PARTIALLY_REFUNDED`) issued from the
+  //    portal — the booking's previous status is `paid`, refundedAmountMinor
+  //    is 0, and the delta is the partial refund value.
+  // 3. Replay of a refund event we already processed via the route — the CAS
+  //    fails because `refundedAmountMinor` already equals the new value.
+  if (
+    isRefundEvent &&
+    event.refundStatus === 'succeeded' &&
+    event.refundAmountMinor &&
+    event.refundAmountMinor > 0
+  ) {
+    const recorded = await recordBookingRefund(
+      clubId,
+      bookingRef.bookingId,
+      event.refundAmountMinor,
+    );
+    if (recorded) {
+      logger.info('booking_refund_recorded_from_webhook', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        refundAmountMinor: event.refundAmountMinor,
+        newPaymentStatus: recorded.paymentStatus,
+        newRefundedAmountMinor: recorded.refundedAmountMinor,
+      });
+    } else {
+      // CAS conflict OR ledger already at this total OR the refund would
+      // exceed the booking total. The first two are expected (idempotency
+      // / replay); the third is a data-integrity concern.
+      logger.info('booking_refund_record_skipped', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        refundAmountMinor: event.refundAmountMinor,
+        currentPaymentStatus: bookingRef.currentPaymentStatus,
+      });
+    }
+    return { clubId, bookingId: bookingRef.bookingId };
+  }
+
+  // Partial-refund events that we mapped via `partial_refunded` but which
+  // arrived without a refund delta the adapter could surface (e.g. malformed
+  // N-Genius payload missing the embedded refunds list). Don't overwrite
+  // `paid` with `refunded` — log so the operator can reconcile manually.
+  if (isRefundEvent && event.status === 'partial_refunded' && !event.refundAmountMinor) {
+    logger.warn('webhook_partial_refund_no_delta', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      provider,
+      eventType: event.eventType,
+      currentPaymentStatus: bookingRef.currentPaymentStatus,
+    });
+    return { clubId, bookingId: bookingRef.bookingId };
+  }
+
   // Refund events on an already-'partial' booking: the refund route is the
   // authoritative ledger (it tracks the running refunded total). Webhooks
-  // don't carry a reliable refund amount, so overriding 'partial' with
+  // don't always carry a reliable refund delta, so overriding 'partial' with
   // 'refunded' here would misrepresent the rider's remaining balance.
+  // Successful refund events with a delta were already handled above.
   if (isRefundEvent && bookingRef.currentPaymentStatus === 'partial') {
     logger.info('webhook_preserving_partial_refund_status', {
       clubId,
@@ -212,19 +289,103 @@ export async function applyPaymentWebhook({
     return { clubId, bookingId: bookingRef.bookingId };
   }
 
-  await setBookingPaymentRef(clubId, bookingRef.bookingId, {
+  // Booking-status guard (audit AI-24). A payment_intent.succeeded landing
+  // for a cancelled or no-show booking must NOT flip paymentStatus='paid'
+  // — that would silently re-charge the rider for a lesson that's already
+  // settled. Log loudly so an operator can refund / reattach manually.
+  // (`nextStatus` from toBookingPaymentStatus is one of 'pending'|'paid'
+  // |'failed'|'refunded' — 'partial' is only set by the refund route's
+  // ledger and never by this helper, so it's not in the union.)
+  if (
+    nextStatus === 'paid' &&
+    (bookingRef.bookingStatus === 'cancelled' || bookingRef.bookingStatus === 'no_show')
+  ) {
+    logger.error('webhook_payment_for_inactive_booking', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      bookingStatus: bookingRef.bookingStatus,
+      eventId: event.eventId,
+      eventType: event.eventType,
+      amountReceived: event.amountReceivedMinorUnits,
+    });
+    return { clubId, bookingId: bookingRef.bookingId };
+  }
+
+  // Amount/currency reconciliation (audit AI-21). Without this guard, a
+  // crafted low-amount PaymentIntent on the connected account with
+  // metadata.bookingId set would mark any booking paid. Refund-flow
+  // events (isRefundEvent) bypass this check — they have their own
+  // amount semantics handled above.
+  if (nextStatus === 'paid' && !isRefundEvent) {
+    if (bookingRef.amount == null) {
+      logger.warn('webhook_booking_missing_amount', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventId: event.eventId,
+      });
+      return { clubId, bookingId: bookingRef.bookingId };
+    }
+    if (event.amountReceivedMinorUnits == null) {
+      logger.warn('webhook_no_amount_received', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventId: event.eventId,
+      });
+      return { clubId, bookingId: bookingRef.bookingId };
+    }
+    if (
+      event.currency &&
+      event.currency.toUpperCase() !== bookingRef.currency.toUpperCase()
+    ) {
+      logger.error('webhook_currency_mismatch', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventId: event.eventId,
+        eventCurrency: event.currency,
+        bookingCurrency: bookingRef.currency,
+      });
+      return { clubId, bookingId: bookingRef.bookingId };
+    }
+    if (event.amountReceivedMinorUnits < bookingRef.amount) {
+      logger.error('webhook_amount_underfunded', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventId: event.eventId,
+        received: event.amountReceivedMinorUnits,
+        expected: bookingRef.amount,
+      });
+      return { clubId, bookingId: bookingRef.bookingId };
+    }
+  }
+
+  const updated = await setBookingPaymentRef(clubId, bookingRef.bookingId, {
     paymentProvider: provider,
     providerPaymentId: event.providerPaymentId,
     paymentStatus: nextStatus,
   });
 
-  logger.info('booking_payment_status_updated_from_webhook', {
-    clubId,
-    bookingId: bookingRef.bookingId,
-    provider,
-    eventType: event.eventType,
-    status: nextStatus,
-  });
+  // Audit M-3: distinguish "row updated" from "guard fired (no-op)".
+  // The terminal-state guard inside setBookingPaymentRef returns null
+  // when the booking was already in `refunded`/`partial`; logging the
+  // success message regardless makes observability lie.
+  if (updated) {
+    logger.info('booking_payment_status_updated_from_webhook', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      provider,
+      eventType: event.eventType,
+      status: nextStatus,
+    });
+  } else {
+    logger.info('webhook_status_no_op_due_to_terminal_state', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      provider,
+      eventType: event.eventType,
+      attempted: nextStatus,
+      currentStatus: bookingRef.currentPaymentStatus,
+    });
+  }
 
   return { clubId, bookingId: bookingRef.bookingId };
 }
@@ -267,7 +428,7 @@ export async function applyLiveryInvoiceWebhook({
   }
 
   const paidAt = new Date();
-  const updated = await markLiveryInvoicePaid(invoice.id, {
+  const updated = await markLiveryInvoicePaid(invoice.clubId, invoice.id, {
     paidAt,
     paymentProvider: provider,
     providerPaymentId: event.providerPaymentId,

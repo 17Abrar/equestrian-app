@@ -52,6 +52,8 @@ import {
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { fetchJson } from '@/lib/fetch-json';
+import type { ApiResponse } from '@equestrian/shared/types';
 
 import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 
@@ -124,20 +126,19 @@ interface ActionDialogProps {
 function useRefundBooking() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ bookingId, reason }: { bookingId: string; reason?: string }) => {
-      const res = await fetch(`/api/v1/bookings/${bookingId}/refund`, {
+    // Audit F-4: route through `fetchJson` so the response-shape
+    // validator (`ResponseShapeError`) catches a CF Worker HTML error
+    // page or a non-envelope response. Previously the bare `fetch` +
+    // `res.json()` would resolve a Cloudflare 502 HTML body as a
+    // success and skip the `onSuccess` invalidation in subtle ways.
+    mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
+      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/bookings/${bookingId}/refund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reason ? { reason } : {}),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error?.message ?? 'Refund failed');
-      }
-      return data;
-    },
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['bookings'] });
+      void qc.invalidateQueries({ queryKey: ['bookings'] });
     },
   });
 }

@@ -1,16 +1,17 @@
 import React from 'react';
 import { type NextRequest, after } from 'next/server';
+import { eq, and, sql } from 'drizzle-orm';
 import { cancelBookingSchema } from '@equestrian/shared/schemas';
 import { calculateCancellationFee, formatMoney } from '@equestrian/shared/utils';
 import {
   adminGetPaymentAccountByProvider,
   getBookingById,
   getBookingSlotById,
-  cancelBooking,
   getMemberById,
   getClubById,
-  recordBookingRefund,
 } from '@equestrian/db/queries';
+import { writeTransaction } from '@equestrian/db';
+import { bookings as bookingsTable, bookingSlots } from '@equestrian/db/schema';
 import {
   withAuth,
   successResponse,
@@ -118,16 +119,21 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse('INTERNAL_ERROR', 'Unable to process cancellation — related data not found', 500);
       }
 
-      // Calculate cancellation fee from the lesson sticker price, then clamp
-      // to the actually-charged amount so a 100%-late fee on a coupon-
-      // discounted booking never exceeds what the rider paid (audit B-2).
+      // Calculate cancellation fee against the actual charged amount
+      // (net of coupon discount), not the sticker price. Audit H-6: a
+      // rider who used a 50% coupon and paid 500 AED on a 1000 AED
+      // lesson should owe `feePercent% × 500`, not `feePercent% × 1000`
+      // clamped to 500 — the previous formula effectively double-charged
+      // coupon-using riders. The clamp to `existing.amount` is preserved
+      // so a malformed lessonPrice can never cause an overcharge.
+      const feeBase = existing.amount ?? slot.lessonTypePrice;
       const feeResult = calculateCancellationFee({
         slotDate: slot.date,
         slotStartTime: slot.startTime,
         timezone: club.timezone,
         cancellationNoticeHours: club.cancellationNoticeHours,
         lateCancellationFeePercent: Number(club.lateCancellationFeePercent),
-        lessonPrice: slot.lessonTypePrice,
+        lessonPrice: feeBase,
       });
       const fee =
         existing.amount != null
@@ -138,101 +144,249 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // refund the provider FIRST (audit B-1). On provider failure we abort
       // before flipping booking state — the rider's email and the DB ledger
       // would otherwise advertise a refund that never actually issued.
-      const refundedSoFar = existing.refundedAmountMinor ?? 0;
+      // Pre-flight provider-account fetch — surfaces as 422 if the club
+      // disconnected the provider mid-flight, before we lock the booking
+      // row. Audit AI-18: the cancel-with-refund flow now mirrors the
+      // standalone /refund route's lock-then-call pattern so cancelBooking
+      // and recordBookingRefund are committed atomically with the
+      // provider call.
       const wasPaidOnline =
         (existing.paymentStatus === 'paid' || existing.paymentStatus === 'partial') &&
         existing.paymentProvider !== null &&
         existing.providerPaymentId !== null;
-      const remainingToRefund =
-        wasPaidOnline && existing.amount != null
-          ? Math.max(0, existing.amount - fee - refundedSoFar)
-          : 0;
 
-      let providerRefundId: string | null = null;
-      if (remainingToRefund > 0 && existing.paymentProvider && existing.providerPaymentId) {
-        const provider = existing.paymentProvider;
-        const account = await adminGetPaymentAccountByProvider(ctx.clubId, provider);
-        if (!account) {
+      let preflightAccount: Awaited<ReturnType<typeof adminGetPaymentAccountByProvider>> = null;
+      if (wasPaidOnline && existing.paymentProvider) {
+        preflightAccount = await adminGetPaymentAccountByProvider(
+          ctx.clubId,
+          existing.paymentProvider,
+        );
+        if (!preflightAccount) {
           return errorResponse(
             'PROVIDER_ACCOUNT_NOT_FOUND',
-            `The ${provider} account this payment was captured on is no longer connected. Cancellation aborted — issue the refund manually before retrying.`,
+            `The ${existing.paymentProvider} account this payment was captured on is no longer connected. Cancellation aborted — issue the refund manually before retrying.`,
             422,
           );
         }
-        const adapter = getAdapter(provider);
-        try {
-          const refund = await adapter.refund({
-            account,
-            providerPaymentId: existing.providerPaymentId,
-            amountMinorUnits: remainingToRefund,
-            reason: data.reason,
-            // Stable across retries (refundedSoFar + amount produce the same
-            // key for the same logical refund). Distinct from the standalone
-            // /refund route's keys so they can't collide if both fire near-
-            // simultaneously.
-            idempotencyKey: `cancel_refund_${bookingId}_${refundedSoFar}_${remainingToRefund}`,
-          });
-          providerRefundId = refund.providerRefundId;
-        } catch (err) {
-          if (err instanceof PaymentProviderError) {
-            logger.warn('cancel_refund_provider_error', {
-              bookingId,
-              clubId: ctx.clubId,
-              provider,
-              code: err.code,
-              message: err.message,
-              retryable: err.retryable,
-            });
-            return errorResponse(
-              'REFUND_FAILED',
-              `Provider refund failed: ${err.message}. Cancellation aborted.`,
-              502,
-            );
-          }
-          throw err;
-        }
       }
 
-      const cancelled = await cancelBooking(
-        ctx.clubId,
-        bookingId,
-        data.reason,
-        ctx.memberId,
-        fee,
-      );
+      let providerRefundId: string | null = null;
+      let remainingToRefund = 0;
+      let cancelled: { id: string; slotId: string } | null = null;
 
-      if (!cancelled) {
-        // Provider refund (if any) succeeded but the booking didn't transition
-        // — surfaces as a 500 because at this point money has moved and
-        // someone needs to investigate. Idempotency-keyed refunds mean a
-        // retry won't double-charge.
-        if (providerRefundId) {
+      const result = await writeTransaction(async (tx) => {
+          // 1. Lock the booking row to serialise concurrent cancel/refund
+          //    attempts and any webhook-driven ledger update. Read every
+          //    field used by the provider call from the LOCKED row, not
+          //    the pre-lock `existing` (audit B-3) — a webhook could
+          //    have flipped providerPaymentId between the two reads.
+          const lockedRows = await tx
+            .select({
+              amount: bookingsTable.amount,
+              refundedAmountMinor: bookingsTable.refundedAmountMinor,
+              paymentStatus: bookingsTable.paymentStatus,
+              status: bookingsTable.status,
+              applicationFeeMinor: bookingsTable.applicationFeeMinor,
+              slotId: bookingsTable.slotId,
+              paymentProvider: bookingsTable.paymentProvider,
+              providerPaymentId: bookingsTable.providerPaymentId,
+              currency: bookingsTable.currency,
+            })
+            .from(bookingsTable)
+            .where(
+              and(
+                eq(bookingsTable.id, bookingId),
+                eq(bookingsTable.clubId, ctx.clubId),
+              ),
+            )
+            .for('update')
+            .limit(1);
+          const locked = lockedRows[0];
+          if (!locked) {
+            return { kind: 'not-found' as const };
+          }
+
+          // 2. Re-validate the booking state under the lock. A racing
+          //    cancel could have landed first.
+          if (
+            locked.status === 'cancelled' ||
+            locked.status === 'completed' ||
+            locked.status === 'no_show'
+          ) {
+            return { kind: 'terminal' as const, status: locked.status };
+          }
+
+          // 3. Compute remainingToRefund from the LIVE refundedAmountMinor
+          //    rather than the pre-lock read.
+          const liveRefundedSoFar = locked.refundedAmountMinor ?? 0;
+          const liveRemaining =
+            wasPaidOnline && locked.amount != null
+              ? Math.max(0, locked.amount - fee - liveRefundedSoFar)
+              : 0;
+
+          // 4. Call the provider INSIDE the lock. Use the LOCKED row's
+          //    paymentProvider + providerPaymentId so a webhook landing
+          //    between the pre-lock read and the lock can't direct the
+          //    refund at the wrong account/charge id (audit B-3).
+          let refundIdLocal: string | null = null;
+          if (
+            liveRemaining > 0 &&
+            locked.paymentProvider &&
+            locked.providerPaymentId &&
+            preflightAccount
+          ) {
+            const adapter = getAdapter(locked.paymentProvider);
+            try {
+              const refund = await adapter.refund({
+                account: preflightAccount,
+                providerPaymentId: locked.providerPaymentId,
+                amountMinorUnits: liveRemaining,
+                reason: data.reason,
+                idempotencyKey: `cancel_refund_${bookingId}_${liveRefundedSoFar}_${liveRemaining}`,
+              });
+              refundIdLocal = refund.providerRefundId;
+            } catch (err) {
+              if (err instanceof PaymentProviderError) {
+                return {
+                  kind: 'provider-error' as const,
+                  code: err.code,
+                  message: err.message,
+                  retryable: err.retryable,
+                };
+              }
+              throw err;
+            }
+          }
+
+          // 5. Apply the cancellation: status='cancelled', fee, cancelledAt,
+          //    cancelledByMemberId. Same SQL guard cancelBooking uses.
+          const cancelledRow = await tx
+            .update(bookingsTable)
+            .set({
+              status: 'cancelled',
+              cancellationReason: data.reason,
+              cancellationFee: fee,
+              cancelledAt: new Date(),
+              cancelledByMemberId: ctx.memberId,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(bookingsTable.id, bookingId),
+                eq(bookingsTable.clubId, ctx.clubId),
+                // Belt-and-braces: the FOR UPDATE lock above already
+                // serialises us, but re-assert the non-terminal predicate.
+                eq(bookingsTable.status, locked.status),
+              ),
+            )
+            .returning({ id: bookingsTable.id, slotId: bookingsTable.slotId });
+          const cancelledLocal = cancelledRow[0];
+          if (!cancelledLocal) {
+            // Should be unreachable — we hold FOR UPDATE on this row.
+            return { kind: 'cancel-failed' as const, refundId: refundIdLocal };
+          }
+
+          // 6. Decrement the slot's rider count.
+          await tx
+            .update(bookingSlots)
+            .set({
+              currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookingSlots.id, cancelledLocal.slotId));
+
+          // 7. Update the refund ledger inside the same tx. Mirrors
+          //    recordBookingRefund's optimistic CAS but the FOR UPDATE
+          //    above means the CAS is a tautology — kept as a guard
+          //    against any future caller that bypasses the lock.
+          if (refundIdLocal && liveRemaining > 0 && locked.amount != null) {
+            const newRefunded = liveRefundedSoFar + liveRemaining;
+            const newStatus = newRefunded >= locked.amount ? 'refunded' : 'partial';
+
+            // Proportional fee decrement — matches recordBookingRefund.
+            let nextFee = locked.applicationFeeMinor;
+            if (locked.applicationFeeMinor != null) {
+              if (newRefunded >= locked.amount) {
+                nextFee = 0;
+              } else {
+                const propRefund = Math.round(
+                  (locked.applicationFeeMinor * liveRemaining) / locked.amount,
+                );
+                nextFee = Math.max(0, locked.applicationFeeMinor - propRefund);
+              }
+            }
+
+            await tx
+              .update(bookingsTable)
+              .set({
+                refundedAmountMinor: newRefunded,
+                paymentStatus: newStatus,
+                ...(locked.applicationFeeMinor != null
+                  ? { applicationFeeMinor: nextFee }
+                  : {}),
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(bookingsTable.id, bookingId),
+                  eq(bookingsTable.clubId, ctx.clubId),
+                ),
+              );
+          }
+
+          return {
+            kind: 'ok' as const,
+            cancelled: cancelledLocal,
+            refundId: refundIdLocal,
+            remainingToRefund: liveRemaining,
+          };
+      });
+
+      if (result.kind === 'not-found') {
+        return errorResponse('NOT_FOUND', 'Booking not found', 404);
+      }
+      if (result.kind === 'terminal') {
+        return errorResponse(
+          'ALREADY_TERMINAL',
+          `Booking is ${result.status} and cannot be cancelled`,
+          422,
+        );
+      }
+      if (result.kind === 'provider-error') {
+        logger.warn('cancel_refund_provider_error', {
+          bookingId,
+          clubId: ctx.clubId,
+          provider: existing.paymentProvider,
+          code: result.code,
+          message: result.message,
+          retryable: result.retryable,
+        });
+        return errorResponse(
+          'REFUND_FAILED',
+          `Provider refund failed: ${result.message}. Cancellation aborted.`,
+          502,
+        );
+      }
+      if (result.kind === 'cancel-failed') {
+        if (result.refundId) {
           logger.error('cancel_refund_orphaned', {
             bookingId,
             clubId: ctx.clubId,
-            providerRefundId,
-            remainingToRefund,
+            providerRefundId: result.refundId,
           });
         }
         return errorResponse('CANCEL_FAILED', 'Failed to cancel booking', 500);
       }
 
-      // Update the refund ledger so finance reports + future refund attempts
-      // see the correct running total.
-      if (remainingToRefund > 0 && providerRefundId) {
-        const updated = await recordBookingRefund(ctx.clubId, bookingId, remainingToRefund);
-        if (!updated) {
-          logger.error('cancel_refund_ledger_conflict', {
-            bookingId,
-            clubId: ctx.clubId,
-            providerRefundId,
-            remainingToRefund,
-          });
-          // Don't fail the request — provider already refunded, booking is
-          // cancelled. The ledger conflict means a webhook landed in the
-          // narrow window; reconciliation surfaces in the next webhook.
-        }
+      cancelled = result.cancelled;
+      providerRefundId = result.refundId;
+      remainingToRefund = result.remainingToRefund;
+
+      if (!cancelled) {
+        return errorResponse('CANCEL_FAILED', 'Failed to cancel booking', 500);
       }
+      // Refund ledger refresh value used below in the audit/log payload.
+      const refundedSoFar = existing.refundedAmountMinor ?? 0;
 
       logger.info('booking_cancelled', {
         requestId: ctx.requestId,

@@ -308,7 +308,7 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
             horse={horse}
             onSuccess={() => {
               setEditOpen(false);
-              refetch();
+              void refetch();
             }}
           />
         </DialogContent>

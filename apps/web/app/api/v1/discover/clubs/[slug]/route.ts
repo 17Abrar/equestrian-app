@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getPublicClubBySlug } from '@equestrian/db/queries';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { successResponse, errorResponse } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -14,9 +15,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     'unknown';
   // Slug-detail returns 404 vs 200 in measurable time — this route is the
   // obvious target for slug enumeration. Throttle per source IP.
+  // Audit D-1: failClosed so a Redis outage doesn't drop the throttle
+  // entirely — the sibling list endpoint already does.
   const rl = await checkRateLimit(`discover:slug:${ip}`, {
     maxRequests: 60,
     windowMs: 60_000,
+    failClosed: true,
   });
   if (!rl.allowed) {
     const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
@@ -26,13 +30,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  // Audit L-2-frontend / F-37: defensive bounds on the slug path segment.
+  // Drizzle's parameterised queries are injection-safe but the DB still
+  // pays the cost of looking up a 1KB nonsense slug. Cheap pre-check.
   const { slug } = await params;
+  if (slug.length > 100 || !/^[a-z0-9-]+$/.test(slug)) {
+    return errorResponse('NOT_FOUND', 'Club not found', 404);
+  }
+
   const club = await getPublicClubBySlug(slug);
   if (!club) {
-    return NextResponse.json(
-      { success: false, error: { code: 'NOT_FOUND', message: 'Club not found' } },
-      { status: 404 },
-    );
+    return errorResponse('NOT_FOUND', 'Club not found', 404);
   }
-  return NextResponse.json({ success: true, data: club });
+  // Audit D-2: route through the success-response helper so future
+  // changes (e.g. adding `x-request-id`) propagate uniformly.
+  return successResponse(club);
 }

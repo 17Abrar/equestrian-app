@@ -148,7 +148,7 @@ export function FileUpload({
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    if (file) void handleFile(file);
   }
 
   function handleDragOver(e: React.DragEvent) {
@@ -163,7 +163,7 @@ export function FileUpload({
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) void handleFile(file);
     // Reset so same file can be uploaded again
     if (inputRef.current) inputRef.current.value = '';
   }

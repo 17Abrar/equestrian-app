@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useState } from 'react';
+import { z } from 'zod';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { createLessonTypeSchema, type CreateLessonTypeFormValues, type CreateLessonTypeInput } from '@equestrian/shared/schemas';
 import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
@@ -26,6 +27,25 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+
+// Edit form takes price in major units (AED) for the human-readable input;
+// the submit handler converts back to minor units. `refine` on min/max
+// enforces business rules (positive duration, maxRiders >= minRiders) so
+// clearing a field can't submit `NaN`. Audit C-8.
+const editLessonTypeFormSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    durationMinutes: z.number().int().min(15, 'Min 15 minutes'),
+    price: z.number().min(0, 'Price cannot be negative'),
+    maxRiders: z.number().int().min(1, 'At least 1 rider'),
+    minRiders: z.number().int().min(1, 'At least 1 rider'),
+    color: z.string().min(4).max(7),
+  })
+  .refine((d) => d.maxRiders >= d.minRiders, {
+    message: 'Max riders must be ≥ min riders',
+    path: ['maxRiders'],
+  });
+type EditLessonTypeFormValues = z.infer<typeof editLessonTypeFormSchema>;
 
 // ─── Lesson Type Form Dialog (Create) ─────────────────────────────────
 
@@ -100,7 +120,7 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
                 <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="price" render={({ field }) => (
-                <FormItem><FormLabel>Price (AED)</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Price</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="color" render={({ field }) => (
                 <FormItem><FormLabel>Color</FormLabel><FormControl><Input type="color" className="h-10 w-full" {...field} value={field.value ?? '#3b82f6'} /></FormControl><FormMessage /></FormItem>
@@ -200,7 +220,8 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
   const [open, setOpen] = useState(false);
   const updateLessonType = useUpdateLessonType(lessonType.id);
 
-  const form = useForm({
+  const form = useForm<EditLessonTypeFormValues>({
+    resolver: zodResolver(editLessonTypeFormSchema),
     defaultValues: {
       name: lessonType.name,
       durationMinutes: lessonType.durationMinutes,
@@ -211,12 +232,13 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
     },
   });
 
-  async function onSubmit(data: Record<string, unknown>) {
+  async function onSubmit(data: EditLessonTypeFormValues) {
     try {
-      await updateLessonType.mutateAsync({
+      const payload: Partial<CreateLessonTypeInput> = {
         ...data,
-        price: Math.round((data.price as number) * 100),
-      } as Partial<CreateLessonTypeInput>);
+        price: Math.round(data.price * 100),
+      };
+      await updateLessonType.mutateAsync(payload);
       toast.success('Lesson type updated');
       setOpen(false);
     } catch (err) {
@@ -234,39 +256,80 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Edit {lessonType.name}</DialogTitle></DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Name</label>
-            <Input className="mt-1" {...form.register('name')} />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm font-medium">Duration (min)</label>
-              <Input className="mt-1" type="number" {...form.register('durationMinutes', { valueAsNumber: true })} />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <div className="grid grid-cols-3 gap-3">
+              <FormField control={form.control} name="durationMinutes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Duration (min)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      {...field}
+                      value={Number.isFinite(field.value) ? field.value : ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="price" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...field}
+                      value={Number.isFinite(field.value) ? field.value : ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="color" render={({ field }) => (
+                <FormItem><FormLabel>Color</FormLabel><FormControl><Input type="color" className="h-10" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
             </div>
-            <div>
-              <label className="text-sm font-medium">Price (AED)</label>
-              <Input className="mt-1" type="number" step="0.01" {...form.register('price', { valueAsNumber: true })} />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={form.control} name="maxRiders" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Max Riders</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      {...field}
+                      value={Number.isFinite(field.value) ? field.value : ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="minRiders" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Min Riders</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      {...field}
+                      value={Number.isFinite(field.value) ? field.value : ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
             </div>
-            <div>
-              <label className="text-sm font-medium">Color</label>
-              <Input className="mt-1 h-10" type="color" {...form.register('color')} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium">Max Riders</label>
-              <Input className="mt-1" type="number" {...form.register('maxRiders', { valueAsNumber: true })} />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Min Riders</label>
-              <Input className="mt-1" type="number" {...form.register('minRiders', { valueAsNumber: true })} />
-            </div>
-          </div>
-          <Button type="submit" className="w-full" disabled={updateLessonType.isPending}>
-            {updateLessonType.isPending ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </form>
+            <Button type="submit" className="w-full" disabled={updateLessonType.isPending}>
+              {updateLessonType.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

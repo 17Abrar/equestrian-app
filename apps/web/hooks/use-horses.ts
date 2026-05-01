@@ -95,7 +95,7 @@ export function useApproveHorseOwnership(horseId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
     },
   });
 }
@@ -110,7 +110,7 @@ export function useDeclineHorseOwnership(horseId: string) {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
     },
   });
 }
@@ -125,8 +125,8 @@ export function useRetireHorseOwnership(horseId: string) {
         body: JSON.stringify({ liveryEndDate }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
-      queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
     },
   });
 }
@@ -150,7 +150,7 @@ export function useCreateHorse() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
     },
   });
 }
@@ -166,8 +166,8 @@ export function useUpdateHorse(horseId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
-      queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
     },
   });
 }
@@ -183,8 +183,8 @@ export function useTransferHorseOwner(horseId: string) {
         body: JSON.stringify({ ownerMemberId }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
-      queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses', horseId] });
     },
   });
 }
@@ -198,7 +198,7 @@ export function useDeleteHorse() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horses'] });
+      void queryClient.invalidateQueries({ queryKey: ['horses'] });
     },
   });
 }

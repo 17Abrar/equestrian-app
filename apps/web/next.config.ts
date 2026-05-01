@@ -54,6 +54,15 @@ const nextConfig: NextConfig = {
         hostname: '**.r2.dev',
         pathname: '/**',
       },
+      // Audit L-8: Clerk's user avatars come from img.clerk.com. The
+      // CSP `img-src` already allows it, but `next/image` enforces a
+      // separate `remotePatterns` allowlist that would otherwise reject
+      // the avatar URL at runtime.
+      {
+        protocol: 'https' as const,
+        hostname: 'img.clerk.com',
+        pathname: '/**',
+      },
       ...(process.env.R2_PUBLIC_URL
         ? [
             {
@@ -121,7 +130,10 @@ export default withSentryConfig(nextConfig, {
   // Include dependencies from the Next.js output when uploading source
   // maps so stack traces in node_modules still resolve to readable frames.
   widenClientFileUpload: true,
-  // Silence the wrapper's console output in CI builds.
+  // Surface the Sentry wrapper's console output in CI (source-map upload
+  // diagnostics are useful when a release pushes silently fails). Quiet
+  // locally so dev builds don't spam the terminal. Audit L-2 — fixes the
+  // prior comment-vs-code inversion.
   silent: !process.env.CI,
   // Avoid ad-blocker interference in production by routing Sentry's ingest
   // through a same-origin `/monitoring` tunnel.

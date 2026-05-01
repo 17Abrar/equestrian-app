@@ -8,11 +8,13 @@ import { clubs } from '../schema/clubs';
 import { getTodayDateString } from '@equestrian/shared/utils';
 
 export async function getDashboardStats(clubId: string) {
-  // Resolve the club's timezone for accurate "today" calculation
+  // Resolve the club's timezone for accurate "today" calculation. A
+  // tombstoned club (post-org.deleted webhook) shouldn't surface stats
+  // even if the auth path missed — audit AI-32b.
   const clubRow = await db
     .select({ timezone: clubs.timezone })
     .from(clubs)
-    .where(eq(clubs.id, clubId))
+    .where(and(eq(clubs.id, clubId), isNull(clubs.deletedAt)))
     .limit(1);
 
   const timezone = clubRow[0]?.timezone ?? 'Asia/Dubai';
@@ -45,11 +47,20 @@ export async function getDashboardStats(clubId: string) {
         pending: sql<number>`count(*) filter (where ${bookings.status} = 'pending')::int`,
       })
       .from(bookings)
-      .innerJoin(bookingSlots, eq(bookings.slotId, bookingSlots.id))
+      // Bind clubId on the join so a row with a mis-tenanted slotId
+      // (planted by a future bug) can't surface in this club's count.
+      // Audit AI-32b.
+      .innerJoin(
+        bookingSlots,
+        and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+      )
       .where(
         and(
           eq(bookings.clubId, clubId),
           sql`${bookingSlots.date} = ${today}`,
+          // Audit M-5: exclude cancelled bookings from "today's bookings"
+          // counts. They were inflating the dashboard tile.
+          sql`${bookings.status} != 'cancelled'`,
         ),
       ),
 
@@ -74,8 +85,14 @@ export async function getDashboardStats(clubId: string) {
         riderName: clubMembers.displayName,
       })
       .from(bookings)
-      .innerJoin(bookingSlots, eq(bookings.slotId, bookingSlots.id))
-      .innerJoin(clubMembers, eq(bookings.riderMemberId, clubMembers.id))
+      .innerJoin(
+        bookingSlots,
+        and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+      )
+      .innerJoin(
+        clubMembers,
+        and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
       .where(eq(bookings.clubId, clubId))
       .orderBy(sql`${bookings.createdAt} desc`)
       .limit(5),

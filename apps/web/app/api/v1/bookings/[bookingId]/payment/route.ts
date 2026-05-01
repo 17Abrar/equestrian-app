@@ -149,7 +149,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           const feePercent = club ? Number(club.platformFeePercent) : 0;
           if (Number.isFinite(feePercent) && feePercent > 0) {
             applicationFeeMinorUnits = Math.round(bookingAmount * (feePercent / 100));
-            persistFeeSnapshot = true;
+            // Audit H-2: persist the fee snapshot BEFORE the Stripe call so
+            // a network blip after Stripe accepts but before the local row
+            // is updated leaves us reading the same value on retry. Without
+            // this, a fee-percent change between attempts would let the
+            // booking row diverge from what Stripe actually captured.
+            const persisted = await setBookingPaymentRef(ctx.clubId, bookingId, {
+              applicationFeeMinor: applicationFeeMinorUnits,
+            });
+            // CAS conflict / terminal-state guard hit → fall back to whatever
+            // the latest row carries (re-read).
+            if (!persisted) {
+              const reread = await getBookingById(ctx.clubId, bookingId);
+              if (reread?.applicationFeeMinor != null) {
+                applicationFeeMinorUnits = reread.applicationFeeMinor;
+              }
+            }
+            persistFeeSnapshot = false;
           }
         }
         // Stripe rejects PaymentIntents where application_fee_amount +
@@ -157,18 +173,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // amount. Clamp to ~70% of the booking so a misconfigured high
         // platform fee + a small booking doesn't surface as a Stripe
         // 400 with an unhelpful "amount too small" error to the rider.
-        // Audit B-28.
+        // Audit B-28 / AI-21 — use integer arithmetic to avoid IEEE-754
+        // drift on small amounts (`7 * 0.7 = 4.8999... → floor 4` instead
+        // of 4).
         if (applicationFeeMinorUnits !== undefined) {
-          const cap = Math.floor(bookingAmount * 0.7);
+          const cap = Math.floor((bookingAmount * 7) / 10);
           if (applicationFeeMinorUnits > cap) {
+            const original = applicationFeeMinorUnits;
+            applicationFeeMinorUnits = Math.max(0, cap);
             logger.warn('booking_payment_application_fee_clamped', {
               bookingId,
               clubId: ctx.clubId,
-              requested: applicationFeeMinorUnits,
+              requested: original,
               cap,
+              applied: applicationFeeMinorUnits,
               bookingAmount,
             });
-            applicationFeeMinorUnits = Math.max(0, cap);
           }
         }
       }
@@ -258,6 +278,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         throw err;
       }
     },
-    { requiredPermission: 'bookings:create' },
+    {
+      requiredPermission: 'bookings:create',
+      // Audit AI-22 — payment-init creates real Stripe/N-Genius/Ziina
+      // PaymentIntents (real money in observability). Tighten from the
+      // default 60/min so a runaway client or replay loop can't flood
+      // the provider with intents. failClosed (audit AI-45) — an Upstash
+      // outage must NOT lift the cap on a money-moving endpoint.
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'booking_payment_init',
+    },
   );
 }

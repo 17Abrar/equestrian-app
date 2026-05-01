@@ -42,11 +42,21 @@ export default {
    * alive until the fetch resolves even though this handler already returned.
    */
   async scheduled(event, env, ctx) {
+    // Audit L-9: refuse to send a cron tick when CRON_SECRET is missing
+    // from the worker env. The route would 401 either way, but a loud
+    // startup error makes the misconfig visible in tail logs immediately
+    // instead of after the day's billing has been silently skipped.
+    if (!env.CRON_SECRET) {
+      console.error('cron_scheduled_skipped_missing_secret', {
+        cron: event.cron,
+      });
+      return;
+    }
     const url = new URL('/api/cron/livery-billing', 'https://internal.worker/');
     const request = new Request(url.toString(), {
       method: 'POST',
       headers: {
-        'x-cron-secret': env.CRON_SECRET ?? '',
+        'x-cron-secret': env.CRON_SECRET,
         'content-type': 'application/json',
         'user-agent': 'cavaliq-cron-scheduled',
       },

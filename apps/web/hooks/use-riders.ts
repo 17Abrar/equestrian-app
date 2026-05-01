@@ -58,8 +58,8 @@ export function useUpdateRider(riderId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['riders'] });
-      queryClient.invalidateQueries({ queryKey: ['riders', riderId] });
+      void queryClient.invalidateQueries({ queryKey: ['riders'] });
+      void queryClient.invalidateQueries({ queryKey: ['riders', riderId] });
     },
   });
 }
@@ -75,7 +75,7 @@ export function useCreateRider() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['riders'] });
+      void queryClient.invalidateQueries({ queryKey: ['riders'] });
     },
   });
 }

@@ -10,7 +10,11 @@ import {
   createCompetitionClassSchema,
   createCompetitionEntrySchema,
   createCompetitionResultSchema,
+  type CreateCompetitionClassInput,
+  type CreateCompetitionEntryInput,
+  type CreateCompetitionResultInput,
 } from '@equestrian/shared/schemas';
+import type { z } from 'zod';
 import { toMinorUnits, formatMoney, formatDate } from '@equestrian/shared/utils';
 import {
   useCompetition,
@@ -440,18 +444,24 @@ function ResultsSection({ competitionId, classId }: { competitionId: string; cla
 
 // ─── Add Class Form ──────────────────────────────────────────────────
 
+type AddClassFormValues = z.input<typeof createCompetitionClassSchema>;
+
 function AddClassForm({ competitionId, currency }: { competitionId: string; currency: string }) {
   const [open, setOpen] = useState(false);
   const createClass = useCreateCompetitionClass(competitionId);
-  const form = useForm({ resolver: zodResolver(createCompetitionClassSchema), defaultValues: { name: '', discipline: '', level: '', sortOrder: 0 } });
+  const form = useForm<AddClassFormValues, unknown, CreateCompetitionClassInput>({
+    resolver: zodResolver(createCompetitionClassSchema),
+    defaultValues: { name: '', discipline: '', level: '', sortOrder: 0 },
+  });
 
-  async function onSubmit(data: Record<string, unknown>) {
+  async function onSubmit(data: CreateCompetitionClassInput) {
     try {
-      const apiData = {
+      // Audit AI-25 — typed onSubmit; entryFee in minor units, no `as number` cast.
+      const apiData: Parameters<typeof createClass.mutateAsync>[0] = {
         ...data,
-        entryFee: data.entryFee != null ? toMinorUnits(data.entryFee as number, currency) : undefined,
+        entryFee: data.entryFee != null ? toMinorUnits(data.entryFee, currency) : undefined,
       };
-      await createClass.mutateAsync(apiData as Parameters<typeof createClass.mutateAsync>[0]);
+      await createClass.mutateAsync(apiData);
       toast.success('Class added');
       form.reset();
       setOpen(false);
@@ -486,7 +496,7 @@ function AddClassForm({ competitionId, currency }: { competitionId: string; curr
                 <FormItem><FormLabel>Max Entries</FormLabel><FormControl><Input type="number" placeholder="Unlimited" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="entryFee" render={({ field }) => (
-                <FormItem><FormLabel>Entry Fee (AED)</FormLabel><FormControl><Input type="number" placeholder="e.g. 150" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Entry Fee</FormLabel><FormControl><Input type="number" placeholder="e.g. 150" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <Button type="submit" className="w-full" disabled={createClass.isPending}>
@@ -509,15 +519,21 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
 
   const riders = ridersData?.data ?? [];
   const horsesList = horsesData?.data ?? [];
-  const form = useForm({ resolver: zodResolver(createCompetitionEntrySchema), defaultValues: { riderMemberId: '' } });
+  const form = useForm<
+    z.input<typeof createCompetitionEntrySchema>,
+    unknown,
+    CreateCompetitionEntryInput
+  >({
+    resolver: zodResolver(createCompetitionEntrySchema),
+    defaultValues: { riderMemberId: '' },
+  });
 
-  async function onSubmit(data: Record<string, unknown>) {
+  async function onSubmit(data: CreateCompetitionEntryInput) {
     try {
-      // `amount` no longer flows through this form — the server stamps the
-      // entry fee from competitionClasses.entryFee on create. The previous
-      // shape accepted `amount` from the body, which let a rider POST
-      // `{ amount: 1 }` for a full-price class (price-injection).
-      await createEntry.mutateAsync(data as Parameters<typeof createEntry.mutateAsync>[0]);
+      // Audit AI-25 — typed onSubmit. `amount` is intentionally absent
+      // from this form — the server stamps the entry fee from
+      // competitionClasses.entryFee on create (price-injection guard).
+      await createEntry.mutateAsync(data);
       toast.success('Entry added');
       form.reset();
       setOpen(false);
@@ -580,11 +596,19 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
 function AddResultForm({ competitionId, classId, entries }: { competitionId: string; classId: string; entries: CompetitionEntry[] }) {
   const [open, setOpen] = useState(false);
   const createResult = useCreateCompetitionResult(competitionId, classId);
-  const form = useForm({ resolver: zodResolver(createCompetitionResultSchema), defaultValues: { entryId: '', faults: 0 } });
+  const form = useForm<
+    z.input<typeof createCompetitionResultSchema>,
+    unknown,
+    CreateCompetitionResultInput
+  >({
+    resolver: zodResolver(createCompetitionResultSchema),
+    defaultValues: { entryId: '', faults: 0 },
+  });
 
-  async function onSubmit(data: Record<string, unknown>) {
+  async function onSubmit(data: CreateCompetitionResultInput) {
     try {
-      await createResult.mutateAsync(data as Parameters<typeof createResult.mutateAsync>[0]);
+      // Audit AI-25 — typed onSubmit; no Record<string, unknown> cast.
+      await createResult.mutateAsync(data);
       toast.success('Result added');
       form.reset();
       setOpen(false);

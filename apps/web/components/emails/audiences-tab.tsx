@@ -130,7 +130,7 @@ function AudienceRow({ audience }: { audience: Audience }) {
       }),
     onSuccess: () => {
       toast.success(`"${audience.name}" deleted`);
-      qc.invalidateQueries({ queryKey: ['audiences'] });
+      void qc.invalidateQueries({ queryKey: ['audiences'] });
     },
     onError: (err) => {
       reportMutationError('audience.delete', err);
@@ -232,7 +232,7 @@ function AudienceFormDialog({ mode, audience }: AudienceFormDialogProps) {
     },
     onSuccess: () => {
       toast.success(mode === 'create' ? 'Audience created' : 'Audience updated');
-      qc.invalidateQueries({ queryKey: ['audiences'] });
+      void qc.invalidateQueries({ queryKey: ['audiences'] });
       setOpen(false);
     },
     onError: (err) => {

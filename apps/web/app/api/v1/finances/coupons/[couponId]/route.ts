@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
-import { createCouponSchema } from '@equestrian/shared/schemas';
+import { couponBaseSchema, couponPercentageRefine } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { updateCoupon } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
@@ -34,8 +34,12 @@ interface RouteParams {
 // `.partial()` to allow updating any subset; `.strict()` to reject any
 // key not declared on the base schema. Without strict(), a malicious
 // PATCH could rewrite clubId / usageCount / createdByMemberId by
-// piggybacking on Drizzle's spread into SET.
-const updateCouponSchema = createCouponSchema.partial().strict();
+// piggybacking on Drizzle's spread into SET. The percentage refine is
+// re-applied so a partial update from {discountType:'percentage'} →
+// discountValue:250 still 422s. Audit AI-21.
+const updateCouponSchema = couponBaseSchema
+  .partial()
+  .superRefine(couponPercentageRefine);
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(

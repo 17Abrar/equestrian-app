@@ -12,7 +12,15 @@
       "drizzle-orm resolution with the peer bound — which then has",
       "nominally-incompatible private types against the copy apps/web",
       "resolves (web doesn't depend on pglite). packageExtensions below",
-      "strips the pglite peer hint, forcing a single drizzle-orm resolution."
+      "strips the pglite peer hint, forcing a single drizzle-orm resolution.",
+      "",
+      "overrides: pin @xmldom/xmldom to a patched version. Reaches us via",
+      "expo > @expo/cli > @expo/plist; Expo's own bump lags the upstream",
+      "advisory window. Used only at build time (Expo CLI runs locally /",
+      "in CI to bundle the mobile app, never ships in the runtime worker)",
+      "but `pnpm audit --prod` flags it as a prod dep because Expo lists",
+      "the CLI as a runtime dep. Override is safe because @xmldom/xmldom",
+      "exposes a stable surface and 0.8.13+ is API-compatible with 0.8.x."
     ],
     "packageExtensions": {
       "drizzle-orm": {
@@ -20,6 +28,9 @@
           "@electric-sql/pglite": null
         }
       }
+    },
+    "overrides": {
+      "@xmldom/xmldom": ">=0.8.13"
     }
   },
   "scripts": {

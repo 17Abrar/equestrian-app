@@ -75,7 +75,7 @@ function useUpdateRiderProfile() {
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['me', 'profile'] });
+      void qc.invalidateQueries({ queryKey: ['me', 'profile'] });
     },
   });
 }

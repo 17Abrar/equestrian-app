@@ -1,9 +1,24 @@
-import type { ErrorEvent, EventHint } from '@sentry/nextjs';
+import type { Breadcrumb, BreadcrumbHint, ErrorEvent, EventHint } from '@sentry/nextjs';
 
-// Query-param keys that commonly carry credentials. Matched case-insensitively
-// against the param name. Any matching value is replaced with `[REDACTED]`
-// before the event leaves the server.
-const SENSITIVE_QUERY_KEY = /code|state|token|secret|key|session|password/i;
+// Query-param keys that commonly carry credentials OR PII. Matched case-
+// insensitively against the param name. Any matching value is replaced with
+// `[REDACTED]` before the event leaves the server.
+//
+// Audit AI-37 — extended to cover PII keys (email/phone/name/user/customer)
+// since `sendDefaultPii: true` is on for triage value (IP/UA) but the URL
+// scrub must not leak query-string PII to the error vendor.
+const SENSITIVE_QUERY_KEY =
+  /code|state|token|secret|key|session|password|email|phone|name|user|customer/i;
+
+// Pattern that matches sensitive query strings inside arbitrary text
+// (e.g. fetch breadcrumb messages like `GET /callback?code=ac_xxx&state=…`).
+// Replaces the value portion only — keeps the rest of the message readable.
+const QUERY_PARAM_IN_TEXT =
+  /([?&])(code|state|token|secret|key|session|password|email|phone|name|user|customer)=([^&\s"']+)/gi;
+
+function redactQueryParamsInText(text: string): string {
+  return text.replace(QUERY_PARAM_IN_TEXT, '$1$2=[REDACTED]');
+}
 
 export function scrubUrl(raw: string | undefined): string | undefined {
   if (!raw) return raw;
@@ -63,7 +78,43 @@ export function scrubSentryEvent(event: ErrorEvent, _hint: EventHint): ErrorEven
       if (crumb.data && typeof crumb.data.url === 'string') {
         crumb.data.url = scrubUrl(crumb.data.url);
       }
+      // Audit H-8: many integrations attach the URL to `crumb.message`
+      // (the rendered "GET /api/v1/foo?code=xx" string) rather than
+      // `crumb.data.url`. Strip query-param values here too so the
+      // event-level scrub is defence-in-depth for the breadcrumb-level
+      // scrubber registered as `beforeBreadcrumb`.
+      if (typeof crumb.message === 'string') {
+        crumb.message = redactQueryParamsInText(crumb.message);
+      }
     }
   }
   return event;
+}
+
+/**
+ * Sentry `beforeBreadcrumb` hook (audit H-8). Runs once per breadcrumb at
+ * collection time, BEFORE the event is queued — catches the
+ * `?code=ac_xxx&state=…` shape on fetch/console/navigation breadcrumbs
+ * regardless of where it lands (`data.url`, `data.to`, `message`).
+ */
+export function scrubSentryBreadcrumb(
+  breadcrumb: Breadcrumb,
+  _hint?: BreadcrumbHint,
+): Breadcrumb | null {
+  if (breadcrumb.data) {
+    for (const key of Object.keys(breadcrumb.data)) {
+      const value = breadcrumb.data[key];
+      if (typeof value === 'string') {
+        if (key.toLowerCase() === 'url') {
+          breadcrumb.data[key] = scrubUrl(value) ?? value;
+        } else {
+          breadcrumb.data[key] = redactQueryParamsInText(value);
+        }
+      }
+    }
+  }
+  if (typeof breadcrumb.message === 'string') {
+    breadcrumb.message = redactQueryParamsInText(breadcrumb.message);
+  }
+  return breadcrumb;
 }

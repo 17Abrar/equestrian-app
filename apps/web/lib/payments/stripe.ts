@@ -206,7 +206,12 @@ export const stripeAdapter: PaymentProviderAdapter = {
         },
         {
           stripeAccount: input.account.externalAccountId,
-          idempotencyKey: `checkout_${input.idempotencyKey}`,
+          // Audit H-1: use the SAME idempotency key as the inline-PI path
+          // so a rider who started with `mode=default` (PI-A) and retried
+          // with `mode=hosted` doesn't end up with two distinct PaymentIntents.
+          // Stripe returns the existing PI (or its enclosing Checkout
+          // Session) when the same key collides with the prior request.
+          idempotencyKey: input.idempotencyKey,
         },
       );
 
@@ -303,12 +308,21 @@ export const stripeAdapter: PaymentProviderAdapter = {
     }
 
     try {
+      // Standard Connect uses **direct charges** (created with the
+      // `stripeAccount` header, charge originates on the connected
+      // account, no platform-level transfer). `reverse_transfer` is only
+      // meaningful for **destination charges** (`transfer_data[destination]`),
+      // which we don't use. Stripe rejects/no-ops the flag for direct
+      // charges. `refund_application_fee: true` proportionally reverses
+      // the platform fee that was charged on the original PI — that's
+      // the correct mechanism here.
       const refund = await stripe.refunds.create(
         {
           payment_intent: input.providerPaymentId,
           amount: input.amountMinorUnits,
           reason: input.reason === 'requested_by_customer' ? 'requested_by_customer' : undefined,
           metadata: input.reason ? { reason: input.reason } : undefined,
+          refund_application_fee: true,
         },
         {
           stripeAccount: input.account.externalAccountId,
@@ -372,63 +386,117 @@ export const stripeAdapter: PaymentProviderAdapter = {
       );
     }
 
-    // Extract payment-intent-specific fields when this is a PI event.
+    // Discriminate on `event.type` so the SDK's union narrows naturally —
+    // audit AI-26. Replaces the previous single-cast pattern that lost
+    // type safety on every field access.
     let providerPaymentId: string | undefined;
     let status: PaymentIntentStatus | undefined;
     let amountReceivedMinorUnits: number | undefined;
     let bookingId: string | undefined;
     let refundStatus: WebhookEvent['refundStatus'];
     let refundAmountMinor: number | undefined;
+    let currency: string | undefined;
 
-    if (event.data.object && typeof event.data.object === 'object') {
-      const obj = event.data.object as {
-        id?: string;
-        object?: string;
-        status?: string;
-        amount?: number;
-        amount_received?: number;
-        payment_intent?: string | { id?: string } | null;
-        amount_refunded?: number;
-        metadata?: Record<string, string | undefined>;
-      };
-      if (obj.object === 'payment_intent' && obj.id) {
-        providerPaymentId = obj.id;
-        if (obj.status) {
-          status = mapIntentStatus(obj.status as Stripe.PaymentIntent.Status);
-        }
-        amountReceivedMinorUnits = obj.amount_received;
-      } else if (obj.object === 'charge') {
-        // Charge-level events (charge.refunded) carry the PaymentIntent id
-        // on the Charge, not on `obj.id`. `amount_refunded` is the cumulative
-        // refunded total — useful for reconciliation but NOT for the
-        // delta of one specific refund (use `refund.updated` for that).
-        providerPaymentId =
-          typeof obj.payment_intent === 'string'
-            ? obj.payment_intent
-            : obj.payment_intent?.id;
-        amountReceivedMinorUnits = obj.amount_refunded;
-      } else if (obj.object === 'refund') {
-        // `charge.refund.updated` events carry a Refund as the data object.
-        // Pull the parent PaymentIntent + the refund's own status/amount so
-        // the webhook handler can reverse the booking ledger when a
-        // `pending → failed` transition lands (audit B-4).
-        providerPaymentId =
-          typeof obj.payment_intent === 'string'
-            ? obj.payment_intent
-            : obj.payment_intent?.id;
-        if (obj.status) {
-          refundStatus = obj.status as WebhookEvent['refundStatus'];
-        }
-        refundAmountMinor = obj.amount;
+    // The `payment_intent` field on Charge / Refund objects is either
+    // expanded (full PaymentIntent) or a bare string id. Normalise both
+    // shapes to the id string for the webhook handler downstream.
+    function piPaymentIntentId(
+      pi: string | Stripe.PaymentIntent | null | undefined,
+    ): string | undefined {
+      if (typeof pi === 'string') return pi;
+      if (pi && typeof pi === 'object' && typeof pi.id === 'string') {
+        return pi.id;
       }
-      // Our own `bookingId` rides on the PI's metadata — stamped at create
-      // time by the bookings/[id]/payment route. Lets the webhook resolve
-      // the booking even when the `provider_payment_id` column hasn't been
-      // written yet (fast-succeed payments racing with the route).
-      const md = obj.metadata;
-      if (md && typeof md.bookingId === 'string') {
-        bookingId = md.bookingId;
+      return undefined;
+    }
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+      case 'payment_intent.processing':
+      case 'payment_intent.payment_failed':
+      case 'payment_intent.canceled':
+      case 'payment_intent.requires_action':
+      case 'payment_intent.created': {
+        const pi = event.data.object;
+        providerPaymentId = pi.id;
+        status = mapIntentStatus(pi.status);
+        amountReceivedMinorUnits = pi.amount_received;
+        currency = pi.currency?.toUpperCase();
+        const md = pi.metadata;
+        if (md && typeof md.bookingId === 'string') {
+          bookingId = md.bookingId;
+        }
+        break;
       }
+      case 'charge.refunded': {
+        const charge = event.data.object;
+        // Charge-level refund event (Stripe fires this in addition to per-
+        // refund `charge.refund.updated`). Surface the most recent refund's
+        // delta so the webhook helper can call `recordBookingRefund`. For
+        // partial refunds the rolling `amount_refunded` is the cumulative
+        // total — extract just the latest refund's `amount` from the
+        // embedded refunds list.
+        providerPaymentId = piPaymentIntentId(charge.payment_intent);
+        currency = charge.currency?.toUpperCase();
+        const md = charge.metadata;
+        if (md && typeof md.bookingId === 'string') {
+          bookingId = md.bookingId;
+        }
+        const refundsList = charge.refunds?.data ?? [];
+        if (refundsList.length > 0) {
+          const sorted = [...refundsList].sort(
+            (a, b) => (b.created ?? 0) - (a.created ?? 0),
+          );
+          const latest = sorted[0];
+          if (latest) {
+            refundStatus = latest.status as WebhookEvent['refundStatus'];
+            refundAmountMinor = latest.amount;
+          }
+        } else {
+          // No embedded refund — fall back to amount_refunded as the delta
+          // (correct for full refund; for partial refund where Stripe hasn't
+          // expanded refunds it's the cumulative total which is also the
+          // delta if this is the first refund event).
+          refundStatus = 'succeeded';
+          refundAmountMinor = charge.amount_refunded;
+        }
+        break;
+      }
+      case 'charge.succeeded':
+      case 'charge.failed': {
+        const charge = event.data.object;
+        providerPaymentId = piPaymentIntentId(charge.payment_intent);
+        // Charge.amount is the captured amount (in minor units). The
+        // PaymentIntent's `amount_received` is the canonical source for
+        // payment-level amounts; for charge events the Charge's `amount`
+        // field is the right-shaped equivalent.
+        amountReceivedMinorUnits = charge.amount;
+        currency = charge.currency?.toUpperCase();
+        const md = charge.metadata;
+        if (md && typeof md.bookingId === 'string') {
+          bookingId = md.bookingId;
+        }
+        break;
+      }
+      case 'charge.refund.updated': {
+        const refund = event.data.object;
+        // The Refund carries the parent PaymentIntent + the refund's own
+        // status/amount so the webhook handler can reverse the booking
+        // ledger when a `pending → failed` transition lands (audit B-4).
+        providerPaymentId = piPaymentIntentId(refund.payment_intent);
+        refundStatus = refund.status as WebhookEvent['refundStatus'];
+        refundAmountMinor = refund.amount;
+        currency = refund.currency?.toUpperCase();
+        const md = refund.metadata;
+        if (md && typeof md.bookingId === 'string') {
+          bookingId = md.bookingId;
+        }
+        break;
+      }
+      default:
+        // Unhandled event type — return the envelope so the webhook
+        // route can dedup/log it without breaking. No fields populated.
+        break;
     }
 
     return {
@@ -441,6 +509,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
       bookingId,
       status,
       amountReceivedMinorUnits,
+      currency,
       refundStatus,
       refundAmountMinor,
       data: event,
