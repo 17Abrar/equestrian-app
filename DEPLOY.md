@@ -398,8 +398,10 @@ The script creates a PITR branch, runs sanity queries (`_migrations`,
 target time on success. NEON_API_KEY is intentionally not stored —
 mint a scoped one at console.neon.tech → Account → API.
 
-> Last restore drill: **TODO** — run `pnpm restore:drill` within the
-> first quarter of operation and update this line with the date.
+> Last restore drill: **2026-05-01** — PITR'd to 2026-05-01T04:17:57.075Z
+> on a one-shot Neon branch; sanity queries (30 migrations, 1 club,
+> 8 bookings) returned expected row counts; branch torn down. Run
+> `pnpm restore:drill` quarterly to refresh this line.
 
 ---
 
@@ -436,12 +438,13 @@ queue rather than collide.
 Required secrets (set with `gh secret set`):
 
 - `CLOUDFLARE_ACCOUNT_ID` ✓ already set (`343dc071...`)
-- `CLOUDFLARE_API_TOKEN` ✗ **TODO (dashboard-only)** — mint at
-  https://dash.cloudflare.com/profile/api-tokens with **Workers Scripts:Edit
-  + Account Logs:Edit + Workers R2 Storage:Edit + Account Settings:Read**.
-  The wrangler OAuth token doesn't expose the API-token-mint scope, so
-  this is the one item that must be done in the Cloudflare dashboard.
-  Once minted: `gh secret set CLOUDFLARE_API_TOKEN`.
+- `CLOUDFLARE_API_TOKEN` ✓ set 2026-05-01. Minted from the
+  "Edit Cloudflare Workers" template at
+  https://dash.cloudflare.com/profile/api-tokens. Verified via
+  `/client/v4/user/tokens/verify`. To rotate: mint a fresh token,
+  `gh secret set CLOUDFLARE_API_TOKEN`, revoke the old one in the
+  dashboard, and update the local copy in
+  `apps/web/.env.production.local`.
 - `DATABASE_URL_UNPOOLED` ✓ set 2026-04-27 (Neon prod unpooled URL,
   used by `db:migrate:neon` in deploy.yml).
 - `SENTRY_AUTH_TOKEN` ✓ set 2026-04-27 (optional — enables source-map
