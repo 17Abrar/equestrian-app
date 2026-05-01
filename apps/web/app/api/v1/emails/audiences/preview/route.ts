@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
     },
     {
       requiredPermission: 'emails:read',
-      rateLimit: { maxRequests: 60, windowMs: 60_000 },
+      // Audit E-2: failClosed so a Redis outage doesn't let an attacker
+      // enumerate audience-shape data via 60+ rapid requests.
+      rateLimit: { maxRequests: 60, windowMs: 60_000, failClosed: true },
       routeKey: 'emails:audiences:preview',
     },
   );

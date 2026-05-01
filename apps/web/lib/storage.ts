@@ -1,3 +1,5 @@
+import 'server-only';
+
 import {
   S3Client,
   PutObjectCommand,
@@ -18,9 +20,19 @@ const ALLOWED_CONTENT_TYPES = [
 ];
 
 // Hard cap to block terabyte uploads via a leaked presigned URL. Documents
-// per CLAUDE.md go up to 25 MB; anything larger is rejected outright at the
-// API boundary, before R2 is even told about the request.
-export const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
+// per CLAUDE.md go up to 25 MB; images are capped at 15 MB. Anything larger
+// is rejected outright at the API boundary, before R2 is even told about
+// the request. Audit AI-29.
+export const MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
+export const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
+/** @deprecated kept as a back-compat alias for the old single-cap callers */
+export const MAX_UPLOAD_SIZE_BYTES = MAX_DOCUMENT_SIZE_BYTES;
+
+export function maxUploadSizeFor(contentType: string): number {
+  return contentType.startsWith('image/')
+    ? MAX_IMAGE_SIZE_BYTES
+    : MAX_DOCUMENT_SIZE_BYTES;
+}
 
 // Folder names: lowercase letters/numbers/underscores, slash-separated segments.
 // Prevents path traversal (`../`) and exotic characters from landing in R2 keys.
@@ -96,8 +108,11 @@ export async function getUploadUrl(params: {
     throw new Error('File size must be a positive integer.');
   }
 
-  if (fileSizeBytes > MAX_UPLOAD_SIZE_BYTES) {
-    const maxMb = Math.floor(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024));
+  // Branch the cap by content type (audit AI-29). 15 MB for images,
+  // 25 MB for documents — matches CLAUDE.md.
+  const maxBytes = maxUploadSizeFor(contentType);
+  if (fileSizeBytes > maxBytes) {
+    const maxMb = Math.floor(maxBytes / (1024 * 1024));
     throw new Error(`File is too large. Maximum size is ${maxMb} MB.`);
   }
 

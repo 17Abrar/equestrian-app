@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, text, timestamp, index, unique } from 'drizzle-orm/pg-core';
+import { joinRequestStatusEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 
@@ -18,7 +19,8 @@ export const clubJoinRequests = pgTable(
     email: varchar('email', { length: 255 }),
     displayName: varchar('display_name', { length: 255 }),
     message: text('message'),
-    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    // Audit AI-36 — promoted to pgEnum.
+    status: joinRequestStatusEnum('status').notNull().default('pending'),
     reviewedByMemberId: uuid('reviewed_by_member_id').references(() => clubMembers.id, {
       onDelete: 'set null',
     }),

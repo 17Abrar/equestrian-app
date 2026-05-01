@@ -113,7 +113,7 @@ export function useCreateArena() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
     },
   });
 }
@@ -129,7 +129,7 @@ export function useUpdateArena(arenaId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
     },
   });
 }
@@ -143,7 +143,7 @@ export function useDeleteArena() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
     },
   });
 }
@@ -168,7 +168,7 @@ export function useCreateLessonType() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
+      void queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
     },
   });
 }
@@ -184,7 +184,7 @@ export function useUpdateLessonType(lessonTypeId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
+      void queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
     },
   });
 }
@@ -198,7 +198,7 @@ export function useDeleteLessonType() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
+      void queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
     },
   });
 }
@@ -230,7 +230,7 @@ export function useCreateBookingSlot() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -246,7 +246,7 @@ export function useUpdateBookingSlot(slotId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -262,7 +262,7 @@ export function useCancelBookingSlot() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -278,7 +278,7 @@ export function useCreateRecurringSlots() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -319,8 +319,8 @@ export function useCreateBooking() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -356,9 +356,9 @@ export function useCancelBooking() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
-      queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
     },
   });
 }
@@ -372,8 +372,8 @@ export function useMarkNoShow() {
         method: 'POST',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -387,8 +387,8 @@ export function useMarkComplete() {
         method: 'POST',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }

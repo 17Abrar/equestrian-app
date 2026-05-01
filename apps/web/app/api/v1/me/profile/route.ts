@@ -1,7 +1,19 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { type UserRole } from '@equestrian/shared/types';
 import { getRiderByMemberId, upsertRiderProfileByMember } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+
+// Rider-profile rows model rider-only attributes (skill level, emergency
+// contacts, medical notes). Coaches/grooms/vets shouldn't accidentally
+// create one for themselves and start showing up in rider reports. Audit
+// AI-3.
+const RIDER_PROFILE_ELIGIBLE_ROLES: UserRole[] = [
+  'rider',
+  'parent',
+  'horse_owner',
+  'club_admin',
+];
 
 export async function GET() {
   return withAuth(async (ctx) => {
@@ -36,6 +48,14 @@ export async function PATCH(request: NextRequest) {
   return withAuth(async (ctx) => {
     if (!ctx.memberId) {
       return errorResponse('NO_MEMBER', 'Member profile not found', 404);
+    }
+
+    if (!RIDER_PROFILE_ELIGIBLE_ROLES.includes(ctx.orgRole)) {
+      return errorResponse(
+        'NOT_RIDER_ELIGIBLE',
+        'Only riders, parents, owners, and admins can have a rider profile.',
+        403,
+      );
     }
 
     const body = await request.json();

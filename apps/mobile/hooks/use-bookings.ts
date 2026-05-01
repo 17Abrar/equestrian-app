@@ -122,8 +122,8 @@ export function useCreateBooking() {
       couponCode?: string;
     }) => api.post<Booking>('/api/v1/bookings', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['myBookings'] });
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['myBookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }
@@ -136,8 +136,8 @@ export function useCancelBooking() {
     mutationFn: ({ bookingId, reason: _reason }: { bookingId: string; reason: string }) =>
       api.delete<Booking>(`/api/v1/bookings/${bookingId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['myBookings'] });
-      queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['myBookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
 }

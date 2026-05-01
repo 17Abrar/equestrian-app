@@ -189,7 +189,7 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="fee">Monthly livery fee (AED)</Label>
+            <Label htmlFor="fee">Monthly livery fee</Label>
             <Input
               id="fee"
               type="number"

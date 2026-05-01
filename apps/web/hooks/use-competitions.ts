@@ -116,7 +116,7 @@ export function useCreateCompetition() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['competitions'] });
     },
   });
 }
@@ -132,8 +132,8 @@ export function useUpdateCompetition(competitionId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitions'] });
-      queryClient.invalidateQueries({ queryKey: ['competitions', competitionId] });
+      void queryClient.invalidateQueries({ queryKey: ['competitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['competitions', competitionId] });
     },
   });
 }
@@ -147,7 +147,7 @@ export function useDeleteCompetition() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['competitions'] });
     },
   });
 }
@@ -179,7 +179,7 @@ export function useCreateCompetitionClass(competitionId: string) {
         },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitions', competitionId, 'classes'] });
+      void queryClient.invalidateQueries({ queryKey: ['competitions', competitionId, 'classes'] });
     },
   });
 }
@@ -211,7 +211,7 @@ export function useCreateCompetitionEntry(competitionId: string, classId: string
         },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ['competitions', competitionId, 'classes', classId, 'entries'],
       });
     },
@@ -232,7 +232,7 @@ export function useWithdrawCompetitionEntry(competitionId: string, classId: stri
         },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ['competitions', competitionId, 'classes', classId, 'entries'],
       });
     },
@@ -266,7 +266,7 @@ export function useCreateCompetitionResult(competitionId: string, classId: strin
         },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ['competitions', competitionId, 'classes', classId, 'results'],
       });
     },

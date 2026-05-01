@@ -1,22 +1,36 @@
 import { type NextRequest } from 'next/server';
-import { createMedicationLogSchema } from '@equestrian/shared/schemas';
+import { createMedicationLogSchema, paginationSchema } from '@equestrian/shared/schemas';
 import {
   getMedicationLogs,
   createMedicationLog,
   getMedicationByIds,
+  getMemberById,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  paginatedResponse,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; medicationId: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId, medicationId } = await params;
-      const logs = await getMedicationLogs(ctx.clubId, horseId, medicationId);
-      return successResponse(logs);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: request.nextUrl.searchParams.get('page') ?? undefined,
+        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await getMedicationLogs(ctx.clubId, horseId, medicationId, {
+        page,
+        pageSize,
+      });
+      return paginatedResponse(items, { page, pageSize, total });
     },
     { requiredPermission: 'horses:read' },
   );
@@ -39,11 +53,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(createMedicationLogSchema, body);
 
+      // Mass-assignment guard (audit AI-19). The body's optional
+      // administeredByMemberId is a UUID — without verification a caller
+      // could log doses against any UUID, which doesn't compromise
+      // tenant isolation today (the FK references club_members(id) which
+      // is global, but is only displayed scoped to this club) but would
+      // attribute the dose to the wrong member if they happen to be in
+      // another club. Force ctx.memberId unless the supplied UUID
+      // matches an active member of this club.
+      let administeredByMemberId: string | null | undefined =
+        ctx.memberId;
+      if (data.administeredByMemberId) {
+        const member = await getMemberById(ctx.clubId, data.administeredByMemberId);
+        if (!member || !member.isActive) {
+          return errorResponse(
+            'INVALID_MEMBER',
+            'administeredByMemberId is not an active member of this club',
+            422,
+          );
+        }
+        administeredByMemberId = member.id;
+      }
+
       const log = await createMedicationLog(ctx.clubId, horseId, {
         ...data,
         medicationId,
         administeredAt: new Date(data.administeredAt),
-        administeredByMemberId: data.administeredByMemberId ?? ctx.memberId,
+        administeredByMemberId,
       });
 
       if (log) {

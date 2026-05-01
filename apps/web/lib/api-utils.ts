@@ -189,9 +189,13 @@ export async function withAuth(
   handler: (ctx: AuthenticatedContext) => Promise<NextResponse>,
   options?: ApiHandlerOptions,
 ): Promise<NextResponse> {
+  // Hoisted so the catch handler can re-use it without re-reading headers
+  // (audit AI-27). Default to 'unknown' so the catch path is robust to
+  // a throw that lands before headers() resolves.
+  let requestId = 'unknown';
   try {
     const headerStore = await headers();
-    const requestId = headerStore.get('x-request-id') ?? crypto.randomUUID();
+    requestId = headerStore.get('x-request-id') ?? crypto.randomUUID();
     const ip =
       headerStore.get('x-forwarded-for')?.split(',')[0]?.trim() ??
       headerStore.get('x-real-ip') ??
@@ -206,9 +210,19 @@ export async function withAuth(
     // this, all endpoints share a single 60/min budget per user and a
     // 3-tab admin polling 5 endpoints starves itself with spurious 429s.
     // Audit G-21.
+    //
+    // Audit auth-8: collapse UUID-shaped path segments to `:id` so a user
+    // hitting the same logical route on N different resource ids doesn't
+    // create N distinct rate-limit buckets. `/horses/abc-...-/exercise`
+    // and `/horses/def-...-/exercise` share a single bucket. routeKey
+    // (when set) takes precedence — that's the canonical per-route bucket.
     const rateLimitConfig = options?.rateLimit ?? { maxRequests: 60, windowMs: 60_000 };
     const pathname = headerStore.get('x-pathname') ?? '';
-    const fallbackKey = pathname ? `${tenantCtx.userId}:${pathname}` : tenantCtx.userId;
+    const normalizedPath = pathname.replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      ':id',
+    );
+    const fallbackKey = normalizedPath ? `${tenantCtx.userId}:${normalizedPath}` : tenantCtx.userId;
     const rateLimitKey = options?.routeKey
       ? `${tenantCtx.userId}:${options.routeKey}`
       : fallbackKey;
@@ -275,7 +289,11 @@ export async function withAuth(
     return await handler(ctx);
   } catch (error) {
     if (error instanceof TenantError) {
-      const status = error.code === 'UNAUTHORIZED' ? 401 : 400;
+      // NO_MEMBERSHIP (audit auth-5) → 503 so the rider's UI can prompt
+      // "your account is being set up — refresh in a moment". The error
+      // is transient (Clerk webhook delivery race), not a hard 401/403.
+      const status =
+        error.code === 'UNAUTHORIZED' ? 401 : error.code === 'NO_MEMBERSHIP' ? 503 : 400;
       return errorResponse(error.code, error.message, status);
     }
 
@@ -295,11 +313,11 @@ export async function withAuth(
       return errorResponse('PAYLOAD_TOO_LARGE', error.message, 413);
     }
 
-    const headerStore = await headers().catch(() => null);
-    const fallbackRequestId = headerStore?.get('x-request-id') ?? 'unknown';
-
+    // Reuse the requestId captured at the top of withAuth (audit AI-27).
+    // The previous fallback re-read headers() inside the catch — both
+    // unnecessary (the value is in scope) and fragile.
     logger.error('unhandled_api_error', {
-      requestId: fallbackRequestId,
+      requestId,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });

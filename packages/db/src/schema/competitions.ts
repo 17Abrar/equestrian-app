@@ -11,7 +11,12 @@ import {
   unique,
   index,
 } from 'drizzle-orm/pg-core';
-import { paymentStatusEnum, paymentMethodEnum } from './enums';
+import {
+  paymentStatusEnum,
+  paymentMethodEnum,
+  competitionStatusEnum,
+  competitionEntryStatusEnum,
+} from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 import { horses } from './horses';
@@ -34,7 +39,8 @@ export const competitions = pgTable('competitions', {
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
   registrationDeadline: timestamp('registration_deadline', { withTimezone: true }),
   maxParticipants: integer('max_participants'),
-  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  // Audit AI-36 — promoted to pgEnum so the DB rejects unknown values.
+  status: competitionStatusEnum('status').notNull().default('draft'),
   isActive: boolean('is_active').notNull().default(true),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -82,7 +88,8 @@ export const competitionEntries = pgTable(
       .references(() => clubMembers.id),
     horseId: uuid('horse_id').references(() => horses.id),
 
-    status: varchar('status', { length: 20 }).notNull().default('registered'),
+    // Audit AI-36 — promoted to pgEnum.
+    status: competitionEntryStatusEnum('status').notNull().default('registered'),
     paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
     paymentMethod: paymentMethodEnum('payment_method'),
     amount: integer('amount'),

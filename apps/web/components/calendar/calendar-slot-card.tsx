@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Clock, X, Pencil, Users, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -9,10 +12,26 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { LESSON_TYPE_COLORS } from '@/lib/ui-constants';
 import { getCapacityInfo, CAPACITY_BADGE_CLASSES, CAPACITY_DOT_CLASSES } from '@/lib/capacity';
 import { useUpdateBookingSlot, useCancelBookingSlot, type BookingSlot } from '@/hooks/use-bookings';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+
+// Reschedule form schema. `endTime > startTime` enforced via refine so a
+// 10:00 → 09:00 reschedule (which would zero-duration any booked riders'
+// lessons) gets caught client-side. Audit C-9.
+const rescheduleFormSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),
+    startTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Invalid start time'),
+    endTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Invalid end time'),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: 'End time must be after start time',
+    path: ['endTime'],
+  });
+type RescheduleFormValues = z.infer<typeof rescheduleFormSchema>;
 
 function getSlotColor(lessonType: string): string {
   return LESSON_TYPE_COLORS[lessonType] ?? '#6366f1';
@@ -184,14 +203,19 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
 }
 
 function RescheduleForm({ slot, onSuccess }: { slot: BookingSlot; onSuccess: () => void }) {
-  const [date, setDate] = useState(slot.date);
-  const [startTime, setStartTime] = useState(slot.startTime);
-  const [endTime, setEndTime] = useState(slot.endTime);
   const updateSlot = useUpdateBookingSlot(slot.id);
+  const form = useForm<RescheduleFormValues>({
+    resolver: zodResolver(rescheduleFormSchema),
+    defaultValues: {
+      date: slot.date,
+      startTime: slot.startTime.slice(0, 5),
+      endTime: slot.endTime.slice(0, 5),
+    },
+  });
 
-  async function handleSave() {
+  async function onSubmit(data: RescheduleFormValues) {
     try {
-      await updateSlot.mutateAsync({ date, startTime, endTime });
+      await updateSlot.mutateAsync(data);
       toast.success('Slot rescheduled');
       onSuccess();
     } catch (err) {
@@ -201,29 +225,28 @@ function RescheduleForm({ slot, onSuccess }: { slot: BookingSlot; onSuccess: () 
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="mb-2 text-sm text-muted-foreground">
-          {slot.lessonTypeName} · {slot.currentRiders} rider(s) booked
-        </p>
-      </div>
-      <div>
-        <label className="text-sm font-medium">Date</label>
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Start Time</label>
-          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1" />
+          <p className="mb-2 text-sm text-muted-foreground">
+            {slot.lessonTypeName} · {slot.currentRiders} rider(s) booked
+          </p>
         </div>
-        <div>
-          <label className="text-sm font-medium">End Time</label>
-          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1" />
+        <FormField control={form.control} name="date" render={({ field }) => (
+          <FormItem><FormLabel>Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField control={form.control} name="startTime" render={({ field }) => (
+            <FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
+          )} />
+          <FormField control={form.control} name="endTime" render={({ field }) => (
+            <FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
+          )} />
         </div>
-      </div>
-      <Button onClick={handleSave} className="w-full" disabled={updateSlot.isPending}>
-        {updateSlot.isPending ? 'Saving...' : 'Save Changes'}
-      </Button>
-    </div>
+        <Button type="submit" className="w-full" disabled={updateSlot.isPending}>
+          {updateSlot.isPending ? 'Saving...' : 'Save Changes'}
+        </Button>
+      </form>
+    </Form>
   );
 }

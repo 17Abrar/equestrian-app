@@ -84,7 +84,7 @@ function useRetireHorse() {
         body: JSON.stringify({}),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['me', 'horses'] });
+      void qc.invalidateQueries({ queryKey: ['me', 'horses'] });
     },
   });
 }

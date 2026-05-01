@@ -72,6 +72,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
+      // Permission gate (audit B-1). Accept either the staff `bookings:create`
+      // grant OR the parent `bookings:create_child` grant — the prior
+      // hard-coded `requiredPermission` 403'd parents on their primary
+      // feature. Parents are still constrained to their child below via
+      // the `canBookForOthers` check + rider relationship validation.
+      const canCreateAny = hasPermission(ctx.orgRole, 'bookings:create');
+      const canCreateChild = hasPermission(ctx.orgRole, 'bookings:create_child');
+      if (!canCreateAny && !canCreateChild) {
+        return errorResponse('FORBIDDEN', 'You do not have permission to create bookings', 403);
+      }
+
       const body = await request.json();
       const data = validateInput(createBookingSchema, body);
 
@@ -199,7 +210,11 @@ export async function POST(request: NextRequest) {
           clubId: ctx.clubId,
           code: data.couponCode,
           amount: grossAmount,
+          currency: slot.lessonTypeCurrency,
           riderMemberId: data.riderMemberId,
+          // Audit H-4: pass lesson type so coupons with `applicableTypes`
+          // restriction are honoured.
+          lessonType: slot.lessonTypeType,
         });
 
         if (!couponResult.valid) {
@@ -356,15 +371,18 @@ export async function POST(request: NextRequest) {
       return successResponse(booking, 201);
     },
     {
-      requiredPermission: 'bookings:create',
+      // Permission gate is inline above — accepts both `bookings:create`
+      // (staff) and `bookings:create_child` (parent). Audit B-1.
       // Rate-limit booking creation per user. The /coupons/validate route
       // is rate-limited (10/min, failClosed) to defeat coupon-code
       // enumeration, but a brute-forcer could otherwise just hit this
       // endpoint with `{ slotId, couponCode: 'GUESS_X' }` 1000× and read
       // the success/failure on the booking — see audit B-23. 30/min lets
       // legitimate burst-booking through (e.g. an admin batch-creating)
-      // while still capping the brute-force surface.
-      rateLimit: { maxRequests: 30, windowMs: 60_000 },
+      // while still capping the brute-force surface. failClosed (audit
+      // AI-45) — bookings consume slot capacity; must not be lifted on a
+      // limiter outage.
+      rateLimit: { maxRequests: 30, windowMs: 60_000, failClosed: true },
       routeKey: 'bookings:create',
     },
   );

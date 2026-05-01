@@ -36,23 +36,46 @@ function sanitizeIp(ip: string | undefined): string | null {
  * fire-and-forget (`void ctx.audit(...)`), so the insert must not race the
  * outer transaction's commit, and audits must persist even if the main
  * operation rolls back.
+ *
+ * Audit M-2: wrapped in try/catch so a transient DB blip during a
+ * fire-and-forget audit doesn't surface as an unhandledRejection. The
+ * caller's mutation has already committed by the time we run; if the
+ * audit row can't land we log loudly so observability picks up the
+ * gap.
  */
-export async function createAuditEntry(params: CreateAuditEntryParams) {
-  const [entry] = await rawDb
-    .insert(auditLog)
-    .values({
+export async function createAuditEntry(
+  params: CreateAuditEntryParams,
+): Promise<{ id: string } | null> {
+  try {
+    const [entry] = await rawDb
+      .insert(auditLog)
+      .values({
+        clubId: params.clubId,
+        actorMemberId: params.actorMemberId,
+        action: params.action,
+        resourceType: params.resourceType,
+        resourceId: params.resourceId,
+        changes: params.changes,
+        ipAddress: sanitizeIp(params.ipAddress),
+        userAgent: params.userAgent?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
+      })
+      .returning({ id: auditLog.id });
+
+    return entry ?? null;
+  } catch (err) {
+    // Avoid pulling in the app-side logger here (different package; would
+    // create a circular import). console.error is the audit-trail-of-
+    // last-resort signal — operators monitor this prefix in tail logs.
+    // eslint-disable-next-line no-console
+    console.error('[audit] createAuditEntry failed', {
       clubId: params.clubId,
-      actorMemberId: params.actorMemberId,
       action: params.action,
       resourceType: params.resourceType,
       resourceId: params.resourceId,
-      changes: params.changes,
-      ipAddress: sanitizeIp(params.ipAddress),
-      userAgent: params.userAgent?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
-    })
-    .returning({ id: auditLog.id });
-
-  return entry;
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+    return null;
+  }
 }
 
 export async function getAuditLog(clubId: string, filters: AuditLogFilters) {

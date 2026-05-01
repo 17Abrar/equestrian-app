@@ -4,14 +4,16 @@ import { paginationSchema } from '@equestrian/shared/schemas';
 import { getPaymentsByClub } from '@equestrian/db/queries';
 import { withAuth, paginatedResponse, validateInput } from '@/lib/api-utils';
 
-// Reuse `paginationSchema` (caps `pageSize` at 100) so this route can't
-// be coerced into pulling the full payment ledger via
-// `?pageSize=999999999`. The previous `Number(searchParams.pageSize) || 25`
-// path had no upper bound.
+// Reuse `paginationSchema` (caps `pageSize` at MAX_PAGE_SIZE) so this
+// route can't be coerced into pulling the full payment ledger via
+// `?pageSize=999999999`. Audit AI-32f — status restricted to the actual
+// enum values; date fields locked to YYYY-MM-DD so a malformed value
+// 500s with a 400 instead of crashing the SQL `>=`.
+const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const paymentFiltersSchema = z.object({
-  status: z.string().optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  status: z.enum(['pending', 'paid', 'failed', 'refunded', 'partial']).optional(),
+  dateFrom: z.string().regex(CALENDAR_DATE_RE, 'dateFrom must be YYYY-MM-DD').optional(),
+  dateTo: z.string().regex(CALENDAR_DATE_RE, 'dateTo must be YYYY-MM-DD').optional(),
   ...paginationSchema.shape,
 });
 

@@ -34,8 +34,45 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
 import { readdir, readFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const migrationsDir = path.resolve(here, '..', 'packages', 'db', 'migrations');
+
+// Auto-load .env.local from the repo root if present, so a developer
+// running `pnpm db:migrate:neon` locally doesn't have to remember to
+// prefix the command with `node --env-file=.env.local …`. CI injects
+// env vars directly so the file is absent there and this is a no-op.
+// Each KEY=VALUE line is parsed verbatim — values are NOT shell-expanded
+// (so the `&` in Neon connection strings doesn't break sourcing).
+function loadEnvLocal() {
+  const envPath = path.resolve(here, '..', '.env.local');
+  if (!existsSync(envPath)) return;
+  const content = readFileSync(envPath, 'utf8');
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eqIdx = line.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = line.slice(0, eqIdx).trim();
+    let value = line.slice(eqIdx + 1).trim();
+    // Strip surrounding quotes if the user happened to wrap a value.
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    // Don't override variables already in the environment (CI / explicit
+    // command-line prefixes win).
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+loadEnvLocal();
 
 // Polyfill WebSocket for Node — Neon's serverless driver expects it
 // on `globalThis` (modern Node 22+) or via this config hook (older).
@@ -48,9 +85,6 @@ if (!DATABASE_URL) {
   console.error('error: DATABASE_URL_UNPOOLED (preferred) or DATABASE_URL must be set.');
   process.exit(1);
 }
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const migrationsDir = path.resolve(here, '..', 'packages', 'db', 'migrations');
 
 // Audit H-9: track which migration files have been applied in a side
 // table so a partial-apply (Pool drops mid-file, network blip) doesn't
@@ -166,7 +200,13 @@ function splitStatements(sql) {
  *   42701 duplicate_column
  *   42P16 invalid_table_definition (for ALTER … ADD CONSTRAINT idempotent retry)
  */
-const IDEMPOTENT_ERROR_CODES = new Set(['42710', '42P07', '42P06', '42701']);
+const IDEMPOTENT_ERROR_CODES = new Set([
+  '42710', // duplicate_object — types, casts, operator classes
+  '42P07', // duplicate_table — tables, indexes, views
+  '42P06', // duplicate_schema
+  '42701', // duplicate_column
+  '42P16', // invalid_table_definition — ALTER … ADD CONSTRAINT idempotent retry. Audit L-7.
+]);
 
 async function applyFile(client, file, sql) {
   const statements = splitStatements(sql);

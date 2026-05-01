@@ -5,6 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
 // Plain-text only — no `html` field. A compromised staff account can
@@ -46,6 +47,36 @@ export async function POST(request: NextRequest) {
           'RECIPIENT_NOT_A_MEMBER',
           'You can only email active members of this club.',
           403,
+        );
+      }
+
+      // Per-recipient cool-down (audit AI-23) — same recipient can't be
+      // hit by the same club more than once per 60s, regardless of which
+      // staff member sent it. Bounds the blast radius of a compromised
+      // admin and protects against accidental loops in front-end code.
+      const recipientLimit = await checkRateLimit(
+        `email:recipient:${ctx.clubId}:${data.to.toLowerCase()}`,
+        { maxRequests: 1, windowMs: 60_000 },
+      );
+      if (!recipientLimit.allowed) {
+        return errorResponse(
+          'RECIPIENT_RATE_LIMITED',
+          `Recipient was contacted recently; try again in a minute.`,
+          429,
+        );
+      }
+
+      // Per-club daily cap (audit AI-23) — bound the blast radius of a
+      // compromised admin to 500 sends/day per club.
+      const clubDay = await checkRateLimit(
+        `email:club_day:${ctx.clubId}`,
+        { maxRequests: 500, windowMs: 24 * 60 * 60_000 },
+      );
+      if (!clubDay.allowed) {
+        return errorResponse(
+          'CLUB_DAILY_CAP',
+          'Club has reached the daily 500-email cap; resumes tomorrow.',
+          429,
         );
       }
 

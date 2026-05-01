@@ -74,7 +74,7 @@ function useRegisterHorse() {
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['me', 'horses'] });
+      void qc.invalidateQueries({ queryKey: ['me', 'horses'] });
     },
   });
 }

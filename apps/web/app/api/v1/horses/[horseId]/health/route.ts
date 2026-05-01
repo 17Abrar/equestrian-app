@@ -1,8 +1,14 @@
 import { type NextRequest } from 'next/server';
-import { createHealthRecordSchema } from '@equestrian/shared/schemas';
+import { createHealthRecordSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getClubById, getHealthRecords, createHealthRecord, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  paginatedResponse,
+} from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -14,8 +20,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { horseId } = await params;
       const recordType = request.nextUrl.searchParams.get('recordType') ?? undefined;
-      const records = await getHealthRecords(ctx.clubId, horseId, recordType);
-      return successResponse(records);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: request.nextUrl.searchParams.get('page') ?? undefined,
+        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await getHealthRecords(ctx.clubId, horseId, recordType, {
+        page,
+        pageSize,
+      });
+      return paginatedResponse(items, { page, pageSize, total });
     },
     { requiredPermission: 'horses:read' },
   );

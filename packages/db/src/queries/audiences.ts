@@ -9,12 +9,26 @@ type NewAudience = typeof audiences.$inferInsert;
 type AudienceCreate = Pick<NewAudience, 'name' | 'description' | 'filters'>;
 type AudienceUpdate = Partial<AudienceCreate>;
 
-export async function listAudiences(clubId: string) {
-  return db
-    .select()
-    .from(audiences)
-    .where(eq(audiences.clubId, clubId))
-    .orderBy(desc(audiences.createdAt));
+export async function listAudiences(
+  clubId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const offset = (page - 1) * pageSize;
+  const where = eq(audiences.clubId, clubId);
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(audiences)
+      .where(where)
+      .orderBy(desc(audiences.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(audiences)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function getAudienceById(clubId: string, audienceId: string) {

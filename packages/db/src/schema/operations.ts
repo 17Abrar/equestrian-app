@@ -20,6 +20,33 @@ import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 import { horses } from './horses';
 
+// ─── Typed jsonb shapes (audit AI-43) ────────────────────────────────
+
+/** Per-option vote tally on a community poll post. */
+export interface PollOption {
+  /** Free-form label shown to voters. */
+  label: string;
+  /** Running count, incremented by the vote endpoint. */
+  count: number;
+}
+
+/** Notification `data` payload — discriminated by the row's `type` column.
+ *  Free-form record by design (each notification type has its own keys);
+ *  consumers narrow at read time using the `type` column. */
+export type NotificationData = Record<string, unknown>;
+
+/** Audit-log `changes` payload — produced by the `ctx.audit({ changes })`
+ *  helper in api-utils. Each top-level key is a column name; each value
+ *  carries the before/after state. `unknown` rather than a tighter union
+ *  because audited columns span every table (booking status, fee int,
+ *  paymentStatus enum, etc.) and tightening here would force casts at
+ *  every call site. */
+export interface AuditLogChange {
+  from: unknown;
+  to: unknown;
+}
+export type AuditLogChanges = Record<string, AuditLogChange>;
+
 export const groomTasks = pgTable('groom_tasks', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')
@@ -99,7 +126,9 @@ export const communityPosts = pgTable('community_posts', {
   title: varchar('title', { length: 500 }),
   body: text('body').notNull(),
   mediaUrls: text('media_urls').array(),
-  pollOptions: jsonb('poll_options'),
+  // Audit AI-43 — typed jsonb. Each option carries a free-form label and
+  // a running tally (`count`) updated by the vote endpoint.
+  pollOptions: jsonb('poll_options').$type<PollOption[]>(),
 
   upvotes: integer('upvotes').notNull().default(0),
   downvotes: integer('downvotes').notNull().default(0),
@@ -122,7 +151,15 @@ export const communityComments = pgTable('community_comments', {
   postId: uuid('post_id')
     .notNull()
     .references(() => communityPosts.id, { onDelete: 'cascade' }),
-  parentCommentId: uuid('parent_comment_id'),
+  // Self-referencing FK (audit C-11). Without this, a deleted parent
+  // comment leaves orphan replies pointing at a defunct UUID and the
+  // threaded view renders empty placeholders. ON DELETE CASCADE so a
+  // moderator's hard-delete of a parent removes the entire subtree —
+  // matches the post-level cascade above.
+  parentCommentId: uuid('parent_comment_id').references(
+    (): import('drizzle-orm/pg-core').AnyPgColumn => communityComments.id,
+    { onDelete: 'cascade' },
+  ),
   authorMemberId: uuid('author_member_id')
     .notNull()
     .references(() => clubMembers.id),
@@ -172,7 +209,11 @@ export const notifications = pgTable('notifications', {
   type: varchar('type', { length: 100 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   body: text('body').notNull(),
-  data: jsonb('data'),
+  // Audit AI-43 — typed jsonb. Notification payloads are union-typed by
+  // `type`; consumers narrow at read time. Storing as
+  // `Record<string, JsonValue>` is closer to the contract than `unknown`
+  // and lets the read-side use a discriminated union.
+  data: jsonb('data').$type<NotificationData | null>(),
   isRead: boolean('is_read').notNull().default(false),
   readAt: timestamp('read_at', { withTimezone: true }),
 
@@ -188,13 +229,20 @@ export const notifications = pgTable('notifications', {
 
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().defaultRandom(),
-  clubId: uuid('club_id').references(() => clubs.id),
-  actorMemberId: uuid('actor_member_id').references(() => clubMembers.id),
+  // ON DELETE SET NULL on both club + actor (audit C-12). Schema declares
+  // these nullable so a deleted club / departed member doesn't tear down
+  // the audit trail; previously NO ACTION blocked club deletion entirely.
+  clubId: uuid('club_id').references(() => clubs.id, { onDelete: 'set null' }),
+  actorMemberId: uuid('actor_member_id').references(() => clubMembers.id, {
+    onDelete: 'set null',
+  }),
 
   action: varchar('action', { length: 100 }).notNull(),
   resourceType: varchar('resource_type', { length: 100 }).notNull(),
   resourceId: uuid('resource_id'),
-  changes: jsonb('changes'),
+  // Audit AI-43 — `{ field: { from, to } }` is the canonical shape; the
+  // route helpers (`ctx.audit({ changes })`) already produce it.
+  changes: jsonb('changes').$type<AuditLogChanges | null>(),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
 

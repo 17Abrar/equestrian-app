@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
+import { fetchJson } from '@/lib/fetch-json';
 
 interface PublicClub {
   id: string;
@@ -47,14 +48,15 @@ export function DiscoverClient() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Audit F-10: route through `fetchJson` so the response-shape validator
+  // catches a worker error / non-envelope reply instead of surfacing as
+  // a generic "Failed to load stables".
   const { data, isLoading, isError, refetch } = useQuery<DiscoverResponse>({
     queryKey: ['discover', debouncedSearch],
-    queryFn: async () => {
+    queryFn: () => {
       const params = new URLSearchParams({ pageSize: '24' });
       if (debouncedSearch) params.set('search', debouncedSearch);
-      const res = await fetch(`/api/v1/discover/clubs?${params}`);
-      if (!res.ok) throw new Error('Failed to load stables');
-      return res.json();
+      return fetchJson<DiscoverResponse>(`/api/v1/discover/clubs?${params}`);
     },
   });
 

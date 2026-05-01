@@ -4,6 +4,7 @@ import {
   getCompetitionClassById,
   updateCompetitionClass,
   deleteCompetitionClass,
+  CompetitionClassHasEntriesError,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
@@ -66,7 +67,15 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Class does not belong to this competition', 404);
       }
 
-      const deleted = await deleteCompetitionClass(ctx.clubId, classId);
+      let deleted: { id: string } | null;
+      try {
+        deleted = await deleteCompetitionClass(ctx.clubId, classId);
+      } catch (err) {
+        if (err instanceof CompetitionClassHasEntriesError) {
+          return errorResponse(err.code, err.message, 409);
+        }
+        throw err;
+      }
 
       if (!deleted) {
         return errorResponse('NOT_FOUND', 'Class not found', 404);

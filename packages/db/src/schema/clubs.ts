@@ -9,7 +9,11 @@ import {
   numeric,
   jsonb,
 } from 'drizzle-orm/pg-core';
-import { subscriptionStatusEnum } from './enums';
+import {
+  subscriptionStatusEnum,
+  subscriptionTierEnum,
+  joinPolicyEnum,
+} from './enums';
 
 export interface NotificationPreferences {
   booking_confirmation?: { email: boolean };
@@ -53,13 +57,17 @@ export const clubs = pgTable('clubs', {
   stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
   stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
 
-  // Subscription
-  subscriptionTier: varchar('subscription_tier', { length: 20 }).notNull().default('trial'),
+  // Subscription. Audit AI-36 — tier promoted to pgEnum.
+  subscriptionTier: subscriptionTierEnum('subscription_tier').notNull().default('trial'),
   subscriptionStatus: subscriptionStatusEnum('subscription_status').notNull().default('trialing'),
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+  // Audit AI-32k — default lowered from '3.5' to '0.9' to match the
+  // documented pricing tier. Existing clubs sitting on the legacy '3.5'
+  // are not auto-migrated (would silently change what merchants are
+  // charged); admin tooling surfaces the field for explicit migration.
   platformFeePercent: numeric('platform_fee_percent', { precision: 4, scale: 2 })
     .notNull()
-    .default('3.5'),
+    .default('0.9'),
 
   // Booking settings
   advanceBookingDays: integer('advance_booking_days').notNull().default(30),
@@ -106,9 +114,10 @@ export const clubs = pgTable('clubs', {
   // Onboarding
   onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
 
-  // Public discovery (Round 7 — rider self-signup funnel)
+  // Public discovery (Round 7 — rider self-signup funnel). Audit AI-36 —
+  // joinPolicy promoted to pgEnum.
   isPublicListing: boolean('is_public_listing').notNull().default(false),
-  joinPolicy: varchar('join_policy', { length: 20 }).notNull().default('invite_only'),
+  joinPolicy: joinPolicyEnum('join_policy').notNull().default('invite_only'),
   shortDescription: varchar('short_description', { length: 280 }),
 
   // Metadata

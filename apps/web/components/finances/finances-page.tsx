@@ -140,8 +140,38 @@ function OverviewTab() {
   );
 }
 
+function PaginationControls({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  onChange: (next: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 pt-4">
+      <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+        Previous
+      </Button>
+      <span className="text-sm text-muted-foreground">
+        Page {page} of {totalPages}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page >= totalPages}
+        onClick={() => onChange(page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+}
+
 function InvoicesTab() {
-  const [page, _setPage] = useState(1);
+  const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useInvoices({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -152,33 +182,36 @@ function InvoicesTab() {
   if (invoices.length === 0) return <EmptyState title="No invoices yet" description="Invoices will appear here when created." />;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Invoice #</TableHead>
-          <TableHead>Member</TableHead>
-          <TableHead>Amount</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Due Date</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {invoices.map((inv) => (
-          <TableRow key={inv.id}>
-            <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
-            <TableCell>{inv.memberName ?? 'Unknown'}</TableCell>
-            <TableCell>{formatMoney(inv.totalAmount, inv.currency)}</TableCell>
-            <TableCell><Badge variant="outline">{inv.status}</Badge></TableCell>
-            <TableCell className="text-muted-foreground">{inv.dueDate ?? '—'}</TableCell>
+    <div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Invoice #</TableHead>
+            <TableHead>Member</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Due Date</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {invoices.map((inv) => (
+            <TableRow key={inv.id}>
+              <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
+              <TableCell>{inv.memberName ?? 'Unknown'}</TableCell>
+              <TableCell>{formatMoney(inv.totalAmount, inv.currency)}</TableCell>
+              <TableCell><Badge variant="outline">{inv.status}</Badge></TableCell>
+              <TableCell className="text-muted-foreground">{inv.dueDate ?? '—'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+    </div>
   );
 }
 
 function PaymentsTab() {
-  const [page, _setPage] = useState(1);
+  const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = usePayments({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -189,33 +222,36 @@ function PaymentsTab() {
   if (payments.length === 0) return <EmptyState title="No payments yet" description="Payments will appear here when processed." />;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Member</TableHead>
-          <TableHead>Amount</TableHead>
-          <TableHead>Method</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Date</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {payments.map((p) => (
-          <TableRow key={p.id}>
-            <TableCell className="font-medium">{p.memberName ?? 'Unknown'}</TableCell>
-            <TableCell>{formatMoney(p.amount, p.currency)}</TableCell>
-            <TableCell className="capitalize">{p.paymentMethod?.replace('_', ' ')}</TableCell>
-            <TableCell><Badge className={PAYMENT_STATUS_COLORS[p.status] ?? ''}>{p.status}</Badge></TableCell>
-            <TableCell className="text-muted-foreground">{p.paidAt ? formatDate(p.paidAt) : '—'}</TableCell>
+    <div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead>Method</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Date</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {payments.map((p) => (
+            <TableRow key={p.id}>
+              <TableCell className="font-medium">{p.memberName ?? 'Unknown'}</TableCell>
+              <TableCell>{formatMoney(p.amount, p.currency)}</TableCell>
+              <TableCell className="capitalize">{p.paymentMethod?.replace('_', ' ')}</TableCell>
+              <TableCell><Badge className={PAYMENT_STATUS_COLORS[p.status] ?? ''}>{p.status}</Badge></TableCell>
+              <TableCell className="text-muted-foreground">{p.paidAt ? formatDate(p.paidAt) : '—'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+    </div>
   );
 }
 
 function ExpensesTab() {
-  const [page, _setPage] = useState(1);
+  const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -232,35 +268,38 @@ function ExpensesTab() {
       {expenses.length === 0 ? (
         <EmptyState title="No expenses yet" description="Track your stable expenses here." />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Vendor</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead className="w-[100px] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {expenses.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell>{e.date}</TableCell>
-                <TableCell><Badge variant="outline" className="capitalize">{e.category}</Badge></TableCell>
-                <TableCell className="max-w-[200px] truncate">{e.description}</TableCell>
-                <TableCell className="text-muted-foreground">{e.vendorName ?? '—'}</TableCell>
-                <TableCell className="font-medium">{formatMoney(e.amount, e.currency)}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <EditExpenseDialog expense={e} />
-                    <DeleteExpenseButton expense={e} />
-                  </div>
-                </TableCell>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead className="w-[100px] text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {expenses.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell>{e.date}</TableCell>
+                  <TableCell><Badge variant="outline" className="capitalize">{e.category}</Badge></TableCell>
+                  <TableCell className="max-w-[200px] truncate">{e.description}</TableCell>
+                  <TableCell className="text-muted-foreground">{e.vendorName ?? '—'}</TableCell>
+                  <TableCell className="font-medium">{formatMoney(e.amount, e.currency)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <EditExpenseDialog expense={e} />
+                      <DeleteExpenseButton expense={e} />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+        </>
       )}
     </div>
   );
@@ -341,7 +380,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="amount" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount (AED)</FormLabel>
+                  <FormLabel>Amount</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -464,7 +503,7 @@ function AddExpenseDialog() {
             )} />
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="amount" render={({ field }) => (
-                <FormItem><FormLabel>Amount (AED) *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Amount *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="date" render={({ field }) => (
                 <FormItem><FormLabel>Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
@@ -488,7 +527,7 @@ function CouponsTab() {
   // Coupons don't store a currency column; display fixed-amount discounts
   // in the club's configured currency.
   const currency = settings?.data.currency ?? 'AED';
-  const [page, _setPage] = useState(1);
+  const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: 25 });
 
   if (isLoading) return <Skeleton className="h-64" />;
@@ -512,30 +551,33 @@ function CouponsTab() {
       {coupons.length === 0 ? (
         <EmptyState title="No coupons yet" description="Create promo codes for your riders." />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Discount</TableHead>
-              <TableHead>Usage</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Expires</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {coupons.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell className="font-mono font-bold">{c.code}</TableCell>
-                <TableCell>
-                  {c.discountType === 'percentage' ? `${c.discountValue}%` : formatMoney(c.discountValue, currency)}
-                </TableCell>
-                <TableCell>{c.usageCount}{c.maxUses ? ` / ${c.maxUses}` : ''}</TableCell>
-                <TableCell><Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge></TableCell>
-                <TableCell className="text-muted-foreground">{c.expiresAt ? formatDate(c.expiresAt) : 'Never'}</TableCell>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Discount</TableHead>
+                <TableHead>Usage</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Expires</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {coupons.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-mono font-bold">{c.code}</TableCell>
+                  <TableCell>
+                    {c.discountType === 'percentage' ? `${c.discountValue}%` : formatMoney(c.discountValue, currency)}
+                  </TableCell>
+                  <TableCell>{c.usageCount}{c.maxUses ? ` / ${c.maxUses}` : ''}</TableCell>
+                  <TableCell><Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge></TableCell>
+                  <TableCell className="text-muted-foreground">{c.expiresAt ? formatDate(c.expiresAt) : 'Never'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+        </>
       )}
     </div>
   );
@@ -587,7 +629,7 @@ function AddCouponDialog() {
                 </FormItem>
               )} />
               <FormField control={form.control} name="discountValue" render={({ field }) => (
-                <FormItem><FormLabel>{form.watch('discountType') === 'percentage' ? 'Percentage *' : 'Amount (AED) *'}</FormLabel><FormControl><Input type="number" placeholder={form.watch('discountType') === 'percentage' ? 'e.g. 25' : 'e.g. 50'} {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>{form.watch('discountType') === 'percentage' ? 'Percentage *' : 'Amount *'}</FormLabel><FormControl><Input type="number" placeholder={form.watch('discountType') === 'percentage' ? 'e.g. 25' : 'e.g. 50'} {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <div className="grid grid-cols-2 gap-4">

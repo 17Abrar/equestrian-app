@@ -1,6 +1,8 @@
 // Pagination
 export const DEFAULT_PAGE_SIZE = 25;
-export const MAX_PAGE_SIZE = 100;
+// Audit AI-18 — capped at 50 (down from 100) so a single oversized page
+// can't blow the Worker subrequest budget on a join-heavy list.
+export const MAX_PAGE_SIZE = 50;
 
 // File uploads
 export const MAX_FILE_SIZE_IMAGE = 15 * 1024 * 1024; // 15MB

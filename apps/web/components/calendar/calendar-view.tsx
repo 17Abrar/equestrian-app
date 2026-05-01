@@ -50,8 +50,8 @@ export function CalendarView() {
       <ErrorState
         message={error instanceof Error ? error.message : 'Failed to load calendar'}
         onRetry={() => {
-          slotsQuery.refetch();
-          competitionsQuery.refetch();
+          void slotsQuery.refetch();
+          void competitionsQuery.refetch();
         }}
       />
     );

@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
 import { db } from '../index';
 import {
   horseHealthRecords,
@@ -8,7 +8,34 @@ import {
   horseExerciseSchedules,
   horseDocuments,
 } from '../schema/horse-health';
+import { horses } from '../schema/horses';
 import { decryptFields, encryptFields } from '../crypto';
+
+/**
+ * Soft-delete gate for every read/write in this file (audit AI-22 / KP-1).
+ * After softDeleteHorse, the horse_health_records / medications / etc. rows
+ * remain on disk but must not be reachable via any horse-scoped GET or POST
+ * — the buyer of a transferred horse, or a GDPR-style deletion request,
+ * would otherwise see medical history surface in the new owner's UI.
+ *
+ * Returns true if the parent horse exists, belongs to this club, and is
+ * not soft-deleted; false otherwise. Read functions that join `horses`
+ * directly (with the same predicate) don't need this — write functions do.
+ */
+async function isHorseActiveInClub(clubId: string, horseId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: horses.id })
+    .from(horses)
+    .where(
+      and(
+        eq(horses.id, horseId),
+        eq(horses.clubId, clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
 
 // Columns on horse_health_records that contain regulated medical content.
 // Stored encrypted at rest; decrypted only in the query layer.
@@ -44,7 +71,16 @@ type DocumentCreate = Omit<NewDocument, 'id' | 'clubId' | 'horseId' | 'createdAt
 
 // ─── Health Records ───────────────────────────────────────────────────
 
-export async function getHealthRecords(clubId: string, horseId: string, recordType?: string) {
+export async function getHealthRecords(
+  clubId: string,
+  horseId: string,
+  recordType: string | undefined,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  // Soft-delete gate (audit AI-22). Returns empty rather than null so
+  // route handlers don't need to special-case the deleted-horse path.
+  if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
+
   const conditions: SQL[] = [
     eq(horseHealthRecords.clubId, clubId),
     eq(horseHealthRecords.horseId, horseId),
@@ -54,21 +90,30 @@ export async function getHealthRecords(clubId: string, horseId: string, recordTy
     conditions.push(sql`${horseHealthRecords.recordType} = ${recordType}`);
   }
 
-  // Defensive cap (audit G-11). Long-lived horses can accumulate
-  // hundreds of records; the route renders all in one tab. 500 is well
-  // beyond any realistic dataset and keeps a malicious admin loop from
-  // OOMing the Worker isolate.
-  const rows = await db
-    .select()
-    .from(horseHealthRecords)
-    .where(and(...conditions))
-    .orderBy(desc(horseHealthRecords.date))
-    .limit(500);
+  const where = and(...conditions);
+  const offset = (page - 1) * pageSize;
+  const [rows, count] = await Promise.all([
+    db
+      .select()
+      .from(horseHealthRecords)
+      .where(where)
+      .orderBy(desc(horseHealthRecords.date))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horseHealthRecords)
+      .where(where),
+  ]);
 
-  return rows.map((row) => decryptFields(row, HEALTH_ENCRYPTED_FIELDS));
+  return {
+    items: rows.map((row) => decryptFields(row, HEALTH_ENCRYPTED_FIELDS)),
+    total: count[0]?.count ?? 0,
+  };
 }
 
 export async function createHealthRecord(clubId: string, horseId: string, data: HealthRecordCreate) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const encrypted = encryptFields(data, HEALTH_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseHealthRecords)
@@ -79,6 +124,9 @@ export async function createHealthRecord(clubId: string, horseId: string, data: 
 }
 
 export async function deleteHealthRecord(clubId: string, horseId: string, recordId: string) {
+  // No soft-delete gate here — admins must still be able to remove records
+  // from soft-deleted horses (e.g. correcting a wrongly-attributed entry
+  // before the horse row itself is purged).
   const result = await db
     .delete(horseHealthRecords)
     .where(
@@ -94,7 +142,14 @@ export async function deleteHealthRecord(clubId: string, horseId: string, record
 
 // ─── Medications ──────────────────────────────────────────────────────
 
-export async function getMedications(clubId: string, horseId: string, activeOnly = false) {
+export async function getMedications(
+  clubId: string,
+  horseId: string,
+  activeOnly: boolean,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
+
   const conditions: SQL[] = [
     eq(horseMedications.clubId, clubId),
     eq(horseMedications.horseId, horseId),
@@ -104,18 +159,30 @@ export async function getMedications(clubId: string, horseId: string, activeOnly
     conditions.push(eq(horseMedications.isActive, true));
   }
 
-  // Defensive cap (audit G-11).
-  const rows = await db
-    .select()
-    .from(horseMedications)
-    .where(and(...conditions))
-    .orderBy(desc(horseMedications.createdAt))
-    .limit(500);
+  const where = and(...conditions);
+  const offset = (page - 1) * pageSize;
+  const [rows, count] = await Promise.all([
+    db
+      .select()
+      .from(horseMedications)
+      .where(where)
+      .orderBy(desc(horseMedications.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horseMedications)
+      .where(where),
+  ]);
 
-  return rows.map((row) => decryptFields(row, MEDICATION_ENCRYPTED_FIELDS));
+  return {
+    items: rows.map((row) => decryptFields(row, MEDICATION_ENCRYPTED_FIELDS)),
+    total: count[0]?.count ?? 0,
+  };
 }
 
 export async function createMedication(clubId: string, horseId: string, data: MedicationCreate) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const encrypted = encryptFields(data, MEDICATION_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseMedications)
@@ -131,6 +198,7 @@ export async function updateMedication(
   medicationId: string,
   data: Partial<MedicationCreate>,
 ) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const encrypted = encryptFields(data, MEDICATION_ENCRYPTED_FIELDS);
   const result = await db
     .update(horseMedications)
@@ -158,6 +226,7 @@ export async function updateMedication(
  * club".
  */
 export async function getMedicationByIds(clubId: string, horseId: string, medicationId: string) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const result = await db
     .select({ id: horseMedications.id })
     .from(horseMedications)
@@ -172,25 +241,37 @@ export async function getMedicationByIds(clubId: string, horseId: string, medica
   return result[0] ?? null;
 }
 
-export async function getMedicationLogs(clubId: string, horseId: string, medicationId: string) {
-  // Defensive cap (audit G-11) — a horse on a long-term medication
-  // accumulates one log entry per administration; over years that's
-  // thousands of rows even at one-per-week.
-  return db
-    .select()
-    .from(horseMedicationLogs)
-    .where(
-      and(
-        eq(horseMedicationLogs.clubId, clubId),
-        eq(horseMedicationLogs.horseId, horseId),
-        eq(horseMedicationLogs.medicationId, medicationId),
-      ),
-    )
-    .orderBy(desc(horseMedicationLogs.administeredAt))
-    .limit(500);
+export async function getMedicationLogs(
+  clubId: string,
+  horseId: string,
+  medicationId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
+  const where = and(
+    eq(horseMedicationLogs.clubId, clubId),
+    eq(horseMedicationLogs.horseId, horseId),
+    eq(horseMedicationLogs.medicationId, medicationId),
+  );
+  const offset = (page - 1) * pageSize;
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(horseMedicationLogs)
+      .where(where)
+      .orderBy(desc(horseMedicationLogs.administeredAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horseMedicationLogs)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function createMedicationLog(clubId: string, horseId: string, data: MedicationLogCreate) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const result = await db
     .insert(horseMedicationLogs)
     .values({ ...data, clubId, horseId })
@@ -200,18 +281,35 @@ export async function createMedicationLog(clubId: string, horseId: string, data:
 
 // ─── Feeding Plans ────────────────────────────────────────────────────
 
-export async function getFeedingPlans(clubId: string, horseId: string) {
-  // Defensive cap (audit G-11) — feeding plans are meal-times-per-day,
-  // realistically <10 rows. 100 is generous defensive bound.
-  return db
-    .select()
-    .from(horseFeedingPlans)
-    .where(and(eq(horseFeedingPlans.clubId, clubId), eq(horseFeedingPlans.horseId, horseId)))
-    .orderBy(asc(horseFeedingPlans.timeOfDay))
-    .limit(100);
+export async function getFeedingPlans(
+  clubId: string,
+  horseId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
+  const where = and(
+    eq(horseFeedingPlans.clubId, clubId),
+    eq(horseFeedingPlans.horseId, horseId),
+  );
+  const offset = (page - 1) * pageSize;
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(horseFeedingPlans)
+      .where(where)
+      .orderBy(asc(horseFeedingPlans.timeOfDay))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horseFeedingPlans)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function createFeedingPlan(clubId: string, horseId: string, data: FeedingPlanCreate) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const values = {
     ...data,
     quantityKg: data.quantityKg != null ? String(data.quantityKg) : null,
@@ -228,6 +326,7 @@ export async function updateFeedingPlan(
   planId: string,
   data: Partial<FeedingPlanCreate>,
 ) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const values = {
     ...data,
     ...(data.quantityKg != null ? { quantityKg: String(data.quantityKg) } : {}),
@@ -248,6 +347,7 @@ export async function updateFeedingPlan(
 }
 
 export async function deleteFeedingPlan(clubId: string, horseId: string, planId: string) {
+  // Allow deletes against soft-deleted horses (admin cleanup pre-purge).
   const result = await db
     .delete(horseFeedingPlans)
     .where(
@@ -263,17 +363,35 @@ export async function deleteFeedingPlan(clubId: string, horseId: string, planId:
 
 // ─── Exercise Schedules ───────────────────────────────────────────────
 
-export async function getExerciseSchedules(clubId: string, horseId: string) {
-  // Defensive cap (audit G-11) — at most 7 days × 24 hour blocks ~= 168.
-  return db
-    .select()
-    .from(horseExerciseSchedules)
-    .where(and(eq(horseExerciseSchedules.clubId, clubId), eq(horseExerciseSchedules.horseId, horseId)))
-    .orderBy(asc(horseExerciseSchedules.dayOfWeek))
-    .limit(200);
+export async function getExerciseSchedules(
+  clubId: string,
+  horseId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
+  const where = and(
+    eq(horseExerciseSchedules.clubId, clubId),
+    eq(horseExerciseSchedules.horseId, horseId),
+  );
+  const offset = (page - 1) * pageSize;
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(horseExerciseSchedules)
+      .where(where)
+      .orderBy(asc(horseExerciseSchedules.dayOfWeek))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horseExerciseSchedules)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function createExerciseSchedule(clubId: string, horseId: string, data: ExerciseCreate) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const result = await db
     .insert(horseExerciseSchedules)
     .values({ ...data, clubId, horseId })
@@ -287,6 +405,7 @@ export async function updateExerciseSchedule(
   scheduleId: string,
   data: Partial<ExerciseCreate>,
 ) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const result = await db
     .update(horseExerciseSchedules)
     .set({ ...data, updatedAt: new Date() })
@@ -302,6 +421,7 @@ export async function updateExerciseSchedule(
 }
 
 export async function deleteExerciseSchedule(clubId: string, horseId: string, scheduleId: string) {
+  // Allow deletes against soft-deleted horses (admin cleanup pre-purge).
   const result = await db
     .delete(horseExerciseSchedules)
     .where(
@@ -317,7 +437,14 @@ export async function deleteExerciseSchedule(clubId: string, horseId: string, sc
 
 // ─── Documents ────────────────────────────────────────────────────────
 
-export async function getDocuments(clubId: string, horseId: string, category?: string) {
+export async function getDocuments(
+  clubId: string,
+  horseId: string,
+  category: string | undefined,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
+
   const conditions: SQL[] = [
     eq(horseDocuments.clubId, clubId),
     eq(horseDocuments.horseId, horseId),
@@ -327,17 +454,26 @@ export async function getDocuments(clubId: string, horseId: string, category?: s
     conditions.push(sql`${horseDocuments.category} = ${category}`);
   }
 
-  // Defensive cap (audit G-11). Vet records, x-rays, and horse passports
-  // accumulate over time; 500 is comfortably above any realistic horse.
-  return db
-    .select()
-    .from(horseDocuments)
-    .where(and(...conditions))
-    .orderBy(desc(horseDocuments.createdAt))
-    .limit(500);
+  const where = and(...conditions);
+  const offset = (page - 1) * pageSize;
+  const [items, count] = await Promise.all([
+    db
+      .select()
+      .from(horseDocuments)
+      .where(where)
+      .orderBy(desc(horseDocuments.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(horseDocuments)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function createDocument(clubId: string, horseId: string, data: DocumentCreate) {
+  if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const result = await db
     .insert(horseDocuments)
     .values({ ...data, clubId, horseId })
@@ -346,6 +482,7 @@ export async function createDocument(clubId: string, horseId: string, data: Docu
 }
 
 export async function deleteDocument(clubId: string, horseId: string, documentId: string) {
+  // Allow deletes against soft-deleted horses (admin cleanup pre-purge).
   const result = await db
     .delete(horseDocuments)
     .where(

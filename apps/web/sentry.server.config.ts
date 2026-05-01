@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from './lib/sentry-shared';
+import { scrubSentryBreadcrumb, scrubSentryEvent } from './lib/sentry-shared';
 
 // Runs on every server-rendered request and inside API routes.
 // Sentry.init is a no-op if SENTRY_DSN is unset, so it's safe to ship
@@ -20,4 +20,8 @@ Sentry.init({
   // plus Clerk `__session` cookies on the URL of any 500 hit during sign-in.
   // Shared with the edge config so middleware-thrown 500s scrub identically.
   beforeSend: scrubSentryEvent,
+  // Audit H-8: scrub breadcrumbs at collection time — many integrations
+  // attach query strings to `breadcrumb.message`, which the event-level
+  // scrub historically missed.
+  beforeBreadcrumb: scrubSentryBreadcrumb,
 });

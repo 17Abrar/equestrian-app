@@ -16,7 +16,11 @@ type MemberUpdate = Partial<Omit<MemberCreate, 'clerkUserId'>>;
  * literal pass-through would silently return zero rows — the dropdowns
  * that omit the `role` query param were rendering empty for that reason.
  */
-export async function getMembersByRole(clubId: string, roles: string[]) {
+export async function getMembersByRole(
+  clubId: string,
+  roles: string[],
+  { page, pageSize }: { page: number; pageSize: number },
+) {
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
     eq(clubMembers.isActive, true),
@@ -26,19 +30,32 @@ export async function getMembersByRole(clubId: string, roles: string[]) {
     conditions.push(sql`${clubMembers.role} = ANY(${roles})`);
   }
 
-  return db
-    .select({
-      id: clubMembers.id,
-      clerkUserId: clubMembers.clerkUserId,
-      role: clubMembers.role,
-      displayName: clubMembers.displayName,
-      email: clubMembers.email,
-      phone: clubMembers.phone,
-      isActive: clubMembers.isActive,
-    })
-    .from(clubMembers)
-    .where(and(...conditions))
-    .orderBy(asc(clubMembers.displayName));
+  const where = and(...conditions);
+  const offset = (page - 1) * pageSize;
+
+  const [items, count] = await Promise.all([
+    db
+      .select({
+        id: clubMembers.id,
+        clerkUserId: clubMembers.clerkUserId,
+        role: clubMembers.role,
+        displayName: clubMembers.displayName,
+        email: clubMembers.email,
+        phone: clubMembers.phone,
+        isActive: clubMembers.isActive,
+      })
+      .from(clubMembers)
+      .where(where)
+      .orderBy(asc(clubMembers.displayName))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(clubMembers)
+      .where(where),
+  ]);
+
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 interface StaffFilters {
@@ -142,10 +159,21 @@ export async function updateMember(clubId: string, memberId: string, data: Membe
   return result[0] ?? null;
 }
 
+/**
+ * Admin-driven deactivation. Audit J-1 — stamps `deactivatedByAdminAt`
+ * so `joinClubInstantly` can refuse a rejoin attempt by the kicked
+ * member. Voluntary-leave flows (none today; future "leave club"
+ * button) should write `is_active = false` WITHOUT setting this column,
+ * preserving the rider's ability to come back.
+ */
 export async function deactivateMember(clubId: string, memberId: string) {
   const result = await db
     .update(clubMembers)
-    .set({ isActive: false, updatedAt: new Date() })
+    .set({
+      isActive: false,
+      deactivatedByAdminAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(and(eq(clubMembers.id, memberId), eq(clubMembers.clubId, clubId)))
     .returning({ id: clubMembers.id });
   return result[0] ?? null;

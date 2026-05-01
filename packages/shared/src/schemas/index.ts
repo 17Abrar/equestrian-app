@@ -50,6 +50,11 @@ export const paginationSchema = z.object({
 export type PaginationInput = z.infer<typeof paginationSchema>;
 
 // ─── Horses ────────────────────────────────────────────────────────────
+// Audit H-1, H-2, H-3: every create/update schema below uses `.strict()`
+// so unknown keys raise a 422 instead of being silently stripped. Without
+// strict, a `clubId` or `ownerMemberId` smuggled into the body would be
+// dropped today — fine — but the moment a future column with the same
+// name is added to the row insert it becomes mass-assignment.
 
 export const createHorseSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
@@ -98,7 +103,7 @@ export const createHorseSchema = z.object({
   photoUrls: z.array(z.string().url().max(2000)).max(20).optional(),
   notes: z.string().max(2000).optional(),
   ownerMemberId: z.string().uuid().optional(),
-});
+}).strict();
 
 /** Input type for forms — fields with .default() are optional */
 export type CreateHorseFormValues = z.input<typeof createHorseSchema>;
@@ -367,20 +372,24 @@ export type BookingFiltersInput = z.infer<typeof bookingFiltersSchema>;
 
 const COMPETITION_STATUSES = ['draft', 'published', 'in_progress', 'completed', 'cancelled'] as const;
 
-export const createCompetitionSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255),
-  description: z.string().max(2000).optional(),
-  startDate: z.string().max(50).min(1, 'Start date is required'),
-  endDate: z.string().max(50).min(1, 'End date is required'),
-  location: z.string().max(500).optional(),
-  arenaId: z.string().uuid().optional(),
-  disciplines: z.array(z.string().max(100)).max(50).optional(),
-  entryFee: optionalNumeric(z.number().int().min(0)),
-  currency: z.string().length(3).default('AED'),
-  registrationDeadline: z.string().max(50).optional(),
-  maxParticipants: optionalNumeric(z.number().int().positive()),
-  status: z.enum(COMPETITION_STATUSES).default('draft'),
-});
+// `.strict()` for parity with update schemas — unknown keys 422 instead
+// of being silently stripped (audit AI-32c).
+export const createCompetitionSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    description: z.string().max(2000).optional(),
+    startDate: z.string().max(50).min(1, 'Start date is required'),
+    endDate: z.string().max(50).min(1, 'End date is required'),
+    location: z.string().max(500).optional(),
+    arenaId: z.string().uuid().optional(),
+    disciplines: z.array(z.string().max(100)).max(50).optional(),
+    entryFee: optionalNumeric(z.number().int().min(0)),
+    currency: z.string().length(3).default('AED'),
+    registrationDeadline: z.string().max(50).optional(),
+    maxParticipants: optionalNumeric(z.number().int().positive()),
+    status: z.enum(COMPETITION_STATUSES).default('draft'),
+  })
+  .strict();
 
 export type CreateCompetitionFormValues = z.input<typeof createCompetitionSchema>;
 export type CreateCompetitionInput = z.output<typeof createCompetitionSchema>;
@@ -410,7 +419,7 @@ export const createCompetitionClassSchema = z.object({
 
 export type CreateCompetitionClassInput = z.output<typeof createCompetitionClassSchema>;
 
-export const updateCompetitionClassSchema = createCompetitionClassSchema.partial();
+export const updateCompetitionClassSchema = createCompetitionClassSchema.partial().strict();
 
 const PAYMENT_METHODS = [
   'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
@@ -568,15 +577,18 @@ export type UpdateOwnerInput = z.output<typeof updateOwnerSchema>;
 
 // ─── Finances ─────────────────────────────────────────────────────────
 
-export const createExpenseSchema = z.object({
-  category: z.string().min(1).max(100),
-  description: z.string().min(1).max(2000),
-  amount: numericField(z.number().positive()),
-  currency: z.string().length(3).default('AED'),
-  date: z.string().max(50).min(1, 'Date is required'),
-  horseId: z.string().uuid().optional(),
-  vendorName: z.string().max(255).optional(),
-});
+// `.strict()` (audit AI-32c) — see createCompetitionSchema rationale.
+export const createExpenseSchema = z
+  .object({
+    category: z.string().min(1).max(100),
+    description: z.string().min(1).max(2000),
+    amount: numericField(z.number().positive()),
+    currency: z.string().length(3).default('AED'),
+    date: z.string().max(50).min(1, 'Date is required'),
+    horseId: z.string().uuid().optional(),
+    vendorName: z.string().max(255).optional(),
+  })
+  .strict();
 
 export type CreateExpenseFormValues = z.input<typeof createExpenseSchema>;
 export type CreateExpenseInput = z.output<typeof createExpenseSchema>;
@@ -607,19 +619,55 @@ export const invoiceFiltersSchema = z.object({
 
 export type InvoiceFiltersInput = z.output<typeof invoiceFiltersSchema>;
 
-export const createCouponSchema = z.object({
-  code: z.string().min(1).max(50).transform((v) => v.toUpperCase()),
-  discountType: z.enum(['percentage', 'fixed']),
-  discountValue: numericField(z.number().positive()),
-  maxDiscount: optionalNumeric(z.number().positive()),
-  minimumAmount: optionalNumeric(z.number().int()),
-  maxUses: optionalNumeric(z.number().int().positive()),
-  maxUsesPerRider: optionalNumeric(z.number().int().positive()),
-  firstTimeOnly: z.boolean().default(false),
-  isStackable: z.boolean().default(false),
-  startsAt: z.string().max(50).optional(),
-  expiresAt: z.string().max(50).optional(),
-});
+// Base ZodObject — used for `.partial().strict()` on the update schema.
+// The update route can't apply `.partial()` directly on the refined version
+// because superRefine returns ZodEffects (not ZodObject). Audit AI-21/AI-24/AI-32c.
+export const couponBaseSchema = z
+  .object({
+    code: z.string().min(1).max(50).transform((v) => v.toUpperCase()),
+    discountType: z.enum(['percentage', 'fixed']),
+    // Stored as integer; for 'percentage' the unit is whole percent points
+    // (1–100), for 'fixed' the unit is minor currency units (fils/cents).
+    // The percentage cap is enforced in `couponPercentageRefine`.
+    discountValue: numericField(z.number().int().positive()),
+    // Cap on the absolute discount in minor units. Optional for fixed
+    // (the value itself is the cap); meaningful for percentage to bound
+    // a percent on a large order.
+    maxDiscount: optionalNumeric(z.number().int().positive()),
+    minimumAmount: optionalNumeric(z.number().int().nonnegative()),
+    maxUses: optionalNumeric(z.number().int().positive()),
+    maxUsesPerRider: optionalNumeric(z.number().int().positive()),
+    firstTimeOnly: z.boolean().default(false),
+    isStackable: z.boolean().default(false),
+    startsAt: z.string().max(50).optional(),
+    expiresAt: z.string().max(50).optional(),
+  })
+  // `.strict()` for parity with update schemas — unknown keys 422
+  // instead of being silently stripped (audit AI-32c).
+  .strict();
+
+// Reusable refine: percentage discounts must be in [1,100]. Hoisted so the
+// update route can compose .partial().superRefine(couponPercentageRefine).
+function couponPercentageRefine<
+  T extends { discountType?: 'percentage' | 'fixed'; discountValue?: number },
+>(data: T, ctx: z.RefinementCtx): void {
+  if (
+    data.discountType === 'percentage' &&
+    typeof data.discountValue === 'number' &&
+    data.discountValue > 100
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['discountValue'],
+      message: 'Percentage discount must be between 1 and 100',
+    });
+  }
+}
+
+export const createCouponSchema = couponBaseSchema.superRefine(couponPercentageRefine);
+// Re-exported so the update route in app/api/v1/finances/coupons/[couponId]
+// can compose `.partial().strict().superRefine(couponPercentageRefine)`.
+export { couponPercentageRefine };
 
 export type CreateCouponFormValues = z.input<typeof createCouponSchema>;
 export type CreateCouponInput = z.output<typeof createCouponSchema>;
@@ -631,24 +679,27 @@ const HEALTH_RECORD_TYPES = [
   'injury', 'condition', 'allergy', 'farrier', 'other',
 ] as const;
 
-export const createHealthRecordSchema = z.object({
-  recordType: z.string().min(1).max(50),
-  title: z.string().min(1, 'Title is required').max(255),
-  description: z.string().max(2000).optional(),
-  date: z.string().max(50).min(1, 'Date is required'),
-  nextDueDate: z.string().max(50).optional(),
-  vetName: z.string().max(255).optional(),
-  vetClinic: z.string().max(255).optional(),
-  diagnosis: z.string().max(5000).optional(),
-  treatment: z.string().max(5000).optional(),
-  cost: optionalNumeric(z.number().int().min(0)),
-  recoveryTimeDays: optionalNumeric(z.number().int().min(0)),
-  followUpNeeded: z.boolean().default(false),
-  followUpDate: z.string().max(50).optional(),
-  batchNumber: z.string().max(100).optional(),
-  productUsed: z.string().max(255).optional(),
-  documentUrls: z.array(z.string().url().max(2000)).max(20).optional(),
-});
+// `.strict()` (audit AI-32c) — see createCompetitionSchema rationale.
+export const createHealthRecordSchema = z
+  .object({
+    recordType: z.string().min(1).max(50),
+    title: z.string().min(1, 'Title is required').max(255),
+    description: z.string().max(2000).optional(),
+    date: z.string().max(50).min(1, 'Date is required'),
+    nextDueDate: z.string().max(50).optional(),
+    vetName: z.string().max(255).optional(),
+    vetClinic: z.string().max(255).optional(),
+    diagnosis: z.string().max(5000).optional(),
+    treatment: z.string().max(5000).optional(),
+    cost: optionalNumeric(z.number().int().min(0)),
+    recoveryTimeDays: optionalNumeric(z.number().int().min(0)),
+    followUpNeeded: z.boolean().default(false),
+    followUpDate: z.string().max(50).optional(),
+    batchNumber: z.string().max(100).optional(),
+    productUsed: z.string().max(255).optional(),
+    documentUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+  })
+  .strict();
 
 export type CreateHealthRecordFormValues = z.input<typeof createHealthRecordSchema>;
 export type CreateHealthRecordInput = z.output<typeof createHealthRecordSchema>;
@@ -691,7 +742,7 @@ export const createFeedingPlanSchema = z.object({
 
 export type CreateFeedingPlanFormValues = z.input<typeof createFeedingPlanSchema>;
 export type CreateFeedingPlanInput = z.output<typeof createFeedingPlanSchema>;
-export const updateFeedingPlanSchema = createFeedingPlanSchema.partial();
+export const updateFeedingPlanSchema = createFeedingPlanSchema.partial().strict();
 
 export const createExerciseScheduleSchema = z.object({
   dayOfWeek: numericField(z.number().int().min(0).max(6)),
@@ -703,7 +754,7 @@ export const createExerciseScheduleSchema = z.object({
 
 export type CreateExerciseScheduleFormValues = z.input<typeof createExerciseScheduleSchema>;
 export type CreateExerciseScheduleInput = z.output<typeof createExerciseScheduleSchema>;
-export const updateExerciseScheduleSchema = createExerciseScheduleSchema.partial();
+export const updateExerciseScheduleSchema = createExerciseScheduleSchema.partial().strict();
 
 const FILE_CATEGORIES = [
   'medical_report', 'blood_test', 'xray', 'competition_result',

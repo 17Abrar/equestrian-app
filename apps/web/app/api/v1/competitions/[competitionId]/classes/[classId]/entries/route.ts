@@ -1,11 +1,17 @@
 import { type NextRequest } from 'next/server';
-import { createCompetitionEntrySchema } from '@equestrian/shared/schemas';
+import { createCompetitionEntrySchema, paginationSchema } from '@equestrian/shared/schemas';
 import {
   getCompetitionClassById,
   getCompetitionEntries,
   createCompetitionEntry,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  paginatedResponse,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -33,14 +39,21 @@ async function assertClassBelongsToCompetition(
   return null;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId, classId } = await params;
       const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
       if (mismatch) return mismatch;
-      const entries = await getCompetitionEntries(ctx.clubId, classId);
-      return successResponse(entries);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: request.nextUrl.searchParams.get('page') ?? undefined,
+        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await getCompetitionEntries(ctx.clubId, classId, {
+        page,
+        pageSize,
+      });
+      return paginatedResponse(items, { page, pageSize, total });
     },
     { requiredPermission: 'competitions:read' },
   );

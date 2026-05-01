@@ -46,22 +46,10 @@ test.describe('public endpoints', () => {
     expect(typeof body.pagination.total).toBe('number');
   });
 
-  test('rate limit on /api/v1/health kicks in after sustained traffic', async ({ request }) => {
-    // 121 requests in a tight loop should trigger the 120/min cap.
-    // Marked `slow()` so Playwright's default 30s timeout doesn't bite
-    // on a cold-start prod isolate.
-    test.slow();
-    const results: number[] = [];
-    for (let i = 0; i < 130; i += 1) {
-      const res = await request.get('/api/v1/health');
-      results.push(res.status());
-      if (res.status() === 429) break;
-    }
-    // We don't assert exactly when 429 fires — Cloudflare's edge can
-    // route requests across multiple isolates so the per-isolate
-    // counter takes a few extra hits to converge in dev. Just verify
-    // we hit the cap eventually.
-    const got429 = results.includes(429);
-    expect(got429).toBe(true);
-  });
+  // Rate-limit assertion moved to a unit test (audit H-6). Hitting
+  // /api/v1/health 130× nightly polluted the prod rate-limit counter
+  // for the GitHub Actions egress IP — other CI jobs from the same NAT
+  // pool then saw 429s for ~60s afterward. The unit test against
+  // `lib/rate-limit.ts` with a mocked Upstash gives the same coverage
+  // without the side effect.
 });

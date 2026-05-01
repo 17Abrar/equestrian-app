@@ -98,12 +98,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const refundedSoFar = booking.refundedAmountMinor ?? 0;
-      const remaining = booking.amount - refundedSoFar;
+      // Cancellation/no-show fees are owed to the club out of the original
+      // amount and must NOT be returned to the rider on refund. Audit AI-24.
+      const cancellationFee = booking.cancellationFee ?? 0;
+      const remaining = booking.amount - refundedSoFar - cancellationFee;
 
       if (remaining <= 0) {
         return errorResponse(
           'NOTHING_TO_REFUND',
-          'Booking is already fully refunded.',
+          cancellationFee > 0 && refundedSoFar === 0
+            ? 'Booking is fully consumed by the cancellation/no-show fee.'
+            : 'Booking is already fully refunded.',
           422,
         );
       }
@@ -166,7 +171,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // lock read and now would lower refundedSoFar — that's fine,
           // the rider just has more refundable headroom. A second-admin
           // refund that landed first would raise it; recompute remaining.
-          const liveRemaining = (booking.amount ?? 0) - liveSoFar;
+          // cancellationFee is immutable once set by markBookingNoShow/
+          // cancelBooking, so the pre-lock read remains authoritative —
+          // audit AI-24.
+          const liveRemaining = (booking.amount ?? 0) - liveSoFar - cancellationFee;
           if (liveRemaining <= 0) {
             return { kind: 'nothing-to-refund' as const };
           }
@@ -269,7 +277,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           status: result.refund.status,
           partial: result.updated.paymentStatus === 'partial',
           refundedAmountMinor: result.updated.refundedAmountMinor,
-          remainingRefundableMinor: (booking.amount ?? 0) - result.updated.refundedAmountMinor,
+          remainingRefundableMinor:
+            (booking.amount ?? 0) - result.updated.refundedAmountMinor - cancellationFee,
         });
       } catch (err) {
         if (err instanceof PaymentProviderError) {
@@ -285,7 +294,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         throw err;
       }
     },
-    { requiredPermission: 'bookings:update' },
+    {
+      requiredPermission: 'bookings:update',
+      // Audit AI-22 — refunds call the provider's refund API and write
+      // the booking ledger; tighten from the default 60/min so a runaway
+      // admin script can't drain the provider's idempotency space.
+      // failClosed (audit AI-45) — money-moving endpoint, an Upstash
+      // outage must not lift the cap.
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'booking_refund',
+    },
   );
 }
 

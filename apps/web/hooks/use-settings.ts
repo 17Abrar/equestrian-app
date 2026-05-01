@@ -2,6 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import {
+  type UpdateClubProfileInput,
+  type UpdateBrandingInput,
+  type UpdateNotificationsInput,
+  type UpdateDiscoveryInput,
+  type UpdateBookingRulesInput,
+} from '@equestrian/shared/schemas';
 import { fetchJson } from '@/lib/fetch-json';
 
 export interface NotificationPreferences {
@@ -69,18 +76,28 @@ export function useClubSettings() {
   });
 }
 
+// Audit AI-25 — union of every settings sub-schema accepted by the
+// PATCH /api/v1/settings handler. Replaces the previous
+// `Record<string, unknown>` that admitted any payload shape.
+export type UpdateSettingsInput =
+  | UpdateClubProfileInput
+  | UpdateBrandingInput
+  | UpdateNotificationsInput
+  | UpdateDiscoveryInput
+  | UpdateBookingRulesInput;
+
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+    mutationFn: (data: UpdateSettingsInput) =>
       fetchJson<ApiSuccessResponse<ClubSettings>>('/api/v1/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
   });
 }

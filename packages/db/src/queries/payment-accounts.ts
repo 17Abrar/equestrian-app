@@ -96,14 +96,27 @@ function toWithCredentials(row: PaymentAccountRow): PaymentAccountWithCredential
 }
 
 /** Lists every payment account for a club — for settings / connected-accounts UI. */
-export async function listPaymentAccounts(clubId: string): Promise<PaymentAccountSummary[]> {
-  const rows = await db
-    .select()
-    .from(clubPaymentAccounts)
-    .where(eq(clubPaymentAccounts.clubId, clubId))
-    .orderBy(asc(clubPaymentAccounts.provider));
+export async function listPaymentAccounts(
+  clubId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+): Promise<{ items: PaymentAccountSummary[]; total: number }> {
+  const offset = (page - 1) * pageSize;
+  const where = eq(clubPaymentAccounts.clubId, clubId);
+  const [rows, count] = await Promise.all([
+    db
+      .select()
+      .from(clubPaymentAccounts)
+      .where(where)
+      .orderBy(asc(clubPaymentAccounts.provider))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(clubPaymentAccounts)
+      .where(where),
+  ]);
 
-  return rows.map(toSummary);
+  return { items: rows.map(toSummary), total: count[0]?.count ?? 0 };
 }
 
 /** Returns the one active account, or null if no provider is connected yet. */
@@ -382,12 +395,22 @@ export async function adminGetActivePaymentAccount(
 export async function findBookingByProviderPaymentId(
   providerPaymentId: string,
   provider: PaymentProvider,
-): Promise<{ clubId: string; bookingId: string; currentPaymentStatus: string } | null> {
+): Promise<{
+  clubId: string;
+  bookingId: string;
+  currentPaymentStatus: string;
+  bookingStatus: string;
+  amount: number | null;
+  currency: string;
+} | null> {
   const rows = await rawDb
     .select({
       id: bookings.id,
       clubId: bookings.clubId,
       paymentStatus: bookings.paymentStatus,
+      status: bookings.status,
+      amount: bookings.amount,
+      currency: bookings.currency,
     })
     .from(bookings)
     .where(
@@ -400,7 +423,14 @@ export async function findBookingByProviderPaymentId(
 
   const row = rows[0];
   return row
-    ? { clubId: row.clubId, bookingId: row.id, currentPaymentStatus: row.paymentStatus }
+    ? {
+        clubId: row.clubId,
+        bookingId: row.id,
+        currentPaymentStatus: row.paymentStatus,
+        bookingStatus: row.status,
+        amount: row.amount,
+        currency: row.currency,
+      }
     : null;
 }
 
@@ -428,6 +458,15 @@ export async function findBookingByIdForWebhook(
   bookingId: string;
   currentPaymentStatus: string;
   currentProviderPaymentId: string | null;
+  /** Booking lifecycle status — webhooks must refuse to flip a cancelled/no_show
+   * booking to paid (audit AI-24). */
+  bookingStatus: string;
+  /** Captured amount in minor units. Webhook reconciles against this before
+   * marking the booking paid (audit AI-21). */
+  amount: number | null;
+  /** ISO-4217 code stamped at booking time. Webhook compares against the
+   * provider event's currency to refuse cross-currency mark-paid. */
+  currency: string;
 } | null> {
   const rows = await rawDb
     .select({
@@ -435,6 +474,9 @@ export async function findBookingByIdForWebhook(
       clubId: bookings.clubId,
       paymentStatus: bookings.paymentStatus,
       providerPaymentId: bookings.providerPaymentId,
+      status: bookings.status,
+      amount: bookings.amount,
+      currency: bookings.currency,
     })
     .from(bookings)
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
@@ -447,6 +489,9 @@ export async function findBookingByIdForWebhook(
         bookingId: row.id,
         currentPaymentStatus: row.paymentStatus,
         currentProviderPaymentId: row.providerPaymentId,
+        bookingStatus: row.status,
+        amount: row.amount,
+        currency: row.currency,
       }
     : null;
 }
@@ -493,22 +538,18 @@ function rowToWebhookSecretConfig(row: PaymentAccountRow): WebhookSecretConfig {
       }
     }
   }
+  // Audit AI-32a — typeof guard already narrows to string; no cast needed.
+  // Hoist the values so the narrow survives optional-chain lookups.
+  const signingSecret = creds?.webhookSigningSecret;
+  const headerName = creds?.webhookHeaderName;
+  const headerValue = creds?.webhookHeaderValue;
   return {
     clubId: row.clubId,
     externalAccountId: row.externalAccountId,
     status: row.status,
-    webhookSigningSecret:
-      typeof creds?.webhookSigningSecret === 'string'
-        ? (creds.webhookSigningSecret as string)
-        : null,
-    webhookHeaderName:
-      typeof creds?.webhookHeaderName === 'string'
-        ? (creds.webhookHeaderName as string)
-        : null,
-    webhookHeaderValue:
-      typeof creds?.webhookHeaderValue === 'string'
-        ? (creds.webhookHeaderValue as string)
-        : null,
+    webhookSigningSecret: typeof signingSecret === 'string' ? signingSecret : null,
+    webhookHeaderName: typeof headerName === 'string' ? headerName : null,
+    webhookHeaderValue: typeof headerValue === 'string' ? headerValue : null,
   };
 }
 

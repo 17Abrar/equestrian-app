@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server';
-import { createDocumentSchema } from '@equestrian/shared/schemas';
+import { createDocumentSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getDocuments, createDocument, getHorseById } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  paginatedResponse,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -12,8 +18,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { horseId } = await params;
       const category = request.nextUrl.searchParams.get('category') ?? undefined;
-      const documents = await getDocuments(ctx.clubId, horseId, category);
-      return successResponse(documents);
+      const { page, pageSize } = validateInput(paginationSchema, {
+        page: request.nextUrl.searchParams.get('page') ?? undefined,
+        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
+      });
+      const { items, total } = await getDocuments(ctx.clubId, horseId, category, {
+        page,
+        pageSize,
+      });
+      return paginatedResponse(items, { page, pageSize, total });
     },
     { requiredPermission: 'horses:read' },
   );

@@ -47,3 +47,6 @@ pnpm-debug.log*
 
 # Sentry
 .sentryclirc
+
+# Claude Code local state — settings + scheduled task lock are per-laptop.
+.claude/

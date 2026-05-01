@@ -17,6 +17,7 @@ import {
   paymentMethodEnum,
   skillLevelEnum,
   paymentProviderEnum,
+  waitlistStatusEnum,
 } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -136,10 +137,14 @@ export const bookings = pgTable('bookings', {
   paymentMethod: paymentMethodEnum('payment_method'),
   amount: integer('amount'),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
-  discountAmount: integer('discount_amount').default(0),
+  discountAmount: integer('discount_amount').notNull().default(0),
   refundedAmountMinor: integer('refunded_amount_minor').notNull().default(0),
-  couponId: uuid('coupon_id').references(() => coupons.id),
-  packageId: uuid('package_id').references(() => riderPackages.id),
+  // ON DELETE SET NULL (audit H-14). The booking's `discountAmount` snapshot
+  // captures the financial impact at booking time, so losing the link to
+  // an expired/archived coupon doesn't corrupt finance reporting; keeping
+  // NO ACTION blocked operators from cleaning up old coupons entirely.
+  couponId: uuid('coupon_id').references(() => coupons.id, { onDelete: 'set null' }),
+  packageId: uuid('package_id').references(() => riderPackages.id, { onDelete: 'set null' }),
 
   // Stripe (legacy — retained while older rows still reference it directly).
   // New code uses `paymentProvider` + `providerPaymentId` below.
@@ -242,7 +247,8 @@ export const waitlist = pgTable(
     position: integer('position').notNull(),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
-    status: varchar('status', { length: 20 }).notNull().default('waiting'),
+    // Audit AI-36 — promoted to pgEnum.
+    status: waitlistStatusEnum('status').notNull().default('waiting'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

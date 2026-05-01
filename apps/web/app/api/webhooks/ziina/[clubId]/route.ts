@@ -144,11 +144,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
+    // Treat every `refund.status.updated` as a refund event so the webhook
+    // helper can apply the lifecycle (pending → succeeded → recordRefund;
+    // pending → failed → reverseRefund). The previous `&& succeeded` gate
+    // dropped the failed-refund path silently — audit C-1.
     const bookingResult = await applyPaymentWebhook({
       provider: 'ziina',
       event,
       overrideClubId: clubId,
-      isRefundEvent: REFUND_EVENTS.has(event.eventType) && event.status === 'succeeded',
+      isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
 
     // Didn't match a booking? Try a livery invoice. A payment intent is for

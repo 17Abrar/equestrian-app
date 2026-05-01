@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from './lib/sentry-shared';
+import { scrubSentryBreadcrumb, scrubSentryEvent } from './lib/sentry-shared';
 
 // Next 15+ canonical client instrumentation. Loads automatically in the
 // browser bundle. The old `sentry.client.config.ts` filename is deprecated.
@@ -39,6 +39,11 @@ Sentry.init({
   // portable (URL/URLSearchParams only) so it runs the same on server,
   // edge, and browser.
   beforeSend: scrubSentryEvent,
+  // Audit H-8: scrub breadcrumbs at collection time. Sentry's fetch
+  // integration attaches request URLs to `breadcrumb.message` on the
+  // browser; without this hook the URL's query params land verbatim
+  // in the captured event.
+  beforeBreadcrumb: scrubSentryBreadcrumb,
 });
 
 // Emits a Sentry transaction for every client-side router navigation so we

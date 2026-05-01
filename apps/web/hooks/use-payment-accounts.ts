@@ -62,7 +62,7 @@ export function useConnectNGenius() {
         },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
   });
 }
@@ -83,7 +83,7 @@ export function useConnectZiina() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
   });
 }
@@ -101,7 +101,7 @@ export function useSetActiveProvider() {
         },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
   });
 }
@@ -115,7 +115,7 @@ export function useDisconnectProvider() {
         { method: 'DELETE' },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
   });
 }

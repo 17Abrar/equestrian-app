@@ -64,7 +64,7 @@ export function useCreateStaff() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      void queryClient.invalidateQueries({ queryKey: ['staff'] });
     },
   });
 }
@@ -80,7 +80,7 @@ export function useUpdateStaff(memberId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      void queryClient.invalidateQueries({ queryKey: ['staff'] });
     },
   });
 }
@@ -94,7 +94,7 @@ export function useDeactivateStaff() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      void queryClient.invalidateQueries({ queryKey: ['staff'] });
     },
   });
 }
@@ -124,8 +124,8 @@ export function useCreateOwner() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['owners'] });
-      queryClient.invalidateQueries({ queryKey: ['members', 'horse_owner'] });
+      void queryClient.invalidateQueries({ queryKey: ['owners'] });
+      void queryClient.invalidateQueries({ queryKey: ['members', 'horse_owner'] });
     },
   });
 }
@@ -139,8 +139,8 @@ export function useDeactivateOwner() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['owners'] });
-      queryClient.invalidateQueries({ queryKey: ['members', 'horse_owner'] });
+      void queryClient.invalidateQueries({ queryKey: ['owners'] });
+      void queryClient.invalidateQueries({ queryKey: ['members', 'horse_owner'] });
     },
   });
 }
