@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/clerk-expo": "^2.19.31",
+    "@clerk/clerk-expo": "^2.19.36",
     "@equestrian/api-client": "workspace:*",
     "@equestrian/shared": "workspace:*",
     "@expo/vector-icons": "^15.1.1",
