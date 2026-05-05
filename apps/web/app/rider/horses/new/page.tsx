@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { ArrowLeft, Rabbit } from 'lucide-react';
@@ -27,7 +30,8 @@ import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { STALE_TIME_MEDIUM } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
-type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
+const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
+type SkillLevel = (typeof SKILL_LEVELS)[number];
 
 interface MyMembership {
   memberId: string;
@@ -49,6 +53,38 @@ function useMemberships() {
     staleTime: STALE_TIME_MEDIUM,
   });
 }
+
+// Audit LOW-11 (2026-05-05): convert from manual useState bag to RHF+Zod —
+// matches the project-wide form pattern (every other rider form uses
+// zodResolver), gives inline validation messages instead of a single
+// `toast.error('Please enter a name')`, and locks the input contract to
+// the `RegisterBody` shape sent to `/api/v1/horses/register-ownership`.
+// Numeric coercion happens in the schema (`z.coerce.number().optional()`)
+// so the input strings turn into numbers before they reach the mutation —
+// the previous code did the cast inline and silently swallowed
+// `Number('abc') = NaN`.
+const registerHorseSchema = z.object({
+  clubId: z.string().uuid({ message: 'Please select a stable' }),
+  name: z.string().trim().min(1, 'Please enter a name').max(120),
+  breed: z.string().trim().max(120).optional().or(z.literal('')),
+  gender: z
+    .enum(['gelding', 'mare', 'stallion', 'filly', 'colt'])
+    .optional()
+    .or(z.literal('')),
+  color: z.string().trim().max(60).optional().or(z.literal('')),
+  dateOfBirth: z.string().optional().or(z.literal('')),
+  heightHands: z
+    .union([z.literal(''), z.coerce.number().positive('Height must be positive')])
+    .optional(),
+  weightKg: z
+    .union([z.literal(''), z.coerce.number().positive('Weight must be positive')])
+    .optional(),
+  skillLevel: z.enum(SKILL_LEVELS),
+  primaryPhotoUrl: z.string().optional().or(z.literal('')),
+  notes: z.string().max(2000).optional().or(z.literal('')),
+});
+
+type RegisterHorseValues = z.infer<typeof registerHorseSchema>;
 
 interface RegisterBody {
   clubId: string;
@@ -86,50 +122,53 @@ export default function RegisterHorsePage() {
 
   const memberships = useMemo(() => data?.data.memberships ?? [], [data]);
 
-  const [clubId, setClubId] = useState('');
-  const [name, setName] = useState('');
-  const [breed, setBreed] = useState('');
-  const [gender, setGender] = useState('');
-  const [color, setColor] = useState('');
-  const [dob, setDob] = useState('');
-  const [height, setHeight] = useState('');
-  const [weight, setWeight] = useState('');
-  const [skillLevel, setSkillLevel] = useState<SkillLevel>('beginner');
-  const [photoUrl, setPhotoUrl] = useState('');
-  const [notes, setNotes] = useState('');
+  const form = useForm<RegisterHorseValues>({
+    resolver: zodResolver(registerHorseSchema),
+    defaultValues: {
+      clubId: '',
+      name: '',
+      breed: '',
+      gender: '',
+      color: '',
+      dateOfBirth: '',
+      heightHands: '',
+      weightKg: '',
+      skillLevel: 'beginner',
+      primaryPhotoUrl: '',
+      notes: '',
+    },
+  });
+
+  const watchedClubId = form.watch('clubId');
+  const watchedPhoto = form.watch('primaryPhotoUrl');
 
   // Preselect the only membership when there's exactly one — saves a click on
   // the common case of riders belonging to a single stable.
   useEffect(() => {
-    if (!clubId && memberships.length === 1) {
-      setClubId(memberships[0]!.clubId);
+    if (!form.getValues('clubId') && memberships.length === 1) {
+      form.setValue('clubId', memberships[0]!.clubId);
     }
-  }, [memberships, clubId]);
+  }, [memberships, form]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!clubId) {
-      toast.error('Please select a stable');
-      return;
-    }
-    if (!name.trim()) {
-      toast.error('Please enter a name');
-      return;
-    }
-
+  async function onSubmit(values: RegisterHorseValues) {
     const body: RegisterBody = {
-      clubId,
-      name: name.trim(),
-      breed: breed.trim() || undefined,
-      gender: gender || undefined,
-      dateOfBirth: dob || undefined,
-      color: color.trim() || undefined,
-      heightHands: height ? Number(height) : undefined,
-      weightKg: weight ? Number(weight) : undefined,
-      skillLevel,
-      primaryPhotoUrl: photoUrl || undefined,
-      notes: notes.trim() || undefined,
+      clubId: values.clubId,
+      name: values.name.trim(),
+      breed: values.breed?.trim() || undefined,
+      gender: values.gender || undefined,
+      dateOfBirth: values.dateOfBirth || undefined,
+      color: values.color?.trim() || undefined,
+      heightHands:
+        typeof values.heightHands === 'number' && Number.isFinite(values.heightHands)
+          ? values.heightHands
+          : undefined,
+      weightKg:
+        typeof values.weightKg === 'number' && Number.isFinite(values.weightKg)
+          ? values.weightKg
+          : undefined,
+      skillLevel: values.skillLevel,
+      primaryPhotoUrl: values.primaryPhotoUrl || undefined,
+      notes: values.notes?.trim() || undefined,
     };
 
     try {
@@ -179,25 +218,34 @@ export default function RegisterHorsePage() {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Stable</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1.5">
             <Label htmlFor="club">Stable *</Label>
-            <Select value={clubId} onValueChange={setClubId}>
-              <SelectTrigger id="club">
-                <SelectValue placeholder="Select a stable" />
-              </SelectTrigger>
-              <SelectContent>
-                {memberships.map((m) => (
-                  <SelectItem key={m.clubId} value={m.clubId}>
-                    {m.clubName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Controller
+              control={form.control}
+              name="clubId"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="club">
+                    <SelectValue placeholder="Select a stable" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {memberships.map((m) => (
+                      <SelectItem key={m.clubId} value={m.clubId}>
+                        {m.clubName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {form.formState.errors.clubId && (
+              <p className="text-xs text-destructive">{form.formState.errors.clubId.message}</p>
+            )}
             <p className="text-xs text-muted-foreground">
               You can register this horse at any stable you&apos;re a member of.
             </p>
@@ -212,8 +260,8 @@ export default function RegisterHorsePage() {
             <div className="space-y-1.5">
               <Label>Photo</Label>
               <FileUpload
-                value={photoUrl}
-                onChange={setPhotoUrl}
+                value={watchedPhoto || ''}
+                onChange={(url) => form.setValue('primaryPhotoUrl', url)}
                 folder="horses/photos"
                 accept="image/*"
                 maxSizeMB={10}
@@ -222,80 +270,74 @@ export default function RegisterHorsePage() {
                 // Store under the target stable's R2 prefix — not the rider's
                 // active tenant — so the file is organized where the horse
                 // actually lives. clubId only valid once the rider picks it.
-                targetClubId={clubId || undefined}
+                targetClubId={watchedClubId || undefined}
               />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Thunder"
-                  required
-                />
+                <Input id="name" placeholder="e.g. Thunder" {...form.register('name')} />
+                {form.formState.errors.name && (
+                  <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                )}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="breed">Breed</Label>
-                <Input
-                  id="breed"
-                  value={breed}
-                  onChange={(e) => setBreed(e.target.value)}
-                  placeholder="e.g. Arabian"
-                />
+                <Input id="breed" placeholder="e.g. Arabian" {...form.register('breed')} />
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="gender">Sex</Label>
-                <Select value={gender} onValueChange={setGender}>
-                  <SelectTrigger id="gender">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gelding">Gelding</SelectItem>
-                    <SelectItem value="mare">Mare</SelectItem>
-                    <SelectItem value="stallion">Stallion</SelectItem>
-                    <SelectItem value="filly">Filly</SelectItem>
-                    <SelectItem value="colt">Colt</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Controller
+                  control={form.control}
+                  name="gender"
+                  render={({ field }) => (
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                      <SelectTrigger id="gender">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gelding">Gelding</SelectItem>
+                        <SelectItem value="mare">Mare</SelectItem>
+                        <SelectItem value="stallion">Stallion</SelectItem>
+                        <SelectItem value="filly">Filly</SelectItem>
+                        <SelectItem value="colt">Colt</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="color">Color</Label>
-                <Input
-                  id="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  placeholder="e.g. Bay"
-                />
+                <Input id="color" placeholder="e.g. Bay" {...form.register('color')} />
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="dob">Date of birth</Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={dob}
-                  onChange={(e) => setDob(e.target.value)}
-                />
+                <Input id="dob" type="date" {...form.register('dateOfBirth')} />
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="skill">Skill level needed *</Label>
-                <Select value={skillLevel} onValueChange={(v) => setSkillLevel(v as SkillLevel)}>
-                  <SelectTrigger id="skill">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="beginner">Beginner</SelectItem>
-                    <SelectItem value="intermediate">Intermediate</SelectItem>
-                    <SelectItem value="advanced">Advanced</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Controller
+                  control={form.control}
+                  name="skillLevel"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={(v) => field.onChange(v as SkillLevel)}>
+                      <SelectTrigger id="skill">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="beginner">Beginner</SelectItem>
+                        <SelectItem value="intermediate">Intermediate</SelectItem>
+                        <SelectItem value="advanced">Advanced</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <p className="text-xs text-muted-foreground">
                   Minimum rider level this horse is suitable for.
                 </p>
@@ -310,9 +352,13 @@ export default function RegisterHorsePage() {
                   min="0"
                   inputMode="decimal"
                   placeholder="e.g. 15.2"
-                  value={height}
-                  onChange={(e) => setHeight(e.target.value)}
+                  {...form.register('heightHands')}
                 />
+                {form.formState.errors.heightHands && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.heightHands.message}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -324,9 +370,13 @@ export default function RegisterHorsePage() {
                   min="0"
                   inputMode="decimal"
                   placeholder="e.g. 500"
-                  value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
+                  {...form.register('weightKg')}
                 />
+                {form.formState.errors.weightKg && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.weightKg.message}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -335,10 +385,9 @@ export default function RegisterHorsePage() {
               <Textarea
                 id="notes"
                 rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional — temperament, special needs, anything your stable should know."
                 maxLength={2000}
+                {...form.register('notes')}
               />
             </div>
           </CardContent>

@@ -18,25 +18,28 @@ interface DateRange {
 // clubId condition into each join condition contains the blast radius.
 
 export async function getRevenueReport(clubId: string, range: DateRange) {
+  // Audit HIGH-11 (2026-05-05): rewritten off the `payments` table —
+  // which no code path actually writes to — onto `bookings` directly.
+  // Net revenue per slot date = sum of (booking.amount - refunded total)
+  // for paid/partial bookings that fall in the range. Confirmed paid
+  // bookings only; pending and failed don't count toward revenue.
   const result = await db
     .select({
       date: sql<string>`${bookingSlots.date}`,
-      revenue: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+      revenue: sql<number>`coalesce(sum(${bookings.amount} - ${bookings.refundedAmountMinor}), 0)::int`,
       count: sql<number>`count(*)::int`,
     })
-    .from(payments)
-    .innerJoin(
-      bookings,
-      and(eq(payments.bookingId, bookings.id), eq(bookings.clubId, clubId)),
-    )
+    .from(bookings)
     .innerJoin(
       bookingSlots,
       and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
     )
     .where(
       and(
-        eq(payments.clubId, clubId),
-        sql`${payments.status} = 'paid'`,
+        eq(bookings.clubId, clubId),
+        // Both `paid` and `partial` (rider has paid but a partial
+        // refund was issued) contribute the net revenue figure.
+        sql`${bookings.paymentStatus} IN ('paid', 'partial')`,
         sql`${bookingSlots.date} >= ${range.dateFrom}`,
         sql`${bookingSlots.date} <= ${range.dateTo}`,
       ),

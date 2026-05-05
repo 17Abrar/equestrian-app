@@ -4,6 +4,7 @@ import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings'
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
 import { coupons, couponUsages } from '../schema/packages';
+import { riderProfiles } from '../schema/rider-profiles';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -679,47 +680,54 @@ export async function recordBookingRefund(
 } | null> {
   if (amountMinor <= 0) return null;
 
-  const existing = await db
-    .select({
-      amount: bookings.amount,
-      refundedAmountMinor: bookings.refundedAmountMinor,
-    })
-    .from(bookings)
-    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
-    .limit(1);
+  // Audit HIGH-4 (2026-05-05): wrap the read+CAS pair in a writeTransaction
+  // with `SELECT … FOR UPDATE` so concurrent calls (admin click + webhook
+  // arrival, two webhooks racing) serialise on the row lock instead of
+  // both reading the same baseline and one losing the optimistic CAS
+  // unpredictably. The CAS predicate is kept as belt-and-braces.
+  return writeTransaction(async (tx) => {
+    const existing = await tx
+      .select({
+        amount: bookings.amount,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+      })
+      .from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .for('update')
+      .limit(1);
 
-  const current = existing[0];
-  if (!current || current.amount == null) return null;
+    const current = existing[0];
+    if (!current || current.amount == null) return null;
 
-  const newRefunded = current.refundedAmountMinor + amountMinor;
-  if (newRefunded > current.amount) return null;
+    const newRefunded = current.refundedAmountMinor + amountMinor;
+    if (newRefunded > current.amount) return null;
 
-  const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
+    const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
 
-  const result = await db
-    .update(bookings)
-    .set({
-      refundedAmountMinor: newRefunded,
-      paymentStatus: newStatus,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(bookings.id, bookingId),
-        eq(bookings.clubId, clubId),
-        // Optimistic concurrency: only update if the pre-state is what
-        // we read above. If another refund landed in between, this
-        // UPDATE returns no rows and the caller can surface a conflict.
-        eq(bookings.refundedAmountMinor, current.refundedAmountMinor),
-      ),
-    )
-    .returning({
-      id: bookings.id,
-      paymentStatus: bookings.paymentStatus,
-      refundedAmountMinor: bookings.refundedAmountMinor,
-    });
+    const result = await tx
+      .update(bookings)
+      .set({
+        refundedAmountMinor: newRefunded,
+        paymentStatus: newStatus,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.clubId, clubId),
+          // CAS belt-and-braces under FOR UPDATE — guards a future
+          // caller that bypasses the lock.
+          eq(bookings.refundedAmountMinor, current.refundedAmountMinor),
+        ),
+      )
+      .returning({
+        id: bookings.id,
+        paymentStatus: bookings.paymentStatus,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+      });
 
-  return result[0] ?? null;
+    return result[0] ?? null;
+  });
 }
 
 /**
@@ -747,47 +755,52 @@ export async function reverseBookingRefund(
 } | null> {
   if (amountMinor <= 0) return null;
 
-  const existing = await db
-    .select({
-      amount: bookings.amount,
-      refundedAmountMinor: bookings.refundedAmountMinor,
-    })
-    .from(bookings)
-    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
-    .limit(1);
+  // Audit HIGH-4 (2026-05-05): same writeTransaction + FOR UPDATE
+  // treatment as recordBookingRefund — concurrent reverses (or a
+  // reverse racing a record) serialise cleanly on the row lock.
+  return writeTransaction(async (tx) => {
+    const existing = await tx
+      .select({
+        amount: bookings.amount,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+      })
+      .from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .for('update')
+      .limit(1);
 
-  const current = existing[0];
-  if (!current || current.amount == null) return null;
+    const current = existing[0];
+    if (!current || current.amount == null) return null;
 
-  // Don't drive the ledger negative — the webhook arrived for a refund we
-  // didn't record (e.g. the original recordBookingRefund failed but the
-  // provider call succeeded, then later failed). Leave it to the operator.
-  if (current.refundedAmountMinor < amountMinor) return null;
+    // Don't drive the ledger negative — webhook arrived for a refund we
+    // never recorded, leave to operator.
+    if (current.refundedAmountMinor < amountMinor) return null;
 
-  const newRefunded = current.refundedAmountMinor - amountMinor;
-  const newStatus = newRefunded === 0 ? 'paid' : 'partial';
+    const newRefunded = current.refundedAmountMinor - amountMinor;
+    const newStatus = newRefunded === 0 ? 'paid' : 'partial';
 
-  const result = await db
-    .update(bookings)
-    .set({
-      refundedAmountMinor: newRefunded,
-      paymentStatus: newStatus,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(bookings.id, bookingId),
-        eq(bookings.clubId, clubId),
-        eq(bookings.refundedAmountMinor, current.refundedAmountMinor),
-      ),
-    )
-    .returning({
-      id: bookings.id,
-      paymentStatus: bookings.paymentStatus,
-      refundedAmountMinor: bookings.refundedAmountMinor,
-    });
+    const result = await tx
+      .update(bookings)
+      .set({
+        refundedAmountMinor: newRefunded,
+        paymentStatus: newStatus,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.clubId, clubId),
+          eq(bookings.refundedAmountMinor, current.refundedAmountMinor),
+        ),
+      )
+      .returning({
+        id: bookings.id,
+        paymentStatus: bookings.paymentStatus,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+      });
 
-  return result[0] ?? null;
+    return result[0] ?? null;
+  });
 }
 
 /**
@@ -820,16 +833,30 @@ export async function setBookingPaymentRef(
       sql`(${bookings.providerPaymentId} IS NULL OR ${bookings.providerPaymentId} = ${data.providerPaymentId})`,
     );
   }
-  // Terminal-state guard for paymentStatus (audit E-11). Once a booking is
-  // in `refunded` / `partial`, subsequent setBookingPaymentRef calls must
-  // NOT downgrade to `pending` / `failed` / `paid` — webhooks arriving
-  // out of order would otherwise rewrite the rider's settled state. The
-  // route-level guard in webhook-helpers.ts:148-162 catches this for the
-  // current call sites; this DB-level gate covers any future caller.
-  if (data.paymentStatus && data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
-    conditions.push(
-      sql`${bookings.paymentStatus} NOT IN ('refunded', 'partial')`,
-    );
+  // Terminal-state guard for paymentStatus (audit E-11 + HIGH-13).
+  // Once a booking is in `refunded` / `partial`, subsequent
+  // setBookingPaymentRef calls must NOT downgrade to other states —
+  // webhooks arriving out of order would otherwise rewrite the
+  // rider's settled state. Audit HIGH-13 (2026-05-05) extends this:
+  // once `paid`, an out-of-order `payment_intent.processing` event
+  // (which maps to `pending`) must NOT downgrade the booking back to
+  // `pending`/`failed`. Only forward transitions (paid → refunded,
+  // paid → partial) are allowed, and idempotent re-writes (paid →
+  // paid) pass through harmlessly.
+  if (data.paymentStatus) {
+    if (data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
+      conditions.push(
+        sql`${bookings.paymentStatus} NOT IN ('refunded', 'partial')`,
+      );
+    }
+    // Block paid → {pending, failed, requires_action} downgrades.
+    // Only `paid → paid` (idempotent) and forward transitions to
+    // refunded/partial pass.
+    if (data.paymentStatus !== 'paid' && data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
+      conditions.push(
+        sql`${bookings.paymentStatus} != 'paid'`,
+      );
+    }
   }
 
   const result = await db
@@ -878,12 +905,21 @@ export async function markBookingComplete(
 
     const row = result[0];
     if (row) {
-      await tx.execute(
-        sql`UPDATE rider_profiles
-            SET total_lessons_completed = total_lessons_completed + 1,
-                updated_at = now()
-            WHERE club_id = ${clubId} AND member_id = ${row.riderMemberId}`,
-      );
+      // Audit LOW-4 (2026-05-05): rewritten via Drizzle builder so the
+      // expression participates in type-checking and follows the
+      // codebase's house style. Functionally identical SQL.
+      await tx
+        .update(riderProfiles)
+        .set({
+          totalLessonsCompleted: sql`${riderProfiles.totalLessonsCompleted} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(riderProfiles.clubId, clubId),
+            eq(riderProfiles.memberId, row.riderMemberId),
+          ),
+        );
     }
 
     return row ?? null;

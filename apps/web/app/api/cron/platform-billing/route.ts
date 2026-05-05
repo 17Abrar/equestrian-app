@@ -99,8 +99,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Some cron wrappers prefer GET. Mirror livery's both-verbs surface.
-export const GET = POST;
+// Audit MED-6 (2026-05-05): GET surface dropped — worker-entry uses
+// POST + header. See livery-billing/route.ts for rationale.
 
 // ─── Issuance ─────────────────────────────────────────────────────────
 

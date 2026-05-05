@@ -26,20 +26,38 @@ export async function POST(request: NextRequest) {
       const body = await request.json();
       const data = validateInput(registerHorseOwnershipSchema, body);
 
-      const horse = await registerHorseOwnership({
-        clubId: data.clubId,
-        clerkUserId: ctx.userId,
-        name: data.name,
-        breed: data.breed,
-        gender: data.gender,
-        dateOfBirth: data.dateOfBirth,
-        color: data.color,
-        heightHands: data.heightHands,
-        weightKg: data.weightKg,
-        skillLevel: data.skillLevel,
-        primaryPhotoUrl: data.primaryPhotoUrl,
-        notes: data.notes,
-      });
+      let horse;
+      try {
+        horse = await registerHorseOwnership({
+          clubId: data.clubId,
+          clerkUserId: ctx.userId,
+          name: data.name,
+          breed: data.breed,
+          gender: data.gender,
+          dateOfBirth: data.dateOfBirth,
+          color: data.color,
+          heightHands: data.heightHands,
+          weightKg: data.weightKg,
+          skillLevel: data.skillLevel,
+          primaryPhotoUrl: data.primaryPhotoUrl,
+          notes: data.notes,
+        });
+      } catch (err) {
+        // Audit HIGH-1 (2026-05-05): query throws when the target-club
+        // role isn't a horse-owning role (e.g. caller is rider at A,
+        // coach at B; passes the active-club gate via A but cannot
+        // register horses at B as a coach). 403 with a specific code
+        // so the UI can show "ask your stable to set you up as a
+        // rider/owner first" rather than "you're not a member".
+        if (err instanceof Error && err.message === 'OWNERSHIP_ROLE_NOT_ALLOWED') {
+          return errorResponse(
+            'OWNERSHIP_ROLE_NOT_ALLOWED',
+            'Your role at this stable is not allowed to register horses',
+            403,
+          );
+        }
+        throw err;
+      }
 
       if (!horse) {
         // The query returns null when the user isn't an active member of the

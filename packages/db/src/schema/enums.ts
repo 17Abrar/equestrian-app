@@ -193,7 +193,9 @@ export const waitlistStatusEnum = pgEnum('waitlist_status', [
 
 export const webhookEventStatusEnum = pgEnum('webhook_event_status', [
   'received',
-  'processing',
+  // 'processing' was dropped in migration 0033 — no code ever set it,
+  // and the staleness reclaim only handles 'received'/'failed', so any
+  // future row stuck in 'processing' would be permanently un-reclaimable.
   'processed',
   'failed',
   'permanently_failed',

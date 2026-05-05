@@ -28,14 +28,17 @@ export async function readWebhookBody(
   }
 
   const body = await request.text();
-  // Belt-and-braces: Content-Length can be missing or wrong; verify after
-  // buffering. JS string length is UTF-16 code units, so it's an upper
-  // bound on byte length for the same payload — checking against the same
-  // numeric cap is conservative.
-  if (body.length > maxBytes) {
+  // Audit LOW-3 (2026-05-05): use byte length, not JS `.length`
+  // (UTF-16 code units). For ASCII the two match; for non-ASCII
+  // bodies a UTF-16-pair character counts as 1 in `.length` but
+  // 4 in UTF-8, so the previous check was conservative for ASCII
+  // and OPTIMISTIC for emoji/CJK payloads. Use `Buffer.byteLength`
+  // for the true UTF-8 size that matters at the network boundary.
+  const actualBytes = Buffer.byteLength(body, 'utf8');
+  if (actualBytes > maxBytes) {
     logger.warn('webhook_body_too_large', {
       source,
-      actualBytes: body.length,
+      actualBytes,
       maxBytes,
     });
     return null;

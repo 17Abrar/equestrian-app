@@ -3,7 +3,20 @@ import { eq, and, ilike, asc, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { riderProfiles } from '../schema/rider-profiles';
 import { clubMembers } from '../schema/club-members';
+import { decryptField, encryptField } from '../crypto';
 import { escapeLikePattern } from '@equestrian/shared/utils';
+
+// Audit MED-3 (2026-05-05): rider medical notes are PHI-class data.
+// horse_health columns get this treatment via `encryptFields` (see
+// horse-health.ts); the rider-profile equivalents shipped in plaintext
+// from the start. Encrypted-at-rest with AES-256-GCM via
+// `encryptField`. The migration below (0034) re-encrypts existing
+// plaintext rows in-place; new writes go through this path.
+//
+// Only `medicalNotes` is encrypted today. Emergency-contact phone is
+// NOT encrypted because it's read on every booking-confirmation email
+// and any error path that hits the rider profile (the decryption cost
+// would compound across hot paths). Revisit if compliance asks.
 
 type NewRiderProfile = typeof riderProfiles.$inferInsert;
 type DrizzleRiderUpdate = Partial<Omit<NewRiderProfile, 'id' | 'clubId' | 'memberId' | 'createdAt' | 'updatedAt'>>;
@@ -90,7 +103,8 @@ export async function getRidersByClub(clubId: string, filters: RiderFilters) {
   ]);
 
   return {
-    data,
+    // Audit MED-3 (2026-05-05): decrypt medicalNotes per row.
+    data: data.map((row) => ({ ...row, medicalNotes: decryptField(row.medicalNotes) })),
     total: countResult[0]?.count ?? 0,
   };
 }
@@ -125,7 +139,13 @@ export async function getRiderById(clubId: string, riderId: string) {
     .where(and(eq(riderProfiles.id, riderId), eq(riderProfiles.clubId, clubId)))
     .limit(1);
 
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  // Audit MED-3: decrypt medical notes on read. `decryptField` returns
+  // the plaintext for an already-encrypted value, OR returns the input
+  // verbatim for a row that hasn't been migrated yet (back-compat for
+  // any rows the migration didn't touch).
+  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
 }
 
 export async function getRiderByMemberId(clubId: string, memberId: string) {
@@ -200,7 +220,8 @@ export async function createRider(clubId: string, data: CreateRiderData) {
         emergencyContactName: data.emergencyContactName,
         emergencyContactPhone: data.emergencyContactPhone,
         emergencyContactRelation: data.emergencyContactRelation,
-        medicalNotes: data.medicalNotes,
+        // Audit MED-3: encrypt PHI on write.
+        medicalNotes: encryptField(data.medicalNotes),
       })
       .returning();
 
@@ -209,7 +230,15 @@ export async function createRider(clubId: string, data: CreateRiderData) {
 }
 
 export async function updateRiderProfile(clubId: string, riderId: string, data: RiderProfileUpdate) {
-  const values = { ...toRiderDecimalStrings(data), updatedAt: new Date() } as Partial<NewRiderProfile>;
+  // Audit MED-3 (2026-05-05): encrypt medicalNotes on write. Pass-through
+  // for undefined (PATCH semantics — omitted means leave alone), null
+  // (explicit clear), or empty string (treat as clear). encryptField
+  // handles all three cases.
+  const partial = toRiderDecimalStrings(data);
+  if (data.medicalNotes !== undefined) {
+    partial.medicalNotes = encryptField(data.medicalNotes ?? null);
+  }
+  const values = { ...partial, updatedAt: new Date() } as Partial<NewRiderProfile>;
   const result = await db
     .update(riderProfiles)
     .set(values)
@@ -263,7 +292,11 @@ export async function upsertRiderProfileByMember(
     ...(data.emergencyContactRelation !== undefined
       ? { emergencyContactRelation: data.emergencyContactRelation }
       : {}),
-    ...(data.medicalNotes !== undefined ? { medicalNotes: data.medicalNotes } : {}),
+    // Audit MED-3 (2026-05-05): encrypt PHI on write. encryptField
+    // returns null for null/empty, ciphertext for non-empty.
+    ...(data.medicalNotes !== undefined
+      ? { medicalNotes: encryptField(data.medicalNotes) }
+      : {}),
   };
 
   const result = await db
@@ -279,7 +312,8 @@ export async function upsertRiderProfileByMember(
       emergencyContactName: data.emergencyContactName ?? null,
       emergencyContactPhone: data.emergencyContactPhone ?? null,
       emergencyContactRelation: data.emergencyContactRelation ?? null,
-      medicalNotes: data.medicalNotes ?? null,
+      // Audit MED-3: encrypt on insert too.
+      medicalNotes: encryptField(data.medicalNotes ?? null),
     })
     .onConflictDoUpdate({
       target: [riderProfiles.clubId, riderProfiles.memberId],

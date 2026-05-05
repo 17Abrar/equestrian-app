@@ -1,6 +1,5 @@
 import { type NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
-import { addDays, format } from 'date-fns';
 import { createRecurringSlotsSchema } from '@equestrian/shared/schemas';
 import { isDateInPast } from '@equestrian/shared/utils';
 import {
@@ -65,24 +64,31 @@ export async function POST(request: NextRequest) {
         maxRiders: number;
       }> = [];
 
-      const startDate = new Date(data.dateFrom);
-      const endDate = new Date(data.dateTo);
-      let current = startDate;
+      // Audit LOW-8 (2026-05-05): iterate strictly in UTC. `new Date('2026-05-15')`
+      // parses to UTC midnight; `getDay()` and date-fns `format()` then render
+      // in the SERVER's local timezone — fine on Cloudflare Workers (UTC) but
+      // off-by-one for any developer west of UTC running this locally
+      // (Pacific: UTC midnight = previous-day 14:00, so Friday becomes
+      // Thursday). Use the UTC accessors and format ISO date by slicing the
+      // UTC string so the day-of-week match and the rendered `yyyy-MM-dd`
+      // both reflect the input's calendar date verbatim.
+      const cursor = new Date(`${data.dateFrom}T00:00:00Z`);
+      const endDate = new Date(`${data.dateTo}T00:00:00Z`);
 
-      while (current <= endDate) {
-        const dayOfWeek = current.getDay(); // 0=Sun, 6=Sat
+      while (cursor <= endDate) {
+        const dayOfWeek = cursor.getUTCDay(); // 0=Sun, 6=Sat
         if (data.daysOfWeek.includes(dayOfWeek)) {
           slots.push({
             lessonTypeId: data.lessonTypeId,
             arenaId: data.arenaId,
             coachMemberId: data.coachMemberId,
-            date: format(current, 'yyyy-MM-dd'),
+            date: cursor.toISOString().slice(0, 10),
             startTime: data.startTime,
             endTime: data.endTime,
             maxRiders: data.maxRiders,
           });
         }
-        current = addDays(current, 1);
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
 
       if (slots.length === 0) {

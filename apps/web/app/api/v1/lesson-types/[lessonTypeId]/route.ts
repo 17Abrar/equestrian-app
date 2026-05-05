@@ -83,6 +83,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
       return successResponse(lessonType);
     },
-    { requiredPermission: 'bookings:delete' },
+    // Audit MED-1 (2026-05-05): align with the matrix. `bookings:delete`
+    // wasn't in `permissions-shared.ts` — the route worked only because
+    // both `club_admin` (`*`) and `club_manager` (`bookings:*`) match
+    // via wildcard, and tightening the matrix later would silently 403
+    // every non-admin role. `bookings:update` (matches PATCH on the
+    // sibling endpoint) is the right gate here.
+    { requiredPermission: 'bookings:update' },
   );
 }

@@ -46,18 +46,32 @@ export default function RiderBookingDetailPage({
     booking.paymentStatus === 'pending' &&
     !OFFLINE_METHODS.has(booking.paymentMethod ?? '');
 
+  // Audit MED-14 (2026-05-05): the previous implementation depended on
+  // `query` directly. `useQuery` returns a fresh object every render,
+  // so the effect re-ran on every render — tearing down the interval,
+  // resetting `start`, and never letting the 2-minute ceiling fire.
+  // Hoist `start` into a ref so it survives renders, and depend on
+  // `query.refetch` (a stable identity) instead of `query`.
+  const pollStartedAtRef = useRef<number | null>(null);
+  const refetch = query.refetch;
   useEffect(() => {
-    if (!shouldPoll) return;
-    const start = Date.now();
+    if (!shouldPoll) {
+      pollStartedAtRef.current = null;
+      return;
+    }
+    if (pollStartedAtRef.current == null) {
+      pollStartedAtRef.current = Date.now();
+    }
     const interval = window.setInterval(() => {
-      if (Date.now() - start > 120_000) {
+      const startedAt = pollStartedAtRef.current;
+      if (startedAt != null && Date.now() - startedAt > 120_000) {
         window.clearInterval(interval);
         return;
       }
-      void query.refetch();
+      void refetch();
     }, 3000);
     return () => window.clearInterval(interval);
-  }, [shouldPoll, query]);
+  }, [shouldPoll, refetch]);
 
   const [payOpen, setPayOpen] = useState(false);
 

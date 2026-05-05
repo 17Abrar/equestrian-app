@@ -11,6 +11,17 @@ import {
 } from '@equestrian/shared/schemas';
 import { type ApiResponse, type ApiSuccessResponse, type PaginatedResponse } from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
+
+// Audit LOW-12 (2026-05-05): default onError for high-stakes mutations.
+// Some consumers call `mutate()` (non-async) with their own per-call
+// `onError` that only surfaces a toast — the failure never reaches Sentry,
+// so a backend regression hides behind a "try again" prompt. The hook-level
+// onError fires alongside any per-call onError in TanStack Query v5, so
+// the consumer's toast still works AND the error lands in observability.
+function defaultMutationErrorReporter(mutationKey: string) {
+  return (err: unknown) => reportMutationError(mutationKey, err);
+}
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -264,6 +275,7 @@ export function useCancelBookingSlot() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
+    onError: defaultMutationErrorReporter('booking_slot.cancel'),
   });
 }
 
@@ -360,6 +372,7 @@ export function useCancelBooking() {
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
       void queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
     },
+    onError: defaultMutationErrorReporter('booking.cancel'),
   });
 }
 
@@ -375,6 +388,7 @@ export function useMarkNoShow() {
       void queryClient.invalidateQueries({ queryKey: ['bookings'] });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
+    onError: defaultMutationErrorReporter('booking.no_show'),
   });
 }
 
@@ -390,5 +404,6 @@ export function useMarkComplete() {
       void queryClient.invalidateQueries({ queryKey: ['bookings'] });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
+    onError: defaultMutationErrorReporter('booking.mark_complete'),
   });
 }

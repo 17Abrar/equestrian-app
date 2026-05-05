@@ -1,5 +1,5 @@
 import { and, asc, eq, sql, lte, inArray, desc, isNull, gt, type SQL } from 'drizzle-orm';
-import { db, rawDb } from '../index';
+import { db, rawDb, writeTransaction } from '../index';
 import { liveryInvoices } from '../schema/livery-invoices';
 import { horses } from '../schema/horses';
 import { clubs } from '../schema/clubs';
@@ -197,6 +197,15 @@ export async function findLiveryInvoiceByProviderPayment(
   providerPaymentId: string,
   provider: string,
 ) {
+  // Audit HIGH-9 (2026-05-05): match on `providerPaymentId` regardless of
+  // whether `paymentProvider` is NULL or matches. The cron writes the
+  // provider id via `setInvoiceProviderRef`, but the webhook can land
+  // BEFORE that write completes (fast-succeed race) — leaving the row
+  // with `provider_payment_id = $id` but `payment_provider = NULL`. The
+  // prior strict match dropped those events silently. The
+  // `payment_provider IS NULL OR =` predicate accepts both states; the
+  // routing layer (caller) already knows which provider this is and
+  // tags audit logs accordingly.
   const rows = await rawDb
     .select({
       id: liveryInvoices.id,
@@ -214,7 +223,7 @@ export async function findLiveryInvoiceByProviderPayment(
     .where(
       and(
         eq(liveryInvoices.providerPaymentId, providerPaymentId),
-        eq(liveryInvoices.paymentProvider, provider),
+        sql`(${liveryInvoices.paymentProvider} IS NULL OR ${liveryInvoices.paymentProvider} = ${provider})`,
       ),
     )
     .limit(1);
@@ -611,34 +620,72 @@ type CreateLiveryInvoiceWithoutNumber = Omit<CreateInvoiceInput, 'invoiceNumber'
 export async function createLiveryInvoiceWithGeneratedNumber(
   input: CreateLiveryInvoiceWithoutNumber,
 ): Promise<NonNullable<Awaited<ReturnType<typeof createLiveryInvoice>>> | null> {
-  const MAX_ATTEMPTS = 8;
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    const invoiceNumber = await nextLiveryInvoiceNumber(input.clubId);
-    try {
-      const invoice = await createLiveryInvoice({ ...input, invoiceNumber });
-      return invoice;
-    } catch (err) {
-      // Postgres 23505 unique-violation. Drizzle bubbles the underlying
-      // PG error so we inspect `.code`. Only retry on the per-club number
-      // index — any other 23505 is a real bug we shouldn't paper over.
-      const code =
-        err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
-      const constraint =
-        err && typeof err === 'object' && 'constraint' in err
-          ? String((err as { constraint: unknown }).constraint)
-          : '';
-      if (code === '23505' && constraint === 'livery_invoices_club_number_unique') {
-        lastError = err;
-        continue;
+  // Audit HIGH-10 (2026-05-05): take a per-club Postgres advisory
+  // transaction lock around the COUNT+INSERT so concurrent callers
+  // serialise on the lock instead of racing the COUNT and burning
+  // through the retry budget. The lock auto-releases at tx commit/rollback.
+  // `hashtext` is deterministic per-string, so two concurrent calls for
+  // the same clubId hash to the same lock id and queue cleanly. The
+  // 23505 retry loop is preserved as belt-and-braces for the (rare)
+  // case where a non-locked admin path adds a row in parallel.
+  return writeTransaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('livery_invoice_number:' || ${input.clubId}))`,
+    );
+    const MAX_ATTEMPTS = 8;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      // Recompute COUNT inside the locked tx — guaranteed monotonic
+      // for this clubId until commit.
+      const result = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(liveryInvoices)
+        .where(eq(liveryInvoices.clubId, input.clubId));
+      const n = (result[0]?.count ?? 0) + 1;
+      const invoiceNumber = `LIV-${input.clubId.slice(0, 6)}-${String(n).padStart(5, '0')}`;
+      try {
+        const values: NewInvoice = {
+          clubId: input.clubId,
+          horseId: input.horseId,
+          ownerMemberId: input.ownerMemberId,
+          invoiceNumber,
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+          amountMinorUnits: input.amountMinorUnits,
+          currency: input.currency,
+          dueDate: input.dueDate,
+          paymentProvider: input.paymentProvider,
+          providerPaymentId: input.providerPaymentId,
+          payLink: input.payLink,
+          status: 'pending',
+        };
+        const inserted = await tx
+          .insert(liveryInvoices)
+          .values(values)
+          .onConflictDoNothing({
+            target: [liveryInvoices.horseId, liveryInvoices.periodStart],
+          })
+          .returning();
+        return inserted[0] ?? null;
+      } catch (err) {
+        const code =
+          err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+        const constraint =
+          err && typeof err === 'object' && 'constraint' in err
+            ? String((err as { constraint: unknown }).constraint)
+            : '';
+        if (code === '23505' && constraint === 'livery_invoices_club_number_unique') {
+          lastError = err;
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
-  }
-  throw new Error(
-    `Failed to allocate unique livery invoice number after ${MAX_ATTEMPTS} attempts (clubId=${input.clubId}): ${
-      lastError instanceof Error ? lastError.message : String(lastError)
-    }`,
-  );
+    throw new Error(
+      `Failed to allocate unique livery invoice number after ${MAX_ATTEMPTS} attempts (clubId=${input.clubId}): ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`,
+    );
+  });
 }
 

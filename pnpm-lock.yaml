@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@xmldom/xmldom': '>=0.8.13'
+  '@stripe/stripe-js': ^9.2.0
 
 packageExtensionsChecksum: sha256-3vFvFR/W5Y2lTITgR2URKuHqm5mUAk/Js8INcaPPd6Q=
 
@@ -4463,13 +4464,9 @@ packages:
   '@stripe/react-stripe-js@6.2.0':
     resolution: {integrity: sha512-GSCErjljZEQv9LaxP30xGOwstcMyyUzb5JyihXwvjOU95yrfhbiPG4K2KkwxYxn+WY0/AyHsRhPPoGRw7urBzg==}
     peerDependencies:
-      '@stripe/stripe-js': '>=9.2.0 <10.0.0'
+      '@stripe/stripe-js': ^9.2.0
       react: '>=16.8.0 <20.0.0'
       react-dom: '>=16.8.0 <20.0.0'
-
-  '@stripe/stripe-js@5.6.0':
-    resolution: {integrity: sha512-w8CEY73X/7tw2KKlL3iOk679V9bWseE4GzNz3zlaYxcTjmcmWOathRb0emgo/QQ3eoNzmq68+2Y2gxluAv3xGw==}
-    engines: {node: '>=12.16'}
 
   '@stripe/stripe-js@9.2.0':
     resolution: {integrity: sha512-YSzLC0t6VS9MDdPTynSMqU8IxrItFUjkDORALFT6sSMR/XZ5Vgm3RDp/Gk7z727MC4A9s4MFVel0gF0c7+kdrg==}
@@ -11058,7 +11055,7 @@ snapshots:
       '@solana/wallet-adapter-base': 0.9.27(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
       '@solana/wallet-adapter-react': 0.15.39(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(bs58@6.0.0)(fastestsmallesttextencoderdecoder@1.0.22)(react-native@0.79.7(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.4)(utf-8-validate@6.0.6))(react@19.2.4)(typescript@5.9.3)
       '@solana/wallet-standard': 1.1.4(@solana/wallet-adapter-base@0.9.27(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)))(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(bs58@6.0.0)(react@19.2.4)
-      '@stripe/stripe-js': 5.6.0
+      '@stripe/stripe-js': 9.2.0
       '@swc/helpers': 0.5.21
       '@tanstack/query-core': 5.87.4
       '@wallet-standard/core': 1.1.1
@@ -14763,8 +14760,6 @@ snapshots:
       prop-types: 15.8.1
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-
-  '@stripe/stripe-js@5.6.0': {}
 
   '@stripe/stripe-js@9.2.0': {}
 

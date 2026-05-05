@@ -140,6 +140,11 @@ function useRefundBooking() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['bookings'] });
     },
+    // Audit LOW-12 (2026-05-05): hook-level reporter so a backend regression
+    // never hides behind the consumer's bare `toast.error` — the call-site
+    // already runs `reportMutationError` from its catch, but Sentry dedupes
+    // identical fingerprints so the overlap is harmless.
+    onError: (err) => reportMutationError('booking.refund', err),
   });
 }
 

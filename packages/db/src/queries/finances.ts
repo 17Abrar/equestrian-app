@@ -188,16 +188,23 @@ interface PaymentFilters {
 }
 
 export async function getPaymentsByClub(clubId: string, filters: PaymentFilters) {
-  const conditions: SQL[] = [eq(payments.clubId, clubId)];
+  // Audit HIGH-11 (2026-05-05): rewritten off the `payments` table
+  // (orphan — no writers) onto `bookings` directly so the Payments
+  // listing actually reflects what riders paid. Each row is a booking
+  // with `paymentStatus IN ('paid','partial','refunded','failed','pending')`,
+  // shown in the same display shape the payments table emitted (id,
+  // amount, currency, paymentMethod, status, description, paidAt,
+  // createdAt, memberName).
+  const conditions: SQL[] = [eq(bookings.clubId, clubId)];
 
   if (filters.status) {
-    conditions.push(sql`${payments.status} = ${filters.status}`);
+    conditions.push(sql`${bookings.paymentStatus} = ${filters.status}`);
   }
   if (filters.dateFrom) {
-    conditions.push(sql`${payments.paidAt} >= ${filters.dateFrom}`);
+    conditions.push(sql`${bookings.createdAt} >= ${filters.dateFrom}`);
   }
   if (filters.dateTo) {
-    conditions.push(sql`${payments.paidAt} <= ${filters.dateTo}`);
+    conditions.push(sql`${bookings.createdAt} <= ${filters.dateTo}`);
   }
 
   const where = and(...conditions);
@@ -206,31 +213,28 @@ export async function getPaymentsByClub(clubId: string, filters: PaymentFilters)
   const [data, countResult] = await Promise.all([
     db
       .select({
-        id: payments.id,
-        amount: payments.amount,
-        currency: payments.currency,
-        paymentMethod: payments.paymentMethod,
-        status: payments.status,
-        description: payments.description,
-        paidAt: payments.paidAt,
-        createdAt: payments.createdAt,
+        id: bookings.id,
+        // Net amount is `amount - refundedAmountMinor` so partial-refund
+        // rows show what the rider actually paid post-refund.
+        amount: sql<number>`(${bookings.amount} - ${bookings.refundedAmountMinor})`,
+        currency: bookings.currency,
+        paymentMethod: bookings.paymentMethod,
+        status: bookings.paymentStatus,
+        description: sql<string>`'Booking'`,
+        paidAt: sql<Date | null>`null::timestamptz`,
+        createdAt: bookings.createdAt,
         memberName: clubMembers.displayName,
       })
-      .from(payments)
-      // Bind the join to `clubId` as well as `memberId`. The FK on
-      // `payments.member_id` is single-column, so without this a row pointing
-      // at a foreign tenant's member (planted by an unrelated bug) would
-      // surface that tenant's `displayName`. Migration 0019 closes this at
-      // the schema level via composite FK; the join binding is defence in depth.
+      .from(bookings)
       .innerJoin(
         clubMembers,
-        and(eq(payments.memberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+        and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
       )
       .where(where)
-      .orderBy(desc(payments.createdAt))
+      .orderBy(desc(bookings.createdAt))
       .limit(filters.pageSize)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(payments).where(where),
+    db.select({ count: sql<number>`count(*)::int` }).from(bookings).where(where),
   ]);
 
   return { data, total: countResult[0]?.count ?? 0 };

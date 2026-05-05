@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
-import { db, rawDb } from '../index';
+import { db, rawDb, writeTransaction } from '../index';
 import { platformSubscriptionInvoices } from '../schema/platform-subscription-invoices';
 import { clubs } from '../schema/clubs';
 
@@ -161,38 +161,69 @@ type CreatePlatformInvoiceWithoutNumber = Omit<CreatePlatformInvoiceInput, 'invo
 export async function createPlatformInvoiceWithGeneratedNumber(
   input: CreatePlatformInvoiceWithoutNumber,
 ): Promise<NonNullable<Awaited<ReturnType<typeof createPlatformInvoice>>> | null> {
-  const MAX_ATTEMPTS = 8;
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    const invoiceNumber = await nextPlatformInvoiceNumber(input.clubId);
-    try {
-      const invoice = await createPlatformInvoice({ ...input, invoiceNumber });
-      return invoice;
-    } catch (err) {
-      const code =
-        err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
-      const constraint =
-        err && typeof err === 'object' && 'constraint' in err
-          ? String((err as { constraint: unknown }).constraint)
-          : '';
-      // Only retry on the per-club number-uniqueness collision. Anything
-      // else (FK violation, NULL on a notNull column, etc.) is a real
-      // bug and should bubble.
-      if (
-        code === '23505' &&
-        constraint === 'platform_subscription_invoices_club_number_unique'
-      ) {
-        lastError = err;
-        continue;
+  // Audit HIGH-10 (2026-05-05): per-club Postgres advisory transaction
+  // lock around COUNT+INSERT — same pattern as the livery counterpart.
+  return writeTransaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('platform_invoice_number:' || ${input.clubId}))`,
+    );
+    const MAX_ATTEMPTS = 8;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const result = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(platformSubscriptionInvoices)
+        .where(eq(platformSubscriptionInvoices.clubId, input.clubId));
+      const n = (result[0]?.count ?? 0) + 1;
+      const invoiceNumber = `PLAT-${input.clubId.slice(0, 6)}-${String(n).padStart(5, '0')}`;
+      try {
+        const inserted = await tx
+          .insert(platformSubscriptionInvoices)
+          .values({
+            clubId: input.clubId,
+            invoiceNumber,
+            tier: input.tier,
+            amountMinorUnits: input.amountMinorUnits,
+            currency: input.currency,
+            periodStart: input.periodStart,
+            periodEnd: input.periodEnd,
+            dueDate: input.dueDate,
+            paymentProvider: input.paymentProvider,
+            providerPaymentId: input.providerPaymentId,
+            payLink: input.payLink,
+            status: 'pending',
+          })
+          .onConflictDoNothing({
+            target: [
+              platformSubscriptionInvoices.clubId,
+              platformSubscriptionInvoices.periodStart,
+            ],
+          })
+          .returning();
+        return inserted[0] ?? null;
+      } catch (err) {
+        const code =
+          err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+        const constraint =
+          err && typeof err === 'object' && 'constraint' in err
+            ? String((err as { constraint: unknown }).constraint)
+            : '';
+        if (
+          code === '23505' &&
+          constraint === 'platform_subscription_invoices_club_number_unique'
+        ) {
+          lastError = err;
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
-  }
-  throw new Error(
-    `createPlatformInvoiceWithGeneratedNumber: exhausted ${MAX_ATTEMPTS} attempts, last error: ${
-      lastError instanceof Error ? lastError.message : String(lastError)
-    }`,
-  );
+    throw new Error(
+      `createPlatformInvoiceWithGeneratedNumber: exhausted ${MAX_ATTEMPTS} attempts, last error: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`,
+    );
+  });
 }
 
 // ─── Lookups ──────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { safeHref } from '@/lib/safe-href';
 
 const CATEGORY_LABELS: Record<string, string> = {
   medical_report: 'Medical Report',
@@ -91,7 +92,7 @@ export function DocumentsTab({ horseId }: DocumentsTabProps) {
                 <div className="flex items-center gap-3">
                   <FileText className="h-8 w-8 text-muted-foreground" />
                   <div>
-                    <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 font-medium hover:underline">
+                    <a href={safeHref(doc.fileUrl)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 font-medium hover:underline">
                       {doc.fileName}
                       <ExternalLink className="h-3 w-3" />
                     </a>

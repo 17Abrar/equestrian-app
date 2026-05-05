@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { safeHref } from '@/lib/safe-href';
 
 export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
@@ -106,7 +107,7 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
               </p>
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link href={publicUrl} target="_blank" rel="noopener noreferrer">
+              <Link href={safeHref(publicUrl)} target="_blank" rel="noopener noreferrer">
                 Preview
                 <ExternalLink className="ml-2 h-3.5 w-3.5" />
               </Link>

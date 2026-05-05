@@ -383,6 +383,7 @@ export async function registerHorseOwnership(input: RegisterOwnershipInput) {
       id: clubMembers.id,
       displayName: clubMembers.displayName,
       email: clubMembers.email,
+      role: clubMembers.role,
     })
     .from(clubMembers)
     .where(
@@ -395,6 +396,18 @@ export async function registerHorseOwnership(input: RegisterOwnershipInput) {
     .limit(1);
 
   if (!member[0]) return null;
+
+  // Audit HIGH-1 (2026-05-05): the route's `requiredPermission`
+  // (`horses:register_own`) is checked against the caller's ACTIVE
+  // club, but `input.clubId` here is the TARGET club from the body.
+  // A user who is rider at A and coach at B passes the route gate
+  // (rider grant from active org A) and arrives here. We must
+  // re-validate the target-club role — only `rider` and `horse_owner`
+  // can register ownership; allowing `coach`/`groom`/etc. would let
+  // staff plant horses they shouldn't own.
+  if (member[0].role !== 'rider' && member[0].role !== 'horse_owner') {
+    throw new Error('OWNERSHIP_ROLE_NOT_ALLOWED');
+  }
 
   const values: NewHorse = {
     clubId: input.clubId,

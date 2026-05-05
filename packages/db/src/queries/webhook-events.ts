@@ -116,9 +116,15 @@ export async function claimWebhookEvent(
   // `markWebhookEventPermanentlyFailed` directly (used by the Clerk
   // org-not-found race so each retry doesn't re-fire the alert).
   if (row.status === 'failed' && row.attemptCount >= MAX_WEBHOOK_ATTEMPTS) {
+    // Audit HIGH-8 (2026-05-05): bump `lastAttemptedAt` alongside the
+    // status flip. Without this, a worker that already read the row at
+    // `t1` BEFORE this auto-promote could race a re-claim UPDATE whose
+    // OCC predicate `eq(lastAttemptedAt, t1)` still matches → the row
+    // flips back to `received` and the permanently-failed signal is
+    // lost. Stamping a fresh time invalidates that predicate.
     await db
       .update(webhookEvents)
-      .set({ status: 'permanently_failed' })
+      .set({ status: 'permanently_failed', lastAttemptedAt: new Date() })
       .where(
         and(
           eq(webhookEvents.provider, provider),
@@ -177,6 +183,34 @@ export async function markWebhookEventProcessed(
       processedAt: new Date(),
       lastError: null,
     })
+    .where(
+      and(
+        eq(webhookEvents.provider, provider),
+        eq(webhookEvents.eventId, eventId),
+      ),
+    );
+}
+
+/**
+ * Audit MED-9 (2026-05-05): stamps the resolved clubId onto the
+ * webhook_events row once the route handler has matched the event to a
+ * club. The schema's `club_id` column was added at table creation
+ * (idx_webhook_events_club_status sits on top of it) but no helper
+ * ever wrote to it — leaving the index empty in practice and forcing
+ * any per-club observability query to fall back to a full scan.
+ *
+ * Caller responsibility: call this after the event has resolved to a
+ * specific club (URL-bound, account-mapped, or via booking lookup).
+ * Idempotent — repeated calls with the same value are a no-op.
+ */
+export async function attachWebhookEventClub(
+  provider: string,
+  eventId: string,
+  clubId: string,
+): Promise<void> {
+  await db
+    .update(webhookEvents)
+    .set({ clubId })
     .where(
       and(
         eq(webhookEvents.provider, provider),

@@ -1,4 +1,5 @@
 import {
+  attachWebhookEventClub,
   findBookingByIdForWebhook,
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
@@ -73,6 +74,7 @@ export async function applyPaymentWebhook({
     currentPaymentStatus: string;
     bookingStatus: string;
     amount: number | null;
+    refundedAmountMinor: number;
     currency: string;
   } | null = null;
   if (event.providerPaymentId) {
@@ -90,6 +92,20 @@ export async function applyPaymentWebhook({
     });
     return null;
   }
+
+  // Audit MED-9 (2026-05-05): now that we've resolved this event to a
+  // specific club, stamp the webhook_events row's `club_id` so per-
+  // club observability queries hit the existing
+  // `idx_webhook_events_club_status` index. Best-effort: a failure
+  // here doesn't fail the request — the event is already claimed and
+  // will process either way.
+  void attachWebhookEventClub(provider, event.eventId, clubId).catch((err) => {
+    logger.warn('attach_webhook_club_failed', {
+      provider,
+      eventId: event.eventId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // (Removed a duplicate findBookingByProviderPaymentId call here that
   // re-ran the same query with the same args — the lookup at line 70
@@ -119,6 +135,7 @@ export async function applyPaymentWebhook({
         currentPaymentStatus: fallback.currentPaymentStatus,
         bookingStatus: fallback.bookingStatus,
         amount: fallback.amount,
+        refundedAmountMinor: fallback.refundedAmountMinor,
         currency: fallback.currency,
       };
     }
@@ -187,23 +204,63 @@ export async function applyPaymentWebhook({
   //    is 0, and the delta is the partial refund value.
   // 3. Replay of a refund event we already processed via the route — the CAS
   //    fails because `refundedAmountMinor` already equals the new value.
+  // Audit HIGH-3 (2026-05-05): if the adapter signalled a CUMULATIVE
+  // refund total (Stripe `charge.refunded` empty-`refunds.data` path),
+  // convert to delta by subtracting the booking's existing ledger total.
+  // This must run BEFORE the per-event-delta branch below, because a
+  // single event can carry only one or the other and we prefer the
+  // explicit delta when present.
+  let derivedRefundDelta: number | undefined = event.refundAmountMinor;
   if (
     isRefundEvent &&
     event.refundStatus === 'succeeded' &&
-    event.refundAmountMinor &&
-    event.refundAmountMinor > 0
+    derivedRefundDelta == null &&
+    typeof event.refundCumulativeMinor === 'number' &&
+    event.refundCumulativeMinor > 0
+  ) {
+    const ledger = bookingRef.refundedAmountMinor;
+    const delta = event.refundCumulativeMinor - ledger;
+    if (delta > 0) {
+      derivedRefundDelta = delta;
+      logger.info('webhook_refund_cumulative_to_delta', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        cumulative: event.refundCumulativeMinor,
+        priorLedger: ledger,
+        delta,
+      });
+    } else {
+      // Cumulative <= existing ledger means we've already recorded
+      // this (or more). Replay or out-of-order event — no-op.
+      logger.info('webhook_refund_cumulative_already_recorded', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        cumulative: event.refundCumulativeMinor,
+        priorLedger: ledger,
+      });
+      return { clubId, bookingId: bookingRef.bookingId };
+    }
+  }
+
+  if (
+    isRefundEvent &&
+    event.refundStatus === 'succeeded' &&
+    derivedRefundDelta &&
+    derivedRefundDelta > 0
   ) {
     const recorded = await recordBookingRefund(
       clubId,
       bookingRef.bookingId,
-      event.refundAmountMinor,
+      derivedRefundDelta,
     );
     if (recorded) {
       logger.info('booking_refund_recorded_from_webhook', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
-        refundAmountMinor: event.refundAmountMinor,
+        refundAmountMinor: derivedRefundDelta,
         newPaymentStatus: recorded.paymentStatus,
         newRefundedAmountMinor: recorded.refundedAmountMinor,
       });
@@ -215,7 +272,7 @@ export async function applyPaymentWebhook({
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
-        refundAmountMinor: event.refundAmountMinor,
+        refundAmountMinor: derivedRefundDelta,
         currentPaymentStatus: bookingRef.currentPaymentStatus,
       });
     }

@@ -91,12 +91,37 @@ export async function POST(request: NextRequest) {
         lessonType: slot.lessonTypeType ?? data.lessonType,
       });
 
-      return successResponse(result);
+      // Audit MED-2 (2026-05-05): tighten the response so the route
+      // can't be used as a coupon-code enumeration oracle.
+      //   1. Strip `couponId` — booking-create re-resolves the coupon
+      //      under FOR UPDATE, so the UI never needs the internal id.
+      //   2. Collapse every `valid: false` reason into a single
+      //      generic message — the prior path returned distinct
+      //      strings for unknown / expired / exhausted, letting an
+      //      attacker distinguish "this code exists but is past its
+      //      expiry" from "this code never existed". Even with the
+      //      10/min failClosed limit, that's a meaningful enumeration
+      //      surface for a multi-month brute-force.
+      // The server-side log can still distinguish reasons at warn
+      // level for ops triage.
+      if (!result.valid) {
+        return successResponse({
+          valid: false,
+          discount: 0,
+          error: 'Invalid promo code',
+        });
+      }
+      return successResponse({
+        valid: true,
+        discount: result.discount,
+      });
     },
     // failClosed: a Redis outage shouldn't let an attacker brute-force coupon
     // codes by spamming this endpoint. Legit users retry; abuse stays capped.
+    // Audit MED-2: tightened from 10/min to 5/min — combined with the unified
+    // error message, the brute-force surface is significantly smaller.
     {
-      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      rateLimit: { maxRequests: 5, windowMs: 60_000, failClosed: true },
       routeKey: 'coupons:validate',
     },
   );

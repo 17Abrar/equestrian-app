@@ -1,5 +1,5 @@
 import { eq, and, desc, lt, sql, type SQL } from 'drizzle-orm';
-import { db, rawDb } from '../index';
+import { db, rawDb, writeTransaction } from '../index';
 import { auditLog } from '../schema/operations';
 
 export interface CreateAuditEntryParams {
@@ -131,18 +131,26 @@ export async function getAuditLog(clubId: string, filters: AuditLogFilters) {
  */
 export async function pruneAuditLog(retentionDays = 90, limit = 5000) {
   const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
-  const result = await rawDb.execute(
-    sql`DELETE FROM ${auditLog}
-        WHERE ${auditLog.id} IN (
-          SELECT ${auditLog.id} FROM ${auditLog}
-          WHERE ${auditLog.createdAt} < ${cutoff}
-          LIMIT ${limit}
-        )`,
-  );
-  // pg returns a row-count style metadata; treat the truthy non-zero as
-  // pruned for logging purposes. Drizzle's neon-http exposes `rowCount`
-  // on the underlying object.
-  return { cutoff: cutoff.toISOString(), pruned: (result as { rowCount?: number }).rowCount ?? 0 };
+  // Audit LOW-5 (2026-05-05): bound the DELETE at the DB level. The cron's
+  // 5min wallclock cap is the only brake today — a runaway prune (severe
+  // bloat after ~2yr without a sweep, or a table-locked vacuum) could
+  // consume the worker's entire budget and skip the rest of the cron.
+  // `SET LOCAL` requires a transaction, so we route through writeTransaction.
+  return writeTransaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL statement_timeout = '4min'`);
+    const result = await tx.execute(
+      sql`DELETE FROM ${auditLog}
+          WHERE ${auditLog.id} IN (
+            SELECT ${auditLog.id} FROM ${auditLog}
+            WHERE ${auditLog.createdAt} < ${cutoff}
+            LIMIT ${limit}
+          )`,
+    );
+    return {
+      cutoff: cutoff.toISOString(),
+      pruned: (result as { rowCount?: number }).rowCount ?? 0,
+    };
+  });
 }
 
 // Silence unused-import for `lt` — kept around so a future filtered

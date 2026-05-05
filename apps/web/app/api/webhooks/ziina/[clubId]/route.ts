@@ -117,12 +117,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     account.externalAccountId &&
     event.providerAccountId !== account.externalAccountId
   ) {
+    // Audit MED-4 (2026-05-05): unify response with the other rejection
+    // paths — every "we won't process this" branch returns the same
+    // 401 "Invalid signature" body so an attacker can't probe whether
+    // their (clubId, account-id) tuple lands in any specific code
+    // path. Operator-actionable detail stays in the log.
     logger.warn('ziina_webhook_account_mismatch', {
       clubId,
       expected: account.externalAccountId,
       got: event.providerAccountId,
     });
-    return new Response('Account mismatch', { status: 400 });
+    return new Response('Invalid signature', { status: 401 });
   }
 
   const claim = await claimWebhookEvent('ziina', event.eventId);

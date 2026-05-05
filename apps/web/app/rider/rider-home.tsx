@@ -160,7 +160,8 @@ function CancelDialog({ booking, open, onOpenChange }: CancelDialogProps) {
           handleOpenChange(false);
         },
         onError: (err) => {
-          toast.error(err.message || 'Failed to cancel booking.');
+          const message = err instanceof Error ? err.message : 'Failed to cancel booking.';
+          toast.error(message || 'Failed to cancel booking.');
         },
       },
     );
