@@ -84,7 +84,32 @@ function getClient(creds: StripeCredentials): Stripe {
   // No module-level cache — each club has a different secret key. The
   // Stripe SDK is cheap to instantiate; the underlying connection pool
   // is shared via Node's HTTP agent.
-  return new Stripe(creds.secretKey, { typescript: true });
+  //
+  // Audit LOW-13 (2026-05-05): pin `apiVersion` so a transitive
+  // SDK upgrade can't quietly bump the API surface our adapter is
+  // built against (e.g. a Stripe webhook event payload reshape between
+  // versions, or a property rename on PaymentIntent/Charge that we
+  // currently access without a guard). Matches `stripe@18.5.0`'s
+  // declared `LatestApiVersion`. Bumping is a deliberate change —
+  // version bumps to this constant should ride with adapter testing.
+  return new Stripe(creds.secretKey, {
+    apiVersion: '2025-08-27.basil',
+    typescript: true,
+  });
+}
+
+/**
+ * Audit LOW-2 (2026-05-05): defensively scrub the `_secret_xxx` half of a
+ * PaymentIntent client_secret before letting a Stripe error message
+ * propagate. Stripe error messages don't currently echo the secret, but a
+ * future SDK change or a rare error path that includes the request body
+ * could surface it. The error message lands in `cause.message` and on
+ * `PaymentProviderError.message`, both of which our callers log
+ * (`booking_payment_provider_error` warns with `err.message`). The
+ * `pi_xxx_secret_yyy` shape is the documented Stripe convention.
+ */
+function scrubStripeErrorMessage(raw: string): string {
+  return raw.replace(/(_secret_)[A-Za-z0-9]+/g, '$1[REDACTED]');
 }
 
 function mapIntentStatus(status: Stripe.PaymentIntent.Status): PaymentIntentStatus {
@@ -142,7 +167,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
     } catch (err) {
       throw new PaymentProviderError(
         'AUTH_FAILED',
-        err instanceof Error ? err.message : 'Stripe key validation failed',
+        err instanceof Error
+          ? scrubStripeErrorMessage(err.message)
+          : 'Stripe key validation failed',
         { cause: err },
       );
     }
@@ -246,7 +273,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
       if (err instanceof PaymentProviderError) throw err;
       throw new PaymentProviderError(
         'CREATE_CHECKOUT_FAILED',
-        err instanceof Error ? err.message : 'Stripe Checkout Session creation failed',
+        err instanceof Error
+          ? scrubStripeErrorMessage(err.message)
+          : 'Stripe Checkout Session creation failed',
         { cause: err },
       );
     }
@@ -295,7 +324,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
       if (err instanceof PaymentProviderError) throw err;
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
-        err instanceof Error ? err.message : 'Stripe PaymentIntent creation failed',
+        err instanceof Error
+          ? scrubStripeErrorMessage(err.message)
+          : 'Stripe PaymentIntent creation failed',
         { cause: err, retryable: err instanceof Stripe.errors.StripeConnectionError },
       );
     }
@@ -325,7 +356,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     } catch (err) {
       throw new PaymentProviderError(
         'REFUND_FAILED',
-        err instanceof Error ? err.message : 'Stripe refund failed',
+        err instanceof Error ? scrubStripeErrorMessage(err.message) : 'Stripe refund failed',
         { cause: err },
       );
     }
@@ -345,7 +376,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
     } catch (err) {
       throw new PaymentProviderError(
         'STATUS_LOOKUP_FAILED',
-        err instanceof Error ? err.message : 'Stripe PaymentIntent retrieval failed',
+        err instanceof Error
+          ? scrubStripeErrorMessage(err.message)
+          : 'Stripe PaymentIntent retrieval failed',
         { cause: err },
       );
     }
@@ -368,7 +401,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
     } catch (err) {
       throw new PaymentProviderError(
         'INVALID_SIGNATURE',
-        err instanceof Error ? err.message : 'Stripe webhook signature verification failed',
+        err instanceof Error
+          ? scrubStripeErrorMessage(err.message)
+          : 'Stripe webhook signature verification failed',
         { cause: err },
       );
     }
@@ -381,6 +416,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let bookingId: string | undefined;
     let refundStatus: WebhookEvent['refundStatus'];
     let refundAmountMinor: number | undefined;
+    let refundCumulativeMinor: number | undefined;
     let currency: string | undefined;
 
     function piPaymentIntentId(
@@ -430,8 +466,17 @@ export const stripeAdapter: PaymentProviderAdapter = {
             refundAmountMinor = latest.amount;
           }
         } else {
+          // Audit HIGH-3 (2026-05-05): empty `refunds.data` means
+          // Stripe didn't expand the refund list on this event. The
+          // only signal we have is `charge.amount_refunded`, which is
+          // CUMULATIVE (sum of every refund against this charge so
+          // far). Surface it as `refundCumulativeMinor` rather than
+          // `refundAmountMinor` — the webhook helper computes a true
+          // delta by subtracting the booking's running ledger total.
+          // The previous version treated cumulative as delta and
+          // double-counted on every refund after the first.
           refundStatus = 'succeeded';
-          refundAmountMinor = charge.amount_refunded;
+          refundCumulativeMinor = charge.amount_refunded;
         }
         break;
       }
@@ -479,6 +524,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
       currency,
       refundStatus,
       refundAmountMinor,
+      refundCumulativeMinor,
       data: event,
     };
   },

@@ -14,8 +14,28 @@ export async function POST(request: NextRequest) {
       const body = await request.json();
       const { provider } = validateInput(setActiveSchema, body);
 
-      const result = await setActiveProvider(ctx.clubId, provider);
+      // Audit MED-7 (2026-05-05): the query now throws
+      // `PROVIDER_NOT_ACTIVATABLE` when the target doesn't exist or
+      // isn't `connected` (instead of leaving the club with no
+      // active provider after a half-applied transaction). Catch it
+      // here and surface as 422 with the same shape as the prior
+      // null-return path.
+      let result;
+      try {
+        result = await setActiveProvider(ctx.clubId, provider);
+      } catch (err) {
+        if (err instanceof Error && err.message === 'PROVIDER_NOT_ACTIVATABLE') {
+          return errorResponse(
+            'NOT_CONNECTED',
+            `${provider} is not connected — finish onboarding before marking it active`,
+            422,
+          );
+        }
+        throw err;
+      }
       if (!result) {
+        // Should be unreachable now (the throw above covers the
+        // not-connected case), but kept as belt-and-braces.
         return errorResponse(
           'NOT_CONNECTED',
           `${provider} is not connected — finish onboarding before marking it active`,

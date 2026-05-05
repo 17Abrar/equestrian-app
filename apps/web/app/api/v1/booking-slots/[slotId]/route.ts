@@ -207,13 +207,33 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         });
       }
 
+      // Audit MED-8 (2026-05-05): paid bookings whose slot just got
+      // cancelled need refunds. Auto-refunding inside the cascade is
+      // feature-sized work (per-booking adapter call, partial-failure
+      // handling, idempotency for retries) — not appropriate to bundle
+      // into a closeout PR. For now, escalate the signal so an
+      // operator definitely sees it: WARN-level structured log with the
+      // booking ids so admin tooling can surface a follow-up queue,
+      // not just an info-level field on the response that an admin
+      // might miss in passing.
+      const refundQueue = cancelledBookings
+        .filter((b) => b.paymentStatus === 'paid' || b.paymentStatus === 'partial')
+        .map((b) => b.id);
+      if (refundQueue.length > 0) {
+        logger.warn('slot_cancellation_refund_queue_pending', {
+          slotId,
+          clubId: ctx.clubId,
+          bookingIds: refundQueue,
+          count: refundQueue.length,
+          actorMemberId: ctx.memberId,
+        });
+      }
+
       return successResponse({
         id: slot.id,
         message: 'Slot cancelled',
         bookingsCancelled: cancelledBookings.length,
-        paidBookingsPendingRefund: cancelledBookings
-          .filter((b) => b.paymentStatus === 'paid')
-          .map((b) => b.id),
+        paidBookingsPendingRefund: refundQueue,
       });
     },
     { requiredPermission: 'bookings:update' },

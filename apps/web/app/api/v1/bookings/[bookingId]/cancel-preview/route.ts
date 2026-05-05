@@ -63,24 +63,39 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Slot or club not found', 404);
       }
 
+      // Audit CRIT-2 (2026-05-05): preview must compute against the same
+      // base the actual cancel will charge — `booking.amount` is the NET
+      // amount stored after coupon discount (see bookings POST line 252:
+      // `netAmount = grossAmount - discountAmount`). Falling back to the
+      // sticker price only when amount is null preserves behaviour for
+      // ancient rows. The Math.min cap mirrors the DELETE handler in
+      // ../route.ts so a misconfigured fee percent can never exceed
+      // what the rider actually paid.
+      const feeBase = booking.amount ?? slot.lessonTypePrice;
       const feeResult = calculateCancellationFee({
         slotDate: slot.date,
         slotStartTime: slot.startTime,
         timezone: club.timezone,
         cancellationNoticeHours: club.cancellationNoticeHours,
         lateCancellationFeePercent: Number(club.lateCancellationFeePercent),
-        lessonPrice: slot.lessonTypePrice,
+        lessonPrice: feeBase,
       });
+      const fee =
+        booking.amount != null
+          ? Math.min(feeResult.fee, booking.amount)
+          : feeResult.fee;
 
       return successResponse({
         bookingId: booking.id,
         isLate: feeResult.isLate,
-        fee: feeResult.fee,
+        fee,
         currency: booking.currency,
         cutoffTime: feeResult.cutoffTime,
         hoursUntilSlot: Math.round(feeResult.hoursUntilSlot * 10) / 10,
         cancellationNoticeHours: club.cancellationNoticeHours,
-        lessonPrice: slot.lessonTypePrice,
+        // Surface what the rider would actually be charged AGAINST so
+        // the dashboard can render "fee X of Y" accurately.
+        lessonPrice: feeBase,
       });
     },
   );

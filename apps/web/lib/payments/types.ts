@@ -158,6 +158,17 @@ export interface WebhookEvent {
    * `amountReceivedMinorUnits` which for charge events is the cumulative
    * refunded total. Required to reverse the right amount on a failed refund. */
   refundAmountMinor?: number;
+  /**
+   * Cumulative refunded total reported by the provider for this charge,
+   * in minor units. Set ONLY when the adapter cannot derive a per-event
+   * delta (Stripe's `charge.refunded` event with empty `refunds.data`).
+   * The webhook helper computes `delta = max(0, cumulative -
+   * bookingRef.refundedAmountMinor)` and feeds that into
+   * `recordBookingRefund` — this avoids the audit HIGH-3 double-count
+   * bug where the helper used to add the cumulative to the running
+   * total. When `refundAmountMinor` is also set on the same event,
+   * the helper prefers the delta and ignores this field. */
+  refundCumulativeMinor?: number;
   data: unknown;
 }
 

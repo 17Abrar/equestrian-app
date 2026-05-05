@@ -211,6 +211,7 @@ export function verifyPlatformWebhook(input: {
       status?: string;
       amount?: number;
       currency_code?: string;
+      created_at?: string;
     };
   };
   try {
@@ -223,12 +224,18 @@ export function verifyPlatformWebhook(input: {
   const intentId = payload.data?.id;
   const eventName = payload.event ?? 'ziina.event';
   const statusKey = payload.data?.status ?? 'nostatus';
+  // Audit HIGH-7 (2026-05-05): include created_at in the dedup composite —
+  // see the matching change in `lib/payments/ziina.ts`. Otherwise two
+  // events sharing (event, intent_id, status) (possible on retries or
+  // partial-refund oscillation) collide and the second is silently
+  // `already_processed`.
+  const createdKey =
+    typeof payload.data?.created_at === 'string'
+      ? payload.data.created_at
+      : 'nots';
 
-  // Compose eventId on (event, intent_id, status) so the pending →
-  // completed transition stream produces distinct dedup keys. Same
-  // pattern as the per-club Ziina adapter.
   const eventId = intentId
-    ? `${eventName}:${intentId}:${statusKey}`
+    ? `${eventName}:${intentId}:${statusKey}:${createdKey}`
     : `${eventName}:` +
       createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 

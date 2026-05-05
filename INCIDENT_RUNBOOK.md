@@ -139,6 +139,45 @@ Within 5 business days of any incident that hit a customer:
 3. Link the postmortem from this runbook's "Past incidents" section
    below.
 
+## Clerk org-resync (membership webhook permanently_failed)
+
+**Audit MED-5 (2026-05-05).** When `apps/web/app/api/webhooks/clerk/route.ts` receives `organizationMembership.created` BEFORE its sibling `organization.created` event (Svix delivery is best-effort, not strictly ordered), the handler can't find the club row to attach the member to. It returns 503 for Svix to retry; if all retries also lose the race, after `MAX_WEBHOOK_ATTEMPTS=3` the row auto-promotes to `permanently_failed` and the membership is silently dropped — the org ends with no admin in `club_members`.
+
+### Symptoms
+- A new club admin completes Clerk signup, lands on `/select-org` and stays there.
+- `wrangler tail` shows `webhook_permanently_failed` with `provider=clerk`, `eventType=organizationMembership.created`.
+- Clerk dashboard lists the user as an org member; Cavaliq DB has zero `club_members` rows for that `clerk_org_id`.
+
+### Resync procedure
+1. Pull the affected `org_id` from the failed log entry (Sentry tag `clerkOrgId` or the `wrangler tail` line).
+2. Fetch the org's member list from Clerk:
+   ```
+   curl -s "https://api.clerk.com/v1/organizations/<ORG_ID>/memberships" \
+     -H "Authorization: Bearer $CLERK_SECRET_KEY" | jq '.data[]'
+   ```
+3. For each member, INSERT/UPDATE the `club_members` row against `DATABASE_URL_UNPOOLED`:
+   ```sql
+   INSERT INTO club_members (club_id, clerk_user_id, role, display_name, email, is_active)
+   VALUES (
+     (SELECT id FROM clubs WHERE clerk_org_id = '<ORG_ID>'),
+     '<CLERK_USER_ID>',
+     '<MAPPED_ROLE>',  -- mapClerkRoleToAppRole(member.role); see lib/clerk-roles.ts
+     '<DISPLAY_NAME>',
+     '<EMAIL>',
+     true
+   )
+   ON CONFLICT (club_id, clerk_user_id) DO UPDATE SET
+     role = EXCLUDED.role,
+     display_name = EXCLUDED.display_name,
+     email = EXCLUDED.email,
+     is_active = true,
+     updated_at = now();
+   ```
+4. Verify the user can now load the dashboard.
+
+### Prevention
+Long-term: build an automated resync triggered when `permanently_failed` Clerk-membership rows are detected. Until then, the Sentry alert on `webhook_permanently_failed` with `provider=clerk` (configured via `scripts/setup-sentry-alerts.mjs`) pages on-call.
+
 ## Past incidents
 
 (Empty as of audit closeout 2026-04-26. Append entries newest-first.)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserButton } from '@clerk/nextjs';
 import { User, Shield, Scale, Ruler, Pencil, Check } from 'lucide-react';
@@ -97,19 +97,16 @@ export default function RiderProfilePage() {
   const me = meData?.data;
   const profile = profileData?.data ?? null;
 
-  // Open the editor automatically if the profile doesn't exist yet — riders
-  // who joined via /discover land here and need to fill their own details.
+  // Audit MED-13 (2026-05-05): the auto-open effect fired on every
+  // refetch where `profile` transiently went null, popping the editor
+  // mid-session. Removed — the derived `showEditor` below already
+  // covers the visual case (force editor whenever profile is null OR
+  // user explicitly clicked Edit).
   const [editing, setEditing] = useState(false);
-  useEffect(() => {
-    if (!profileLoading && !profile) setEditing(true);
-  }, [profileLoading, profile]);
 
   if (meLoading || profileLoading) return <ProfileSkeleton />;
   if (isError) return <ErrorState message={error?.message} onRetry={refetch} />;
 
-  // View-mode card derefs `profile.*`; force the editor whenever profile is
-  // null so a transient initial render doesn't null-deref before the effect
-  // above flips `editing` to true.
   const showEditor = editing || !profile;
 
   return (

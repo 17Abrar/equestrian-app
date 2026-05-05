@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { safeHref } from '@/lib/safe-href';
 import {
   useSubscription,
   useRefreshPayLink,
@@ -196,7 +197,14 @@ function OutstandingRow({ invoice }: { invoice: OutstandingInvoice }) {
       const res = await refresh.mutateAsync(invoice.id);
       if (res.success && res.data.payLink) {
         // Open in a new tab so the admin doesn't lose the dashboard.
-        window.open(res.data.payLink, '_blank', 'noopener,noreferrer');
+        // Audit LOW-10: route through safeHref so a malformed/javascript: pay
+        // link from the API can never execute in the admin's session.
+        const safe = safeHref(res.data.payLink);
+        if (safe === '#') {
+          toast.error('Pay link URL is invalid');
+          return;
+        }
+        window.open(safe, '_blank', 'noopener,noreferrer');
         toast.success('Pay link generated');
       }
     } catch (err) {
@@ -222,7 +230,7 @@ function OutstandingRow({ invoice }: { invoice: OutstandingInvoice }) {
         </span>
         {invoice.payLink ? (
           <Button asChild size="sm">
-            <a href={invoice.payLink} target="_blank" rel="noopener noreferrer">
+            <a href={safeHref(invoice.payLink)} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-2 h-4 w-4" />
               Pay
             </a>

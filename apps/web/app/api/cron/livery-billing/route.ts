@@ -152,8 +152,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET mirrors POST for wiring variants that prefer GET (some cron wrappers).
-export const GET = POST;
+// Audit MED-6 (2026-05-05): GET surface dropped. `worker-entry.mjs`
+// invokes this with POST + the `x-cron-secret` HEADER. A GET twin
+// invited operators to put the secret in the URL ("?cron-secret=…")
+// — which would land in Cloudflare access logs, browser history,
+// and proxy intermediaries. Header-only.
 
 // ─── Shared — payment intent + adapter cache ─────────────────────────
 

@@ -32,6 +32,11 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
 
       return successResponse(invoice);
     },
-    { requiredPermission: 'finances:update' },
+    {
+      requiredPermission: 'finances:update',
+      // Audit LOW-1: rate limit. See livery mark-paid for rationale.
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'livery_invoice_cancel',
+    },
   );
 }

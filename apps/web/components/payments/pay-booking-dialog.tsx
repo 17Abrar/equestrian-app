@@ -236,16 +236,60 @@ function StripePaymentForm({
       return;
     }
 
-    if (result.paymentIntent?.status === 'succeeded') {
+    // Audit HIGH-5 (2026-05-05): Stripe `confirmPayment` returns the
+    // PaymentIntent's current status, NOT the final outcome. Five
+    // possible non-error statuses, each with a different UX:
+    //   - succeeded:           Money captured. Close dialog, fire onPaid.
+    //   - processing:          Async clearing (bank transfers etc).
+    //                           Webhook will finalise; close dialog,
+    //                           inform user.
+    //   - requires_action:     3DS popup closed by user without
+    //                           completing. KEEP DIALOG OPEN so they
+    //                           can retry.
+    //   - requires_payment_method: Last card was declined. KEEP DIALOG
+    //                           OPEN so they can pick another method.
+    //   - requires_confirmation / requires_capture: should not happen
+    //                           with `redirect: if_required` + capture
+    //                           on confirm. Treat as "keep open" to be
+    //                           safe.
+    // The previous implementation closed the dialog on every non-
+    // succeeded non-error status, including `requires_action`. Riders
+    // would close 3DS, see "processing" toast, dismiss the dialog,
+    // and walk away from an unpaid booking — webhook never finalises.
+    const intentStatus = result.paymentIntent?.status;
+    if (intentStatus === 'succeeded') {
       toast.success('Payment successful');
       onPaid();
       return;
     }
-
-    // For statuses like `processing` / `requires_action` we fall through —
-    // the webhook will finalize things server-side.
-    toast.info('Payment is being processed. We’ll email you when it clears.');
-    onPaid();
+    if (intentStatus === 'processing') {
+      toast.info('Payment is being processed. We’ll email you when it clears.');
+      onPaid();
+      return;
+    }
+    if (intentStatus === 'requires_action') {
+      const message =
+        'Payment needs an additional step (3-D Secure or similar). Please complete the prompt and try again.';
+      setSubmitError(message);
+      toast.error(message);
+      setSubmitting(false);
+      return;
+    }
+    if (intentStatus === 'requires_payment_method') {
+      const message =
+        'That payment method was declined. Try a different card or method below.';
+      setSubmitError(message);
+      toast.error(message);
+      setSubmitting(false);
+      return;
+    }
+    // Any other status (`requires_confirmation`, `requires_capture`,
+    // `canceled`, anything we haven't enumerated) — surface as an
+    // error and keep the dialog open. Don't silently close.
+    const fallback = `Payment is in an unexpected state (${intentStatus ?? 'unknown'}). Please try again or contact support.`;
+    setSubmitError(fallback);
+    toast.error(fallback);
+    setSubmitting(false);
   }
 
   return (

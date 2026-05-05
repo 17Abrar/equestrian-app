@@ -44,6 +44,7 @@ import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { safeHref } from '@/lib/safe-href';
 
 interface LiveryTabProps {
   horse: Horse;
@@ -335,7 +336,7 @@ function InvoicesCard({
                             title="Open pay link"
                           >
                             <a
-                              href={inv.payLink}
+                              href={safeHref(inv.payLink)}
                               target="_blank"
                               rel="noopener noreferrer"
                             >

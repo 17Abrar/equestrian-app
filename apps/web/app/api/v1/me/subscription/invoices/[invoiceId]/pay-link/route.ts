@@ -101,6 +101,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         throw err;
       }
     },
-    { requiredPermission: 'settings:update' },
+    {
+      requiredPermission: 'settings:update',
+      // Audit LOW-1 (2026-05-05): rate limit — each call mints a fresh
+      // Ziina payment intent on the platform account. Loose loop here
+      // would hit Ziina's per-account rate limit before ours.
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'platform_invoice_pay_link_refresh',
+    },
   );
 }

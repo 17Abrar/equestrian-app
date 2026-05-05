@@ -49,10 +49,18 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Slot or club not found', 404);
       }
 
-      const noShowFee = calculateNoShowFee({
+      // Audit HIGH-12 (2026-05-05): no-show fee must compute against the
+      // NET amount the rider actually owes (`booking.amount`), not the
+      // sticker price — same fix shape as CRIT-2's cancel-preview/cancel
+      // unification. Cap the result at `booking.amount` so a future
+      // misconfigured percent can never overcharge.
+      const feeBase = booking.amount ?? slot.lessonTypePrice;
+      const rawFee = calculateNoShowFee({
         noShowFeePercent: Number(club.noShowFeePercent),
-        lessonPrice: slot.lessonTypePrice,
+        lessonPrice: feeBase,
       });
+      const noShowFee =
+        booking.amount != null ? Math.min(rawFee, booking.amount) : rawFee;
 
       const updated = await markBookingNoShow(ctx.clubId, bookingId, noShowFee);
 

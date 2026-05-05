@@ -153,17 +153,33 @@ describe('recordBookingRefund', () => {
     });
   });
 
-  it('optimistic concurrency: two parallel refunds — only one wins', async () => {
+  it('concurrent refunds serialize cleanly — no lost update', async () => {
+    // Audit HIGH-4 (2026-05-05): the implementation now wraps the
+    // read+CAS pair in `writeTransaction` with `SELECT … FOR UPDATE`.
+    // The previous contract was OCC ("only one wins; the other gets a
+    // 409"); the new contract serialises on the row lock so concurrent
+    // admin clicks + webhook arrivals BOTH commit in order without
+    // double-counting. This test enforces the lost-update prevention
+    // invariant: two parallel refunds may both succeed, but the final
+    // running total must equal their SUM — never less (lost update),
+    // never more (over-refund).
     const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
     await withTestDb(testDb.db, async () => {
       const [a, b] = await Promise.all([
         recordBookingRefund(clubId, bookingId, 2_000),
         recordBookingRefund(clubId, bookingId, 3_000),
       ]);
-      // Exactly one should have landed; the other gets null and the
-      // caller returns 409 (see refund route's REFUND_RACE branch).
+      // Both should land — neither violates the over-refund cap (5_000
+      // ≤ 10_000), and FOR UPDATE prevents the previous race window
+      // where both read 0 and one's CAS lost.
       const successes = [a, b].filter((r) => r !== null);
-      expect(successes.length).toBe(1);
+      expect(successes.length).toBe(2);
+      // Running total reflects both — lost-update would have left this
+      // at 2_000 or 3_000 instead of 5_000.
+      const finalTotal = Math.max(
+        ...successes.map((r) => r!.refundedAmountMinor),
+      );
+      expect(finalTotal).toBe(5_000);
     });
   });
 });

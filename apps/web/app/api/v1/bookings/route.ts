@@ -11,6 +11,7 @@ import {
   getBookingById,
   getMemberById,
   getClubById,
+  getHorseById,
   isParentOf,
   getDependentMemberIds,
 } from '@equestrian/db/queries';
@@ -115,6 +116,22 @@ export async function POST(request: NextRequest) {
 
       const data = await parseRequiredBody(request, createBookingSchema);
 
+      // Audit CRIT-3 (2026-05-05): the booking row's `payment_method` enum
+      // declares `'package_credit'`, but no code anywhere decrements
+      // `rider_packages.remaining_credits`. Until the consumption path
+      // ships (FOR-UPDATE lock on the rider's active package, atomic
+      // decrement inside the booking writeTransaction, rollback on
+      // depletion), accepting it here would let any rider with
+      // `bookings:create` book free lessons. Reject at the route until
+      // that work lands.
+      if (data.paymentMethod === 'package_credit') {
+        return errorResponse(
+          'NOT_IMPLEMENTED',
+          'Package-credit booking is not yet enabled. Pick a different payment method.',
+          422,
+        );
+      }
+
       // Verify slot exists and has capacity
       const slot = await getBookingSlotById(ctx.clubId, data.slotId);
       if (!slot) {
@@ -172,6 +189,28 @@ export async function POST(request: NextRequest) {
       }
 
       const isGuestBooking = !!data.guest;
+
+      // Audit CRIT-1 (2026-05-05): bind the body's horseId to this club
+      // before forwarding to createBooking. The `bookings.horse_id` FK
+      // is single-column → references `horses(id)` only, with no
+      // `(horse_id, club_id)` composite constraint (migration 0017
+      // applied that pattern to horse SUB-tables but not to bookings
+      // itself). Without this guard, a Club A staffer could POST
+      // `{ slotId: <A>, horseId: <B-horse-uuid> }` and the DB would
+      // accept the row. Migration 0033 adds the composite FK as
+      // belt-and-braces; this route check is the immediate defence.
+      // Soft-deleted horses are also filtered (`isNull(deletedAt)` in
+      // getHorseById) so a "deleted" club B horse can't be smuggled.
+      if (data.horseId) {
+        const horse = await getHorseById(ctx.clubId, data.horseId);
+        if (!horse) {
+          return errorResponse(
+            'HORSE_NOT_FOUND',
+            'Horse is not in this club',
+            404,
+          );
+        }
+      }
 
       let assignedHorseId = data.horseId;
       let matchScore: number | undefined;

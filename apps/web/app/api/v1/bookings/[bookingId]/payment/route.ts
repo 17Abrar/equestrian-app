@@ -125,6 +125,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      // Audit MED-11 (2026-05-05): currency parity — refuse to drive a
+      // payment if the booking's currency doesn't match what the
+      // active provider account was connected as. Failure mode without
+      // this check: Stripe/Ziina return a confused 5xx on the first
+      // charge for a non-matching currency, leaving the rider with no
+      // pay link and a "something went wrong" toast. The metadata
+      // shape varies by provider — Stripe stores `defaultCurrency` on
+      // metadata; N-Genius/Ziina don't always — so we only enforce
+      // when the data is present. Soft-fail otherwise (the provider
+      // call will surface a clearer error).
+      const meta = (account.metadata ?? null) as Record<string, unknown> | null;
+      const rawDefaultCurrency = meta?.defaultCurrency;
+      const accountCurrency =
+        typeof rawDefaultCurrency === 'string' ? rawDefaultCurrency.toUpperCase() : null;
+      if (accountCurrency && booking.currency.toUpperCase() !== accountCurrency) {
+        logger.warn('booking_payment_currency_mismatch', {
+          bookingId,
+          clubId: ctx.clubId,
+          provider: account.provider,
+          bookingCurrency: booking.currency,
+          accountCurrency,
+        });
+        return errorResponse(
+          'CURRENCY_MISMATCH',
+          `Booking is in ${booking.currency.toUpperCase()} but the active payment provider settles in ${accountCurrency}. Reach out to support to align them.`,
+          422,
+        );
+      }
+
       const adapter = getAdapter(account.provider);
       // Stripe / N-Genius / Ziina all require ABSOLUTE return/cancel URLs.
       // A relative-URL fallback would silently misconfigure every provider —

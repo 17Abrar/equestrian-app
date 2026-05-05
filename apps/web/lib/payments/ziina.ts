@@ -341,11 +341,23 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     const intentId = payload.data?.id;
     const statusKey = payload.data?.status ?? 'nostatus';
     const eventName = payload.event ?? 'ziina.event';
+    // Audit HIGH-7 (2026-05-05): include the resource's created_at in the
+    // dedup composite. Without it, two distinct events that share
+    // (event, intent_id, status) — possible on a partial-refund flow,
+    // a status oscillation, or a Ziina retry of a stale event — collide
+    // and the second is silently `already_processed`. created_at is
+    // not the event's send time but the PaymentIntent's creation time;
+    // for our dedup purposes that's still distinct per (intent, status,
+    // moment-of-state-change). When absent, fall back to body-hash.
+    const createdKey =
+      typeof payload.data?.created_at === 'string'
+        ? payload.data.created_at
+        : 'nots';
     // 32 hex chars = 128 bits of entropy on the SHA-256 — collision is
     // astronomically unlikely for any practical webhook volume but cheap
     // to extend from the prior 24 (96 bits).
     const eventId = intentId
-      ? `${eventName}:${intentId}:${statusKey}`
+      ? `${eventName}:${intentId}:${statusKey}:${createdKey}`
       : `${eventName}:` +
         createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 

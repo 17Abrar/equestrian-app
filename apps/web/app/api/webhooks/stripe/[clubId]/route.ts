@@ -104,6 +104,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('Invalid signature', { status: 401 });
   }
 
+  // Audit HIGH-2 (2026-05-05): bind the event's `account` to the URL's
+  // clubId. Signature verification proves the body was signed with
+  // this club's `whsec_…`, but a `whsec_…` pasted into two clubs'
+  // connect flows (operator typo, sandbox copy-paste, deliberate misuse)
+  // would otherwise let Club A's event posted to /webhooks/stripe/<B>
+  // get applied to Club B. Mirrors Ziina's per-club receiver. When
+  // `event.account` is set (Connect platform events have it; direct-
+  // keys events created via the platform have it too), enforce the
+  // binding against the stored `externalAccountId`.
+  if (
+    event.providerAccountId &&
+    account.externalAccountId &&
+    event.providerAccountId !== account.externalAccountId
+  ) {
+    logger.warn('stripe_webhook_account_mismatch', {
+      clubId,
+      expected: account.externalAccountId,
+      got: event.providerAccountId,
+    });
+    return new Response('Invalid signature', { status: 401 });
+  }
+
   if (!HANDLED_EVENTS.has(event.eventType)) {
     logger.info('stripe_webhook_unhandled', { clubId, type: event.eventType });
     return new Response('OK', { status: 200 });

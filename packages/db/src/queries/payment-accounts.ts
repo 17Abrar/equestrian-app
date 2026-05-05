@@ -236,6 +236,32 @@ export async function setActiveProvider(
   provider: PaymentProvider,
 ): Promise<PaymentAccountSummary | null> {
   return writeTransaction(async (tx) => {
+    // Audit MED-7 (2026-05-05): pre-check the target before touching
+    // any state. The previous implementation deactivated all rows
+    // first, then tried to activate the requested one — if the target
+    // didn't exist or wasn't `connected`, the deactivation committed
+    // and the club was left with NO active provider, silently
+    // returning null. Pre-check turns that into a clean rollback.
+    const [target] = await tx
+      .select({
+        id: clubPaymentAccounts.id,
+        status: clubPaymentAccounts.status,
+      })
+      .from(clubPaymentAccounts)
+      .where(
+        and(
+          eq(clubPaymentAccounts.clubId, clubId),
+          eq(clubPaymentAccounts.provider, provider),
+        ),
+      )
+      .limit(1);
+
+    if (!target || target.status !== 'connected') {
+      // Throw inside writeTransaction → rollback → no state change.
+      // Caller's catch maps this to a 422.
+      throw new Error('PROVIDER_NOT_ACTIVATABLE');
+    }
+
     await tx
       .update(clubPaymentAccounts)
       .set({ isActive: false, updatedAt: new Date() })
@@ -401,6 +427,11 @@ export async function findBookingByProviderPaymentId(
   currentPaymentStatus: string;
   bookingStatus: string;
   amount: number | null;
+  /** Running refunded total in minor units. Audit HIGH-3 (2026-05-05):
+   *  needed by the webhook helper to convert a provider's CUMULATIVE
+   *  refund total (Stripe `charge.amount_refunded` in the empty-
+   *  `refunds.data` fallback path) into a true delta. */
+  refundedAmountMinor: number;
   currency: string;
 } | null> {
   const rows = await rawDb
@@ -410,6 +441,7 @@ export async function findBookingByProviderPaymentId(
       paymentStatus: bookings.paymentStatus,
       status: bookings.status,
       amount: bookings.amount,
+      refundedAmountMinor: bookings.refundedAmountMinor,
       currency: bookings.currency,
     })
     .from(bookings)
@@ -429,6 +461,7 @@ export async function findBookingByProviderPaymentId(
         currentPaymentStatus: row.paymentStatus,
         bookingStatus: row.status,
         amount: row.amount,
+        refundedAmountMinor: row.refundedAmountMinor,
         currency: row.currency,
       }
     : null;
@@ -464,6 +497,9 @@ export async function findBookingByIdForWebhook(
   /** Captured amount in minor units. Webhook reconciles against this before
    * marking the booking paid (audit AI-21). */
   amount: number | null;
+  /** Audit HIGH-3 (2026-05-05): refunded-so-far for cumulative→delta
+   *  conversion in the empty-`refunds.data` fallback path. */
+  refundedAmountMinor: number;
   /** ISO-4217 code stamped at booking time. Webhook compares against the
    * provider event's currency to refuse cross-currency mark-paid. */
   currency: string;
@@ -476,6 +512,7 @@ export async function findBookingByIdForWebhook(
       providerPaymentId: bookings.providerPaymentId,
       status: bookings.status,
       amount: bookings.amount,
+      refundedAmountMinor: bookings.refundedAmountMinor,
       currency: bookings.currency,
     })
     .from(bookings)
@@ -491,6 +528,7 @@ export async function findBookingByIdForWebhook(
         currentProviderPaymentId: row.providerPaymentId,
         bookingStatus: row.status,
         amount: row.amount,
+        refundedAmountMinor: row.refundedAmountMinor,
         currency: row.currency,
       }
     : null;
