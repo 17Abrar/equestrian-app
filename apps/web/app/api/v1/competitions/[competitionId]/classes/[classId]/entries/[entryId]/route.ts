@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   getCompetitionClassById,
   getCompetitionEntryById,
+  isParentOf,
   withdrawCompetitionEntry,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
@@ -31,16 +32,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const data = validateInput(withdrawSchema, body);
 
-    // Staff with `competitions:update` (admin/manager via wildcard) can
-    // withdraw any entry. Riders/parents with `competitions:register` can
-    // only withdraw their own — symmetric with the POST endpoint, which
-    // also lets them register themselves but not others. Inline check
-    // rather than `requiredPermission` so the own-entry constraint runs
-    // after we've loaded the row.
+    // Three valid withdraw paths, symmetric with the POST endpoint:
+    //   - Staff with `competitions:update` (admin/manager via wildcard)
+    //     may withdraw any entry.
+    //   - Riders with `competitions:register` may withdraw their own.
+    //   - Parents with `competitions:register_child` may withdraw their
+    //     dependent's entry, verified via `rider_profiles.parent_member_id`.
+    // The own-entry constraint runs after the row is loaded so we can
+    // also check guardian status for the parent path. See audit F-2.
     const canWithdrawAny = hasPermission(ctx.orgRole, 'competitions:update');
-    const canWithdrawOwn = hasPermission(ctx.orgRole, 'competitions:register');
+    const canWithdrawSelf = hasPermission(ctx.orgRole, 'competitions:register');
+    const canWithdrawChild = hasPermission(ctx.orgRole, 'competitions:register_child');
 
-    if (!canWithdrawAny && !canWithdrawOwn) {
+    if (!canWithdrawAny && !canWithdrawSelf && !canWithdrawChild) {
       return errorResponse(
         'FORBIDDEN',
         'You do not have permission to withdraw competition entries',
@@ -65,12 +69,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           400,
         );
       }
-      if (existing.riderMemberId !== ctx.memberId) {
-        return errorResponse(
-          'FORBIDDEN',
-          'You can only withdraw your own entries',
-          403,
-        );
+      const isSelf = existing.riderMemberId === ctx.memberId;
+      if (!isSelf) {
+        if (!canWithdrawChild) {
+          return errorResponse(
+            'FORBIDDEN',
+            'You can only withdraw your own entries',
+            403,
+          );
+        }
+        const linked = await isParentOf(ctx.clubId, ctx.memberId, existing.riderMemberId);
+        if (!linked) {
+          return errorResponse(
+            'FORBIDDEN',
+            'You can only withdraw entries for riders linked to you as a guardian',
+            403,
+          );
+        }
       }
     }
 

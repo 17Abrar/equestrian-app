@@ -10,7 +10,9 @@ import { scrubSentryBreadcrumb, scrubSentryEvent } from './lib/sentry-shared';
 // to the OpenNext-built bundle.
 Sentry.init({
   dsn: process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN,
-  sendDefaultPii: true,
+  // `sendDefaultPii` left at default (false) — see sentry.server.config.ts
+  // (audit F-4 2026-05-05). Edge runtime sees mostly the Clerk middleware
+  // path, which we explicitly do NOT want to capture IP/cookies on.
   tracesSampleRate: process.env.NODE_ENV === 'development' ? 1.0 : 0.1,
   enableLogs: true,
   enabled: !!(process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN),

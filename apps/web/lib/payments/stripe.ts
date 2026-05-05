@@ -353,15 +353,14 @@ export const stripeAdapter: PaymentProviderAdapter = {
 
   async verifyWebhook(input: VerifyWebhookInput): Promise<WebhookEvent> {
     // The route hands us the per-club webhook signing secret — there is no
-    // platform-level webhook receiver any more. constructEvent does both
-    // signature verification and timestamp-window enforcement.
+    // platform-level webhook receiver any more. `Stripe.webhooks.constructEvent`
+    // is a static crypto helper (signature verify + timestamp window) that
+    // does NOT require an authenticated client — using the static surface
+    // avoids the dummy-key instance the prior implementation needed and
+    // saves a per-webhook HTTP-agent allocation. Audit F-6 (2026-05-05).
     let event: Stripe.Event;
     try {
-      // Stripe.webhooks.constructEvent doesn't need a configured client —
-      // it's a pure crypto helper. Construct a minimal Stripe instance
-      // just to access the static helper.
-      const stripe = new Stripe('sk_dummy_for_webhooks_only', { typescript: true });
-      event = stripe.webhooks.constructEvent(
+      event = Stripe.webhooks.constructEvent(
         input.body,
         input.signatureHeader,
         input.webhookSecret,
