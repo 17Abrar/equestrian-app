@@ -16,7 +16,7 @@ import {
 } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
-import { bookings } from './bookings';
+import { bookings, lessonTypes } from './bookings';
 
 export const packages = pgTable('packages', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -26,7 +26,12 @@ export const packages = pgTable('packages', {
 
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
-  lessonTypeId: uuid('lesson_type_id'),
+  // FK to `lesson_types.id` ON DELETE SET NULL added in migration 0035
+  // (audit pass-2 schema-drift sweep). Previously a bare UUID, which
+  // permitted cross-tenant smuggling of arbitrary lesson-type IDs.
+  lessonTypeId: uuid('lesson_type_id').references(() => lessonTypes.id, {
+    onDelete: 'set null',
+  }),
   totalCredits: integer('total_credits').notNull(),
   price: integer('price').notNull(),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),

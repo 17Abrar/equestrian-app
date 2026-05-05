@@ -41,6 +41,7 @@ export interface InvoiceLineItem {
  *  every adapter records different keys. */
 export type PaymentMetadata = Record<string, unknown>;
 import { bookings } from './bookings';
+import { riderPackages } from './packages';
 
 /**
  * One row per (club, provider). A club may have multiple provider rows but
@@ -177,8 +178,18 @@ export const payments = pgTable('payments', {
   status: paymentStatusEnum('status').notNull().default('pending'),
   description: text('description'),
 
-  bookingId: uuid('booking_id').references(() => bookings.id),
-  packageId: uuid('package_id'),
+  // FK is composite (booking_id, club_id) -> bookings(id, club_id) ON
+  // DELETE SET NULL, declared in the table extras below as
+  // `payments_booking_club_fk` (matches migration 0033). The previous
+  // single-column inline `references(() => bookings.id)` was a
+  // residual that drizzle-kit would have regenerated as a regression.
+  bookingId: uuid('booking_id'),
+  // FK to `rider_packages.id` ON DELETE SET NULL added in migration
+  // 0035 (audit pass-2 schema-drift sweep). Previously a bare UUID,
+  // permitting cross-tenant smuggling of arbitrary rider-package IDs.
+  packageId: uuid('package_id').references(() => riderPackages.id, {
+    onDelete: 'set null',
+  }),
   liveryContractId: uuid('livery_contract_id').references(() => liveryContracts.id),
   invoiceId: uuid('invoice_id').references(() => invoices.id),
 
@@ -202,6 +213,15 @@ export const payments = pgTable('payments', {
     columns: [table.memberId, table.clubId],
     foreignColumns: [clubMembers.id, clubMembers.clubId],
   }),
+  // Composite FK ensures `bookingId` matches the payment's `clubId` —
+  // closes the cross-tenant child-row planting surface a single-column
+  // FK leaves open. ON DELETE SET NULL because some payments are for
+  // livery invoices (booking_id NULL by design). Matches migration 0033.
+  foreignKey({
+    name: 'payments_booking_club_fk',
+    columns: [table.bookingId, table.clubId],
+    foreignColumns: [bookings.id, bookings.clubId],
+  }).onDelete('set null'),
 ]);
 
 export const expenses = pgTable('expenses', {

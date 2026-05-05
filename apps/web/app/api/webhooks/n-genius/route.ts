@@ -3,6 +3,7 @@ import {
   claimWebhookEvent,
   findWebhookConfigByExternalId,
   markWebhookEventFailed,
+  markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { nGeniusAdapter } from '@/lib/payments/n-genius';
@@ -186,9 +187,21 @@ export async function POST(request: NextRequest) {
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
     if (!bookingResult) {
-      await applyLiveryInvoiceWebhook({ provider: 'n_genius', event });
+      await applyLiveryInvoiceWebhook({
+        provider: 'n_genius',
+        event,
+        clubId: account.clubId,
+      });
     }
-    await markWebhookEventProcessed('n_genius', event.eventId);
+    if (bookingResult?.permanentFailureReason) {
+      await markWebhookEventPermanentlyFailed(
+        'n_genius',
+        event.eventId,
+        bookingResult.permanentFailureReason,
+      );
+    } else {
+      await markWebhookEventProcessed('n_genius', event.eventId);
+    }
     return new Response('OK', { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';

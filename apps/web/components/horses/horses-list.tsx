@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { PendingApprovalCard } from './pending-approval-card';
 import { HORSE_STATUS_COLORS } from '@/lib/ui-constants';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 type Tab = 'active' | 'pending';
 
@@ -48,11 +49,39 @@ function usePendingCount() {
   return useHorses({ ownershipStatus: 'pending', page: 1, pageSize: 1 });
 }
 
-export function HorsesList() {
+interface HorsesListProps {
+  /**
+   * Audit MED (2026-05-05 pass 2): server-determined `horses:create`
+   * gate. Owners (read-own only) and coaches no longer see the Add
+   * Horse button that clicks to a 403.
+   */
+  canCreate?: boolean;
+}
+
+// Audit LOW (2026-05-05 pass 2): the filter Select offers all six DB
+// statuses (available/resting/injured/retired/off_site/sold). Mirror
+// the full union from `horseFiltersSchema` (NOT a narrower one — the
+// previous `as 'available' | 'resting'` cast was an outright lie when
+// the user selected "Injured" or "Sold"; the value made it through to
+// the network layer because the API's Zod schema accepts all six, but
+// the TS contract was wrong).
+const HORSE_STATUS_FILTER_VALUES = [
+  'available',
+  'resting',
+  'injured',
+  'retired',
+  'off_site',
+  'sold',
+] as const;
+type HorseStatusFilter = (typeof HORSE_STATUS_FILTER_VALUES)[number] | undefined;
+const SKILL_LEVEL_FILTER_VALUES = ['beginner', 'intermediate', 'advanced'] as const;
+type SkillLevelFilter = (typeof SKILL_LEVEL_FILTER_VALUES)[number] | undefined;
+
+export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
   const [tab, setTab] = useState<Tab>('active');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<string | undefined>();
-  const [skillLevel, setSkillLevel] = useState<string | undefined>();
+  const [status, setStatus] = useState<HorseStatusFilter>();
+  const [skillLevel, setSkillLevel] = useState<SkillLevelFilter>();
   const [page, setPage] = useState(1);
 
   const pendingBadge = usePendingCount();
@@ -60,11 +89,11 @@ export function HorsesList() {
 
   const { data, isLoading, isError, error, refetch } = useHorses({
     search: search || undefined,
-    status: status as 'available' | 'resting' | undefined,
-    skillLevel: skillLevel as 'beginner' | 'intermediate' | 'advanced' | undefined,
+    status,
+    skillLevel,
     ownershipStatus: tab === 'pending' ? 'pending' : 'active',
     page,
-    pageSize: 25,
+    pageSize: DEFAULT_PAGE_SIZE,
   });
 
   function switchTab(next: Tab) {
@@ -83,12 +112,14 @@ export function HorsesList() {
           <h1 className="text-3xl font-bold tracking-tight">Horses</h1>
           <p className="mt-1 text-muted-foreground">Manage your stable&apos;s horses</p>
         </div>
-        <Button asChild>
-          <Link href="/horses/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Horse
-          </Link>
-        </Button>
+        {canCreate && (
+          <Button asChild>
+            <Link href="/horses/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Horse
+            </Link>
+          </Button>
+        )}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => switchTab(v as Tab)}>
@@ -126,7 +157,15 @@ export function HorsesList() {
           <Select
             value={status ?? 'all'}
             onValueChange={(v) => {
-              setStatus(v === 'all' ? undefined : v);
+              setStatus(
+                v === 'all'
+                  ? undefined
+                  : (HORSE_STATUS_FILTER_VALUES.includes(
+                        v as (typeof HORSE_STATUS_FILTER_VALUES)[number],
+                      )
+                      ? (v as (typeof HORSE_STATUS_FILTER_VALUES)[number])
+                      : undefined),
+              );
               setPage(1);
             }}
           >
@@ -146,7 +185,15 @@ export function HorsesList() {
           <Select
             value={skillLevel ?? 'all'}
             onValueChange={(v) => {
-              setSkillLevel(v === 'all' ? undefined : v);
+              setSkillLevel(
+                v === 'all'
+                  ? undefined
+                  : (SKILL_LEVEL_FILTER_VALUES.includes(
+                        v as (typeof SKILL_LEVEL_FILTER_VALUES)[number],
+                      )
+                      ? (v as (typeof SKILL_LEVEL_FILTER_VALUES)[number])
+                      : undefined),
+              );
               setPage(1);
             }}
           >

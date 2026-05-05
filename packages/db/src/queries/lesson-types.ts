@@ -28,11 +28,30 @@ export async function getLessonTypesByClub(
   return { items, total: count[0]?.count ?? 0 };
 }
 
-export async function getLessonTypeById(clubId: string, lessonTypeId: string) {
+/**
+ * Audit MED (2026-05-05 pass 2): forward-creation paths (booking-slots
+ * create/bulk) must reject deactivated lesson types — soft-delete is
+ * the only signal admins have to drop a type from rotation. Pass
+ * `{ activeOnly: true }` from those routes; admin-detail reads (the
+ * lesson-type's own GET endpoint) keep the default.
+ */
+export async function getLessonTypeById(
+  clubId: string,
+  lessonTypeId: string,
+  options: { activeOnly?: boolean } = {},
+) {
+  const conditions = [
+    eq(lessonTypes.id, lessonTypeId),
+    eq(lessonTypes.clubId, clubId),
+  ];
+  if (options.activeOnly) {
+    conditions.push(eq(lessonTypes.isActive, true));
+  }
+
   const result = await db
     .select()
     .from(lessonTypes)
-    .where(and(eq(lessonTypes.id, lessonTypeId), eq(lessonTypes.clubId, clubId)))
+    .where(and(...conditions))
     .limit(1);
 
   return result[0] ?? null;

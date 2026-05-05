@@ -5,6 +5,7 @@ import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
 import { coupons, couponUsages } from '../schema/packages';
 import { riderProfiles } from '../schema/rider-profiles';
+import { calculateCouponDiscount } from '@equestrian/shared/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -12,7 +13,23 @@ type NewBookingSlot = typeof bookingSlots.$inferInsert;
 type BookingSlotCreate = Omit<NewBookingSlot, 'id' | 'clubId' | 'createdAt' | 'updatedAt'>;
 
 type NewBooking = typeof bookings.$inferInsert;
-type BookingCreate = Omit<NewBooking, 'id' | 'clubId' | 'createdAt' | 'updatedAt'>;
+type BookingCreateBase = Omit<NewBooking, 'id' | 'clubId' | 'createdAt' | 'updatedAt'>;
+
+/**
+ * Audit MED (2026-05-05 pass 2): when `couponId` is set, the caller now
+ * passes `grossAmount` instead of pre-computing `amount`/`discountAmount`
+ * — `createBooking` recomputes the discount under the locked coupon's
+ * effective `discountValue`/`maxDiscount`. This closes the TOCTOU gap
+ * where an admin tightening `maxDiscount` between the route's
+ * `validateCoupon` pre-flight and the in-tx lock would let the rider
+ * keep the looser pre-flight rate. When `couponId` is unset, `amount`
+ * is used as-is (no coupon math).
+ */
+type BookingCreate = BookingCreateBase & {
+  /** Pre-discount lesson price. Required when `couponId` is set;
+   *  ignored otherwise (caller passes the final `amount` directly). */
+  grossAmount?: number;
+};
 
 interface BookingSlotFilters {
   date?: string;
@@ -468,6 +485,14 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     // failure rolls back without touching slot capacity. Any concurrent
     // booking by the same rider waits behind this lock and then re-reads
     // the now-current `usage_count` / per-rider count.
+    // Audit MED (2026-05-05 pass 2): TOCTOU recompute. Lock the coupon and
+    // re-derive `discount`/`amount` from the LOCKED `discountType` /
+    // `discountValue` / `maxDiscount` columns rather than trusting the
+    // route's pre-flight numbers. An admin who tightens `maxDiscount`
+    // between the pre-flight and this lock can no longer leave the rider
+    // paying the looser pre-flight rate.
+    let recomputedAmount: number | null = null;
+    let recomputedDiscount: number | null = null;
     if (data.couponId) {
       const lockedCoupon = await tx
         .select({
@@ -475,6 +500,9 @@ export async function createBooking(clubId: string, data: BookingCreate) {
           maxUses: coupons.maxUses,
           maxUsesPerRider: coupons.maxUsesPerRider,
           usageCount: coupons.usageCount,
+          discountType: coupons.discountType,
+          discountValue: coupons.discountValue,
+          maxDiscount: coupons.maxDiscount,
         })
         .from(coupons)
         .where(and(eq(coupons.id, data.couponId), eq(coupons.clubId, clubId)))
@@ -505,6 +533,19 @@ export async function createBooking(clubId: string, data: BookingCreate) {
           throw new Error('COUPON_RIDER_MAX_USES_REACHED');
         }
       }
+
+      // Recompute. Falls back to caller-supplied `amount` when grossAmount
+      // is omitted (legacy callers); the recompute then derives the
+      // pre-discount value as amount + discountAmount.
+      const gross =
+        data.grossAmount ?? (data.amount ?? 0) + (data.discountAmount ?? 0);
+      recomputedDiscount = calculateCouponDiscount({
+        amount: gross,
+        discountType: c.discountType as 'percentage' | 'fixed',
+        discountValue: c.discountValue,
+        maxDiscount: c.maxDiscount,
+      });
+      recomputedAmount = Math.max(0, gross - recomputedDiscount);
     }
 
     // Atomically increment rider count only if (a) capacity is not exceeded,
@@ -539,7 +580,25 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       throw new Error('SLOT_FULL');
     }
 
-    const result = await tx.insert(bookings).values({ ...data, clubId }).returning();
+    // Audit MED (2026-05-05 pass 2): write the POST-lock `recomputedAmount` /
+    // `recomputedDiscount` if the coupon was locked above. Otherwise fall
+    // through to caller-supplied values (no coupon path).
+    const insertValues = (
+      recomputedAmount !== null && recomputedDiscount !== null
+        ? {
+            ...data,
+            clubId,
+            amount: recomputedAmount,
+            discountAmount: recomputedDiscount,
+          }
+        : { ...data, clubId }
+    ) as typeof bookings.$inferInsert;
+    // `grossAmount` is a convention parameter on `BookingCreate` only —
+    // strip it before handing to Drizzle.
+    if ('grossAmount' in insertValues) {
+      delete (insertValues as Record<string, unknown>).grossAmount;
+    }
+    const result = await tx.insert(bookings).values(insertValues).returning();
     const booking = result[0];
 
     // Without this, the gates checked above stay at 0 forever and the same
@@ -547,8 +606,8 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     // (charged) amount; reconstruct the original sticker price by adding
     // the discount back.
     if (booking && data.couponId) {
-      const finalAmount = data.amount ?? 0;
-      const discount = data.discountAmount ?? 0;
+      const finalAmount = recomputedAmount ?? data.amount ?? 0;
+      const discount = recomputedDiscount ?? data.discountAmount ?? 0;
       const originalAmount = finalAmount + discount;
       await tx.insert(couponUsages).values({
         clubId,

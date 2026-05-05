@@ -196,6 +196,18 @@ export async function markLiveryInvoicePaid(
 export async function findLiveryInvoiceByProviderPayment(
   providerPaymentId: string,
   provider: string,
+  /**
+   * Audit MED (2026-05-05 pass 2): when the caller has the URL's
+   * clubId in hand — every webhook receiver does, since the URL pattern
+   * is `/api/webhooks/<provider>/[clubId]` — pass it here. The lookup
+   * binds both `(providerPaymentId, provider)` AND `clubId`, so a
+   * future provider-payment-id collision (Ziina docs reserve the right
+   * to reuse intent ids across merchants under specific edge cases)
+   * can never resolve to another club's invoice. Optional for legacy
+   * callers; the `applyLiveryInvoiceWebhook` route-side helper now
+   * always passes it.
+   */
+  clubId?: string,
 ) {
   // Audit HIGH-9 (2026-05-05): match on `providerPaymentId` regardless of
   // whether `paymentProvider` is NULL or matches. The cron writes the
@@ -206,6 +218,14 @@ export async function findLiveryInvoiceByProviderPayment(
   // `payment_provider IS NULL OR =` predicate accepts both states; the
   // routing layer (caller) already knows which provider this is and
   // tags audit logs accordingly.
+  const conditions = [
+    eq(liveryInvoices.providerPaymentId, providerPaymentId),
+    sql`(${liveryInvoices.paymentProvider} IS NULL OR ${liveryInvoices.paymentProvider} = ${provider})`,
+  ];
+  if (clubId) {
+    conditions.push(eq(liveryInvoices.clubId, clubId));
+  }
+
   const rows = await rawDb
     .select({
       id: liveryInvoices.id,
@@ -220,12 +240,7 @@ export async function findLiveryInvoiceByProviderPayment(
       periodEnd: liveryInvoices.periodEnd,
     })
     .from(liveryInvoices)
-    .where(
-      and(
-        eq(liveryInvoices.providerPaymentId, providerPaymentId),
-        sql`(${liveryInvoices.paymentProvider} IS NULL OR ${liveryInvoices.paymentProvider} = ${provider})`,
-      ),
-    )
+    .where(and(...conditions))
     .limit(1);
   return rows[0] ?? null;
 }

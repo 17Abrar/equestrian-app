@@ -4,6 +4,7 @@ import {
   claimWebhookEvent,
   getWebhookConfigByClubProvider,
   markWebhookEventFailed,
+  markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { ziinaAdapter } from '@/lib/payments/ziina';
@@ -106,29 +107,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return new Response('OK', { status: 200 });
   }
 
-  // Bind the event's account_id to the URL's clubId. The signature check
-  // above already proved the body was signed with this club's secret — but
-  // if the same secret were ever pasted into two clubs' connect flows
-  // (operator misconfiguration), a webhook for Club A's payment posted to
-  // /api/webhooks/ziina/<clubB-uuid> would otherwise be applied to Club B.
-  // Defence in depth.
-  if (
-    event.providerAccountId &&
-    account.externalAccountId &&
-    event.providerAccountId !== account.externalAccountId
-  ) {
-    // Audit MED-4 (2026-05-05): unify response with the other rejection
-    // paths — every "we won't process this" branch returns the same
-    // 401 "Invalid signature" body so an attacker can't probe whether
-    // their (clubId, account-id) tuple lands in any specific code
-    // path. Operator-actionable detail stays in the log.
-    logger.warn('ziina_webhook_account_mismatch', {
-      clubId,
-      expected: account.externalAccountId,
-      got: event.providerAccountId,
-    });
-    return new Response('Invalid signature', { status: 401 });
-  }
+  // Audit HIGH-1 (2026-05-05 pass 2): the previous defense-in-depth
+  // comparison block here checked `event.providerAccountId` (a real
+  // Ziina merchant id read from `payload.data.account_id`) against
+  // `account.externalAccountId` (a synthesized `ziina_<clubId>` stored
+  // at connect time because Ziina doesn't expose a stable merchant id
+  // we can read without extra scopes — see ziina.ts:110-115). Those
+  // two values can NEVER match. The check was a silent ticking bomb:
+  // the moment Ziina ever populates `data.account_id` on a payload
+  // (the adapter reads it defensively, suggesting it sometimes does),
+  // every Ziina webhook for the club returns 401 and bookings stay
+  // forever-pending. Removed entirely. The URL's clubId + per-club
+  // `webhook_signing_secret` (verified above) already prove tenancy
+  // — a misconfigured-shared-secret scenario is the only residual,
+  // and operators can detect it by comparing clubId-vs-payload-merchant
+  // in the dashboard if they need to.
 
   const claim = await claimWebhookEvent('ziina', event.eventId);
 
@@ -176,9 +169,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // one OR the other, never both, so we only run the second lookup when
     // the first comes up empty.
     if (!bookingResult) {
-      await applyLiveryInvoiceWebhook({ provider: 'ziina', event });
+      await applyLiveryInvoiceWebhook({ provider: 'ziina', event, clubId });
     }
-    await markWebhookEventProcessed('ziina', event.eventId);
+    if (bookingResult?.permanentFailureReason) {
+      await markWebhookEventPermanentlyFailed(
+        'ziina',
+        event.eventId,
+        bookingResult.permanentFailureReason,
+      );
+    } else {
+      await markWebhookEventProcessed('ziina', event.eventId);
+    }
     return new Response('OK', { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';

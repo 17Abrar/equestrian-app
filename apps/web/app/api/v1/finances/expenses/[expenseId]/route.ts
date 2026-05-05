@@ -1,7 +1,12 @@
 import { type NextRequest } from 'next/server';
 import { updateExpenseSchema } from '@equestrian/shared/schemas';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import { getExpenseById, updateExpense, deleteExpense } from '@equestrian/db/queries';
+import {
+  getExpenseById,
+  updateExpense,
+  deleteExpense,
+  getHorseById,
+} from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
 interface RouteParams {
@@ -43,6 +48,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (amount !== undefined) {
         const targetCurrency = data.currency ?? existing.currency;
         amountMinor = toMinorUnits(amount, targetCurrency);
+      }
+
+      // Audit LOW (2026-05-05 pass 2): cross-tenant verify horseId on
+      // PATCH (same rationale as POST — the column has no composite FK).
+      if (data.horseId) {
+        const horse = await getHorseById(ctx.clubId, data.horseId);
+        if (!horse) {
+          return errorResponse(
+            'INVALID_HORSE',
+            'Horse not found in this club',
+            400,
+          );
+        }
       }
 
       const expense = await updateExpense(ctx.clubId, expenseId, {

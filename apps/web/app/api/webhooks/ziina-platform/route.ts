@@ -5,6 +5,7 @@ import {
   getPlatformInvoiceForEmail,
   markPlatformInvoicePaid,
   markWebhookEventFailed,
+  markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import {
@@ -107,8 +108,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    let permanentFailureReason: string | null = null;
     if (event.status === 'succeeded' && event.providerPaymentId) {
-      await applyPaidEvent({
+      permanentFailureReason = await applyPaidEvent({
         providerPaymentId: event.providerPaymentId,
         eventCurrency: event.currency,
         eventAmountReceived: event.amountReceivedMinorUnits,
@@ -119,7 +121,21 @@ export async function POST(request: NextRequest) {
     // will reissue / the admin will retry. We only flip to `paid` on a
     // confirmed completion.
 
-    await markWebhookEventProcessed(PROVIDER, event.eventId);
+    // Audit LOW (2026-05-05 pass 2): currency-mismatch / underfunded
+    // branches inside applyPaidEvent now signal `permanentFailureReason`
+    // rather than returning silently. The previous shape called
+    // `markWebhookEventProcessed` even though no apply happened — the
+    // operator could only spot the gap by tailing logs. Park the dedup
+    // row in `permanently_failed` so the alert fires.
+    if (permanentFailureReason) {
+      await markWebhookEventPermanentlyFailed(
+        PROVIDER,
+        event.eventId,
+        permanentFailureReason,
+      );
+    } else {
+      await markWebhookEventProcessed(PROVIDER, event.eventId);
+    }
     return new Response('OK', { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';
@@ -140,7 +156,12 @@ interface PaidEventArgs {
   eventAmountReceived: number | undefined;
 }
 
-async function applyPaidEvent(args: PaidEventArgs): Promise<void> {
+/**
+ * Audit LOW (2026-05-05 pass 2): returns null on a clean apply, or a
+ * human-readable reason string when the event must be parked
+ * (`permanently_failed`) instead of silently flipped to `processed`.
+ */
+async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   const invoice = await findPlatformInvoiceByProviderPayment(
     args.providerPaymentId,
     'ziina_platform',
@@ -149,7 +170,10 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<void> {
     logger.warn('platform_webhook_no_invoice_for_event', {
       providerPaymentId: args.providerPaymentId,
     });
-    return;
+    // Unknown invoice — could be a test event, a Cavaliq-platform
+    // payment outside our subscription flow, or genuinely lost. Mark
+    // processed (idempotent no-op); operators see the warn log.
+    return null;
   }
 
   // Amount + currency reconciliation. A Ziina event with metadata that
@@ -168,7 +192,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<void> {
       eventCurrency: args.eventCurrency,
       invoiceCurrency: invoice.currency,
     });
-    return;
+    return `Currency mismatch on platform invoice ${invoice.id}: expected ${invoice.currency}, got ${args.eventCurrency}`;
   }
   if (
     args.eventAmountReceived !== undefined &&
@@ -180,7 +204,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<void> {
       received: args.eventAmountReceived,
       expected: invoice.amountMinorUnits,
     });
-    return;
+    return `Amount underfunded on platform invoice ${invoice.id}: received ${args.eventAmountReceived} < expected ${invoice.amountMinorUnits}`;
   }
 
   const paidAt = new Date();
@@ -198,7 +222,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<void> {
       clubId: invoice.clubId,
       currentStatus: invoice.status,
     });
-    return;
+    return null;
   }
 
   // Send the receipt email. Fetch the joined view so we know the club's
@@ -226,4 +250,5 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<void> {
     clubId: invoice.clubId,
     invoiceNumber: invoice.invoiceNumber,
   });
+  return null;
 }

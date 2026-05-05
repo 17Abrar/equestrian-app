@@ -185,15 +185,29 @@ function ClubCard({ club }: { club: PublicClub }) {
       href={`/c/${club.slug}`}
       className="group overflow-hidden rounded-xl border bg-card transition-all hover:shadow-lg"
     >
+      {/*
+        Audit LOW (2026-05-05 pass 2): swap inline `backgroundImage:
+        url(${coverPhotoUrl})` for `next/image` so the cover photo gets
+        Next's responsive sizing + Cloudflare image-resizing pipeline.
+        The previous form bypassed both, downloading the original R2
+        asset (often >1MB) on every cards-grid render. The wrapper
+        carries the brand colour as a fallback and the photo overlays
+        when present.
+      */}
       <div
         className="relative h-32 w-full overflow-hidden"
-        style={{
-          backgroundColor: accent,
-          backgroundImage: club.coverPhotoUrl ? `url(${club.coverPhotoUrl})` : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+        style={{ backgroundColor: accent }}
       >
+        {club.coverPhotoUrl && (
+          <Image
+            src={club.coverPhotoUrl}
+            alt=""
+            fill
+            sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+            className="object-cover"
+            // Decorative — alt="" keeps screen readers from announcing it.
+          />
+        )}
         {club.logoUrl && (
           <div className="absolute bottom-2 left-2 h-12 w-12 overflow-hidden rounded-lg border-2 border-background bg-background shadow-sm">
             <Image

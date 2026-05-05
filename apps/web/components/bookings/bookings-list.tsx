@@ -56,6 +56,7 @@ import { fetchJson } from '@/lib/fetch-json';
 import type { ApiResponse } from '@equestrian/shared/types';
 
 import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 // ─── Action Dialog Types ─────────────────────────────────────────────
 
@@ -268,17 +269,42 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
 
 // ─── Main Component ──────────────────────────────────────────────────
 
-export function BookingsList() {
-  const [status, setStatus] = useState<string | undefined>();
+interface BookingsListProps {
+  /**
+   * Audit MED (2026-05-05 pass 2): server-determined `bookings:create`
+   * gate. When false, the "Add Booking" affordance is hidden — coaches
+   * (who hold `read` + `update_own` but not `create`) no longer see a
+   * button that clicks straight to a 403.
+   */
+  canCreate?: boolean;
+}
+
+// Audit LOW (2026-05-05 pass 2): mirror the full booking-status union
+// from `bookingFiltersSchema`. The previous `as 'pending' | 'confirmed'`
+// was a cast lie — the Select offers `completed`/`cancelled`/`no_show`
+// too. Keep all five so picking "Completed" or "Cancelled" routes the
+// real value to the API rather than slipping through as the broken
+// narrow type.
+const BOOKING_STATUS_FILTER_VALUES = [
+  'pending',
+  'confirmed',
+  'completed',
+  'cancelled',
+  'no_show',
+] as const;
+type BookingStatusFilter = (typeof BOOKING_STATUS_FILTER_VALUES)[number] | undefined;
+
+export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
+  const [status, setStatus] = useState<BookingStatusFilter>();
   const [date, setDate] = useState<string>('');
   const [page, setPage] = useState(1);
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useBookings({
-    status: status as 'pending' | 'confirmed' | undefined,
+    status,
     date: date || undefined,
     page,
-    pageSize: 25,
+    pageSize: DEFAULT_PAGE_SIZE,
   });
 
   function getAvailableActions(booking: Booking): ActionType[] {
@@ -307,7 +333,7 @@ export function BookingsList() {
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
           <p className="mt-1 text-muted-foreground">View and manage lesson bookings</p>
         </div>
-        <AddBookingDialog />
+        {canCreate && <AddBookingDialog />}
       </div>
 
       {/* Filters */}
@@ -327,7 +353,15 @@ export function BookingsList() {
         <Select
           value={status ?? 'all'}
           onValueChange={(v) => {
-            setStatus(v === 'all' ? undefined : v);
+            setStatus(
+              v === 'all'
+                ? undefined
+                : BOOKING_STATUS_FILTER_VALUES.includes(
+                      v as (typeof BOOKING_STATUS_FILTER_VALUES)[number],
+                    )
+                  ? (v as (typeof BOOKING_STATUS_FILTER_VALUES)[number])
+                  : undefined,
+            );
             setPage(1);
           }}
         >

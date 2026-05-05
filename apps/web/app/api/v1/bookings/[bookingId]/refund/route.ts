@@ -146,6 +146,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .select({
               refundedAmountMinor: bookingsTable.refundedAmountMinor,
               paymentStatus: bookingsTable.paymentStatus,
+              // Audit LOW (2026-05-05 pass 2): include providerPaymentId
+              // in the locked SELECT so the adapter call below uses the
+              // post-lock value rather than the pre-lock `booking` snapshot.
+              // `setBookingPaymentRef` enforces application-level
+              // immutability (the only writer is the payment-init route,
+              // and its WHERE predicate refuses to overwrite a non-null
+              // value), so concurrent rewrite is unreachable today —
+              // this is defense-in-depth that makes the lock self-
+              // contained.
+              providerPaymentId: bookingsTable.providerPaymentId,
             })
             .from(bookingsTable)
             .where(
@@ -184,9 +194,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // already 422'd; we only get here when finalAmount equals
           // requestedAmount in the happy path. The min() above is a
           // belt-and-braces clamp for the rare lock-released case.
+          // Use the post-lock providerPaymentId (audit LOW pass 2). The
+          // pre-lock `booking.providerPaymentId` was sufficient given
+          // `setBookingPaymentRef`'s immutability predicate, but the
+          // locked read keeps the lock self-contained: if a future writer
+          // bypasses that predicate, this still reads the live value.
+          const lockedProviderPaymentId = locked.providerPaymentId;
+          if (!lockedProviderPaymentId) {
+            // Should be unreachable — payment-init writes this column
+            // before the booking can be marked paid, and the route's
+            // earlier check verified `paymentStatus = 'paid' | 'partial'`.
+            return { kind: 'not-refundable' as const, status: locked.paymentStatus };
+          }
+
           const refund = await adapter.refund({
             account,
-            providerPaymentId: booking.providerPaymentId!,
+            providerPaymentId: lockedProviderPaymentId,
             amountMinorUnits: finalAmount,
             reason: data.reason,
             idempotencyKey: `refund_${bookingId}_${liveSoFar}_${finalAmount}`,

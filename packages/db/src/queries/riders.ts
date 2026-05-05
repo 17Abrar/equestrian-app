@@ -6,12 +6,23 @@ import { clubMembers } from '../schema/club-members';
 import { decryptField, encryptField } from '../crypto';
 import { escapeLikePattern } from '@equestrian/shared/utils';
 
-// Audit MED-3 (2026-05-05): rider medical notes are PHI-class data.
-// horse_health columns get this treatment via `encryptFields` (see
-// horse-health.ts); the rider-profile equivalents shipped in plaintext
-// from the start. Encrypted-at-rest with AES-256-GCM via
-// `encryptField`. The migration below (0034) re-encrypts existing
-// plaintext rows in-place; new writes go through this path.
+// Audit MED-3 (2026-05-05) + HIGH-3 (2026-05-05 pass 2): rider medical
+// notes are PHI-class data. Encrypted-at-rest with AES-256-GCM via
+// `encryptField` (`v1:` + base64(IV || tag || ct)). Two paths matter:
+//
+//   1. New writes — `createRider`, `updateRiderProfile`,
+//      `upsertRiderProfileByMember` below all run `encryptField` before
+//      handing the value to Drizzle.
+//   2. Pre-2026-05-05 plaintext rows — the original closeout claimed an
+//      in-place backfill via "migration 0034" but never shipped one,
+//      leaving legacy rows plaintext on disk. The pass-2 closeout
+//      ships both pieces: `scripts/backfill-rider-medical-notes.mjs`
+//      runs the encryption in Node-land (Postgres can't reproduce the
+//      AES-GCM envelope without leaking the key into pgcrypto), and
+//      `packages/db/migrations/0034_rider_medical_notes_backfill.sql`
+//      is a verifier that aborts the deploy if any plaintext row
+//      remains. The deploy procedure (DEPLOY.md) sequences the
+//      script before the migrate-neon step.
 //
 // Only `medicalNotes` is encrypted today. Emergency-contact phone is
 // NOT encrypted because it's read on every booking-confirmation email

@@ -77,6 +77,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { useRouter } from 'next/navigation';
+import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 
 interface CompetitionDetailProps {
   competitionId: string;
@@ -514,8 +515,8 @@ function AddClassForm({ competitionId, currency }: { competitionId: string; curr
 function AddEntryForm({ competitionId, classId }: { competitionId: string; classId: string }) {
   const [open, setOpen] = useState(false);
   const createEntry = useCreateCompetitionEntry(competitionId, classId);
-  const { data: ridersData } = useRiders({ page: 1, pageSize: 100 });
-  const { data: horsesData } = useHorses({ page: 1, pageSize: 100 });
+  const { data: ridersData } = useRiders({ page: 1, pageSize: MAX_PAGE_SIZE });
+  const { data: horsesData } = useHorses({ page: 1, pageSize: MAX_PAGE_SIZE });
 
   const riders = ridersData?.data ?? [];
   const horsesList = horsesData?.data ?? [];

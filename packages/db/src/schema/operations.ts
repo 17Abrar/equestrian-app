@@ -98,7 +98,14 @@ export const communityTopics = pgTable('community_topics', {
   id: uuid('id').primaryKey().defaultRandom(),
 
   name: varchar('name', { length: 255 }).notNull(),
-  slug: varchar('slug', { length: 100 }).unique().notNull(),
+  // Audit AI-13 pass-2: was `unique()` globally — two clubs couldn't both
+  // use the same per-club topic slug ("general", "events", etc.).
+  // Migration 0035 swaps to a per-club composite unique declared in the
+  // table-extras below. Default-system topics with `clubId IS NULL` keep
+  // working: Postgres's UNIQUE treats NULL as "not equal to NULL" by
+  // default, so global-default rows don't collide with per-club rows
+  // sharing the same slug.
+  slug: varchar('slug', { length: 100 }).notNull(),
   description: text('description'),
   icon: varchar('icon', { length: 50 }),
   isDefault: boolean('is_default').notNull().default(false),
@@ -108,6 +115,7 @@ export const communityTopics = pgTable('community_topics', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_topics_club').on(table.clubId),
+  unique('community_topics_club_slug_unique').on(table.clubId, table.slug),
 ]);
 
 export const communityPosts = pgTable('community_posts', {

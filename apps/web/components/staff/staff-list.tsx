@@ -29,6 +29,7 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 const ROLE_COLORS: Record<string, string> = {
   club_manager: 'bg-purple-100 text-purple-800',
@@ -58,7 +59,12 @@ function StaffSkeleton() {
   );
 }
 
-export function StaffList() {
+interface StaffListProps {
+  /** Audit MED (2026-05-05 pass 2): server-side `staff:create` gate. */
+  canCreate?: boolean;
+}
+
+export function StaffList({ canCreate = true }: StaffListProps = {}) {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string | undefined>();
   const [page, setPage] = useState(1);
@@ -67,7 +73,7 @@ export function StaffList() {
     search: search || undefined,
     role: roleFilter,
     page,
-    pageSize: 25,
+    pageSize: DEFAULT_PAGE_SIZE,
   });
   const deactivateStaff = useDeactivateStaff();
 
@@ -83,7 +89,10 @@ export function StaffList() {
       toast.success('Staff member deactivated');
     } catch (err) {
       reportMutationError('staff.deactivate', err, { memberId });
-      toast.error('Failed to deactivate staff member');
+      // Audit LOW (2026-05-05 pass 2): surface server-side error
+      // detail (e.g. "Last admin cannot be deactivated") instead of
+      // a hardcoded placeholder.
+      toast.error(err instanceof Error ? err.message : 'Failed to deactivate staff member');
     }
   }
 
@@ -94,7 +103,7 @@ export function StaffList() {
           <h1 className="text-3xl font-bold tracking-tight">Staff & Coaches</h1>
           <p className="mt-1 text-muted-foreground">Manage your team members</p>
         </div>
-        <AddStaffDialog />
+        {canCreate && <AddStaffDialog />}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

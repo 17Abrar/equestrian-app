@@ -447,5 +447,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
       return successResponse(cancelled);
     },
+    {
+      // Audit MED (2026-05-05 pass 2): cancel-with-refund hits the
+      // payment provider's refund API and writes the booking ledger —
+      // money-moving by definition. Sibling routes (`bookings/[id]/refund`
+      // and `bookings/[id]/payment`) already cap at 10/min/user
+      // failClosed; this DELETE was inheriting the default 60/min,
+      // letting a runaway client or replay loop fire 60 refund calls
+      // a minute. failClosed = an Upstash outage cannot lift the cap.
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'booking_cancel',
+    },
   );
 }

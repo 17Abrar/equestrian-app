@@ -50,7 +50,14 @@ export const liveryInvoices = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique('livery_invoices_unique_horse_period').on(table.horseId, table.periodStart),
+    // Audit AI-22 pass-2: the global `unique('livery_invoices_unique_horse_period')`
+    // declaration was dropped in migration 0027, replaced with a partial
+    // unique `WHERE status <> 'cancelled'` so a cancelled invoice for
+    // (horse, period) doesn't block re-issuing one for the same period
+    // (the cancel-then-reissue admin flow). Drizzle has no partial-unique
+    // builder; the constraint lives at the SQL layer only and does NOT
+    // appear here. Keep this comment so a future schema reviewer
+    // doesn't re-add the global form.
     index('idx_livery_invoices_club').on(table.clubId),
     index('idx_livery_invoices_owner_status').on(table.ownerMemberId, table.status),
     index('idx_livery_invoices_horse').on(table.horseId),

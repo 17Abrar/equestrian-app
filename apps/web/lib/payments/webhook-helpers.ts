@@ -57,7 +57,18 @@ export async function applyPaymentWebhook({
   event,
   overrideClubId,
   isRefundEvent,
-}: HandleWebhookOptions): Promise<{ clubId: string; bookingId: string } | null> {
+}: HandleWebhookOptions): Promise<{
+  clubId: string;
+  bookingId: string;
+  /**
+   * Audit MED (2026-05-05 pass 2): when set, the caller MUST call
+   * `markWebhookEventPermanentlyFailed` rather than `markWebhookEventProcessed`
+   * — the event resolved to a booking in a state where applying it
+   * would corrupt the ledger (e.g. paid event for a cancelled booking).
+   * Replaying won't help; an operator needs to step in.
+   */
+  permanentFailureReason?: string;
+} | null> {
   // 1. Resolve clubId via one of three paths, in priority order.
   let clubId = overrideClubId;
 
@@ -365,7 +376,21 @@ export async function applyPaymentWebhook({
       eventType: event.eventType,
       amountReceived: event.amountReceivedMinorUnits,
     });
-    return { clubId, bookingId: bookingRef.bookingId };
+    // Audit MED (2026-05-05 pass 2): the rider's payment is in the
+    // merchant balance but the booking is already cancelled / no-show
+    // — there's no automatic apply that's safe (silently flipping
+    // `paymentStatus = paid` would re-charge a settled lesson). The
+    // previous shape returned cleanly here and let the route flip the
+    // dedup row to `processed`, leaving operators to spot the error
+    // log only by accident. Surface it loud: signal `permanentFailure`
+    // so the route calls `markWebhookEventPermanentlyFailed` and the
+    // `webhook_permanently_failed` alert fires for an operator to
+    // review (refund manually, or reattach the booking).
+    return {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      permanentFailureReason: `Payment received for a ${bookingRef.bookingStatus} booking — manual reconciliation required`,
+    };
   }
 
   // Amount/currency reconciliation (audit AI-21). Without this guard, a
@@ -460,15 +485,25 @@ export async function applyPaymentWebhook({
 export async function applyLiveryInvoiceWebhook({
   provider,
   event,
+  clubId,
 }: {
   provider: ProviderName;
   event: WebhookEvent;
+  /**
+   * Audit MED (2026-05-05 pass 2): the URL clubId from the webhook
+   * receiver path. Every receiver has it (`/api/webhooks/<provider>/[clubId]`).
+   * Threading it through scopes the invoice lookup to a single tenant —
+   * defense-in-depth against any future cross-merchant payment-id
+   * collision.
+   */
+  clubId?: string;
 }): Promise<{ invoiceId: string; clubId: string } | null> {
   if (!event.providerPaymentId) return null;
 
   const invoice = await findLiveryInvoiceByProviderPayment(
     event.providerPaymentId,
     provider,
+    clubId,
   );
   if (!invoice) return null;
 

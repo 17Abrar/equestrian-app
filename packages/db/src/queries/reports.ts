@@ -1,7 +1,6 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../index';
 import { bookings, bookingSlots, lessonTypes } from '../schema/bookings';
-import { payments } from '../schema/finances';
 import { horses } from '../schema/horses';
 
 interface DateRange {

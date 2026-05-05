@@ -37,12 +37,25 @@
     "mode": "smart"
   },
 
-  // Cron triggers. 02:00 UTC daily = 06:00 Dubai / 05:00 Riyadh — before the
-  // workday but after midnight rolls over, so "due today" means the current
-  // Dubai date. Hits `/api/cron/livery-billing` via scheduled() → fetch().
-  // Secured by CRON_SECRET comparison server-side.
+  // Cron triggers. Split between two distinct schedules so a slow run on
+  // one (e.g. a stable with hundreds of livery horses on the livery cron,
+  // or platform-billing fanning out across every active club) cannot
+  // starve the other inside a single 30-second-CPU-budget invocation.
+  // Audit PROC-1 (2026-05-05 pass 2).
+  //
+  //   02:00 UTC daily — livery billing cron (`/api/cron/livery-billing`).
+  //                     06:00 Dubai / 05:00 Riyadh — before the workday
+  //                     so "due today" means the current Dubai date.
+  //   02:15 UTC daily — platform billing cron (`/api/cron/platform-billing`).
+  //                     15-minute lag gives the livery cron a clear runway
+  //                     before Cavaliq's own subscription billing fans out
+  //                     to every active club.
+  //
+  // Both are secured by CRON_SECRET comparison server-side, dispatched
+  // by `worker-entry.mjs`'s `scheduled()` handler which routes by the
+  // event's scheduled-time signature.
   "triggers": {
-    "crons": ["0 2 * * *"]
+    "crons": ["0 2 * * *", "15 2 * * *"]
   },
 
   // Custom domain binding. Cavaliq's root domain is served from this Worker.

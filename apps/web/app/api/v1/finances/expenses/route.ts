@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { createExpenseSchema, expenseFiltersSchema } from '@equestrian/shared/schemas';
-import { getExpensesByClub, createExpense } from '@equestrian/db/queries';
+import { getExpensesByClub, createExpense, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
@@ -21,6 +21,22 @@ export async function POST(request: NextRequest) {
     async (ctx) => {
       const body = await request.json();
       const data = validateInput(createExpenseSchema, body);
+
+      // Audit LOW (2026-05-05 pass 2): cross-tenant verify the optional
+      // horseId. The `expenses.horse_id` column has no composite FK
+      // (audit trail target only — horse-deletion shouldn't lose the
+      // expense row), so a forged UUID from another club would
+      // otherwise insert cleanly and skew per-horse cost reports.
+      if (data.horseId) {
+        const horse = await getHorseById(ctx.clubId, data.horseId);
+        if (!horse) {
+          return errorResponse(
+            'INVALID_HORSE',
+            'Horse not found in this club',
+            400,
+          );
+        }
+      }
 
       // Convert at the user-entered currency, not a hardcoded 2-decimal scale
       // — KWD/BHD/JOD/OMR/TND are 3-decimal, JPY/KRW/etc. are 0-decimal.

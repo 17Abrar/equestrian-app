@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 import { Plus, Trash2, Users, Pencil } from 'lucide-react';
 import { STALE_TIME_BURST } from '@equestrian/shared/constants';
@@ -207,16 +210,56 @@ interface AudienceFormDialogProps {
   audience?: Audience;
 }
 
+// Audit MED (2026-05-05 pass 2): converted from `useState` + ad-hoc
+// `if (!name.trim()) toast.error(...)` validation to RHF + Zod, matching
+// CLAUDE.md's project-wide form rule. Filters stay in `useState` because
+// they're a complex nested editor with their own builder UI; their
+// validation is structural (the FiltersEditor only emits valid shapes)
+// rather than user-input-from-strings.
+const audienceFormSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(120, 'Name must be 120 characters or fewer'),
+  description: z
+    .string()
+    .max(500, 'Description must be 500 characters or fewer')
+    .optional()
+    .or(z.literal('')),
+});
+
+type AudienceFormValues = z.infer<typeof audienceFormSchema>;
+
 function AudienceFormDialog({ mode, audience }: AudienceFormDialogProps) {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
-  const [name, setName] = useState(audience?.name ?? '');
-  const [description, setDescription] = useState(audience?.description ?? '');
   const [filters, setFilters] = useState<AudienceFilters>(audience?.filters ?? {});
 
+  const form = useForm<AudienceFormValues>({
+    resolver: zodResolver(audienceFormSchema),
+    defaultValues: {
+      name: audience?.name ?? '',
+      description: audience?.description ?? '',
+    },
+  });
+
+  // Edit mode: re-seed when the source audience changes (different row
+  // selected from the list, or a parallel mutation refreshed the cache).
+  useEffect(() => {
+    if (mode === 'edit' && audience) {
+      form.reset({ name: audience.name, description: audience.description ?? '' });
+      setFilters(audience.filters ?? {});
+    }
+  }, [audience, mode, form]);
+
   const saveMut = useMutation({
-    mutationFn: async () => {
-      const body = JSON.stringify({ name, description: description || undefined, filters });
+    mutationFn: async (values: AudienceFormValues) => {
+      const body = JSON.stringify({
+        name: values.name,
+        description: values.description || undefined,
+        filters,
+      });
       if (mode === 'create') {
         return fetchJson<ApiEnvelope<Audience>>('/api/v1/emails/audiences', {
           method: 'POST',
@@ -244,18 +287,13 @@ function AudienceFormDialog({ mode, audience }: AudienceFormDialogProps) {
   function handleOpenChange(o: boolean) {
     setOpen(o);
     if (!o && mode === 'create') {
-      setName('');
-      setDescription('');
+      form.reset({ name: '', description: '' });
       setFilters({});
     }
   }
 
-  function onSubmit() {
-    if (!name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-    saveMut.mutate();
+  function onSubmit(values: AudienceFormValues) {
+    saveMut.mutate(values);
   }
 
   return (
@@ -281,40 +319,47 @@ function AudienceFormDialog({ mode, audience }: AudienceFormDialogProps) {
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'New Audience' : `Edit ${audience!.name}`}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="space-y-1.5">
             <Label htmlFor="audience-name">Name *</Label>
             <Input
               id="audience-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Active Beginners"
+              {...form.register('name')}
             />
+            {form.formState.errors.name && (
+              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="audience-description">Description</Label>
             <Textarea
               id="audience-description"
               rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
               placeholder="Short note to remember what this segment is for"
+              {...form.register('description')}
             />
+            {form.formState.errors.description && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.description.message}
+              </p>
+            )}
           </div>
 
           <FiltersEditor filters={filters} onChange={setFilters} />
 
           <LivePreview filters={filters} />
-        </div>
-        <DialogFooter>
-          <Button onClick={onSubmit} disabled={saveMut.isPending}>
-            {saveMut.isPending
-              ? 'Saving...'
-              : mode === 'create'
-                ? 'Create audience'
-                : 'Save changes'}
-          </Button>
-        </DialogFooter>
+
+          <DialogFooter>
+            <Button type="submit" disabled={saveMut.isPending}>
+              {saveMut.isPending
+                ? 'Saving...'
+                : mode === 'create'
+                  ? 'Create audience'
+                  : 'Save changes'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
