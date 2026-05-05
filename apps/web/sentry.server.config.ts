@@ -7,7 +7,13 @@ import { scrubSentryBreadcrumb, scrubSentryEvent } from './lib/sentry-shared';
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
-  sendDefaultPii: true,
+  // `sendDefaultPii` left at its default (false) — audit F-4 (2026-05-05).
+  // The Sentry SDK would otherwise attach the request IP, full User-Agent,
+  // and (on browser) cookies to every event. User attribution is preserved
+  // via `scope.setUser({ id })` in `lib/logger.ts`, which only ships the
+  // Clerk userId — no IP/UA/PII. If we later want truncated-IP for rate-
+  // limit attribution, capture it explicitly into a tag rather than
+  // re-enabling sendDefaultPii globally.
   // 10% prod sampling keeps ingest cost bounded; 100% in dev for full signal.
   tracesSampleRate: process.env.NODE_ENV === 'development' ? 1.0 : 0.1,
   includeLocalVariables: true,

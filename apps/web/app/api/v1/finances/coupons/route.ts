@@ -67,11 +67,20 @@ export async function POST(request: NextRequest) {
         resolveCouponDate(ctx.clubId, data.expiresAt),
       ]);
 
-      const coupon = await createCoupon(ctx.clubId, {
-        ...data,
-        startsAt,
-        expiresAt,
-      } as Parameters<typeof createCoupon>[1], ctx.memberId ?? undefined);
+      // `satisfies` (not `as`) so a future change that adds a string-typed
+      // timestamp field to `couponBaseSchema` would surface here as a type
+      // error instead of being silently widened through the cast and
+      // corrupted by the Date-coerced spread. The earlier `as Parameters<…>`
+      // cast hid that risk.
+      const coupon = await createCoupon(
+        ctx.clubId,
+        {
+          ...data,
+          startsAt,
+          expiresAt,
+        } satisfies Parameters<typeof createCoupon>[1],
+        ctx.memberId ?? undefined,
+      );
 
       if (!coupon) {
         return errorResponse('CREATE_FAILED', 'Failed to create coupon', 500);

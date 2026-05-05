@@ -12,4 +12,5 @@ export * from './operations';
 export * from './audiences';
 export * from './club-join-requests';
 export * from './livery-invoices';
+export * from './platform-subscription-invoices';
 export * from './webhook-events';

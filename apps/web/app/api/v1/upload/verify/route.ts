@@ -68,6 +68,17 @@ export async function POST(request: NextRequest) {
           )
           .limit(1);
         if (!membership[0]) {
+          // Audit F-9 (2026-05-05): emit a structured warn so a flood of
+          // cross-stable rejections from one userId — i.e., someone
+          // probing other clubs' R2 keys — surfaces in observability
+          // alongside the standard 403. Sentry forwards `warn` per
+          // logger.ts's level mapping.
+          logger.warn('upload_verify_cross_stable_blocked', {
+            ctxClubId: ctx.clubId,
+            keyClubId,
+            userId: ctx.userId,
+            keyPrefix: data.key.slice(0, 80),
+          });
           return errorResponse(
             'FORBIDDEN',
             'You do not have access to this upload',

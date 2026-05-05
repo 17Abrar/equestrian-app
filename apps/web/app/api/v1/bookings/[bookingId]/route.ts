@@ -186,7 +186,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
               refundedAmountMinor: bookingsTable.refundedAmountMinor,
               paymentStatus: bookingsTable.paymentStatus,
               status: bookingsTable.status,
-              applicationFeeMinor: bookingsTable.applicationFeeMinor,
               slotId: bookingsTable.slotId,
               paymentProvider: bookingsTable.paymentProvider,
               providerPaymentId: bookingsTable.providerPaymentId,
@@ -303,27 +302,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             const newRefunded = liveRefundedSoFar + liveRemaining;
             const newStatus = newRefunded >= locked.amount ? 'refunded' : 'partial';
 
-            // Proportional fee decrement — matches recordBookingRefund.
-            let nextFee = locked.applicationFeeMinor;
-            if (locked.applicationFeeMinor != null) {
-              if (newRefunded >= locked.amount) {
-                nextFee = 0;
-              } else {
-                const propRefund = Math.round(
-                  (locked.applicationFeeMinor * liveRemaining) / locked.amount,
-                );
-                nextFee = Math.max(0, locked.applicationFeeMinor - propRefund);
-              }
-            }
-
             await tx
               .update(bookingsTable)
               .set({
                 refundedAmountMinor: newRefunded,
                 paymentStatus: newStatus,
-                ...(locked.applicationFeeMinor != null
-                  ? { applicationFeeMinor: nextFee }
-                  : {}),
                 updatedAt: new Date(),
               })
               .where(

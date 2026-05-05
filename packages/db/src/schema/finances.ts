@@ -184,7 +184,6 @@ export const payments = pgTable('payments', {
 
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
   stripeChargeId: varchar('stripe_charge_id', { length: 255 }),
-  platformFee: integer('platform_fee'),
 
   refundedAmount: integer('refunded_amount').default(0),
   refundedAt: timestamp('refunded_at', { withTimezone: true }),

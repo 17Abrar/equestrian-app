@@ -11,6 +11,8 @@ import {
   getBookingById,
   getMemberById,
   getClubById,
+  isParentOf,
+  getDependentMemberIds,
 } from '@equestrian/db/queries';
 import { matchHorsesToRider } from '@equestrian/shared/utils';
 import {
@@ -19,6 +21,7 @@ import {
   paginatedResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
@@ -31,29 +34,55 @@ export async function GET(request: NextRequest) {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
       const filters = validateInput(bookingFiltersSchema, searchParams);
 
-      // Riders/parents can only see their own bookings
       const canReadAll = hasPermission(ctx.orgRole, 'bookings:read');
-      const canReadOwn = hasPermission(ctx.orgRole, 'bookings:read_own') || hasPermission(ctx.orgRole, 'bookings:read_child');
+      const canReadOwn = hasPermission(ctx.orgRole, 'bookings:read_own');
+      const canReadChild = hasPermission(ctx.orgRole, 'bookings:read_child');
 
-      if (!canReadAll && !canReadOwn) {
+      if (!canReadAll && !canReadOwn && !canReadChild) {
         return errorResponse('FORBIDDEN', 'You do not have permission to view bookings', 403);
       }
 
-      // Security: riders MUST be scoped to their own memberId — never allow them to query other riders
+      // Riders MUST be scoped to their own memberId; parents may also query
+      // any rider whose `rider_profiles.parent_member_id` points at them.
+      // The parent-child relation lives on rider_profiles (audit H-7), not
+      // club_members, so the audit's earlier "schema doesn't model it" note
+      // missed this column.
       let riderMemberIdFilter = filters.riderMemberId;
+      let riderMemberIdsFilter: string[] | undefined;
+
       if (!canReadAll) {
         if (!ctx.memberId) {
           return errorResponse('NO_MEMBER', 'Member profile not found. Contact your club admin.', 403);
         }
-        if (filters.riderMemberId && filters.riderMemberId !== ctx.memberId) {
-          return errorResponse('FORBIDDEN', 'You can only view your own bookings', 403);
+
+        if (filters.riderMemberId) {
+          const isSelf = filters.riderMemberId === ctx.memberId;
+          if (!isSelf) {
+            const isDependent =
+              canReadChild &&
+              (await isParentOf(ctx.clubId, ctx.memberId, filters.riderMemberId));
+            if (!isDependent) {
+              return errorResponse('FORBIDDEN', 'You can only view your own bookings', 403);
+            }
+          }
+          // riderMemberIdFilter passes through unchanged.
+        } else if (canReadChild) {
+          // Parent without a specific filter — expand to (self + dependents)
+          // so a single GET surfaces every booking the parent is responsible
+          // for. Riders/owners (no read_child grant) fall through to the
+          // self-only branch below.
+          const dependents = await getDependentMemberIds(ctx.clubId, ctx.memberId);
+          riderMemberIdsFilter = [ctx.memberId, ...dependents];
+          riderMemberIdFilter = undefined;
+        } else {
+          riderMemberIdFilter = ctx.memberId;
         }
-        riderMemberIdFilter = ctx.memberId;
       }
 
       const effectiveFilters = {
         ...filters,
         riderMemberId: riderMemberIdFilter,
+        riderMemberIds: riderMemberIdsFilter,
         page: filters.page,
         pageSize: filters.pageSize,
       };
@@ -72,19 +101,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      // Permission gate (audit B-1). Accept either the staff `bookings:create`
-      // grant OR the parent `bookings:create_child` grant — the prior
-      // hard-coded `requiredPermission` 403'd parents on their primary
-      // feature. Parents are still constrained to their child below via
-      // the `canBookForOthers` check + rider relationship validation.
+      // Permission gate. Accepts either the staff `bookings:create` grant
+      // OR the parent `bookings:create_child` grant — the body check below
+      // narrows parents to riders linked to them as a guardian via
+      // `rider_profiles.parent_member_id` (audit H-7). The previous
+      // implementation accepted parents at the gate but blocked them in
+      // the body because `canBookForOthers` required staff-only perms.
       const canCreateAny = hasPermission(ctx.orgRole, 'bookings:create');
       const canCreateChild = hasPermission(ctx.orgRole, 'bookings:create_child');
       if (!canCreateAny && !canCreateChild) {
         return errorResponse('FORBIDDEN', 'You do not have permission to create bookings', 403);
       }
 
-      const body = await request.json();
-      const data = validateInput(createBookingSchema, body);
+      const data = await parseRequiredBody(request, createBookingSchema);
 
       // Verify slot exists and has capacity
       const slot = await getBookingSlotById(ctx.clubId, data.slotId);
@@ -104,22 +133,41 @@ export async function POST(request: NextRequest) {
         return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
       }
 
-      // Security: riders can only book for themselves (or for guests under
-      // their own account — guest bookings still attach `riderMemberId` to
-      // the booker as the payer of record).
-      const canBookForOthers = hasPermission(ctx.orgRole, 'bookings:create') && hasPermission(ctx.orgRole, 'bookings:read');
-      if (!canBookForOthers && data.riderMemberId !== ctx.memberId) {
-        return errorResponse('FORBIDDEN', 'You can only create bookings for yourself', 403);
-      }
+      const isSelf = data.riderMemberId === ctx.memberId;
+      // Staff who can both create and read can book for any rider in the
+      // club. Pure `bookings:create` (rider role) only authorizes self
+      // bookings — guests are attached to the booker's row, not booked
+      // under a fresh memberId.
+      const canBookForAnyone =
+        canCreateAny && hasPermission(ctx.orgRole, 'bookings:read');
 
-      // Staff booking for someone else — verify the named rider is a
-      // member of *this* club. The bookings.rider_member_id FK only points
-      // at club_members.id (no compound (id, club_id) constraint), so a
-      // forged UUID from Club B would otherwise insert cleanly.
-      if (canBookForOthers && data.riderMemberId !== ctx.memberId) {
+      if (!isSelf) {
+        if (!canBookForAnyone && !canCreateChild) {
+          return errorResponse('FORBIDDEN', 'You can only create bookings for yourself', 403);
+        }
+
+        // Verify the named rider is a member of *this* club. The
+        // bookings.rider_member_id FK only points at club_members.id (no
+        // compound (id, club_id) constraint), so a forged UUID from Club B
+        // would otherwise insert cleanly.
         const targetRider = await getMemberById(ctx.clubId, data.riderMemberId);
         if (!targetRider) {
           return errorResponse('RIDER_NOT_FOUND', 'Rider is not a member of this club', 404);
+        }
+
+        if (!canBookForAnyone) {
+          // Parent-only path — verify the target is recorded as their
+          // dependent on the rider profile. Without this, the
+          // `bookings:create_child` grant would let any parent book for
+          // any rider in the club.
+          const linked = await isParentOf(ctx.clubId, ctx.memberId, data.riderMemberId);
+          if (!linked) {
+            return errorResponse(
+              'FORBIDDEN',
+              'You can only book lessons for riders linked to you as a guardian',
+              403,
+            );
+          }
         }
       }
 
@@ -372,7 +420,8 @@ export async function POST(request: NextRequest) {
     },
     {
       // Permission gate is inline above — accepts both `bookings:create`
-      // (staff) and `bookings:create_child` (parent). Audit B-1.
+      // (staff/rider) and `bookings:create_child` (parent), and narrows
+      // each role to the riders they're allowed to book for. Audit B-1.
       // Rate-limit booking creation per user. The /coupons/validate route
       // is rate-limited (10/min, failClosed) to defeat coupon-code
       // enumeration, but a brute-forcer could otherwise just hit this

@@ -37,6 +37,7 @@ import { NotificationsForm } from '@/components/settings/notifications-form';
 import { PermissionsMatrix } from '@/components/settings/permissions-matrix';
 import { BrandingForm } from '@/components/settings/branding-form';
 import { DiscoveryForm } from '@/components/settings/discovery-form';
+import { SubscriptionPanel } from '@/components/settings/subscription-panel';
 
 function SettingsSkeleton() {
   return (
@@ -79,6 +80,7 @@ export function SettingsPage() {
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="payment">Payment</TabsTrigger>
+          <TabsTrigger value="subscription">Subscription</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
         </TabsList>
 
@@ -112,6 +114,21 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent>
               <PaymentsPanel />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="subscription" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Cavaliq Subscription</CardTitle>
+              <CardDescription>
+                Your monthly Cavaliq subscription. Invoices are issued automatically — pay them
+                via the Ziina link to keep your account active.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SubscriptionPanel />
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, inArray, isNull, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
 import { clubMembers } from '../schema/club-members';
@@ -26,6 +26,14 @@ interface BookingFilters {
   date?: string;
   lessonTypeId?: string;
   riderMemberId?: string;
+  /**
+   * Match bookings where `rider_member_id` is in the supplied list. Used by
+   * the parent-role GET path to pull "self + dependents" in one query
+   * without forcing the route to fan out per-child requests. When both
+   * `riderMemberId` and `riderMemberIds` are set the AND-combination is
+   * empty unless the single id is in the list — callers should pick one.
+   */
+  riderMemberIds?: string[];
   page: number;
   pageSize: number;
 }
@@ -298,6 +306,15 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
     conditions.push(eq(bookings.riderMemberId, filters.riderMemberId));
   }
 
+  if (filters.riderMemberIds && filters.riderMemberIds.length > 0) {
+    conditions.push(inArray(bookings.riderMemberId, filters.riderMemberIds));
+  } else if (filters.riderMemberIds && filters.riderMemberIds.length === 0) {
+    // Empty allowlist must yield zero results — without this short-circuit
+    // the missing IN-clause would let the query fall through and return
+    // every booking the tenant owns.
+    return { data: [], total: 0 };
+  }
+
   const where = and(...conditions);
   const offset = (filters.page - 1) * filters.pageSize;
 
@@ -381,7 +398,6 @@ export async function getBookingById(clubId: string, bookingId: string) {
       currency: bookings.currency,
       discountAmount: bookings.discountAmount,
       refundedAmountMinor: bookings.refundedAmountMinor,
-      applicationFeeMinor: bookings.applicationFeeMinor,
       cancellationFee: bookings.cancellationFee,
       horseMatchScore: bookings.horseMatchScore,
       horseMatchAuto: bookings.horseMatchAuto,
@@ -667,7 +683,6 @@ export async function recordBookingRefund(
     .select({
       amount: bookings.amount,
       refundedAmountMinor: bookings.refundedAmountMinor,
-      applicationFeeMinor: bookings.applicationFeeMinor,
     })
     .from(bookings)
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
@@ -681,34 +696,11 @@ export async function recordBookingRefund(
 
   const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
 
-  // Proportional fee decrement (audit AI-21). When the Stripe adapter
-  // calls refunds.create with refund_application_fee=true, Stripe reverses
-  // the application fee proportionally; mirror that here so the booking's
-  // recorded fee snapshot matches the platform's actual retained revenue.
-  // For a full refund (newRefunded === amount) the fee zeroes out.
-  let nextApplicationFeeMinor = current.applicationFeeMinor;
-  if (current.applicationFeeMinor != null) {
-    if (newRefunded >= current.amount) {
-      nextApplicationFeeMinor = 0;
-    } else {
-      const proportionalFeeRefund = Math.round(
-        (current.applicationFeeMinor * amountMinor) / current.amount,
-      );
-      nextApplicationFeeMinor = Math.max(
-        0,
-        current.applicationFeeMinor - proportionalFeeRefund,
-      );
-    }
-  }
-
   const result = await db
     .update(bookings)
     .set({
       refundedAmountMinor: newRefunded,
       paymentStatus: newStatus,
-      ...(current.applicationFeeMinor != null
-        ? { applicationFeeMinor: nextApplicationFeeMinor }
-        : {}),
       updatedAt: new Date(),
     })
     .where(
@@ -803,11 +795,6 @@ export async function reverseBookingRefund(
  * after the active provider returns a PaymentIntent / order / equivalent.
  * Idempotent — calling again with the same values is a no-op.
  *
- * `applicationFeeMinor` is the Stripe Connect platform-fee snapshot. The
- * route writes it once on first PI create; the persisted value is then
- * read on retries so a later change to `clubs.platform_fee_percent` can't
- * make finance reports diverge from what Stripe captured (see audit B-3).
- *
  * CAS guard on `providerPaymentId` (audit B-19): when this call is
  * setting/updating providerPaymentId, the WHERE only matches if the
  * existing column is either NULL (first attach) or already equal to the
@@ -825,7 +812,6 @@ export async function setBookingPaymentRef(
     // 'overdue' is a livery-invoice-only status; bookings never go there.
     // Removing it from the union (audit L-4) reflects the actual call sites.
     paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed';
-    applicationFeeMinor?: number;
   },
 ) {
   const conditions = [eq(bookings.id, bookingId), eq(bookings.clubId, clubId)];
@@ -852,9 +838,6 @@ export async function setBookingPaymentRef(
       ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
       ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
       ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
-      ...(data.applicationFeeMinor !== undefined
-        ? { applicationFeeMinor: data.applicationFeeMinor }
-        : {}),
       updatedAt: new Date(),
     })
     .where(and(...conditions))

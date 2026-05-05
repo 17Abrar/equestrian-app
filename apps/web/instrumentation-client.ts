@@ -5,7 +5,11 @@ import { scrubSentryBreadcrumb, scrubSentryEvent } from './lib/sentry-shared';
 // browser bundle. The old `sentry.client.config.ts` filename is deprecated.
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  sendDefaultPii: true,
+  // `sendDefaultPii` left at default (false) — audit F-4 (2026-05-05).
+  // Browser SDK with `sendDefaultPii: true` would otherwise attach
+  // cookies + IP to events. The replay integration below already masks
+  // text + form inputs, but `sendDefaultPii` was independently shipping
+  // request-level PII. setUser({ id }) in logger preserves attribution.
   // Trace 10% of requests in prod — lower would be quieter but loses coverage
   // of slow requests. Tweak if sampling volume gets expensive.
   tracesSampleRate: process.env.NODE_ENV === 'development' ? 1.0 : 0.1,

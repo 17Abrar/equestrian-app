@@ -39,12 +39,6 @@ wrangler secret put CLERK_SECRET_KEY
 wrangler secret put CLERK_WEBHOOK_SECRET
 wrangler secret put NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
-# Stripe
-wrangler secret put STRIPE_SECRET_KEY
-wrangler secret put STRIPE_WEBHOOK_SECRET
-wrangler secret put STRIPE_CLIENT_ID          # OAuth client id from Stripe Connect settings
-wrangler secret put NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-
 # R2 (S3-compatible)
 wrangler secret put R2_ENDPOINT
 wrangler secret put R2_ACCESS_KEY_ID
@@ -112,15 +106,25 @@ In the Clerk dashboard:
    to `organization.created/updated/deleted`, `organizationMembership.created/updated/deleted`.
    Copy the signing secret → set it as `CLERK_WEBHOOK_SECRET`.
 
-### Stripe Connect
-In the Stripe dashboard (Platform → Connect → Settings):
-1. **OAuth redirect URI**: add `https://cavaliq.com/api/v1/payments/stripe/callback`.
-2. **Platform webhook endpoint**: `https://cavaliq.com/api/webhooks/stripe` —
-   subscribe to `payment_intent.succeeded`, `payment_intent.payment_failed`,
-   `payment_intent.canceled`, `charge.refunded`, `charge.refund.updated`.
-   Copy the signing secret → set it as `STRIPE_WEBHOOK_SECRET`.
-3. **Client id**: Developers → API keys → Connect → copy the `ca_…` value →
-   set it as `STRIPE_CLIENT_ID`.
+### Stripe (per-club, no platform setup)
+Cavaliq is **not** a Stripe Connect platform. There is no platform-wide
+Stripe configuration to do — each club connects their own Stripe account
+themselves from Settings → Payments. For your reference (or to share with
+clubs onboarding), the per-club steps are:
+
+1. In the club's own Stripe dashboard, copy the API keys from
+   **Developers → API keys**: the publishable key (`pk_live_…`) and the
+   secret key (`sk_live_…`).
+2. In **Developers → Webhooks**, add an endpoint pointing at
+   `https://cavaliq.com/api/webhooks/stripe/<their-clubId>` (the
+   Settings → Payments page surfaces the exact URL once they've started
+   the connect flow). Subscribe to `payment_intent.succeeded`,
+   `payment_intent.payment_failed`, `payment_intent.canceled`,
+   `charge.refunded`, `charge.refund.updated`. Copy the signing secret
+   (`whsec_…`).
+3. Paste all three into Cavaliq's Settings → Payments → Connect Stripe
+   form. Cavaliq encrypts and stores them per-club; nothing flows
+   through a platform Stripe account.
 
 ### N-Genius
 In the Network International merchant portal (per club, not platform-wide):

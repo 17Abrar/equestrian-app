@@ -241,7 +241,6 @@ function extractOrderFields(order: unknown): {
 
 export const nGeniusAdapter: PaymentProviderAdapter = {
   name: 'n_genius',
-  connectMode: 'api_key',
   displayName: 'N-Genius (Network International)',
 
   async connectWithCredentials(input: DirectConnectInput): Promise<DirectConnectResult> {

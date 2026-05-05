@@ -7,8 +7,14 @@ import { fetchJson } from '@/lib/fetch-json';
 
 /**
  * Payload returned from POST /api/v1/bookings/[id]/payment. The `flow`
- * discriminates the union: Stripe carries a `clientSecret` for inline
- * Elements; N-Genius and Ziina carry a `paymentUrl` for redirect.
+ * discriminates the union: Stripe carries a `clientSecret` + the club's
+ * `publishableKey` for inline Elements; N-Genius and Ziina carry a
+ * `paymentUrl` for redirect.
+ *
+ * `publishableKey` is on the inline variant because each club runs Stripe
+ * under their own merchant account (no platform Connect), so the dialog
+ * must call `loadStripe(publishableKey)` with the per-club key returned
+ * here — there is no `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` to fall back to.
  */
 export type BookingPaymentResult =
   | {
@@ -17,6 +23,7 @@ export type BookingPaymentResult =
       providerPaymentId: string;
       flow: 'inline';
       clientSecret: string;
+      publishableKey: string;
       status: 'pending' | 'requires_action' | 'succeeded' | 'failed' | 'cancelled';
     }
   | {

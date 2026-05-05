@@ -35,8 +35,6 @@ export interface CreatePaymentInput {
   returnUrl: string;
   /** Stable key for idempotent retries against the provider. */
   idempotencyKey: string;
-  /** Platform cut in minor units — only honored by providers that support split payments. */
-  applicationFeeMinorUnits?: number;
 }
 
 export type CreatePaymentResult =
@@ -45,6 +43,13 @@ export type CreatePaymentResult =
       providerPaymentId: string;
       /** Returned by Stripe to mount Elements client-side. */
       clientSecret: string;
+      /**
+       * Stripe publishable key for THIS club. The pay dialog calls
+       * `loadStripe(publishableKey)` with this. Per-club because each
+       * stable runs Stripe under their own merchant account — there's
+       * no platform-level publishable key.
+       */
+      publishableKey: string;
       status: PaymentIntentStatus;
     }
   | {
@@ -84,32 +89,12 @@ export interface PaymentStatusResult {
   amountReceivedMinorUnits: number | undefined;
 }
 
-// ─── Connection (OAuth) — Stripe ──────────────────────────────────────
-
-export interface OAuthInitInput {
-  clubId: string;
-  /** App-side page the user should land on after completing Stripe onboarding. */
-  returnUrl: string;
-  /** Opaque signed state used to defend against CSRF on the OAuth callback. */
-  stateToken: string;
-}
-
-export interface OAuthInitResult {
-  redirectUrl: string;
-}
-
-export interface OAuthCallbackInput {
-  code: string;
-}
-
-export interface OAuthCallbackResult {
-  externalAccountId: string;
-  metadata: Record<string, unknown>;
-  /** Providers that issue a refresh/access token store it here (encrypted downstream). */
-  credentials: DecryptedCredentials | null;
-}
-
-// ─── Connection (direct API key) — N-Genius, Ziina ────────────────────
+// ─── Connection (direct API key) — every provider ─────────────────────
+//
+// Every supported provider — Stripe, N-Genius, Ziina — uses per-club
+// credentials pasted into the settings form (Stripe Connect / OAuth was
+// removed when we shifted to a non-platform model where each stable
+// runs payments under their own merchant account).
 
 export interface DirectConnectInput {
   clubId: string;
@@ -180,13 +165,12 @@ export interface WebhookEvent {
 
 export interface PaymentProviderAdapter {
   readonly name: ProviderName;
-  readonly connectMode: 'oauth' | 'api_key';
   readonly displayName: string;
 
-  // Connect flow — providers implement the variant matching `connectMode`.
-  initOAuthConnection?(input: OAuthInitInput): Promise<OAuthInitResult>;
-  completeOAuthCallback?(input: OAuthCallbackInput): Promise<OAuthCallbackResult>;
-  connectWithCredentials?(input: DirectConnectInput): Promise<DirectConnectResult>;
+  // Single connect flow: each merchant pastes their provider credentials
+  // into the settings form. The adapter validates them by round-tripping
+  // an authenticated request before storing the encrypted blob.
+  connectWithCredentials(input: DirectConnectInput): Promise<DirectConnectResult>;
 
   // Payment lifecycle.
   createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult>;

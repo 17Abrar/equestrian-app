@@ -288,3 +288,55 @@ export async function upsertRiderProfileByMember(
     .returning();
   return result[0] ?? null;
 }
+
+/**
+ * Returns true if `parentMemberId` is recorded as the guardian of the rider
+ * profile attached to `childMemberId`, scoped to `clubId`. Used by the
+ * booking and payment routes to authorize parents acting on behalf of a
+ * child rider — without this check, a `parent` role could pass any
+ * rider's memberId as `riderMemberId` and book/pay on their behalf.
+ *
+ * Returns false when the child has no rider profile (e.g. a coach or
+ * groom whose memberId was supplied), or when `parentMemberId === childMemberId`
+ * (a member is never their own parent).
+ */
+export async function isParentOf(
+  clubId: string,
+  parentMemberId: string,
+  childMemberId: string,
+): Promise<boolean> {
+  if (parentMemberId === childMemberId) return false;
+  const result = await db
+    .select({ parentMemberId: riderProfiles.parentMemberId })
+    .from(riderProfiles)
+    .where(
+      and(
+        eq(riderProfiles.clubId, clubId),
+        eq(riderProfiles.memberId, childMemberId),
+      ),
+    )
+    .limit(1);
+  return result[0]?.parentMemberId === parentMemberId;
+}
+
+/**
+ * Returns the memberIds of every rider whose `parent_member_id` points at
+ * the given parent, scoped to `clubId`. Used by the booking GET path to
+ * list a parent's children's bookings without forcing them to know each
+ * child's id.
+ */
+export async function getDependentMemberIds(
+  clubId: string,
+  parentMemberId: string,
+): Promise<string[]> {
+  const result = await db
+    .select({ memberId: riderProfiles.memberId })
+    .from(riderProfiles)
+    .where(
+      and(
+        eq(riderProfiles.clubId, clubId),
+        eq(riderProfiles.parentMemberId, parentMemberId),
+      ),
+    );
+  return result.map((r) => r.memberId);
+}

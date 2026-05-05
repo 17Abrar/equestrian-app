@@ -25,8 +25,6 @@ const ALLOWED_CONTENT_TYPES = [
 // the request. Audit AI-29.
 export const MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
 export const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
-/** @deprecated kept as a back-compat alias for the old single-cap callers */
-export const MAX_UPLOAD_SIZE_BYTES = MAX_DOCUMENT_SIZE_BYTES;
 
 export function maxUploadSizeFor(contentType: string): number {
   return contentType.startsWith('image/')
@@ -81,7 +79,7 @@ function getR2Client() {
  * The declared `fileSizeBytes` is bound into the signature via
  * `ContentLength`, so an R2 PUT that doesn't match the signed length is
  * rejected as a signature mismatch. The API layer also caps the declared
- * size at MAX_UPLOAD_SIZE_BYTES before a URL is even issued.
+ * size at `maxUploadSizeFor(contentType)` before a URL is even issued.
  */
 export async function getUploadUrl(params: {
   clubId: string;

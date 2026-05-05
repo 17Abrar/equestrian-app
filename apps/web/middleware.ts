@@ -9,13 +9,15 @@ import { NextResponse } from 'next/server';
 const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/api/webhooks/stripe',
+  '/api/webhooks/stripe/(.*)',
   '/api/webhooks/clerk',
   '/api/webhooks/n-genius',
   '/api/webhooks/ziina/(.*)',
+  '/api/webhooks/ziina-platform',
   // Cron endpoints authenticate via x-cron-secret header, not Clerk session.
   // Cloudflare's scheduled() invocation has no user context.
   '/api/cron/livery-billing',
+  '/api/cron/platform-billing',
   '/api/v1/health',
   // Sentry's tunnel route — forwards client-side errors through our origin
   // so they aren't blocked by ad-blockers. Must be reachable unauthenticated.
@@ -72,11 +74,37 @@ export default clerkMiddleware(async (auth, request) => {
   // Content-Length pre-check rejects oversized bodies before the worker
   // isolate parses anything. Webhooks have their own per-provider caps
   // in `lib/payments/webhook-body.ts` (smaller than this default).
+  //
+  // Audit AI-10: Cloudflare Workers buffers the request body and sets
+  // `Content-Length` before invoking the worker, so chunked-transfer
+  // requests don't reach this middleware in practice. We still reject
+  // them explicitly here as defense in depth — a future runtime change
+  // (or a different reverse proxy in front of this code) would otherwise
+  // let a `Transfer-Encoding: chunked` request slip past the cap and
+  // burn the worker's CPU/memory budget on a hostile body. The same
+  // guard refuses a bodied request that omits Content-Length entirely.
   if (
     request.nextUrl.pathname.startsWith('/api/v1/') &&
     request.method !== 'GET' &&
     request.method !== 'HEAD'
   ) {
+    const transferEncoding = request.headers.get('transfer-encoding');
+    if (transferEncoding && transferEncoding.toLowerCase().includes('chunked')) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: 'LENGTH_REQUIRED',
+            message: 'Chunked transfer encoding is not supported. Send Content-Length.',
+          },
+        }),
+        {
+          status: 411,
+          headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+        },
+      );
+    }
+
     const contentLength = request.headers.get('content-length');
     if (contentLength) {
       const declared = Number(contentLength);

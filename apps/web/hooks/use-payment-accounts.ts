@@ -30,13 +30,25 @@ export function usePaymentAccounts() {
   });
 }
 
+interface StripeConnectInput {
+  secretKey: string;
+  publishableKey: string;
+  webhookSigningSecret?: string;
+  makeActive?: boolean;
+}
+
 export function useConnectStripe() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      fetchJson<ApiSuccessResponse<{ redirectUrl: string }>>(
-        '/api/v1/payments/stripe/connect',
-        { method: 'POST' },
-      ),
+    mutationFn: (data: StripeConnectInput) =>
+      fetchJson<ApiSuccessResponse<PaymentAccount>>('/api/v1/payments/stripe/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
+    },
   });
 }
 

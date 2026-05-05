@@ -64,6 +64,39 @@ export const MS_PER_DAY = 86_400_000;
 export const MS_PER_YEAR_AVG = 365.25 * MS_PER_DAY;
 export const ACTIVE_CLUB_COOKIE_TTL_SECONDS = 60 * 60 * 24 * 30;
 
+// Trial length granted to a freshly-created club. The Clerk
+// `organization.created` webhook stamps `clubs.trial_ends_at` to
+// `now + TRIAL_DURATION_DAYS`. Pricing copy must reference this
+// constant — the previous webhook hardcoded 30 days while marketing
+// quoted 14, so a new club got a quietly different deal than the one
+// it signed up for.
+export const TRIAL_DURATION_DAYS = 14;
+
+// ─── Round 6 — Cavaliq → club subscription pricing ───────────────────
+//
+// Per-tier monthly fee in MINOR currency units (fils for AED). The
+// platform-billing cron snapshots the matching value onto each invoice's
+// `amount_minor_units` at issue time, so a future price change applies
+// to NEW periods only, never retroactively. The 'trial' tier never
+// generates an invoice — clubs in trial pay nothing until trial_ends_at
+// elapses and the cron picks them up.
+export const PLATFORM_TIER_PRICES_MINOR: Record<
+  'trial' | 'starter' | 'growing' | 'professional',
+  number
+> = {
+  trial: 0,
+  starter: 30_000, // AED 300
+  growing: 80_000, // AED 800
+  professional: 200_000, // AED 2000
+} as const;
+
+export const PLATFORM_BILLING_CURRENCY = 'AED';
+
+// Days from period start until the invoice is overdue. Mirrors livery's
+// 7-day cadence — clubs get a week to pay before reminders kick in
+// (reminder cadence itself is the next round of work).
+export const PLATFORM_INVOICE_DUE_DAYS = 7;
+
 // Rate-limit presets. Per-route configs reach for one of these instead of
 // open-coding `{ maxRequests, windowMs }` object literals — see audit F-15.
 // `failClosed: true` is route-specific (coupon validate, public join), so

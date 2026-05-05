@@ -4,6 +4,7 @@ import {
   getCompetitionClassById,
   getCompetitionEntries,
   createCompetitionEntry,
+  isParentOf,
 } from '@equestrian/db/queries';
 import {
   withAuth,
@@ -65,21 +66,57 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const { competitionId, classId } = await params;
       const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
       if (mismatch) return mismatch;
+      // Three valid registration paths, mirroring bookings/route.ts:
+      //   - Staff with `competitions:create` (admin/manager via wildcard)
+      //     may register any rider in the club.
+      //   - Riders with `competitions:register` may register themselves.
+      //   - Parents with `competitions:register_child` may register a
+      //     rider linked to them via `rider_profiles.parent_member_id`.
+      // Inline gate so the body validation + the role-aware narrowing
+      // run together. The previous `requiredPermission: 'competitions:register'`
+      // 403'd parents (their grant is `competitions:register_child`)
+      // before the body even loaded — see audit F-1.
+      const canRegisterAny = hasPermission(ctx.orgRole, 'competitions:create');
+      const canRegisterSelf = hasPermission(ctx.orgRole, 'competitions:register');
+      const canRegisterChild = hasPermission(ctx.orgRole, 'competitions:register_child');
+      if (!canRegisterAny && !canRegisterSelf && !canRegisterChild) {
+        return errorResponse(
+          'FORBIDDEN',
+          'You do not have permission to register competition entries',
+          403,
+        );
+      }
+
       const body = await request.json();
       const data = validateInput(createCompetitionEntrySchema, body);
 
-      // Riders/parents may only register themselves; only staff with
-      // `competitions:create` (admin/manager via wildcard) may register
-      // another rider. Without this, any caller with the `competitions:register`
-      // grant could submit an arbitrary `riderMemberId` and enroll someone
-      // else. Mirrors the bookings/route.ts:99-113 pattern.
-      const canRegisterOthers = hasPermission(ctx.orgRole, 'competitions:create');
-      if (!canRegisterOthers) {
-        if (!ctx.memberId) {
-          return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
+      if (!ctx.memberId) {
+        return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
+      }
+
+      const isSelf = data.riderMemberId === ctx.memberId;
+      if (!isSelf) {
+        if (!canRegisterAny && !canRegisterChild) {
+          return errorResponse(
+            'FORBIDDEN',
+            'You can only register yourself for competitions',
+            403,
+          );
         }
-        if (data.riderMemberId !== ctx.memberId) {
-          return errorResponse('FORBIDDEN', 'You can only register yourself for competitions', 403);
+        if (!canRegisterAny) {
+          // Parent-only path — verify the target rider is recorded as
+          // their dependent. Without this, the `register_child` grant
+          // would let any parent register any rider in the club.
+          // `createCompetitionEntry` separately rejects cross-tenant
+          // riders via the RIDER_NOT_IN_CLUB error mapped below.
+          const linked = await isParentOf(ctx.clubId, ctx.memberId, data.riderMemberId);
+          if (!linked) {
+            return errorResponse(
+              'FORBIDDEN',
+              'You can only register riders linked to you as a guardian',
+              403,
+            );
+          }
         }
       }
 
@@ -138,6 +175,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       return successResponse(entry, 201);
     },
-    { requiredPermission: 'competitions:register' },
+    // Permission gate is inline above — accepts any of staff
+    // (`competitions:create`), self (`competitions:register`), or parent
+    // (`competitions:register_child`), and narrows each role to the
+    // riders they're allowed to register for. See audit F-1.
   );
 }

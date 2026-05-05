@@ -26,14 +26,21 @@ import {
 } from '@/hooks/use-booking-payment';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
-// Lazy-load Stripe once per session. loadStripe caches the promise internally.
-let stripePromise: Promise<Stripe | null> | null = null;
-function getStripePromise(): Promise<Stripe | null> {
-  if (!stripePromise) {
-    const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-    stripePromise = key ? loadStripe(key) : Promise.resolve(null);
+// Each club runs Stripe under their own merchant account, so the
+// publishable key is per-club — no shared `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+// to read at module load. The payment-init API response carries the
+// correct key for the rider's active club; we cache `loadStripe(key)`
+// keyed by publishableKey so a rider booking multiple times in the
+// same club doesn't refetch the Stripe.js bundle, but a rider who
+// switches clubs (multi-club rider) gets a fresh promise.
+const stripePromiseCache = new Map<string, Promise<Stripe | null>>();
+function stripePromiseFor(publishableKey: string): Promise<Stripe | null> {
+  let promise = stripePromiseCache.get(publishableKey);
+  if (!promise) {
+    promise = loadStripe(publishableKey);
+    stripePromiseCache.set(publishableKey, promise);
   }
-  return stripePromise;
+  return promise;
 }
 
 interface PayBookingDialogProps {
@@ -143,6 +150,7 @@ export function PayBookingDialog({
         {payment?.flow === 'inline' && (
           <StripeInlineForm
             clientSecret={payment.clientSecret}
+            publishableKey={payment.publishableKey}
             returnUrl={returnUrl ?? (typeof window !== 'undefined' ? window.location.href : '/')}
             onPaid={() => {
               onPaid?.();
@@ -164,15 +172,22 @@ export function PayBookingDialog({
 
 interface StripeInlineFormProps {
   clientSecret: string;
+  publishableKey: string;
   returnUrl: string;
   onPaid: () => void;
   onCancel: () => void;
 }
 
-function StripeInlineForm({ clientSecret, returnUrl, onPaid, onCancel }: StripeInlineFormProps) {
+function StripeInlineForm({
+  clientSecret,
+  publishableKey,
+  returnUrl,
+  onPaid,
+  onCancel,
+}: StripeInlineFormProps) {
   return (
     <Elements
-      stripe={getStripePromise()}
+      stripe={stripePromiseFor(publishableKey)}
       options={{ clientSecret, appearance: { theme: 'stripe' } }}
     >
       <StripePaymentForm returnUrl={returnUrl} onPaid={onPaid} onCancel={onCancel} />
