@@ -8,26 +8,48 @@ import {
   getUploadUrl,
   getFolderRoot,
   UPLOAD_FOLDER_PERMISSIONS,
-  MAX_UPLOAD_SIZE_BYTES,
+  maxUploadSizeFor,
 } from '@/lib/storage';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
-const uploadRequestSchema = z.object({
-  fileName: z.string().min(1).max(255),
-  contentType: z.string().min(1),
-  folder: z.string().min(1).max(100),
-  // Declared size is bound into the R2 signature via ContentLength — a PUT
-  // that doesn't match fails with a signature error, closing the previous
-  // unbounded-upload hole. Max is enforced here as well.
-  fileSizeBytes: z.number().int().positive().max(MAX_UPLOAD_SIZE_BYTES),
-  // Optional override: upload under a different club the user belongs to.
-  // Used by the rider horse-registration flow — the rider's active tenant
-  // may not be the target stable, and we want the photo to live under the
-  // target stable's R2 prefix. Membership re-check prevents abuse.
-  targetClubId: z.string().uuid().optional(),
-});
+// Declared size is bound into the R2 signature via ContentLength — a PUT
+// that doesn't match fails with a signature error, closing the previous
+// unbounded-upload hole. The cap is enforced here per content type
+// (15 MB for images, 25 MB for documents) so the route returns a clean
+// 400 VALIDATION_ERROR before getUploadUrl ever runs. The previous
+// shape (`.max(<single 25 MB cap>)`) accepted up to 25 MB for any type,
+// then the storage layer would re-throw "File is too large…" — which
+// the catch handler below didn't recognize, surfacing the size violation
+// as an opaque 500.
+const uploadRequestSchema = z
+  .object({
+    fileName: z.string().min(1).max(255),
+    contentType: z.string().min(1),
+    folder: z.string().min(1).max(100),
+    fileSizeBytes: z.number().int().positive(),
+    // Optional override: upload under a different club the user belongs
+    // to. Used by the rider horse-registration flow — the rider's active
+    // tenant may not be the target stable, and we want the photo to live
+    // under the target stable's R2 prefix. Membership re-check prevents
+    // abuse.
+    targetClubId: z.string().uuid().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const max = maxUploadSizeFor(data.contentType);
+    if (data.fileSizeBytes > max) {
+      const maxMb = Math.floor(max / (1024 * 1024));
+      ctx.addIssue({
+        code: z.ZodIssueCode.too_big,
+        type: 'number',
+        maximum: max,
+        inclusive: true,
+        path: ['fileSizeBytes'],
+        message: `File is too large for ${data.contentType}. Maximum size is ${maxMb} MB.`,
+      });
+    }
+  });
 
 export async function POST(request: NextRequest) {
   return withAuth(
@@ -125,6 +147,15 @@ export async function POST(request: NextRequest) {
         }
         if (err instanceof Error && err.message.includes('not configured')) {
           return errorResponse('STORAGE_NOT_CONFIGURED', err.message, 503);
+        }
+        // Defense in depth — the Zod superRefine on `uploadRequestSchema`
+        // should reject oversized uploads with VALIDATION_ERROR 400 before
+        // reaching getUploadUrl, but storage.ts re-checks the cap and
+        // throws on mismatch. Without this branch, that throw would
+        // surface as a 500 INTERNAL_ERROR instead of a 400 the user can
+        // act on.
+        if (err instanceof Error && err.message.startsWith('File is too large')) {
+          return errorResponse('FILE_TOO_LARGE', err.message, 400);
         }
         throw err;
       }

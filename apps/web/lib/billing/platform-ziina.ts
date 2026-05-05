@@ -1,0 +1,246 @@
+import 'server-only';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+
+/**
+ * Platform-billing Ziina helper. Uses Cavaliq's OWN Ziina merchant
+ * account (the `PLATFORM_ZIINA_API_KEY` env secret) to issue payment
+ * intents that bill clubs for their Cavaliq subscription.
+ *
+ * Distinct from `apps/web/lib/payments/ziina.ts`, which is the per-club
+ * adapter — that adapter takes credentials from
+ * `club_payment_accounts.encrypted_credentials` and runs payments under
+ * the CLUB's Ziina account. This module talks to the platform's account
+ * only and is used solely by the platform-billing cron + webhook receiver.
+ */
+
+const API_BASE_URL = process.env.ZIINA_API_BASE_URL ?? 'https://api-v2.ziina.com/api';
+
+function getPlatformApiKey(): string {
+  const key = process.env.PLATFORM_ZIINA_API_KEY;
+  if (!key) {
+    throw new PlatformZiinaError(
+      'PROVIDER_NOT_CONFIGURED',
+      'PLATFORM_ZIINA_API_KEY is not set — Cavaliq cannot bill subscriptions until this is configured.',
+    );
+  }
+  return key;
+}
+
+function authHeaders(extra: Record<string, string> = {}) {
+  return {
+    Authorization: `Bearer ${getPlatformApiKey()}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    ...extra,
+  };
+}
+
+export class PlatformZiinaError extends Error {
+  public readonly code: string;
+  public readonly retryable: boolean;
+
+  constructor(code: string, message: string, opts?: { retryable?: boolean; cause?: unknown }) {
+    super(message);
+    this.code = code;
+    this.retryable = opts?.retryable ?? false;
+    this.name = 'PlatformZiinaError';
+    if (opts?.cause) {
+      (this as { cause?: unknown }).cause = opts.cause;
+    }
+  }
+}
+
+export interface CreatePlatformPaymentIntentInput {
+  amountMinorUnits: number;
+  currency: string;
+  /** Stable string passed to Ziina as `operation_id` for idempotent retries. */
+  idempotencyKey: string;
+  /** Human-readable line on the Ziina hosted page / receipt. */
+  message: string;
+  /** Where Ziina sends the browser after success/failure/cancel. */
+  returnUrl: string;
+}
+
+export interface CreatePlatformPaymentIntentResult {
+  /** Ziina's `payment_intent.id`. Persisted to the invoice as
+   *  `provider_payment_id` so the webhook can resolve back to the row. */
+  providerPaymentId: string;
+  /** Hosted Ziina page the club admin opens to pay. */
+  paymentUrl: string;
+  status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'requires_action';
+}
+
+function mapIntentStatus(
+  status: string | undefined,
+): CreatePlatformPaymentIntentResult['status'] {
+  switch (status) {
+    case 'completed':
+      return 'succeeded';
+    case 'failed':
+      return 'failed';
+    case 'canceled':
+      return 'cancelled';
+    case 'requires_payment_instrument':
+    case 'requires_user_action':
+      return 'requires_action';
+    case 'pending':
+    default:
+      return 'pending';
+  }
+}
+
+/**
+ * Issues a Ziina payment intent under Cavaliq's platform account. The
+ * returned `paymentUrl` is the hosted page the club admin will load to
+ * complete payment.
+ */
+export async function createPlatformPaymentIntent(
+  input: CreatePlatformPaymentIntentInput,
+): Promise<CreatePlatformPaymentIntentResult> {
+  const res = await fetch(`${API_BASE_URL}/payment_intent`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      operation_id: input.idempotencyKey,
+      amount: input.amountMinorUnits,
+      currency_code: input.currency.toUpperCase(),
+      message: input.message,
+      success_url: input.returnUrl,
+      cancel_url: input.returnUrl,
+      failure_url: input.returnUrl,
+      test: false,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new PlatformZiinaError(
+      res.status === 401 || res.status === 403 ? 'AUTH_FAILED' : 'CREATE_PAYMENT_FAILED',
+      `Ziina platform payment-intent creation failed (${res.status}): ${text.slice(0, 200)}`,
+      { retryable: res.status >= 500 },
+    );
+  }
+
+  const json = (await res.json()) as {
+    id?: string;
+    redirect_url?: string;
+    status?: string;
+  };
+
+  if (!json.id || !json.redirect_url) {
+    throw new PlatformZiinaError(
+      'MALFORMED_RESPONSE',
+      'Ziina did not return `id` and `redirect_url` for the platform intent',
+    );
+  }
+
+  return {
+    providerPaymentId: json.id,
+    paymentUrl: json.redirect_url,
+    status: mapIntentStatus(json.status),
+  };
+}
+
+// ─── Webhook verification ─────────────────────────────────────────────
+
+export interface PlatformWebhookEvent {
+  /** Stable id we hand to `claimWebhookEvent` for dedup. Distinct from
+   *  per-club Ziina event ids by virtue of the `ziina_platform` provider
+   *  string used at claim time. */
+  eventId: string;
+  eventType: string;
+  /** The Ziina payment intent id — matches `provider_payment_id` on the
+   *  invoice row. */
+  providerPaymentId: string | undefined;
+  status: CreatePlatformPaymentIntentResult['status'];
+  amountReceivedMinorUnits: number | undefined;
+  currency: string | undefined;
+}
+
+export class PlatformWebhookError extends Error {
+  public readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = 'PlatformWebhookError';
+  }
+}
+
+/**
+ * Verifies the `X-Hmac-Signature` header against
+ * `PLATFORM_ZIINA_WEBHOOK_SECRET` (set as a wrangler secret) and parses
+ * the event envelope. Throws on signature mismatch — the route maps
+ * that to a 401.
+ */
+export function verifyPlatformWebhook(input: {
+  body: string;
+  signatureHeader: string | null;
+}): PlatformWebhookEvent {
+  const secret = process.env.PLATFORM_ZIINA_WEBHOOK_SECRET;
+  if (!secret) {
+    throw new PlatformWebhookError(
+      'NOT_CONFIGURED',
+      'PLATFORM_ZIINA_WEBHOOK_SECRET is not set',
+    );
+  }
+
+  const providedRaw = (input.signatureHeader ?? '').trim();
+  if (!providedRaw) {
+    throw new PlatformWebhookError('INVALID_SIGNATURE', 'Missing X-Hmac-Signature');
+  }
+
+  const expected = createHmac('sha256', secret).update(input.body).digest('hex');
+  // Tolerate the `sha256=` prefix some pipelines prepend, normalise case.
+  const provided = providedRaw.replace(/^sha256=/i, '').toLowerCase();
+
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(provided, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    throw new PlatformWebhookError(
+      'INVALID_SIGNATURE',
+      'Platform Ziina webhook signature verification failed',
+    );
+  }
+
+  // Parse the envelope. Ziina's shape is `{ event, data }` with the
+  // PaymentIntent under `data` for `payment_intent.status.updated` events.
+  let payload: {
+    event?: string;
+    data?: {
+      id?: string;
+      status?: string;
+      amount?: number;
+      currency_code?: string;
+    };
+  };
+  try {
+    payload = JSON.parse(input.body);
+  } catch {
+    throw new PlatformWebhookError('INVALID_BODY', 'Webhook body is not valid JSON');
+  }
+
+  const status = mapIntentStatus(payload.data?.status);
+  const intentId = payload.data?.id;
+  const eventName = payload.event ?? 'ziina.event';
+  const statusKey = payload.data?.status ?? 'nostatus';
+
+  // Compose eventId on (event, intent_id, status) so the pending →
+  // completed transition stream produces distinct dedup keys. Same
+  // pattern as the per-club Ziina adapter.
+  const eventId = intentId
+    ? `${eventName}:${intentId}:${statusKey}`
+    : `${eventName}:` +
+      createHash('sha256').update(input.body).digest('hex').slice(0, 32);
+
+  return {
+    eventId,
+    eventType: eventName,
+    providerPaymentId: intentId,
+    status,
+    amountReceivedMinorUnits:
+      status === 'succeeded' && typeof payload.data?.amount === 'number'
+        ? payload.data.amount
+        : undefined,
+    currency: payload.data?.currency_code?.toUpperCase(),
+  };
+}

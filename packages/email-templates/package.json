@@ -13,7 +13,9 @@
     "./horse-registration-declined": "./src/horse-registration-declined.tsx",
     "./livery-invoice-issued": "./src/livery-invoice-issued.tsx",
     "./livery-payment-received": "./src/livery-payment-received.tsx",
-    "./livery-invoice-overdue": "./src/livery-invoice-overdue.tsx"
+    "./livery-invoice-overdue": "./src/livery-invoice-overdue.tsx",
+    "./subscription-invoice-issued": "./src/subscription-invoice-issued.tsx",
+    "./subscription-payment-received": "./src/subscription-payment-received.tsx"
   },
   "dependencies": {
     "@equestrian/shared": "workspace:*",

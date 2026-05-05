@@ -3,7 +3,7 @@
    and drain to Cloudflare's observability pipeline. */
 // Wrapper around the OpenNext-generated Cloudflare Worker that adds a
 // `scheduled()` export so Cloudflare Cron Triggers can fire our internal
-// billing job. OpenNext 1.x doesn't expose a wrapper override in
+// billing jobs. OpenNext 1.x doesn't expose a wrapper override in
 // `open-next.config.ts`, so we re-export the generated module's surface here
 // and tack on `scheduled()`.
 //
@@ -11,11 +11,14 @@
 //   1. `pnpm opennextjs-cloudflare build`  — generates `.open-next/worker.js`
 //   2. `wrangler deploy` — uses this file (per wrangler.jsonc `main`)
 //
-// Cron wiring: when a cron trigger fires, we construct an internal POST
-// request to `/api/cron/livery-billing` and hand it directly to the
-// generated worker's own fetch handler. Keeps the traffic inside the
-// isolate — no public round-trip — and gets the same auth middleware
-// behavior as an external call.
+// Cron wiring: when a cron trigger fires, we construct internal POST
+// requests to BOTH cron endpoints (`/api/cron/livery-billing` for club →
+// owner livery invoices, `/api/cron/platform-billing` for Cavaliq → club
+// subscription invoices) and hand them directly to the generated worker's
+// own fetch handler. Keeps the traffic inside the isolate — no public
+// round-trip — and gets the same auth middleware behavior as an external
+// call. Both runs are independent: a failure in one doesn't block the
+// other.
 
 import worker from './.open-next/worker.js';
 
@@ -36,10 +39,10 @@ export default {
    * Cloudflare Cron Trigger entrypoint. Schedule comes from
    * wrangler.jsonc → triggers.crons.
    *
-   * Fires a POST to our own /api/cron/livery-billing handler. The route
-   * checks `x-cron-secret` against the CRON_SECRET env secret and runs
-   * invoice issuing + overdue reminders. `ctx.waitUntil` keeps the Worker
-   * alive until the fetch resolves even though this handler already returned.
+   * Fires POSTs to BOTH cron endpoints. Each route checks `x-cron-secret`
+   * against the CRON_SECRET env secret and runs its respective billing
+   * pass. The two runs are independent — a failure in one doesn't block
+   * the other.
    */
   async scheduled(event, env, ctx) {
     // Audit L-9: refuse to send a cron tick when CRON_SECRET is missing
@@ -52,58 +55,63 @@ export default {
       });
       return;
     }
-    const url = new URL('/api/cron/livery-billing', 'https://internal.worker/');
-    const request = new Request(url.toString(), {
-      method: 'POST',
-      headers: {
-        'x-cron-secret': env.CRON_SECRET,
-        'content-type': 'application/json',
-        'user-agent': 'cavaliq-cron-scheduled',
-      },
-    });
 
-    const task = worker
-      .fetch(request, env, ctx)
-      .then(async (res) => {
-        // Drain the response body so the isolate doesn't hold the socket
-        // open; we don't read its content — see audit G-27, body could
-        // include `error.message` text we'd rather not echo.
-        await res.text().catch(() => '');
-        if (!res.ok) {
-          // Most non-2xx paths from the cron route ALSO fire a
-          // logger.error() inside the route (which goes to Sentry) — see
-          // the route's top-level try/catch and per-step logger.error
-          // calls. This console.error is the last-resort signal for
-          // operators reading Cloudflare's tail when the route itself
-          // failed to log; status code only, no body content (which
-          // could include error.message with internal info — audit G-27).
-          console.error('cron_scheduled_non_ok', {
-            cron: event.cron,
-            status: res.status,
-          });
-        } else {
-          console.log('cron_scheduled_ok', {
-            cron: event.cron,
-            status: res.status,
-          });
-        }
-      })
-      .catch((err) => {
-        // Fetch-level throw: the request never made it to the route, so
-        // there's no Sentry-connected logger.error inside Next.js to
-        // emit a tagged event. Best-effort signal via console.error so
-        // it lands in Cloudflare's observability tail. Operators
-        // monitoring `cron_scheduled_failed` need a separate Logpush
-        // alert rule until @sentry/cloudflare is wired into this entry —
-        // tracked by audit H-6. Worker-isolate fetch throws are rare
-        // (binding misconfig, bundler issue) so the alerting gap is
-        // narrow.
-        console.error('cron_scheduled_failed', {
-          cron: event.cron,
-          error: err instanceof Error ? err.message : String(err),
-        });
+    const cronTargets = [
+      { path: '/api/cron/livery-billing', label: 'livery' },
+      { path: '/api/cron/platform-billing', label: 'platform' },
+    ];
+
+    const tasks = cronTargets.map((target) => {
+      const url = new URL(target.path, 'https://internal.worker/');
+      const request = new Request(url.toString(), {
+        method: 'POST',
+        headers: {
+          'x-cron-secret': env.CRON_SECRET,
+          'content-type': 'application/json',
+          'user-agent': 'cavaliq-cron-scheduled',
+        },
       });
 
-    ctx.waitUntil(task);
+      return worker
+        .fetch(request, env, ctx)
+        .then(async (res) => {
+          // Drain the response body so the isolate doesn't hold the socket
+          // open; we don't read its content — see audit G-27, body could
+          // include `error.message` text we'd rather not echo.
+          await res.text().catch(() => '');
+          if (!res.ok) {
+            console.error('cron_scheduled_non_ok', {
+              cron: event.cron,
+              target: target.label,
+              status: res.status,
+            });
+          } else {
+            console.log('cron_scheduled_ok', {
+              cron: event.cron,
+              target: target.label,
+              status: res.status,
+            });
+          }
+        })
+        .catch((err) => {
+          // Fetch-level throw: the request never made it to the route, so
+          // there's no Sentry-connected logger.error inside Next.js to
+          // emit a tagged event. Best-effort signal via console.error so
+          // it lands in Cloudflare's observability tail. Operators
+          // monitoring `cron_scheduled_failed` need a separate Logpush
+          // alert rule until @sentry/cloudflare is wired into this entry —
+          // tracked by audit H-6.
+          console.error('cron_scheduled_failed', {
+            cron: event.cron,
+            target: target.label,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    });
+
+    // `Promise.all` not `Promise.allSettled` — each task already swallows
+    // its own errors, so this resolves cleanly. allSettled would be
+    // identical here, but `all` reads more naturally.
+    ctx.waitUntil(Promise.all(tasks));
   },
 };

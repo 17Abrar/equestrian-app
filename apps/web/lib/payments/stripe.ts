@@ -1,12 +1,10 @@
 import Stripe from 'stripe';
-import { logger } from '@/lib/logger';
+import { z } from 'zod';
 import {
   type CreatePaymentInput,
   type CreatePaymentResult,
-  type OAuthCallbackInput,
-  type OAuthCallbackResult,
-  type OAuthInitInput,
-  type OAuthInitResult,
+  type DirectConnectInput,
+  type DirectConnectResult,
   type PaymentProviderAdapter,
   type PaymentStatusInput,
   type PaymentStatusResult,
@@ -18,27 +16,75 @@ import {
   PaymentProviderError,
 } from './types';
 
-let stripeClient: Stripe | null = null;
+/**
+ * Stripe adapter — direct integration. Each club pastes their own Stripe
+ * API keys into the settings form; we encrypt them into
+ * `club_payment_accounts.encrypted_credentials` and use them to drive
+ * payments under the club's merchant account directly. Cavaliq is NOT a
+ * Stripe Connect platform — there is no platform `STRIPE_CLIENT_ID`, no
+ * OAuth flow, no `application_fee_amount`, no `stripeAccount` header on
+ * SDK calls. Each charge lands in the club's Stripe balance with no
+ * platform cut, and the 0.9% per-booking fee that the Connect path used
+ * to capture is retired (subscription tiers carry the revenue).
+ *
+ * Webhook delivery is per-club. The merchant configures
+ * `https://cavaliq.com/api/webhooks/stripe/<clubId>` in their own Stripe
+ * dashboard; the URL embeds the clubId so the receiver can look up the
+ * right per-club signing secret.
+ */
 
-function getStripe(): Stripe {
-  if (stripeClient) return stripeClient;
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) {
+const stripeCredentialsSchema = z.object({
+  /** Stripe secret key — `sk_live_…` or `sk_test_…`. Used server-side. */
+  secretKey: z
+    .string()
+    .min(1, 'secretKey is required')
+    .refine((v) => v.startsWith('sk_'), 'secretKey must start with "sk_"'),
+  /**
+   * Stripe publishable key — `pk_live_…` or `pk_test_…`. Returned to the
+   * client at payment-init time so the pay dialog can mount Elements
+   * with the correct merchant account. Storing it alongside the secret
+   * keeps the live/test mode coupled — a stable that pasted a live
+   * `sk_live_…` cannot accidentally be charged through a `pk_test_…`.
+   */
+  publishableKey: z
+    .string()
+    .min(1, 'publishableKey is required')
+    .refine((v) => v.startsWith('pk_'), 'publishableKey must start with "pk_"'),
+  /**
+   * Webhook signing secret (`whsec_…`) from the merchant's webhook
+   * endpoint config in Stripe. Optional at connect time so a stable can
+   * skip Stripe webhooks entirely (status will only update via the
+   * inline-confirm response), but recommended — without it, refunds
+   * issued from the Stripe dashboard won't reflect in the booking
+   * ledger.
+   */
+  webhookSigningSecret: z
+    .string()
+    .min(1)
+    .refine((v) => v.startsWith('whsec_'), 'webhookSigningSecret must start with "whsec_"')
+    .optional(),
+});
+
+type StripeCredentials = z.infer<typeof stripeCredentialsSchema>;
+
+function parseCredentials(raw: unknown): StripeCredentials {
+  const result = stripeCredentialsSchema.safeParse(raw);
+  if (!result.success) {
     throw new PaymentProviderError(
-      'PROVIDER_NOT_CONFIGURED',
-      'STRIPE_SECRET_KEY is not set',
+      'INVALID_CREDENTIALS',
+      `Stripe credentials are invalid: ${result.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ')}`,
     );
   }
-  stripeClient = new Stripe(secret, { typescript: true });
-  return stripeClient;
+  return result.data;
 }
 
-function assertEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new PaymentProviderError('PROVIDER_NOT_CONFIGURED', `${name} is not set`);
-  }
-  return value;
+function getClient(creds: StripeCredentials): Stripe {
+  // No module-level cache — each club has a different secret key. The
+  // Stripe SDK is cheap to instantiate; the underlying connection pool
+  // is shared via Node's HTTP agent.
+  return new Stripe(creds.secretKey, { typescript: true });
 }
 
 function mapIntentStatus(status: Stripe.PaymentIntent.Status): PaymentIntentStatus {
@@ -78,100 +124,67 @@ function mapRefundStatus(
 
 export const stripeAdapter: PaymentProviderAdapter = {
   name: 'stripe',
-  connectMode: 'oauth',
   displayName: 'Stripe',
 
-  async initOAuthConnection(input: OAuthInitInput): Promise<OAuthInitResult> {
-    const clientId = assertEnv('STRIPE_CLIENT_ID');
-    const redirectUri = new URL('/api/v1/payments/stripe/callback', assertEnv('NEXT_PUBLIC_APP_URL'));
-
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: clientId,
-      scope: 'read_write',
-      state: input.stateToken,
-      redirect_uri: redirectUri.toString(),
+  async connectWithCredentials(input: DirectConnectInput): Promise<DirectConnectResult> {
+    const creds = parseCredentials({
+      secretKey: input.credentials.secretKey,
+      publishableKey: input.credentials.publishableKey,
+      webhookSigningSecret: input.credentials.webhookSigningSecret,
     });
 
-    // Pre-fill fields on Stripe's onboarding page if we have them. Non-critical.
-    params.set('stripe_user[business_type]', 'company');
-
-    return {
-      redirectUrl: `https://connect.stripe.com/oauth/authorize?${params.toString()}`,
-    };
-  },
-
-  async completeOAuthCallback(input: OAuthCallbackInput): Promise<OAuthCallbackResult> {
-    const stripe = getStripe();
-
-    let tokenResponse: Stripe.OAuthToken;
+    // Round-trip the secret against `accounts.retrieve()` so we reject bad
+    // keys at connect time instead of at first payment. No argument =
+    // retrieve the account THIS API key belongs to.
+    let account: Stripe.Account;
     try {
-      tokenResponse = await stripe.oauth.token({
-        grant_type: 'authorization_code',
-        code: input.code,
-      });
+      account = await getClient(creds).accounts.retrieve();
     } catch (err) {
       throw new PaymentProviderError(
-        'OAUTH_EXCHANGE_FAILED',
-        err instanceof Error ? err.message : 'Stripe OAuth code exchange failed',
+        'AUTH_FAILED',
+        err instanceof Error ? err.message : 'Stripe key validation failed',
         { cause: err },
       );
     }
 
-    const accountId = tokenResponse.stripe_user_id;
-    if (!accountId) {
+    // Live/test mode parity check. A stable that pastes `sk_test_…` with
+    // `pk_live_…` would otherwise look connected and then silently fail
+    // every payment with a mode-mismatch error from Elements. Stripe key
+    // prefixes encode the mode reliably.
+    const secretIsLive = creds.secretKey.startsWith('sk_live_');
+    const publishableIsLive = creds.publishableKey.startsWith('pk_live_');
+    if (secretIsLive !== publishableIsLive) {
       throw new PaymentProviderError(
-        'OAUTH_NO_ACCOUNT_ID',
-        'Stripe did not return a connected account id',
+        'KEY_MODE_MISMATCH',
+        'Secret and publishable keys must be the same mode (both live or both test).',
       );
     }
 
-    // Fetch the connected account so we can surface charges_enabled / country /
-    // default currency in the settings UI without re-querying later.
-    let account: Stripe.Account | null = null;
-    try {
-      account = await stripe.accounts.retrieve(accountId);
-    } catch (err) {
-      logger.warn('stripe_account_retrieve_failed', {
-        accountId,
-        error: err instanceof Error ? err.message : 'unknown',
-      });
-    }
-
     return {
-      externalAccountId: accountId,
+      externalAccountId: account.id,
       metadata: {
-        livemode: tokenResponse.livemode,
-        scope: tokenResponse.scope,
-        country: account?.country ?? null,
-        defaultCurrency: account?.default_currency ?? null,
-        chargesEnabled: account?.charges_enabled ?? null,
-        payoutsEnabled: account?.payouts_enabled ?? null,
-        businessName: account?.business_profile?.name ?? null,
-        email: account?.email ?? null,
+        livemode: secretIsLive,
+        country: account.country ?? null,
+        defaultCurrency: account.default_currency ?? null,
+        chargesEnabled: account.charges_enabled ?? null,
+        payoutsEnabled: account.payouts_enabled ?? null,
+        businessName: account.business_profile?.name ?? null,
+        email: account.email ?? null,
+        hasWebhookSecret: !!creds.webhookSigningSecret,
       },
-      // Standard Connect drives requests via our platform secret + the
-      // `stripeAccount` header, so there's no per-account credential to store.
-      credentials: null,
+      credentials: { ...creds },
     };
   },
 
   /**
-   * Creates a Stripe Checkout Session scoped to the connected account and
-   * returns its hosted URL. Used by clients (mobile) that can't render the
-   * PaymentElement inline.
+   * Creates a Stripe Checkout Session. Used by clients (mobile) that
+   * can't render the PaymentElement inline.
    */
   async createHostedCheckout(
     input: CreatePaymentInput,
   ): Promise<CreatePaymentResult & { flow: 'redirect' }> {
-    const stripe = getStripe();
-
-    if (!input.account.externalAccountId) {
-      throw new PaymentProviderError(
-        'ACCOUNT_NOT_CONNECTED',
-        'Stripe account id is missing — club has not completed Connect onboarding',
-      );
-    }
+    const creds = parseCredentials(input.account.credentials);
+    const stripe = getClient(creds);
 
     try {
       const session = await stripe.checkout.sessions.create(
@@ -199,18 +212,13 @@ export const stripeAdapter: PaymentProviderAdapter = {
               clubId: input.clubId,
               ...input.metadata,
             },
-            ...(input.applicationFeeMinorUnits
-              ? { application_fee_amount: input.applicationFeeMinorUnits }
-              : {}),
           },
         },
         {
-          stripeAccount: input.account.externalAccountId,
-          // Audit H-1: use the SAME idempotency key as the inline-PI path
-          // so a rider who started with `mode=default` (PI-A) and retried
-          // with `mode=hosted` doesn't end up with two distinct PaymentIntents.
-          // Stripe returns the existing PI (or its enclosing Checkout
-          // Session) when the same key collides with the prior request.
+          // Audit H-1: same idempotency key as the inline-PI path so a
+          // rider who started with `mode=default` (PI-A) and retried
+          // with `mode=hosted` doesn't end up with two distinct
+          // PaymentIntents.
           idempotencyKey: input.idempotencyKey,
         },
       );
@@ -224,9 +232,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
 
       return {
         flow: 'redirect',
-        // For Connect Standard we use the underlying PaymentIntent id as our
-        // provider_payment_id because webhooks arrive with that id, not the
-        // session id. Falls back to session id if the intent isn't yet set.
+        // Use the underlying PaymentIntent id as our provider_payment_id
+        // because webhooks arrive with that id, not the session id.
+        // Falls back to session id if the intent isn't yet set.
         providerPaymentId:
           (typeof session.payment_intent === 'string'
             ? session.payment_intent
@@ -245,14 +253,8 @@ export const stripeAdapter: PaymentProviderAdapter = {
   },
 
   async createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
-    const stripe = getStripe();
-
-    if (!input.account.externalAccountId) {
-      throw new PaymentProviderError(
-        'ACCOUNT_NOT_CONNECTED',
-        'Stripe account id is missing — club has not completed Connect onboarding',
-      );
-    }
+    const creds = parseCredentials(input.account.credentials);
+    const stripe = getClient(creds);
 
     try {
       const intent = await stripe.paymentIntents.create(
@@ -269,10 +271,8 @@ export const stripeAdapter: PaymentProviderAdapter = {
           // `automatic_payment_methods` lets Stripe choose the right surfaces
           // per region (card, Apple/Google Pay, Link, etc.).
           automatic_payment_methods: { enabled: true },
-          application_fee_amount: input.applicationFeeMinorUnits,
         },
         {
-          stripeAccount: input.account.externalAccountId,
           idempotencyKey: input.idempotencyKey,
         },
       );
@@ -288,6 +288,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
         flow: 'inline',
         providerPaymentId: intent.id,
         clientSecret: intent.client_secret,
+        publishableKey: creds.publishableKey,
         status: mapIntentStatus(intent.status),
       };
     } catch (err) {
@@ -301,31 +302,18 @@ export const stripeAdapter: PaymentProviderAdapter = {
   },
 
   async refund(input: RefundInput): Promise<RefundResult> {
-    const stripe = getStripe();
-
-    if (!input.account.externalAccountId) {
-      throw new PaymentProviderError('ACCOUNT_NOT_CONNECTED', 'Stripe account id is missing');
-    }
+    const creds = parseCredentials(input.account.credentials);
+    const stripe = getClient(creds);
 
     try {
-      // Standard Connect uses **direct charges** (created with the
-      // `stripeAccount` header, charge originates on the connected
-      // account, no platform-level transfer). `reverse_transfer` is only
-      // meaningful for **destination charges** (`transfer_data[destination]`),
-      // which we don't use. Stripe rejects/no-ops the flag for direct
-      // charges. `refund_application_fee: true` proportionally reverses
-      // the platform fee that was charged on the original PI — that's
-      // the correct mechanism here.
       const refund = await stripe.refunds.create(
         {
           payment_intent: input.providerPaymentId,
           amount: input.amountMinorUnits,
           reason: input.reason === 'requested_by_customer' ? 'requested_by_customer' : undefined,
           metadata: input.reason ? { reason: input.reason } : undefined,
-          refund_application_fee: true,
         },
         {
-          stripeAccount: input.account.externalAccountId,
           idempotencyKey: input.idempotencyKey,
         },
       );
@@ -344,16 +332,11 @@ export const stripeAdapter: PaymentProviderAdapter = {
   },
 
   async getPaymentStatus(input: PaymentStatusInput): Promise<PaymentStatusResult> {
-    const stripe = getStripe();
-
-    if (!input.account.externalAccountId) {
-      throw new PaymentProviderError('ACCOUNT_NOT_CONNECTED', 'Stripe account id is missing');
-    }
+    const creds = parseCredentials(input.account.credentials);
+    const stripe = getClient(creds);
 
     try {
-      const intent = await stripe.paymentIntents.retrieve(input.providerPaymentId, {
-        stripeAccount: input.account.externalAccountId,
-      });
+      const intent = await stripe.paymentIntents.retrieve(input.providerPaymentId);
 
       return {
         status: mapIntentStatus(intent.status),
@@ -369,10 +352,15 @@ export const stripeAdapter: PaymentProviderAdapter = {
   },
 
   async verifyWebhook(input: VerifyWebhookInput): Promise<WebhookEvent> {
-    const stripe = getStripe();
-
+    // The route hands us the per-club webhook signing secret — there is no
+    // platform-level webhook receiver any more. constructEvent does both
+    // signature verification and timestamp-window enforcement.
     let event: Stripe.Event;
     try {
+      // Stripe.webhooks.constructEvent doesn't need a configured client —
+      // it's a pure crypto helper. Construct a minimal Stripe instance
+      // just to access the static helper.
+      const stripe = new Stripe('sk_dummy_for_webhooks_only', { typescript: true });
       event = stripe.webhooks.constructEvent(
         input.body,
         input.signatureHeader,
@@ -387,8 +375,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     }
 
     // Discriminate on `event.type` so the SDK's union narrows naturally —
-    // audit AI-26. Replaces the previous single-cast pattern that lost
-    // type safety on every field access.
+    // audit AI-26.
     let providerPaymentId: string | undefined;
     let status: PaymentIntentStatus | undefined;
     let amountReceivedMinorUnits: number | undefined;
@@ -397,9 +384,6 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let refundAmountMinor: number | undefined;
     let currency: string | undefined;
 
-    // The `payment_intent` field on Charge / Refund objects is either
-    // expanded (full PaymentIntent) or a bare string id. Normalise both
-    // shapes to the id string for the webhook handler downstream.
     function piPaymentIntentId(
       pi: string | Stripe.PaymentIntent | null | undefined,
     ): string | undefined {
@@ -430,12 +414,6 @@ export const stripeAdapter: PaymentProviderAdapter = {
       }
       case 'charge.refunded': {
         const charge = event.data.object;
-        // Charge-level refund event (Stripe fires this in addition to per-
-        // refund `charge.refund.updated`). Surface the most recent refund's
-        // delta so the webhook helper can call `recordBookingRefund`. For
-        // partial refunds the rolling `amount_refunded` is the cumulative
-        // total — extract just the latest refund's `amount` from the
-        // embedded refunds list.
         providerPaymentId = piPaymentIntentId(charge.payment_intent);
         currency = charge.currency?.toUpperCase();
         const md = charge.metadata;
@@ -453,10 +431,6 @@ export const stripeAdapter: PaymentProviderAdapter = {
             refundAmountMinor = latest.amount;
           }
         } else {
-          // No embedded refund — fall back to amount_refunded as the delta
-          // (correct for full refund; for partial refund where Stripe hasn't
-          // expanded refunds it's the cumulative total which is also the
-          // delta if this is the first refund event).
           refundStatus = 'succeeded';
           refundAmountMinor = charge.amount_refunded;
         }
@@ -466,10 +440,6 @@ export const stripeAdapter: PaymentProviderAdapter = {
       case 'charge.failed': {
         const charge = event.data.object;
         providerPaymentId = piPaymentIntentId(charge.payment_intent);
-        // Charge.amount is the captured amount (in minor units). The
-        // PaymentIntent's `amount_received` is the canonical source for
-        // payment-level amounts; for charge events the Charge's `amount`
-        // field is the right-shaped equivalent.
         amountReceivedMinorUnits = charge.amount;
         currency = charge.currency?.toUpperCase();
         const md = charge.metadata;
@@ -480,9 +450,6 @@ export const stripeAdapter: PaymentProviderAdapter = {
       }
       case 'charge.refund.updated': {
         const refund = event.data.object;
-        // The Refund carries the parent PaymentIntent + the refund's own
-        // status/amount so the webhook handler can reverse the booking
-        // ledger when a `pending → failed` transition lands (audit B-4).
         providerPaymentId = piPaymentIntentId(refund.payment_intent);
         refundStatus = refund.status as WebhookEvent['refundStatus'];
         refundAmountMinor = refund.amount;
@@ -495,7 +462,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
       }
       default:
         // Unhandled event type — return the envelope so the webhook
-        // route can dedup/log it without breaking. No fields populated.
+        // route can dedup/log it without breaking.
         break;
     }
 
@@ -503,8 +470,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
       eventId: event.id,
       eventType: event.type,
       providerPaymentId,
-      // On a Connect platform webhook, `event.account` is the connected
-      // account id that the event pertains to.
+      // `event.account` is set on Connect platform webhooks. With direct
+      // keys we don't get that field — the route resolves clubId from
+      // the URL path instead.
       providerAccountId: event.account ?? undefined,
       bookingId,
       status,

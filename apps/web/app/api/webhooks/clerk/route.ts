@@ -11,6 +11,7 @@ import {
 import { logger } from '@/lib/logger';
 import { mapClerkRoleToAppRole } from '@/lib/clerk-roles';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
+import { TRIAL_DURATION_DAYS } from '@equestrian/shared/constants';
 
 interface OrganizationEvent {
   data: {
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
       case 'organization.created': {
         const orgData = (event as OrganizationEvent).data;
         const trialEndsAt = new Date();
-        trialEndsAt.setDate(trialEndsAt.getDate() + 30);
+        trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
 
         // Retry-safe against both Svix redeliveries (same clerk_org_id) and
         // concurrent org.created for the same name (same slug). Each INSERT

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   getActivePaymentAccount,
   getBookingById,
-  getClubById,
+  isParentOf,
   setBookingPaymentRef,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
@@ -56,9 +56,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Booking not found', 404);
       }
 
+      // Authorization. Three valid callers:
+      //   - Staff with `bookings:update` (manager/admin) — pays on behalf
+      //     of any rider in the club.
+      //   - The rider themselves — booking.riderMemberId === ctx.memberId.
+      //   - The rider's parent — `bookings:create_child` grant AND a
+      //     `rider_profiles.parent_member_id` match. Without this branch,
+      //     a parent who used POST /bookings to book a child's lesson
+      //     could not initialize its payment.
+      // The outer `requiredPermission: 'bookings:create'` was removed
+      // because it 403'd parents (who hold `bookings:create_child`,
+      // not `bookings:create`) before the inline check ran.
       const canActForAny = hasPermission(ctx.orgRole, 'bookings:update');
-      const isOwnBooking = ctx.memberId && booking.riderMemberId === ctx.memberId;
-      if (!canActForAny && !isOwnBooking) {
+      const isOwnBooking = !!ctx.memberId && booking.riderMemberId === ctx.memberId;
+      const canPayForChild = !!ctx.memberId && hasPermission(ctx.orgRole, 'bookings:create_child');
+      let isGuardianOfRider = false;
+      if (canPayForChild && ctx.memberId && !isOwnBooking) {
+        isGuardianOfRider = await isParentOf(
+          ctx.clubId,
+          ctx.memberId,
+          booking.riderMemberId,
+        );
+      }
+      if (!canActForAny && !isOwnBooking && !isGuardianOfRider) {
         return errorResponse('FORBIDDEN', 'You can only pay for your own bookings', 403);
       }
 
@@ -128,75 +148,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const returnUrl = new URL(returnUrlPath, appUrl).toString();
 
       // booking.amount is the NET (post-coupon) amount we charge — coupon
-      // discounts are baked into it at booking-create time. Platform fee is
-      // computed off the net charge because that's what we actually settle.
-      // N-Genius and Ziina don't support split payments — their adapters
-      // ignore applicationFeeMinorUnits.
-      //
-      // The fee is snapshotted on FIRST PI create (audit B-3). Stripe honours
-      // `application_fee_amount` only on the first call; recomputing from a
-      // live `clubs.platform_fee_percent` on retries would silently let
-      // finance reports diverge from what Stripe captured if an admin lowered
-      // the fee mid-flight.
-      const bookingAmount = booking.amount;
-      let applicationFeeMinorUnits: number | undefined;
-      let persistFeeSnapshot = false;
-      if (account.provider === 'stripe') {
-        if (booking.applicationFeeMinor != null) {
-          applicationFeeMinorUnits = booking.applicationFeeMinor;
-        } else {
-          const club = await getClubById(ctx.clubId);
-          const feePercent = club ? Number(club.platformFeePercent) : 0;
-          if (Number.isFinite(feePercent) && feePercent > 0) {
-            applicationFeeMinorUnits = Math.round(bookingAmount * (feePercent / 100));
-            // Audit H-2: persist the fee snapshot BEFORE the Stripe call so
-            // a network blip after Stripe accepts but before the local row
-            // is updated leaves us reading the same value on retry. Without
-            // this, a fee-percent change between attempts would let the
-            // booking row diverge from what Stripe actually captured.
-            const persisted = await setBookingPaymentRef(ctx.clubId, bookingId, {
-              applicationFeeMinor: applicationFeeMinorUnits,
-            });
-            // CAS conflict / terminal-state guard hit → fall back to whatever
-            // the latest row carries (re-read).
-            if (!persisted) {
-              const reread = await getBookingById(ctx.clubId, bookingId);
-              if (reread?.applicationFeeMinor != null) {
-                applicationFeeMinorUnits = reread.applicationFeeMinor;
-              }
-            }
-            persistFeeSnapshot = false;
-          }
-        }
-        // Stripe rejects PaymentIntents where application_fee_amount +
-        // Stripe's processing fee (~2.9% + 30c) exceeds the captured
-        // amount. Clamp to ~70% of the booking so a misconfigured high
-        // platform fee + a small booking doesn't surface as a Stripe
-        // 400 with an unhelpful "amount too small" error to the rider.
-        // Audit B-28 / AI-21 — use integer arithmetic to avoid IEEE-754
-        // drift on small amounts (`7 * 0.7 = 4.8999... → floor 4` instead
-        // of 4).
-        if (applicationFeeMinorUnits !== undefined) {
-          const cap = Math.floor((bookingAmount * 7) / 10);
-          if (applicationFeeMinorUnits > cap) {
-            const original = applicationFeeMinorUnits;
-            applicationFeeMinorUnits = Math.max(0, cap);
-            logger.warn('booking_payment_application_fee_clamped', {
-              bookingId,
-              clubId: ctx.clubId,
-              requested: original,
-              cap,
-              applied: applicationFeeMinorUnits,
-              bookingAmount,
-            });
-          }
-        }
-      }
-
+      // discounts are baked into it at booking-create time. We do NOT take
+      // a platform cut: each club runs Stripe / N-Genius / Ziina under
+      // their own merchant account and the full amount lands directly in
+      // the club's balance. Cavaliq revenue comes from the subscription
+      // tiers, not per-booking application fees.
       try {
         const paymentInput = {
           account,
-          amountMinorUnits: bookingAmount,
+          amountMinorUnits: booking.amount,
           currency: booking.currency,
           bookingId: booking.id,
           riderId: booking.riderMemberId,
@@ -210,7 +170,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           metadata: {
             bookingId: booking.id,
           },
-          applicationFeeMinorUnits,
         };
 
         // Mobile clients (mode=hosted) need a redirect URL for every provider
@@ -225,11 +184,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const updated = await setBookingPaymentRef(ctx.clubId, bookingId, {
           paymentProvider: account.provider,
           providerPaymentId: result.providerPaymentId,
-          // Persist the fee snapshot on the first successful PI create so
-          // retries read the same value (audit B-3).
-          ...(persistFeeSnapshot && applicationFeeMinorUnits !== undefined
-            ? { applicationFeeMinor: applicationFeeMinorUnits }
-            : {}),
         });
 
         logger.info('booking_payment_initialized', {
@@ -248,13 +202,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
 
         // Expose only the fields the client needs — don't leak account creds.
+        // The publishable key is only on the inline Stripe path; redirect
+        // flows (N-Genius, Ziina, Stripe Checkout) hand back a hosted URL
+        // and never need it.
         return successResponse({
           bookingId,
           provider: account.provider,
           providerPaymentId: result.providerPaymentId,
           flow: result.flow,
           ...(result.flow === 'inline'
-            ? { clientSecret: result.clientSecret }
+            ? {
+                clientSecret: result.clientSecret,
+                publishableKey: result.publishableKey,
+              }
             : { paymentUrl: result.paymentUrl }),
           status: result.status,
           booking: updated,
@@ -279,7 +239,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     },
     {
-      requiredPermission: 'bookings:create',
+      // Permission gate is inline above — `bookings:create` would 403
+      // parents who pay for child bookings under `bookings:create_child`.
+      // The inline check authorizes staff, the rider themselves, and the
+      // rider's recorded guardian.
       // Audit AI-22 — payment-init creates real Stripe/N-Genius/Ziina
       // PaymentIntents (real money in observability). Tighten from the
       // default 60/min so a runaway client or replay loop can't flood

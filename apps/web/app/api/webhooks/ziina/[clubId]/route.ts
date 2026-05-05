@@ -58,16 +58,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Audit B-9: getWebhookConfigByClubProvider returns ONLY the webhook
   // fields, never the Ziina API key. A future logger.error here can't
   // accidentally surface the API key into observability.
+  //
+  // Audit AI-15: a webhook URL that returns 200 when no account is
+  // connected and 401 when an invalid signature is presented lets an
+  // attacker probe whether a clubId has Ziina connected. clubIds are
+  // UUIDs (not enumerable) but the asymmetry was unintentional. Unify
+  // the responses to 401 with an identical body so the connect state
+  // isn't observable via response shape. Operator-distinguishing
+  // context lives in the log, not the response.
   const account = await getWebhookConfigByClubProvider(clubId, 'ziina');
   if (!account) {
     logger.warn('ziina_webhook_club_not_connected', { clubId });
-    return new Response('OK', { status: 200 });
+    return new Response('Invalid signature', { status: 401 });
   }
 
   const webhookSecret = account.webhookSigningSecret;
   if (!webhookSecret) {
+    // Operator misconfiguration: the merchant connected Ziina but never
+    // saved the webhook signing secret. Surface the alert via log rather
+    // than via a distinct response code so attackers and Ziina see the
+    // same shape as every other rejection path.
     logger.error('ziina_webhook_secret_not_configured', { clubId });
-    return new Response('Webhook secret not configured', { status: 503 });
+    return new Response('Invalid signature', { status: 401 });
   }
 
   let event;
@@ -86,7 +98,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       clubId,
       error: err instanceof Error ? err.message : 'unknown',
     });
-    return new Response('Verification failed', { status: 400 });
+    return new Response('Invalid signature', { status: 401 });
   }
 
   if (!HANDLED_EVENTS.has(event.eventType)) {

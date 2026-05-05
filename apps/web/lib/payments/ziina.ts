@@ -84,7 +84,6 @@ function mapIntentStatus(status: string | undefined): PaymentIntentStatus {
 
 export const ziinaAdapter: PaymentProviderAdapter = {
   name: 'ziina',
-  connectMode: 'api_key',
   displayName: 'Ziina',
 
   async connectWithCredentials(input: DirectConnectInput): Promise<DirectConnectResult> {

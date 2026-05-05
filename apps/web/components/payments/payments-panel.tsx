@@ -60,7 +60,6 @@ interface ProviderInfo {
   name: PaymentProviderName;
   displayName: string;
   tagline: string;
-  connectMode: 'oauth' | 'api_key';
 }
 
 const PROVIDERS: readonly ProviderInfo[] = [
@@ -68,19 +67,16 @@ const PROVIDERS: readonly ProviderInfo[] = [
     name: 'stripe',
     displayName: 'Stripe',
     tagline: 'Global card acceptance. Best for international riders and Apple/Google Pay.',
-    connectMode: 'oauth',
   },
   {
     name: 'n_genius',
     displayName: 'N-Genius',
     tagline: 'Network International — UAE-dominant card acquirer with Mada support.',
-    connectMode: 'api_key',
   },
   {
     name: 'ziina',
     displayName: 'Ziina',
     tagline: 'UAE fintech with fast onboarding and low-friction local payments.',
-    connectMode: 'api_key',
   },
 ] as const;
 
@@ -142,39 +138,27 @@ function ProviderCard({ info, account }: ProviderCardProps) {
   const isActive = isConnected && account?.isActive;
   const hasError = account?.status === 'error';
   const isDisabled = account?.status === 'disabled';
-  const isPlatformUnavailable = info.name === 'stripe' && !STRIPE_ENABLED;
 
   return (
     <Card
       className={
-        isPlatformUnavailable
-          ? 'border-muted bg-muted/20 opacity-75'
-          : isActive
-            ? 'border-green-200 bg-green-50/30'
-            : hasError
-              ? 'border-red-200 bg-red-50/30'
-              : ''
+        isActive
+          ? 'border-green-200 bg-green-50/30'
+          : hasError
+            ? 'border-red-200 bg-red-50/30'
+            : ''
       }
     >
       <CardHeader>
         <div className="flex items-start justify-between">
           <CardTitle className="text-lg">{info.displayName}</CardTitle>
-          {isPlatformUnavailable ? (
-            <Badge variant="outline" className="text-xs">Coming soon</Badge>
-          ) : (
-            <StatusBadge account={account} />
-          )}
+          <StatusBadge account={account} />
         </div>
         <CardDescription className="text-xs leading-relaxed">
           {info.tagline}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 pb-3">
-        {isPlatformUnavailable && (
-          <div className="text-xs text-muted-foreground">
-            Stripe Connect is pending platform activation. Use N-Genius or Ziina in the meantime.
-          </div>
-        )}
         {account?.externalAccountId && (
           <div className="text-xs text-muted-foreground">
             <span className="font-medium">Account:</span>{' '}
@@ -231,8 +215,8 @@ function StatusBadge({ account }: { account: PaymentAccount | null }) {
 // ─── Connect action: dispatches to the right flow ────────────────────
 
 function ConnectAction({ info, label = 'Connect' }: { info: ProviderInfo; label?: string }) {
-  if (info.connectMode === 'oauth') {
-    return <StripeConnectButton label={label} />;
+  if (info.name === 'stripe') {
+    return <StripeConnectDialog label={label} />;
   }
   if (info.name === 'n_genius') {
     return <NGeniusConnectDialog label={label} />;
@@ -240,50 +224,170 @@ function ConnectAction({ info, label = 'Connect' }: { info: ProviderInfo; label?
   return <ZiinaConnectDialog label={label} />;
 }
 
-// True only when the platform has Stripe Connect OAuth configured. Baked in at
-// build time via `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`. Until a UAE trade license
-// lets the founder activate Stripe Connect, this stays unset and the Stripe
-// card shows a disabled "Coming soon" state instead of a red error toast.
-const STRIPE_ENABLED = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+// ─── Stripe credential dialog ─────────────────────────────────────────
 
-function StripeConnectButton({ label }: { label: string }) {
+const stripeSchema = z
+  .object({
+    secretKey: z
+      .string()
+      .min(1, 'Secret key is required')
+      .refine((v) => v.startsWith('sk_'), 'Must start with "sk_"'),
+    publishableKey: z
+      .string()
+      .min(1, 'Publishable key is required')
+      .refine((v) => v.startsWith('pk_'), 'Must start with "pk_"'),
+    webhookSigningSecret: z
+      .string()
+      .optional()
+      .refine(
+        (v) => !v || v.startsWith('whsec_'),
+        'Webhook secret must start with "whsec_"',
+      ),
+  })
+  // Live/test parity. The server enforces this too (lib/payments/stripe.ts),
+  // but failing fast in the form avoids a round-trip on an obvious mistake.
+  .refine(
+    (data) => data.secretKey.startsWith('sk_live_') === data.publishableKey.startsWith('pk_live_'),
+    {
+      path: ['publishableKey'],
+      message: 'Secret and publishable keys must be the same mode (both live or both test)',
+    },
+  );
+type StripeForm = z.infer<typeof stripeSchema>;
+
+function StripeConnectDialog({ label }: { label: string }) {
+  const [open, setOpen] = useState(false);
   const connect = useConnectStripe();
 
-  if (!STRIPE_ENABLED) {
-    return (
-      <Button size="sm" variant="outline" disabled title="Stripe Connect is not available on this platform yet.">
-        <Link2 className="mr-2 h-4 w-4" />
-        Coming soon
-      </Button>
-    );
-  }
+  const form = useForm<StripeForm>({
+    resolver: zodResolver(stripeSchema),
+    defaultValues: { secretKey: '', publishableKey: '', webhookSigningSecret: '' },
+  });
 
-  async function handleClick() {
+  async function onSubmit(values: StripeForm) {
     try {
-      const res = await connect.mutateAsync();
-      if (res.success) {
-        window.location.href = res.data.redirectUrl;
-      }
+      await connect.mutateAsync({
+        secretKey: values.secretKey,
+        publishableKey: values.publishableKey,
+        webhookSigningSecret: values.webhookSigningSecret || undefined,
+        makeActive: true,
+      });
+      toast.success('Stripe connected');
+      form.reset();
+      setOpen(false);
     } catch (err) {
       reportMutationError('payments.stripe.connect', err);
-      toast.error(err instanceof Error ? err.message : 'Could not start Stripe connection');
+      toast.error(err instanceof Error ? err.message : 'Connection failed');
     }
   }
 
   return (
-    <Button onClick={handleClick} disabled={connect.isPending} size="sm">
-      {connect.isPending ? (
-        <>
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Redirecting…
-        </>
-      ) : (
-        <>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
           <Link2 className="mr-2 h-4 w-4" />
           {label} Stripe
-        </>
-      )}
-    </Button>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Connect Stripe</DialogTitle>
+          <DialogDescription>
+            Paste your Stripe API keys from{' '}
+            <a
+              href="https://dashboard.stripe.com/apikeys"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              dashboard.stripe.com/apikeys
+            </a>
+            . Use live keys (<code>sk_live_…</code> / <code>pk_live_…</code>) for
+            production. Your keys are encrypted before storage and used only to
+            charge cards on your Stripe account.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="secretKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Secret Key</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="sk_live_…" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="publishableKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Publishable Key</FormLabel>
+                  <FormControl>
+                    <Input placeholder="pk_live_…" {...field} />
+                  </FormControl>
+                  <FormDescription className="text-xs">
+                    Sent to riders&apos; browsers to mount the Stripe payment form.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="rounded-md bg-muted/50 p-3 space-y-3">
+              <p className="text-xs font-medium">Webhook (recommended)</p>
+              <p className="text-xs text-muted-foreground">
+                In Stripe, add a webhook endpoint pointing at your stable&apos;s
+                Cavaliq webhook URL — Settings → Payments will show the exact URL
+                once Stripe is connected. Subscribe to{' '}
+                <code className="text-[10px]">payment_intent.succeeded</code>,{' '}
+                <code className="text-[10px]">payment_intent.payment_failed</code>,{' '}
+                <code className="text-[10px]">charge.refunded</code>, and{' '}
+                <code className="text-[10px]">charge.refund.updated</code>. Paste
+                the signing secret below.
+              </p>
+              <FormField
+                control={form.control}
+                name="webhookSigningSecret"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Webhook Signing Secret</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="whsec_…" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={connect.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={connect.isPending}>
+                {connect.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Validating…
+                  </>
+                ) : (
+                  'Connect'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
