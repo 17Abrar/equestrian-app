@@ -14,13 +14,16 @@ import {
   paginatedResponse,
 } from '@/lib/api-utils';
 
+// audit M-1 (2026-05-05) — schema kept narrow: only the three filters the
+// resolver actually evaluates. `.strict()` rejects unknown keys, so a
+// caller that POSTs `hasActivePackage` or `tags` (the prior dead fields)
+// now gets a 400, instead of silently persisting state the resolver
+// would ignore.
 const audienceFiltersSchema = z
   .object({
     skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
     activeWithinDays: z.number().int().min(1).max(3650).optional(),
-    hasActivePackage: z.boolean().optional(),
     minBookings: z.number().int().min(1).optional(),
-    tags: z.array(z.string().max(100)).max(50).optional(),
   })
   .strict();
 

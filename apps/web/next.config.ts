@@ -1,44 +1,20 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
-// CSP allowlist per third-party service.
+// audit F-3 (2026-05-05) — CSP moved out of next.config.ts.
 //
-// Clerk production uses a custom subdomain (`clerk.cavaliq.com`) for the
-// Frontend API, plus `*.clerk.services` for account portal / image CDN /
-// webhook backends. `*.clerk.accounts.dev` is kept so the app can still
-// boot against a dev Clerk instance without a config change.
-// `challenges.cloudflare.com` is Clerk's bot-protection challenge host.
-const CLERK_SCRIPT =
-  'https://clerk.cavaliq.com https://*.clerk.services https://*.clerk.accounts.dev https://challenges.cloudflare.com';
-const CLERK_CONNECT =
-  'https://clerk.cavaliq.com https://*.clerk.services https://*.clerk.accounts.dev https://*.clerk.com https://clerk-telemetry.com';
-const CLERK_FRAME =
-  'https://clerk.cavaliq.com https://*.clerk.accounts.dev https://challenges.cloudflare.com';
-
-const SENTRY_CONNECT =
-  'https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io';
-
-const STRIPE_SCRIPT = 'https://js.stripe.com';
-const STRIPE_CONNECT = 'https://api.stripe.com';
-const STRIPE_FRAME = 'https://js.stripe.com https://hooks.stripe.com';
-
-const cspDirectives = [
-  "default-src 'self'",
-  // unsafe-inline required: Next.js injects inline hydration scripts; Clerk SDK injects inline scripts
-  `script-src 'self' 'unsafe-inline' ${CLERK_SCRIPT} ${STRIPE_SCRIPT}`,
-  // unsafe-inline required: Clerk SDK injects inline styles for its UI components
-  `style-src 'self' 'unsafe-inline' ${CLERK_SCRIPT}`,
-  // Any R2 public bucket (pub-*.r2.dev) — wildcard covers all buckets in the account
-  "img-src 'self' data: blob: https://*.r2.dev https://img.clerk.com",
-  "font-src 'self' data:",
-  `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://maps.googleapis.com`,
-  `frame-src 'self' ${CLERK_FRAME} ${STRIPE_FRAME}`,
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self' https://checkout.stripe.com",
-  ...(process.env.NODE_ENV === 'production' ? ['upgrade-insecure-requests'] : []),
-].join('; ');
+// The header is now built per-request in `middleware.ts` so each
+// response carries a fresh nonce: `script-src 'strict-dynamic'
+// 'nonce-XXX' 'self' 'unsafe-inline' <hosts>`. Modern browsers
+// (Chrome 52+, Firefox 52+, Safari 15.4+) honour `'strict-dynamic'`
+// and treat the nonce as the only source of trust — `'unsafe-inline'`
+// and the host allowlist are silently ignored. Older browsers fall
+// back to the host list + `'unsafe-inline'`, preserving the prior
+// looser-but-functional behaviour.
+//
+// Static security headers (X-Frame-Options, HSTS, Permissions-Policy,
+// X-Content-Type-Options) stay here — they don't need per-request
+// state and benefit from being baked into the build.
 
 const nextConfig: NextConfig = {
   transpilePackages: [
@@ -91,7 +67,8 @@ const nextConfig: NextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
           },
-          { key: 'Content-Security-Policy', value: cspDirectives },
+          // Content-Security-Policy: set per-request in middleware.ts.
+          // Required for the per-request nonce; see audit F-3 above.
         ],
       },
       // CORS headers are set dynamically in middleware.ts (origin allowlist)

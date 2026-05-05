@@ -66,6 +66,18 @@ jobs:
       - name: Dependency audit (moderate, advisory only)
         run: pnpm audit --prod --audit-level moderate || true
 
+      # audit L-2 (2026-05-05) — regenerate the Cloudflare Workers env
+      # types from wrangler.jsonc so typecheck runs against the real
+      # binding shape, not the hand-written placeholder committed to git.
+      # The placeholder exists so local `pnpm typecheck` works without
+      # requiring every dev to run wrangler first; CI is authoritative.
+      # If a new binding/var/secret was added to wrangler.jsonc but not
+      # to the placeholder, this step picks it up and the next typecheck
+      # would fail on a real reference (or pass if no code uses it yet —
+      # either way, no `unknown` slips through).
+      - name: Regenerate Cloudflare env types
+        run: pnpm --filter @equestrian/web cf:typegen
+
       - name: Typecheck
         run: pnpm turbo typecheck --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 

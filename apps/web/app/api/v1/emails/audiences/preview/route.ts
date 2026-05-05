@@ -3,14 +3,15 @@ import { z } from 'zod';
 import { countAudienceMembers } from '@equestrian/db/queries';
 import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
 
+// audit M-1 (2026-05-05) — preview must match POST/PATCH so the count
+// the user sees while building a filter is the same count the resolver
+// would deliver. Diverging schemas would re-introduce the original bug.
 const previewSchema = z.object({
   filters: z
     .object({
       skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
       activeWithinDays: z.number().int().min(1).max(3650).optional(),
-      hasActivePackage: z.boolean().optional(),
       minBookings: z.number().int().min(1).optional(),
-      tags: z.array(z.string().max(100)).max(50).optional(),
     })
     .strict(),
 });

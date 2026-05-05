@@ -5,6 +5,7 @@ import { Upload, X, FileText, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { fetchJson } from '@/lib/fetch-json';
 
 interface FileUploadProps {
   /** Current file URL (displays existing file) */
@@ -77,8 +78,18 @@ export function FileUpload({
     setUploading(true);
 
     try {
-      // Step 1: Get presigned URL from our API
-      const presignRes = await fetch('/api/v1/upload', {
+      // Step 1: Get presigned URL from our API.
+      //
+      // audit L-2 (2026-05-05) — switched from raw fetch + .json() to
+      // fetchJson<T>. Cloudflare workerd types correctly tighten
+      // `Response.json(): Promise<unknown>` (the prior `Promise<any>`
+      // was a lie); fetchJson wraps the validation, surfaces the
+      // server's error message via `throw`, and does the cast in one
+      // place.
+      const presignJson = await fetchJson<{
+        success: true;
+        data: { uploadUrl: string; publicUrl: string; key: string };
+      }>('/api/v1/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -89,19 +100,7 @@ export function FileUpload({
           ...(targetClubId ? { targetClubId } : {}),
         }),
       });
-
-      if (!presignRes.ok) {
-        const errData = await presignRes.json();
-        throw new Error(errData.error?.message ?? 'Failed to prepare upload');
-      }
-
-      const { uploadUrl, publicUrl, key } = await presignRes
-        .json()
-        .then(
-          (r: {
-            data: { uploadUrl: string; publicUrl: string; key: string };
-          }) => r.data,
-        );
+      const { uploadUrl, publicUrl, key } = presignJson.data;
 
       // Step 2: Upload directly to R2
       const uploadRes = await fetch(uploadUrl, {
