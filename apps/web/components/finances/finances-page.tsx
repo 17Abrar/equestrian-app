@@ -38,6 +38,7 @@ import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 export function FinancesPage() {
   return (
@@ -172,7 +173,7 @@ function PaginationControls({
 
 function InvoicesTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error, refetch } = useInvoices({ page, pageSize: 25 });
+  const { data, isLoading, isError, error, refetch } = useInvoices({ page, pageSize: DEFAULT_PAGE_SIZE });
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
@@ -212,7 +213,7 @@ function InvoicesTab() {
 
 function PaymentsTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error, refetch } = usePayments({ page, pageSize: 25 });
+  const { data, isLoading, isError, error, refetch } = usePayments({ page, pageSize: DEFAULT_PAGE_SIZE });
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
@@ -252,7 +253,7 @@ function PaymentsTab() {
 
 function ExpensesTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: 25 });
+  const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: DEFAULT_PAGE_SIZE });
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
@@ -528,7 +529,7 @@ function CouponsTab() {
   // in the club's configured currency.
   const currency = settings?.data.currency ?? 'AED';
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: 25 });
+  const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: DEFAULT_PAGE_SIZE });
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;

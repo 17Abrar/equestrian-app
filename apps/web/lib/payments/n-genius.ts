@@ -263,6 +263,17 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         hasRealmName: !!creds.realmName,
         hasWebhookHeader: !!(creds.webhookHeaderName && creds.webhookHeaderValue),
         webhookHeaderName: creds.webhookHeaderName ?? null,
+        // Audit MED (2026-05-05 pass 2): record the outlet's settlement
+        // currency so the booking-payment route's currency-parity check
+        // (`apps/web/app/api/v1/bookings/[bookingId]/payment/route.ts`)
+        // can refuse to drive a payment in a currency the merchant
+        // can't settle. N-Genius outlets are configured for a single
+        // currency at the merchant portal (the rare multi-currency
+        // outlet is opt-in and not in the GCC SaaS use case). AED is
+        // the default for the GCC market — operators on a non-AED
+        // outlet should override this in the connect form (TODO when
+        // we ship the multi-currency UI).
+        defaultCurrency: 'AED',
       },
       credentials: { ...creds },
     };
@@ -456,13 +467,35 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // portal; N-Genius echoes that header on every delivery. The caller
     // (route handler) extracts the header value and passes it here; we
     // compare against the stored secret in constant time.
+    //
+    // Audit LOW (2026-05-05 pass 2): length-pad before compare. The
+    // previous shape short-circuited on `a.length !== b.length`, leaking
+    // the expected length to a timing attacker (probing different
+    // payload lengths until the response time stops being constant).
+    // The cron-secret compare elsewhere already pads; mirror it here so
+    // an attacker can't measure the secret length even though the
+    // residual is small (the secret value alone is the brute-force
+    // surface, not its length, but defense-in-depth is cheap).
     const expected = input.webhookSecret;
     const provided = input.signatureHeader.trim();
 
-    const a = Buffer.from(expected, 'utf8');
-    const b = Buffer.from(provided, 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const providedBuf = Buffer.from(provided, 'utf8');
 
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    // Pad the shorter buffer to the longer length with zero bytes; mark
+    // the result invalid if the lengths differ. `timingSafeEqual`
+    // requires equal-length inputs.
+    const maxLen = Math.max(expectedBuf.length, providedBuf.length);
+    const expectedPadded = Buffer.alloc(maxLen);
+    expectedBuf.copy(expectedPadded);
+    const providedPadded = Buffer.alloc(maxLen);
+    providedBuf.copy(providedPadded);
+
+    const equal =
+      timingSafeEqual(expectedPadded, providedPadded) &&
+      expectedBuf.length === providedBuf.length;
+
+    if (!equal) {
       logger.warn('n_genius_webhook_header_mismatch');
       throw new PaymentProviderError(
         'INVALID_SIGNATURE',

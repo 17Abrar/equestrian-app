@@ -171,6 +171,18 @@ export async function POST(request: NextRequest) {
         if (!targetRider) {
           return errorResponse('RIDER_NOT_FOUND', 'Rider is not a member of this club', 404);
         }
+        // Audit MED (2026-05-05 pass 2): `getMemberById` returns rows
+        // regardless of `isActive`. Booking lessons for a deactivated
+        // rider produced a confirmed booking the rider couldn't see and
+        // bypassed the deactivate-flow's intent. Sibling check in the
+        // medication-logs route already filters this; mirror it here.
+        if (!targetRider.isActive) {
+          return errorResponse(
+            'RIDER_INACTIVE',
+            'This rider is deactivated and cannot be booked. Reactivate the rider first.',
+            422,
+          );
+        }
 
         if (!canBookForAnyone) {
           // Parent-only path — verify the target is recorded as their
@@ -324,7 +336,13 @@ export async function POST(request: NextRequest) {
           riderMemberId: data.riderMemberId,
           horseId: assignedHorseId,
           bookedByMemberId: ctx.memberId,
+          // Pass the pre-discount value when a coupon is in play — the
+          // post-lock TOCTOU recompute inside `createBooking` derives the
+          // final amount/discount from the LOCKED coupon's effective
+          // values (audit MED, 2026-05-05 pass 2). For the no-coupon
+          // path, `amount` is used directly.
           amount: netAmount,
+          grossAmount: couponId ? grossAmount : undefined,
           currency: slot.lessonTypeCurrency,
           paymentMethod: data.paymentMethod,
           discountAmount,

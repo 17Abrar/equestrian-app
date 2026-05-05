@@ -10,6 +10,7 @@ import {
   timestamp,
   unique,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import {
   bookingStatusEnum,
@@ -127,7 +128,13 @@ export const bookings = pgTable('bookings', {
   riderMemberId: uuid('rider_member_id')
     .notNull()
     .references(() => clubMembers.id),
-  horseId: uuid('horse_id').references(() => horses.id),
+  // Audit AI-22 (2026-05-05 pass 2): composite FK declared in the
+  // table-extras below as `bookings_horse_club_fk` (horseId, clubId)
+  // -> horses(id, clubId) ON DELETE SET NULL — matches migration 0033.
+  // The single-column inline `references(() => horses.id)` was a
+  // residual from before 0033 and would silently regenerate as a
+  // regression migration if drizzle-kit ever ran `generate`.
+  horseId: uuid('horse_id'),
   bookedByMemberId: uuid('booked_by_member_id')
     .notNull()
     .references(() => clubMembers.id),
@@ -145,10 +152,6 @@ export const bookings = pgTable('bookings', {
   // NO ACTION blocked operators from cleaning up old coupons entirely.
   couponId: uuid('coupon_id').references(() => coupons.id, { onDelete: 'set null' }),
   packageId: uuid('package_id').references(() => riderPackages.id, { onDelete: 'set null' }),
-
-  // Stripe (legacy — retained while older rows still reference it directly).
-  // New code uses `paymentProvider` + `providerPaymentId` below.
-  stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
 
   // Generic payment-provider reference. `paymentProvider` disambiguates which
   // adapter owns `providerPaymentId` (a Stripe PaymentIntent id, N-Genius
@@ -171,7 +174,15 @@ export const bookings = pgTable('bookings', {
   cancellationReason: text('cancellation_reason'),
   cancellationFee: integer('cancellation_fee').default(0),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-  cancelledByMemberId: uuid('cancelled_by_member_id').references(() => clubMembers.id),
+  // ON DELETE SET NULL matches the SQL constraint
+  // `bookings_cancelled_by_member_id_club_members_id_fk` (audit AI-22
+  // pass 2). Cancellations should outlive the staff member who issued
+  // them — the audit row carries the actor identity at the time of
+  // action, the cancellation just loses its actor pointer.
+  cancelledByMemberId: uuid('cancelled_by_member_id').references(
+    () => clubMembers.id,
+    { onDelete: 'set null' },
+  ),
 
   // Guest bookings — the signed-in rider (riderMemberId) is booking on behalf
   // of someone who isn't a member of the stable. Guest contact details are
@@ -195,7 +206,21 @@ export const bookings = pgTable('bookings', {
   index('idx_bookings_horse').on(table.horseId),
   index('idx_bookings_status').on(table.clubId, table.status),
   index('idx_bookings_date').on(table.clubId, table.createdAt),
-  index('idx_bookings_stripe').on(table.stripePaymentIntentId),
+  // Composite FK ensures `horseId` matches the booking's `clubId` —
+  // closes the cross-tenant smuggling surface a single-column FK
+  // leaves open. ON DELETE SET NULL preserves the booking row when a
+  // horse is deleted (the booking's `amount` snapshot stays correct
+  // for finance reporting). Matches migration 0033.
+  foreignKey({
+    name: 'bookings_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('set null'),
+  // Composite FK target for `payments.booking_id, club_id`. Tautologically
+  // unique because `id` is the PK, but Postgres needs the explicit
+  // constraint to use the column pair as an FK target. Matches the
+  // `bookings_id_club_id_unique` constraint added in migration 0033.
+  unique('bookings_id_club_id_unique').on(table.id, table.clubId),
 ]);
 
 export const horsePairingHistory = pgTable('horse_pairing_history', {

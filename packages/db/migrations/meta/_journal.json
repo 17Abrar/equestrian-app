@@ -239,6 +239,20 @@
       "when": 1777248000022,
       "tag": "0033_audit_2026_05_05_critical_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1777248000023,
+      "tag": "0034_rider_medical_notes_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1777248000024,
+      "tag": "0035_audit_pass_2_schema_drift",
+      "breakpoints": true
     }
   ]
 }

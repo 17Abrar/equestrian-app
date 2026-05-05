@@ -60,7 +60,12 @@ export function CreateRecurringSlotsDialog() {
   async function onSubmit(data: CreateRecurringSlotsInput) {
     try {
       const result = await createSlots.mutateAsync(data);
-      const count = (result as { data?: { created?: number } }).data?.created ?? 0;
+      // Audit LOW (2026-05-05 pass 2): replaced the
+      // `(result as { data?: { created?: number } }).data?.created` cast
+      // with a real discriminator on the `ApiResponse<{ created: number }>`
+      // union. The success branch holds `data.created`; the error branch
+      // holds `error` and would have already thrown via fetchJson.
+      const count = result.success ? result.data.created : 0;
       toast.success(`${count} slots created`);
       form.reset();
       setOpen(false);

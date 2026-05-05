@@ -40,13 +40,30 @@ export async function POST(request: NextRequest) {
       // otherwise be repeated on up to 365 inserted rows. lessonTypeId is
       // included alongside arena/coach because lesson_types has the same
       // single-column FK shape (audit A-2).
-      const lessonType = await getLessonTypeById(ctx.clubId, data.lessonTypeId);
+      // Audit MED (2026-05-05 pass 2): require both to be active —
+      // bulk-insert ignoring the soft-delete flag silently restores a
+      // dropped arena / lesson type into rotation across up to 365 rows.
+      const lessonType = await getLessonTypeById(ctx.clubId, data.lessonTypeId, {
+        activeOnly: true,
+      });
       if (!lessonType) {
-        return errorResponse('INVALID_LESSON_TYPE', 'Lesson type not found in this club', 400);
+        return errorResponse(
+          'INVALID_LESSON_TYPE',
+          'Lesson type not found, or has been deactivated.',
+          400,
+        );
       }
       if (data.arenaId) {
-        const arena = await getArenaById(ctx.clubId, data.arenaId);
-        if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);
+        const arena = await getArenaById(ctx.clubId, data.arenaId, {
+          activeOnly: true,
+        });
+        if (!arena) {
+          return errorResponse(
+            'INVALID_ARENA',
+            'Arena not found, or has been deactivated.',
+            400,
+          );
+        }
       }
       if (data.coachMemberId) {
         const coach = await getMemberById(ctx.clubId, data.coachMemberId);

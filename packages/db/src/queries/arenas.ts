@@ -28,11 +28,28 @@ export async function getArenasByClub(
   return { items, total: count[0]?.count ?? 0 };
 }
 
-export async function getArenaById(clubId: string, arenaId: string) {
+/**
+ * Audit MED (2026-05-05 pass 2): forward-creation paths (booking-slots
+ * create/update/bulk) must reject deactivated arenas — soft-delete is
+ * the only signal admins have to drop an arena from rotation. Pass
+ * `{ activeOnly: true }` from those routes; admin-detail reads (the
+ * arena's own GET endpoint) keep the default to surface deactivated
+ * rows for re-activation flows.
+ */
+export async function getArenaById(
+  clubId: string,
+  arenaId: string,
+  options: { activeOnly?: boolean } = {},
+) {
+  const conditions = [eq(arenas.id, arenaId), eq(arenas.clubId, clubId)];
+  if (options.activeOnly) {
+    conditions.push(eq(arenas.isActive, true));
+  }
+
   const result = await db
     .select()
     .from(arenas)
-    .where(and(eq(arenas.id, arenaId), eq(arenas.clubId, clubId)))
+    .where(and(...conditions))
     .limit(1);
 
   return result[0] ?? null;

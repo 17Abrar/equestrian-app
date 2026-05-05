@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { formatMoney } from '@equestrian/shared/utils';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 function CompetitionsListSkeleton() {
   return (
@@ -37,7 +38,7 @@ export function CompetitionsList() {
   const { data, isLoading, isError, error, refetch } = useCompetitions({
     status: statusFilter as 'draft' | 'published' | 'in_progress' | 'completed' | 'cancelled' | undefined,
     page,
-    pageSize: 25,
+    pageSize: DEFAULT_PAGE_SIZE,
   });
 
   if (isLoading) return <CompetitionsListSkeleton />;

@@ -40,6 +40,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 function RiderListSkeleton() {
   return (
@@ -61,16 +62,27 @@ function RiderListSkeleton() {
   );
 }
 
-export function RidersList() {
+interface RidersListProps {
+  /** Audit MED (2026-05-05 pass 2): server-side `riders:create` gate. */
+  canCreate?: boolean;
+}
+
+// Audit LOW (2026-05-05 pass 2): replace the inline `as` cast with a
+// real union type. Select offers exactly these values; storing them
+// under the matching union narrows the call-site automatically.
+const SKILL_LEVELS_FILTER = ['beginner', 'intermediate', 'advanced'] as const;
+type SkillLevelFilter = (typeof SKILL_LEVELS_FILTER)[number] | undefined;
+
+export function RidersList({ canCreate = true }: RidersListProps = {}) {
   const [search, setSearch] = useState('');
-  const [skillLevel, setSkillLevel] = useState<string | undefined>();
+  const [skillLevel, setSkillLevel] = useState<SkillLevelFilter>();
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, error, refetch } = useRiders({
     search: search || undefined,
-    skillLevel: skillLevel as 'beginner' | 'intermediate' | 'advanced' | undefined,
+    skillLevel,
     page,
-    pageSize: 25,
+    pageSize: DEFAULT_PAGE_SIZE,
   });
 
   return (
@@ -81,7 +93,7 @@ export function RidersList() {
           <h1 className="text-3xl font-bold tracking-tight">Riders</h1>
           <p className="mt-1 text-muted-foreground">Manage rider profiles and progress</p>
         </div>
-        <AddRiderDialog />
+        {canCreate && <AddRiderDialog />}
       </div>
 
       {/* Filters */}
@@ -101,7 +113,15 @@ export function RidersList() {
         <Select
           value={skillLevel ?? 'all'}
           onValueChange={(v) => {
-            setSkillLevel(v === 'all' ? undefined : v);
+            setSkillLevel(
+              v === 'all'
+                ? undefined
+                : SKILL_LEVELS_FILTER.includes(
+                      v as (typeof SKILL_LEVELS_FILTER)[number],
+                    )
+                  ? (v as (typeof SKILL_LEVELS_FILTER)[number])
+                  : undefined,
+            );
             setPage(1);
           }}
         >

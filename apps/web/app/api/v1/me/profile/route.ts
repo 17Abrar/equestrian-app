@@ -18,7 +18,18 @@ const RIDER_PROFILE_ELIGIBLE_ROLES: UserRole[] = [
 export async function GET() {
   return withAuth(async (ctx) => {
     if (!ctx.memberId) {
-      return errorResponse('NO_MEMBER', 'Member profile not found', 404);
+      // Audit LOW (2026-05-05 pass 2): unify with `tenant.ts`'s
+      // `NO_MEMBERSHIP` shape. Same condition (signed-in Clerk user
+      // with no club_members row) was 404 here and 503 from the tenant
+      // resolver, so a refresh during onboarding flipped the user
+      // between two unrelated UX paths. Use 503 + the canonical code so
+      // the front-end's existing membership-not-yet-synced handling
+      // catches both surfaces.
+      return errorResponse(
+        'NO_MEMBERSHIP',
+        'Your account is being prepared. Refresh in a moment.',
+        503,
+      );
     }
 
     const rider = await getRiderByMemberId(ctx.clubId, ctx.memberId);

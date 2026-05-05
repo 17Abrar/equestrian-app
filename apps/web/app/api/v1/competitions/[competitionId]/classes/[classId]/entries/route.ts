@@ -175,9 +175,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       return successResponse(entry, 201);
     },
-    // Permission gate is inline above — accepts any of staff
-    // (`competitions:create`), self (`competitions:register`), or parent
-    // (`competitions:register_child`), and narrows each role to the
-    // riders they're allowed to register for. See audit F-1.
+    {
+      // Permission gate is inline above — accepts any of staff
+      // (`competitions:create`), self (`competitions:register`), or parent
+      // (`competitions:register_child`), and narrows each role to the
+      // riders they're allowed to register for. See audit F-1.
+      //
+      // Audit LOW (2026-05-05 pass 2): rate limit. Competition entries
+      // are billable and a runaway client could fan out a dozen entries
+      // per rider per cycle. Match the booking-creation cadence
+      // (10/min/user, failClosed) since both are money-creating.
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'competition_entry_create',
+    },
   );
 }

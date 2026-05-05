@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Mail, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -125,6 +125,19 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
   const [prefs, setPrefs] = useState<NotificationPreferences>(
     settings.notificationPreferences ?? {},
   );
+
+  // Audit MED (2026-05-05 pass 2): the previous shape initialised `prefs`
+  // from the prop ONCE — a parallel mutation that invalidated the cached
+  // settings (e.g. another tab toggling preferences, or the discovery
+  // form's optimistic refetch) updated the prop but left this `prefs`
+  // stale. Toggling here would then write the *stale* state, silently
+  // overwriting the just-saved values from the other path. The effect
+  // resyncs whenever `settings` shifts; the dep on `notificationPreferences`
+  // (rather than the whole `settings` object) avoids re-running on
+  // unrelated field changes.
+  useEffect(() => {
+    setPrefs(settings.notificationPreferences ?? {});
+  }, [settings.notificationPreferences]);
 
   function toggle(key: keyof NotificationPreferences, value: boolean) {
     setPrefs((current) => ({

@@ -11,6 +11,7 @@ import {
 } from '@equestrian/db/queries';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 import { sendTriggeredEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
 
@@ -36,19 +37,33 @@ interface RouteParams {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
-  return withAuth(
-    async (ctx) => {
-      const { slotId } = await params;
-      const slot = await getBookingSlotById(ctx.clubId, slotId);
+  return withAuth(async (ctx) => {
+    // Audit MED (2026-05-05 pass 2): permission gate replicated from
+    // the list endpoint. The previous `requiredPermission: 'bookings:read'`
+    // 403'd riders / parents / owners — they hold `read_own` /
+    // `read_child` / nothing — even though those callers legitimately
+    // need slot-detail to deep-link to a booking they own. Mirror the
+    // list endpoint's union: staff (`read`), bookers (`create`), and
+    // self-readers (`read_own`) all pass; the slot data returned is
+    // already public-club-internal (no PII).
+    const canViewSlot =
+      hasPermission(ctx.orgRole, 'bookings:read') ||
+      hasPermission(ctx.orgRole, 'bookings:create') ||
+      hasPermission(ctx.orgRole, 'bookings:read_own');
 
-      if (!slot) {
-        return errorResponse('NOT_FOUND', 'Slot not found', 404);
-      }
+    if (!canViewSlot) {
+      return errorResponse('FORBIDDEN', 'You do not have permission to view booking slots', 403);
+    }
 
-      return successResponse(slot);
-    },
-    { requiredPermission: 'bookings:read' },
-  );
+    const { slotId } = await params;
+    const slot = await getBookingSlotById(ctx.clubId, slotId);
+
+    if (!slot) {
+      return errorResponse('NOT_FOUND', 'Slot not found', 404);
+    }
+
+    return successResponse(slot);
+  });
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
@@ -61,9 +76,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // Same cross-club guard as the POST routes — neither column has a
       // compound (id, club_id) FK, so a forged UUID would otherwise
       // attach a foreign club's arena/coach to this slot.
+      // Audit MED (2026-05-05 pass 2): require the arena to still be
+      // active. Editing a slot to point at a deactivated arena would
+      // restore the arena into rotation through the back door.
       if (data.arenaId) {
-        const arena = await getArenaById(ctx.clubId, data.arenaId);
-        if (!arena) return errorResponse('INVALID_ARENA', 'Arena not found in this club', 400);
+        const arena = await getArenaById(ctx.clubId, data.arenaId, {
+          activeOnly: true,
+        });
+        if (!arena) {
+          return errorResponse(
+            'INVALID_ARENA',
+            'Arena not found, or has been deactivated.',
+            400,
+          );
+        }
       }
       if (data.coachMemberId) {
         const coach = await getMemberById(ctx.clubId, data.coachMemberId);

@@ -40,6 +40,7 @@ import { formatMoney } from '@equestrian/shared/utils';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
 import type { ApiSuccessResponse } from '@equestrian/shared/types';
+import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 
 // Audit F-6: convert from 8 separate `useState` calls to a single
 // react-hook-form + Zod-validated form, matching the project's RHF
@@ -83,6 +84,13 @@ export function AddBookingDialog() {
   const [couponError, setCouponError] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
 
+  // Audit LOW (2026-05-05 pass 2): the unavoidable corner of RHF + Zod
+  // typing. The Zod schema makes `paymentMethod` required (no
+  // undefined), but we want the form to start with no selection so the
+  // submit-time validation message fires correctly. `defaultValues` is
+  // typed against `FieldValues` which inherits `FormValues`'s required
+  // `paymentMethod`. The `Partial` cast tells TS we're intentionally
+  // omitting it; runtime behavior is unchanged.
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -91,11 +99,8 @@ export function AddBookingDialog() {
       slotId: '',
       riderMemberId: '',
       horseId: '__none__',
-      // No default — RHF leaves it undefined until the user picks one,
-      // so the validation error fires correctly on submit.
-      paymentMethod: undefined as unknown as (typeof PAYMENT_METHODS)[number],
       couponCode: '',
-    },
+    } as Partial<FormValues> as FormValues,
   });
 
   // Watch fields that drive cascading queries / state resets.
@@ -110,8 +115,8 @@ export function AddBookingDialog() {
     date: date || undefined,
     lessonTypeId: lessonTypeId || undefined,
   });
-  const ridersQuery = useRiders({ page: 1, pageSize: 100 });
-  const horsesQuery = useHorses({ page: 1, pageSize: 100 });
+  const ridersQuery = useRiders({ page: 1, pageSize: MAX_PAGE_SIZE });
+  const horsesQuery = useHorses({ page: 1, pageSize: MAX_PAGE_SIZE });
   const createBooking = useCreateBooking();
 
   const lessonTypes = lessonTypesQuery.data?.data ?? [];

@@ -113,7 +113,9 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
       router.push('/horses');
     } catch (err) {
       reportMutationError('horse.archive', err, { horseId });
-      toast.error('Failed to archive horse');
+      // Audit LOW (2026-05-05 pass 2): surface server-side error
+      // (e.g. "Horse has open bookings") so the operator can act.
+      toast.error(err instanceof Error ? err.message : 'Failed to archive horse');
     }
   }
 

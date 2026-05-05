@@ -20,14 +20,18 @@ export interface Horse {
   microchipNumber: string | null;
   passportNumber: string | null;
   registrationNumber: string | null;
-  status: string;
-  skillLevel: string;
+  // Audit LOW (2026-05-05 pass 2): tightened from `string` to the
+  // matching DB enum unions so consumers don't need `as` casts to bind
+  // the values to Selects / forms. Mirrors `horseStatusEnum` etc. in
+  // `packages/db/src/schema/enums.ts`.
+  status: 'available' | 'resting' | 'injured' | 'retired' | 'off_site' | 'sold';
+  skillLevel: 'beginner' | 'intermediate' | 'advanced';
   temperament: string[] | null;
   weightLimitKg: string | null;
   minRiderAge: number | null;
   maxLessonsPerDay: number;
   mandatoryRestDays: number;
-  saleStatus: string;
+  saleStatus: 'not_for_sale' | 'for_sale' | 'sold';
   purchasePrice: number | null;
   currentValue: number | null;
   salePrice: number | null;

@@ -76,6 +76,29 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         noShowFee,
       });
 
+      // Audit LOW (2026-05-05 pass 2): when a rider paid online and is
+      // then marked no-show with a fee LESS than the amount paid, the
+      // delta is owed back. We don't auto-issue the refund here (cancel
+      // does, but no-show's policy decision belongs to the operator —
+      // some clubs retain the full amount, some prorate). Surface the
+      // pending-refund amount to the dashboard so the admin sees the
+      // signal next to the no-show row and can issue the refund. Also
+      // emit a logger.warn so observability tools can build a queue.
+      const pendingRefundAmount =
+        booking.paymentStatus === 'paid' && booking.amount != null
+          ? Math.max(0, booking.amount - noShowFee)
+          : 0;
+      if (pendingRefundAmount > 0) {
+        logger.warn('no_show_refund_owed', {
+          bookingId,
+          clubId: ctx.clubId,
+          paid: booking.amount,
+          retained: noShowFee,
+          pendingRefundAmount,
+          actorMemberId: ctx.memberId,
+        });
+      }
+
       void ctx.audit({
         action: 'booking.no_show',
         resourceType: 'booking',
@@ -117,7 +140,12 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         }
       });
 
-      return successResponse(updated);
+      // Surface the pending refund amount on the response so the
+      // dashboard can show a one-click "Issue refund" affordance next
+      // to the no-show row. Zero when the booking wasn't paid online,
+      // when the fee equalled the amount, or when the booking has
+      // no amount at all.
+      return successResponse({ ...updated, pendingRefundAmount });
     },
     { requiredPermission: 'bookings:update' },
   );

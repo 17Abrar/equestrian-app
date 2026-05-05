@@ -56,10 +56,22 @@ export default {
       return;
     }
 
-    const cronTargets = [
-      { path: '/api/cron/livery-billing', label: 'livery' },
-      { path: '/api/cron/platform-billing', label: 'platform' },
-    ];
+    // Audit PROC-1 (2026-05-05 pass 2): dispatch by `event.cron` so the
+    // two billing runs no longer share a single 30-second-CPU-budget
+    // invocation. `0 2 * * *` fires the livery cron, `15 2 * * *` fires
+    // platform billing. Anything else falls back to running both
+    // (defensive — a misconfigured wrangler.jsonc or future schedule
+    // addition won't silently skip the cron the operator forgot to
+    // route).
+    const KNOWN_CRON_TARGETS = {
+      '0 2 * * *': [{ path: '/api/cron/livery-billing', label: 'livery' }],
+      '15 2 * * *': [{ path: '/api/cron/platform-billing', label: 'platform' }],
+    };
+    const cronTargets =
+      KNOWN_CRON_TARGETS[event.cron] ?? [
+        { path: '/api/cron/livery-billing', label: 'livery' },
+        { path: '/api/cron/platform-billing', label: 'platform' },
+      ];
 
     const tasks = cronTargets.map((target) => {
       const url = new URL(target.path, 'https://internal.worker/');

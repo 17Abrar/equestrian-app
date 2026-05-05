@@ -4,6 +4,7 @@ import {
   claimWebhookEvent,
   getWebhookConfigByClubProvider,
   markWebhookEventFailed,
+  markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { stripeAdapter } from '@/lib/payments/stripe';
@@ -175,9 +176,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
     if (!bookingResult) {
-      await applyLiveryInvoiceWebhook({ provider: 'stripe', event });
+      await applyLiveryInvoiceWebhook({ provider: 'stripe', event, clubId });
     }
-    await markWebhookEventProcessed('stripe', event.eventId);
+    // Audit MED (2026-05-05 pass 2): if applyPaymentWebhook signalled
+    // a permanent failure (e.g. paid event for a cancelled booking),
+    // record it as such so the `webhook_permanently_failed` alert
+    // fires for an operator. Otherwise mark processed.
+    if (bookingResult?.permanentFailureReason) {
+      await markWebhookEventPermanentlyFailed(
+        'stripe',
+        event.eventId,
+        bookingResult.permanentFailureReason,
+      );
+    } else {
+      await markWebhookEventProcessed('stripe', event.eventId);
+    }
     return new Response('OK', { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';

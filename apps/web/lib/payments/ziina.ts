@@ -116,6 +116,11 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       metadata: {
         apiBaseUrl: API_BASE_URL,
         hasWebhookSecret: !!creds.webhookSigningSecret,
+        // Audit MED (2026-05-05 pass 2): Ziina is a UAE-only fintech
+        // and settles exclusively in AED. Stamping the metadata lets
+        // the booking-payment route's currency-parity check refuse a
+        // booking in any other currency before hitting the provider.
+        defaultCurrency: 'AED',
       },
       credentials: { ...creds },
     };
@@ -356,8 +361,22 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // 32 hex chars = 128 bits of entropy on the SHA-256 — collision is
     // astronomically unlikely for any practical webhook volume but cheap
     // to extend from the prior 24 (96 bits).
+    //
+    // Audit LOW (2026-05-05 pass 2): always append a body-hash slice,
+    // not just on the no-intent-id fallback. Two distinct events that
+    // share (event, intent, status, created_at) — Ziina retries that
+    // re-stamp `created_at` from the original PI rather than the event,
+    // which the docs don't rule out — would otherwise collide on the
+    // composite alone. Hashing the body forces them apart at the cost
+    // of a few µs of SHA-256 per webhook. Slice short (16 hex = 64
+    // bits) since the rest of the composite already carries entropy;
+    // the body-hash is just a tie-breaker.
+    const bodyHashTie = createHash('sha256')
+      .update(input.body)
+      .digest('hex')
+      .slice(0, 16);
     const eventId = intentId
-      ? `${eventName}:${intentId}:${statusKey}:${createdKey}`
+      ? `${eventName}:${intentId}:${statusKey}:${createdKey}:${bodyHashTie}`
       : `${eventName}:` +
         createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 

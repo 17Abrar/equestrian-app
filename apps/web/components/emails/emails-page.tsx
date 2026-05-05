@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { toast } from 'sonner';
 import { Send } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -50,32 +52,46 @@ export function EmailsPage() {
   );
 }
 
+// Audit MED (2026-05-05 pass 2): converted from `useState` + ad-hoc
+// `if (!to || !subject || !body)` validation to RHF + Zod, matching the
+// project-wide form pattern (every other create-dialog uses zodResolver
+// — settings, horses, riders, staff, owners, bookings, lesson-types,
+// arenas, competitions, expenses, coupons, all onboarding sub-steps).
+// CLAUDE.md mandates RHF+Zod for all forms.
+const composeEmailSchema = z.object({
+  to: z.string().email('Please enter a valid email address'),
+  subject: z
+    .string()
+    .trim()
+    .min(1, 'Subject is required')
+    .max(255, 'Subject must be 255 characters or fewer'),
+  body: z
+    .string()
+    .trim()
+    .min(1, 'Body is required')
+    .max(50_000, 'Body must be 50,000 characters or fewer'),
+});
+
+type ComposeEmailValues = z.infer<typeof composeEmailSchema>;
+
 function ComposeTab() {
-  const [to, setTo] = useState('');
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [sending, setSending] = useState(false);
+  const form = useForm<ComposeEmailValues>({
+    resolver: zodResolver(composeEmailSchema),
+    defaultValues: { to: '', subject: '', body: '' },
+  });
 
-  async function handleSend() {
-    if (!to || !subject || !body) {
-      toast.error('Please fill in all fields');
-      return;
-    }
-
-    setSending(true);
+  async function onSubmit(values: ComposeEmailValues) {
     try {
-      await sendEmail({ to, subject, body });
+      await sendEmail(values);
       toast.success('Email sent successfully');
-      setTo('');
-      setSubject('');
-      setBody('');
+      form.reset();
     } catch (err) {
       reportMutationError('email.send', err);
       toast.error(err instanceof Error ? err.message : 'Failed to send email');
-    } finally {
-      setSending(false);
     }
   }
+
+  const isSubmitting = form.formState.isSubmitting;
 
   return (
     <Card>
@@ -84,39 +100,49 @@ function ComposeTab() {
         <CardDescription>Send an email to a rider, owner, or staff member</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <label className="text-sm font-medium">To *</label>
-          <Input
-            type="email"
-            placeholder="rider@example.com"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Subject *</label>
-          <Input
-            placeholder="Email subject..."
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Body *</label>
-          <Textarea
-            placeholder="Write your email..."
-            rows={10}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-        <Button onClick={handleSend} disabled={sending || !to || !subject || !body}>
-          <Send className="mr-2 h-4 w-4" />
-          {sending ? 'Sending...' : 'Send Email'}
-        </Button>
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div>
+            <label className="text-sm font-medium">To *</label>
+            <Input
+              type="email"
+              placeholder="rider@example.com"
+              className="mt-1"
+              {...form.register('to')}
+            />
+            {form.formState.errors.to && (
+              <p className="mt-1 text-xs text-destructive">{form.formState.errors.to.message}</p>
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium">Subject *</label>
+            <Input
+              placeholder="Email subject..."
+              className="mt-1"
+              {...form.register('subject')}
+            />
+            {form.formState.errors.subject && (
+              <p className="mt-1 text-xs text-destructive">
+                {form.formState.errors.subject.message}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium">Body *</label>
+            <Textarea
+              placeholder="Write your email..."
+              rows={10}
+              className="mt-1"
+              {...form.register('body')}
+            />
+            {form.formState.errors.body && (
+              <p className="mt-1 text-xs text-destructive">{form.formState.errors.body.message}</p>
+            )}
+          </div>
+          <Button type="submit" disabled={isSubmitting}>
+            <Send className="mr-2 h-4 w-4" />
+            {isSubmitting ? 'Sending...' : 'Send Email'}
+          </Button>
+        </form>
       </CardContent>
     </Card>
   );

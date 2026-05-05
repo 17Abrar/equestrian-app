@@ -24,6 +24,7 @@ import {
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 function OwnersSkeleton() {
   return (
@@ -35,14 +36,20 @@ function OwnersSkeleton() {
   );
 }
 
-export function OwnersList() {
+interface OwnersListProps {
+  /** Audit MED (2026-05-05 pass 2): server-side `owners:create` (or
+   *  the wildcard equivalent) gate. */
+  canCreate?: boolean;
+}
+
+export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, error, refetch } = useOwners({
     search: search || undefined,
     page,
-    pageSize: 25,
+    pageSize: DEFAULT_PAGE_SIZE,
   });
   const deactivateOwner = useDeactivateOwner();
 
@@ -58,7 +65,10 @@ export function OwnersList() {
       toast.success('Owner deactivated');
     } catch (err) {
       reportMutationError('owner.deactivate', err, { memberId });
-      toast.error('Failed to deactivate owner');
+      // Audit LOW (2026-05-05 pass 2): surface the server's message
+      // (e.g. "Cannot deactivate owner with active horses") instead of
+      // the generic placeholder.
+      toast.error(err instanceof Error ? err.message : 'Failed to deactivate owner');
     }
   }
 
@@ -69,7 +79,7 @@ export function OwnersList() {
           <h1 className="text-3xl font-bold tracking-tight">Private Owners</h1>
           <p className="mt-1 text-muted-foreground">Manage horse owners and their profiles</p>
         </div>
-        <AddOwnerDialog />
+        {canCreate && <AddOwnerDialog />}
       </div>
 
       <div className="relative max-w-sm">

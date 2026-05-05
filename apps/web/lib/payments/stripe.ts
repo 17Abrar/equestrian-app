@@ -391,12 +391,21 @@ export const stripeAdapter: PaymentProviderAdapter = {
     // does NOT require an authenticated client — using the static surface
     // avoids the dummy-key instance the prior implementation needed and
     // saves a per-webhook HTTP-agent allocation. Audit F-6 (2026-05-05).
+    // Audit LOW (2026-05-05 pass 2): pin tolerance explicitly. Stripe's
+    // SDK default is 300 (5 min) — sufficient for healthy clocks but a
+    // Worker with severe clock skew would silently drop legitimate
+    // webhooks while passing the silent-default invariant on review.
+    // Stating the value documents the contract; 300 also matches the
+    // staleness window we use elsewhere for webhook claim recovery.
+    const STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
+
     let event: Stripe.Event;
     try {
       event = Stripe.webhooks.constructEvent(
         input.body,
         input.signatureHeader,
         input.webhookSecret,
+        STRIPE_WEBHOOK_TOLERANCE_SECONDS,
       );
     } catch (err) {
       throw new PaymentProviderError(

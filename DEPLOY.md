@@ -63,9 +63,13 @@ wrangler secret put EMAIL_FROM
 wrangler secret put SENTRY_DSN
 wrangler secret put NEXT_PUBLIC_SENTRY_DSN
 
-# Daily livery-billing cron secret (REQUIRED — without it the cron route
-# 503s every fire). worker-entry.mjs sends this header when invoking the
-# scheduled handler at 02:00 UTC. Generate with: openssl rand -hex 32.
+# Daily cron secret (REQUIRED — without it the cron routes 503 every
+# fire). worker-entry.mjs sends this header on both schedules:
+#   - 02:00 UTC: `/api/cron/livery-billing` (livery invoices)
+#   - 02:15 UTC: `/api/cron/platform-billing` (Cavaliq subscription)
+# The split (audit pass-2 PROC-1) prevents a slow run on one cron from
+# starving the other inside a single 30s-CPU-budget Worker invocation.
+# Generate with: openssl rand -hex 32.
 wrangler secret put CRON_SECRET
 
 # Encryption key for horse medical data
@@ -222,6 +226,24 @@ A quick check to run before you deploy:
 ls packages/db/migrations/*.sql | sed -E 's|.*/||; s|\.sql$||'
 jq -r '.entries[].tag' packages/db/migrations/meta/_journal.json
 ```
+
+**Special case — migration 0034 (rider medical-notes encryption backfill).**
+Audit pass-2 HIGH-3. The migration is a verifier; it aborts if any
+`rider_profiles.medical_notes` row is still plaintext. The actual
+encryption happens in Node-land (Postgres can't reproduce our
+AES-256-GCM `v1:` envelope without leaking the key into pgcrypto). Run
+the backfill BEFORE the migration, against the same database:
+
+```sh
+# Same env as migrate-neon — pulls DATABASE_URL_UNPOOLED + ENCRYPTION_KEY
+# from .env.local. --dry-run reports counts without writing.
+node scripts/backfill-rider-medical-notes.mjs --dry-run
+node scripts/backfill-rider-medical-notes.mjs
+```
+
+The script is idempotent — rows already in `v1:` ciphertext are
+skipped — so re-running on a clean database is a no-op. Migration
+0034 then applies cleanly.
 
 ### Regenerating the Cloudflare env type
 

@@ -36,6 +36,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
+import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 
 interface RiderProfileProps {
   riderId: string;
@@ -548,7 +549,7 @@ function RiderProgress({ riderMemberId, totalLessonsCompleted, skillLevel }: Pro
   const { data, isLoading, isError } = useBookings({
     riderMemberId,
     status: 'completed',
-    pageSize: 100,
+    pageSize: MAX_PAGE_SIZE,
   });
 
   const bookings = data?.data ?? [];
