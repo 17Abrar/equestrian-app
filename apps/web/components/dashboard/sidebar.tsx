@@ -8,7 +8,9 @@ import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
 import { type UserRole } from '@equestrian/shared/types';
 import { useHorses } from '@/hooks/use-horses';
 import { Badge } from '@/components/ui/badge';
-import { hasPermission } from '@/lib/permissions';
+// audit P-1 (2026-05-05) — read from the no-guard module. `@/lib/permissions`
+// is `'server-only'` and would crash the client bundle if imported here.
+import { hasPermission } from '@/lib/permissions-shared';
 import {
   LayoutDashboard,
   Calendar,

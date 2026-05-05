@@ -8,13 +8,15 @@ import {
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
+// audit M-1 (2026-05-05) — see the matching schema in
+// `app/api/v1/emails/audiences/route.ts` for rationale. The two
+// validators must stay in lockstep: a key that POST accepts but PATCH
+// rejects (or vice versa) is its own latent bug.
 const audienceFiltersSchema = z
   .object({
     skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
     activeWithinDays: z.number().int().min(1).max(3650).optional(),
-    hasActivePackage: z.boolean().optional(),
     minBookings: z.number().int().min(1).optional(),
-    tags: z.array(z.string().max(100)).max(50).optional(),
   })
   .strict();
 

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { fetchJson } from '@/lib/fetch-json';
 import {
   ArrowLeft,
   MapPin,
@@ -64,15 +65,14 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
   async function submitJoin() {
     setJoining(true);
     try {
-      const res = await fetch(`/api/v1/clubs/${club.slug}/join`, {
-        method: 'POST',
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        toast.error(json.error?.message ?? 'Failed to join');
-        return;
-      }
+      // audit L-2 (2026-05-05) — switched from raw fetch + .json() to
+      // fetchJson<T>. The Cloudflare workerd types correctly type
+      // `Response.json(): Promise<unknown>` (the prior `Promise<any>`
+      // was a lie); fetchJson wraps the validation + cast.
+      const json = await fetchJson<{
+        success: true;
+        data: { status: 'joined' | 'already_member' | string };
+      }>(`/api/v1/clubs/${club.slug}/join`, { method: 'POST' });
 
       if (json.data.status === 'joined' || json.data.status === 'already_member') {
         toast.success(`You're in. Welcome to ${club.name}.`);
@@ -80,7 +80,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
       }
     } catch (err) {
       reportMutationError('public.club.join', err, { slug: club.slug });
-      toast.error(err instanceof Error ? err.message : 'Network error');
+      toast.error(err instanceof Error ? err.message : 'Failed to join');
     } finally {
       setJoining(false);
     }
