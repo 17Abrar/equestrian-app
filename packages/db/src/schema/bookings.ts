@@ -197,6 +197,11 @@ export const bookings = pgTable('bookings', {
   guestPhone: varchar('guest_phone', { length: 50 }),
   guestSkillLevel: varchar('guest_skill_level', { length: 20 }),
 
+  // Round 6.1 — set by `/api/cron/booking-reminders` once the 24h-before
+  // reminder email goes out. The cron's mark-sent helper does a CAS on
+  // `IS NULL` so concurrent invocations can't double-send. Migration 0036.
+  reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -206,6 +211,11 @@ export const bookings = pgTable('bookings', {
   index('idx_bookings_horse').on(table.horseId),
   index('idx_bookings_status').on(table.clubId, table.status),
   index('idx_bookings_date').on(table.clubId, table.createdAt),
+  // Round 6.1 — supports the booking-reminder cron's "find upcoming
+  // confirmed bookings that haven't been reminded yet" query. Composite
+  // (slot_id, reminder_sent_at) lets a single index scan answer the
+  // hot path. Migration 0036.
+  index('idx_bookings_slot_reminder').on(table.slotId, table.reminderSentAt),
   // Composite FK ensures `horseId` matches the booking's `clubId` —
   // closes the cross-tenant smuggling surface a single-column FK
   // leaves open. ON DELETE SET NULL preserves the booking row when a

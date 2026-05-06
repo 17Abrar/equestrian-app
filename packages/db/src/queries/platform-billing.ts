@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { platformSubscriptionInvoices } from '../schema/platform-subscription-invoices';
 import { clubs } from '../schema/clubs';
@@ -366,6 +366,156 @@ export async function setPlatformInvoiceProviderRef(
     )
     .returning();
   return result[0] ?? null;
+}
+
+/**
+ * Round 6.1 reminder cadence — find platform invoices past due that
+ * haven't yet hit their next 7/14/30-day reminder threshold. Mirrors
+ * livery's `findOverdueInvoicesForReminders` shape so the cron can
+ * iterate the same way. The caller filters per-club timezone before
+ * stepping the counter (see `apps/web/app/api/cron/platform-billing/route.ts`).
+ *
+ * Cancelled clubs are excluded — once an operator manually cancels a
+ * subscription via the Cavaliq-internal admin tool, the cron stops
+ * chasing past invoices. The bound (LIMIT 200) protects against the
+ * Worker wallclock budget on a sustained backlog; orderBy
+ * `reminderCount ASC` keeps the day-7 nudge from being starved by
+ * day-30 stragglers (audit G-13 pattern from livery).
+ */
+export async function findOverduePlatformInvoicesForReminders(today: string) {
+  const rows = await rawDb
+    .select({
+      invoiceId: platformSubscriptionInvoices.id,
+      clubId: platformSubscriptionInvoices.clubId,
+      clubName: clubs.name,
+      clubEmail: clubs.email,
+      clubTimezone: clubs.timezone,
+      invoiceNumber: platformSubscriptionInvoices.invoiceNumber,
+      tier: platformSubscriptionInvoices.tier,
+      amountMinorUnits: platformSubscriptionInvoices.amountMinorUnits,
+      currency: platformSubscriptionInvoices.currency,
+      dueDate: platformSubscriptionInvoices.dueDate,
+      payLink: platformSubscriptionInvoices.payLink,
+      providerPaymentId: platformSubscriptionInvoices.providerPaymentId,
+      lastReminderAt: platformSubscriptionInvoices.lastReminderAt,
+      reminderCount: platformSubscriptionInvoices.reminderCount,
+      status: platformSubscriptionInvoices.status,
+    })
+    .from(platformSubscriptionInvoices)
+    .innerJoin(clubs, eq(clubs.id, platformSubscriptionInvoices.clubId))
+    .where(
+      and(
+        inArray(platformSubscriptionInvoices.status, ['pending', 'overdue']),
+        lte(platformSubscriptionInvoices.dueDate, today),
+        // Don't keep chasing a club whose subscription has been
+        // cancelled by Cavaliq — the operator already made that call.
+        sql`${clubs.subscriptionStatus} <> 'cancelled'`,
+        isNull(clubs.deletedAt),
+      ),
+    )
+    .orderBy(
+      asc(platformSubscriptionInvoices.reminderCount),
+      asc(platformSubscriptionInvoices.dueDate),
+    )
+    .limit(200);
+  return rows;
+}
+
+/**
+ * One-shot `pending → overdue` flip + reminder counter increment.
+ * Used by the cron when a reminder email actually went out (i.e. the
+ * club has an email on file). Mirrors livery's
+ * `markInvoiceOverdueAndLogReminder`.
+ */
+export async function markPlatformInvoiceOverdueAndLogReminder(
+  clubId: string,
+  invoiceId: string,
+) {
+  const result = await rawDb
+    .update(platformSubscriptionInvoices)
+    .set({
+      status: 'overdue',
+      lastReminderAt: new Date(),
+      reminderCount: sql`${platformSubscriptionInvoices.reminderCount} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(platformSubscriptionInvoices.id, invoiceId),
+        eq(platformSubscriptionInvoices.clubId, clubId),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
+/**
+ * `pending → overdue` flip with NO counter bump — used when the club
+ * has no email on file (a freshly-created club where the admin hasn't
+ * filled in `clubs.email` yet). Bumping the counter would burn the
+ * 7/14/30 cadence on rows that never sent anything; this preserves
+ * the cadence for when the email is patched in. Idempotent: a second
+ * call against an already-overdue row is a no-op (the WHERE filters
+ * `status = 'pending'`).
+ */
+export async function markPlatformInvoiceOverdueOnly(
+  clubId: string,
+  invoiceId: string,
+) {
+  const result = await rawDb
+    .update(platformSubscriptionInvoices)
+    .set({
+      status: 'overdue',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(platformSubscriptionInvoices.id, invoiceId),
+        eq(platformSubscriptionInvoices.clubId, clubId),
+        eq(platformSubscriptionInvoices.status, 'pending'),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
+/**
+ * Round 6.1 — find clubs whose 14-day trial ends in `daysOut` days
+ * (1 or 3) and haven't already been emailed at that threshold. The
+ * threshold-tracking is implicit in the query: callers pass
+ * `daysOut === 3` once and `daysOut === 1` once per cron pass; the
+ * trial only crosses each window once, and we DON'T currently track
+ * a "trial_reminder_count" column to avoid migration churn. The cron
+ * dedupes via the (today + daysOut) date check — a club that already
+ * reached `trial_ends_at - 3 days` yesterday won't match again today.
+ */
+export async function findClubsWithTrialEndingOn(targetDateIso: string) {
+  const rows = await rawDb
+    .select({
+      clubId: clubs.id,
+      clubName: clubs.name,
+      clubEmail: clubs.email,
+      clubTimezone: clubs.timezone,
+      clubCurrency: clubs.currency,
+      tier: clubs.subscriptionTier,
+      subscriptionStatus: clubs.subscriptionStatus,
+      trialEndsAt: clubs.trialEndsAt,
+    })
+    .from(clubs)
+    .where(
+      and(
+        eq(clubs.subscriptionStatus, 'trialing'),
+        // `trialEndsAt::date = $targetDateIso`. Postgres CASTs
+        // timestamptz → date in the club's stored timezone? No —
+        // the cast uses the session timezone (UTC for our cron).
+        // For our purposes that's good enough: trial dates are stored
+        // as midnight UTC on the trial-end day, so comparing to a
+        // YYYY-MM-DD string in UTC matches.
+        sql`${clubs.trialEndsAt}::date = ${targetDateIso}::date`,
+        isNull(clubs.deletedAt),
+      ),
+    );
+  return rows;
 }
 
 /** Used by the dashboard subscription summary card. Returns the

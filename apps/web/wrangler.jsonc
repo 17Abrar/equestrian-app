@@ -37,25 +37,28 @@
     "mode": "smart"
   },
 
-  // Cron triggers. Split between two distinct schedules so a slow run on
-  // one (e.g. a stable with hundreds of livery horses on the livery cron,
-  // or platform-billing fanning out across every active club) cannot
-  // starve the other inside a single 30-second-CPU-budget invocation.
-  // Audit PROC-1 (2026-05-05 pass 2).
+  // Cron triggers. Split across distinct schedules so a slow run on one
+  // can't starve the others inside a single 30-second-CPU-budget Worker
+  // invocation. Audit PROC-1 (2026-05-05 pass 2) + Round 6.1.
   //
-  //   02:00 UTC daily — livery billing cron (`/api/cron/livery-billing`).
-  //                     06:00 Dubai / 05:00 Riyadh — before the workday
-  //                     so "due today" means the current Dubai date.
-  //   02:15 UTC daily — platform billing cron (`/api/cron/platform-billing`).
-  //                     15-minute lag gives the livery cron a clear runway
-  //                     before Cavaliq's own subscription billing fans out
-  //                     to every active club.
+  //   02:00 UTC daily   — livery billing (`/api/cron/livery-billing`).
+  //                       06:00 Dubai / 05:00 Riyadh — before the workday
+  //                       so "due today" means the current Dubai date.
+  //   02:15 UTC daily   — platform billing (`/api/cron/platform-billing`).
+  //                       Issuance + Round 6.1 reminder cadence + trial-
+  //                       ending nudges. 15-minute lag gives the livery
+  //                       cron a clear runway.
+  //   `0 * * * *` hourly — booking reminders (`/api/cron/booking-reminders`).
+  //                        24h-before-lesson nudge. Hourly is required to
+  //                        hit the 24h window in non-UTC clubs — daily-only
+  //                        misses at the day boundary in zones with offsets
+  //                        like Asia/Dubai (UTC+4).
   //
-  // Both are secured by CRON_SECRET comparison server-side, dispatched
+  // All are secured by CRON_SECRET comparison server-side, dispatched
   // by `worker-entry.mjs`'s `scheduled()` handler which routes by the
   // event's scheduled-time signature.
   "triggers": {
-    "crons": ["0 2 * * *", "15 2 * * *"]
+    "crons": ["0 2 * * *", "15 2 * * *", "0 * * * *"]
   },
 
   // Custom domain binding. Cavaliq's root domain is served from this Worker.

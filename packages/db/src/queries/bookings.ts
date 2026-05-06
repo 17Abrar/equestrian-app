@@ -984,3 +984,109 @@ export async function markBookingComplete(
     return row ?? null;
   });
 }
+
+/**
+ * Round 6.1 — find upcoming confirmed bookings whose slot starts within
+ * the [windowStartUtc, windowEndUtc] range and haven't yet had a 24h
+ * reminder sent. The caller (booking-reminder cron) computes the window
+ * as `[now+23h, now+25h]` so the 24h reminder fires once even if the
+ * cron runs slightly off-schedule. Joins everything the email template
+ * needs in one round-trip.
+ *
+ * Slot date+time are stored as `date` + `time` (no timezone). The
+ * caller resolves them to instants in the club's timezone before
+ * comparing to the window — that work happens in the cron route, not
+ * here, because the schema doesn't carry the offset and we'd need
+ * `AT TIME ZONE` to do it in SQL (driver-specific). The query here
+ * returns ALL `confirmed` bookings within the next 48h that haven't
+ * been reminded; the cron filters precisely.
+ */
+export async function findUpcomingBookingsForReminder(now: Date) {
+  const today = now.toISOString().slice(0, 10);
+  const twoDaysOut = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const rows = await db
+    .select({
+      bookingId: bookings.id,
+      clubId: bookings.clubId,
+      slotId: bookings.slotId,
+      riderMemberId: bookings.riderMemberId,
+      riderName: clubMembers.displayName,
+      riderEmail: clubMembers.email,
+      isGuestBooking: bookings.isGuestBooking,
+      guestName: bookings.guestName,
+      guestEmail: bookings.guestEmail,
+      slotDate: bookingSlots.date,
+      slotStartTime: bookingSlots.startTime,
+      lessonTypeName: lessonTypes.name,
+      arenaName: arenas.name,
+      coachMemberId: bookingSlots.coachMemberId,
+    })
+    .from(bookings)
+    .innerJoin(
+      bookingSlots,
+      and(
+        eq(bookingSlots.id, bookings.slotId),
+        eq(bookingSlots.clubId, bookings.clubId),
+      ),
+    )
+    .innerJoin(
+      lessonTypes,
+      and(
+        eq(lessonTypes.id, bookingSlots.lessonTypeId),
+        eq(lessonTypes.clubId, bookings.clubId),
+      ),
+    )
+    .leftJoin(
+      arenas,
+      and(
+        eq(arenas.id, bookingSlots.arenaId),
+        eq(arenas.clubId, bookings.clubId),
+      ),
+    )
+    .leftJoin(
+      clubMembers,
+      and(
+        eq(clubMembers.id, bookings.riderMemberId),
+        eq(clubMembers.clubId, bookings.clubId),
+      ),
+    )
+    .where(
+      and(
+        eq(bookings.status, 'confirmed'),
+        sql`${bookings.reminderSentAt} IS NULL`,
+        sql`${bookingSlots.isCancelled} = false`,
+        sql`${bookingSlots.date} BETWEEN ${today}::date AND ${twoDaysOut}::date`,
+      ),
+    )
+    .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime))
+    .limit(500);
+
+  return rows;
+}
+
+/**
+ * Round 6.1 — flips `reminder_sent_at` to now if and only if it's still
+ * NULL. The CAS prevents two concurrent cron invocations from both
+ * sending a reminder for the same booking. Returns the row when the
+ * caller won the CAS, null when another worker beat them.
+ */
+export async function markBookingReminderSent(
+  clubId: string,
+  bookingId: string,
+) {
+  const result = await db
+    .update(bookings)
+    .set({ reminderSentAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        sql`${bookings.reminderSentAt} IS NULL`,
+      ),
+    )
+    .returning({ id: bookings.id });
+  return result[0] ?? null;
+}
