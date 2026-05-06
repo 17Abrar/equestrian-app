@@ -39,7 +39,7 @@ const connectSchema = z.object({
     .refine((v) => v.startsWith('whsec_'), 'Webhook secret must start with "whsec_"')
     .optional(),
   makeActive: z.boolean().default(true),
-});
+}).strict();
 
 export async function POST(request: NextRequest) {
   return withAuth(

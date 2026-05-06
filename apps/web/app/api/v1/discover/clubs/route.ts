@@ -9,12 +9,17 @@ import { checkRateLimit } from '@/lib/rate-limit';
 // is no userId to key on, and unauthenticated discovery is the obvious
 // scrape target.
 
-const queryShape = z.object({
-  search: z.string().optional(),
-  city: z.string().optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-});
+// Audit F-22/F-23 (2026-05-06): `.strict()` rejects unknown keys; `.max(200)`
+// caps user input on the unauthenticated discovery endpoint. The route is
+// rate-limited (20 req/min per IP), but capped lengths reduce the amplifier.
+const queryShape = z
+  .object({
+    search: z.string().max(200).optional(),
+    city: z.string().max(200).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .strict();
 
 export async function GET(request: NextRequest) {
   const ip =

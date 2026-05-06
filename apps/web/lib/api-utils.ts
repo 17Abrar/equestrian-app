@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { type ZodError, type ZodTypeAny } from 'zod';
+import { z, ZodError, type ZodTypeAny } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
 import { getTenantContext, TenantError, type ActiveMembership } from './tenant';
 import { hasPermission, PermissionError } from './permissions';
@@ -91,6 +91,29 @@ export function validateInput<S extends ZodTypeAny>(
     throw new ValidationError(result.error);
   }
   return result.data;
+}
+
+const uuidParamSchema = z.string().uuid();
+
+/**
+ * Validates a URL path param expected to be a UUID. Audit F-10
+ * (2026-05-06): without this guard, a malformed id (`/bookings/foo`)
+ * threads straight into Drizzle, hits Postgres `22P02 invalid input
+ * syntax for type uuid`, and the route's catch-all surfaces a 500 —
+ * wrong status code AND a wasted DB round-trip.
+ *
+ * Use as the first line of every dynamic-segment handler:
+ *   const bookingId = validateUuidParam('bookingId', (await params).bookingId);
+ */
+export function validateUuidParam(name: string, value: string): string {
+  const r = uuidParamSchema.safeParse(value);
+  if (!r.success) {
+    const issues = new ZodError([
+      { code: 'custom', path: [name], message: 'Invalid id (expected UUID)' },
+    ]);
+    throw new ValidationError(issues);
+  }
+  return r.data;
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   deleteExpense,
   getHorseById,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ expenseId: string }>;
@@ -17,6 +17,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { expenseId } = await params;
+      validateUuidParam('expenseId', expenseId);
       const body = await request.json();
       const data = validateInput(updateExpenseSchema, body);
 
@@ -88,6 +89,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { expenseId } = await params;
+      validateUuidParam('expenseId', expenseId);
       const result = await deleteExpense(ctx.clubId, expenseId);
 
       if (!result) {

@@ -8,7 +8,7 @@ import {
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { competitionEntries } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string; classId: string }>;
@@ -18,6 +18,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId, classId } = await params;
+      validateUuidParam('competitionId', competitionId);
+      validateUuidParam('classId', classId);
       // Audit A-4: bind URL's classId to URL's competitionId.
       const cls = await getCompetitionClassById(ctx.clubId, classId);
       if (!cls || cls.competitionId !== competitionId) {
@@ -34,6 +36,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { classId } = await params;
+      validateUuidParam('classId', classId);
       const body = await request.json();
       const data = validateInput(createCompetitionResultSchema, body);
 

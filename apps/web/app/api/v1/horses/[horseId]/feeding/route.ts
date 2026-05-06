@@ -1,13 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { createFeedingPlanSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getFeedingPlans, createFeedingPlan, getHorseById } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse,
-} from '@/lib/api-utils';
+  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -17,6 +15,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
       const { page, pageSize } = validateInput(paginationSchema, {
         page: request.nextUrl.searchParams.get('page') ?? undefined,
         pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
@@ -32,6 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
 
       // Bind the horse to this tenant before insert — see medications/route.ts
       // for the cross-tenant write scenario this guards against.

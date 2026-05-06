@@ -34,9 +34,11 @@ async function resolveCouponDate(
   return new Date(value);
 }
 
-const couponFiltersSchema = paginationSchema.extend({
-  status: z.enum(['active', 'inactive', 'expired']).optional(),
-});
+const couponFiltersSchema = paginationSchema
+  .extend({
+    status: z.enum(['active', 'inactive', 'expired']).optional(),
+  })
+  .strict();
 
 export async function GET(request: NextRequest) {
   return withAuth(

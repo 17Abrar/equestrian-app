@@ -10,12 +10,14 @@ import { withAuth, paginatedResponse, validateInput } from '@/lib/api-utils';
 // enum values; date fields locked to YYYY-MM-DD so a malformed value
 // 500s with a 400 instead of crashing the SQL `>=`.
 const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const paymentFiltersSchema = z.object({
-  status: z.enum(['pending', 'paid', 'failed', 'refunded', 'partial']).optional(),
-  dateFrom: z.string().regex(CALENDAR_DATE_RE, 'dateFrom must be YYYY-MM-DD').optional(),
-  dateTo: z.string().regex(CALENDAR_DATE_RE, 'dateTo must be YYYY-MM-DD').optional(),
-  ...paginationSchema.shape,
-});
+const paymentFiltersSchema = z
+  .object({
+    status: z.enum(['pending', 'paid', 'failed', 'refunded', 'partial']).optional(),
+    dateFrom: z.string().regex(CALENDAR_DATE_RE, 'dateFrom must be YYYY-MM-DD').optional(),
+    dateTo: z.string().regex(CALENDAR_DATE_RE, 'dateTo must be YYYY-MM-DD').optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export async function GET(request: NextRequest) {
   return withAuth(

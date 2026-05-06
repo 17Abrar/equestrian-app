@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateHorseSchema } from '@equestrian/shared/schemas';
 import { getHorseById, updateHorse, softDeleteHorse } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -18,6 +18,7 @@ interface RouteParams {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { horseId } = await params;
+    validateUuidParam('horseId', horseId);
 
     const canReadAny = hasPermission(ctx.orgRole, 'horses:read');
     const canReadOwn = hasPermission(ctx.orgRole, 'horses:read_own');
@@ -41,6 +42,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { horseId } = await params;
+    validateUuidParam('horseId', horseId);
     const body = await request.json();
     const data = validateInput(updateHorseSchema, body);
 
@@ -77,6 +79,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { horseId } = await params;
+    validateUuidParam('horseId', horseId);
 
     const canDeleteAny = hasPermission(ctx.orgRole, 'horses:delete');
     const canDeleteOwn = hasPermission(ctx.orgRole, 'horses:delete_own');

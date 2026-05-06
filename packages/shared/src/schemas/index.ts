@@ -130,6 +130,14 @@ export const updateHorseSchema = createHorseSchema
 
 export type UpdateHorseInput = z.infer<typeof updateHorseSchema>;
 
+// Audit F-24 (2026-05-06): the schema can't enforce that `ownerMemberId`
+// resolves to a member with role `'horse_owner'` or `'rider'` — the role
+// isn't in the request body. The caller MUST follow the same pattern as
+// `apps/web/app/api/v1/horses/[horseId]/owner/route.ts:40-58`: load the
+// member via `getMemberById(ctx.clubId, ownerMemberId)` and refuse if the
+// role isn't owner-eligible. Don't ship a new endpoint that uses this
+// schema without that guard, or you reintroduce the cross-role smuggle
+// hole this comment exists to prevent.
 export const transferHorseOwnerSchema = z
   .object({
     // `null` = school horse / no owner.
@@ -139,13 +147,15 @@ export const transferHorseOwnerSchema = z
 
 export type TransferHorseOwnerInput = z.output<typeof transferHorseOwnerSchema>;
 
-export const horseFiltersSchema = z.object({
-  search: z.string().max(200).optional(),
-  status: z.enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold']).optional(),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
-  ownershipStatus: z.enum(['pending', 'active', 'retired', 'declined']).optional(),
-  ...paginationSchema.shape,
-});
+export const horseFiltersSchema = z
+  .object({
+    search: z.string().max(200).optional(),
+    status: z.enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold']).optional(),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+    ownershipStatus: z.enum(['pending', 'active', 'retired', 'declined']).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export type HorseFiltersInput = z.infer<typeof horseFiltersSchema>;
 
@@ -233,11 +243,13 @@ export const updateRiderProfileSchema = z
 export type UpdateRiderProfileFormValues = z.input<typeof updateRiderProfileSchema>;
 export type UpdateRiderProfileInput = z.output<typeof updateRiderProfileSchema>;
 
-export const riderFiltersSchema = z.object({
-  search: z.string().max(200).optional(),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
-  ...paginationSchema.shape,
-});
+export const riderFiltersSchema = z
+  .object({
+    search: z.string().max(200).optional(),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export type RiderFiltersInput = z.infer<typeof riderFiltersSchema>;
 
@@ -384,13 +396,15 @@ export const cancelBookingSchema = z
   })
   .strict();
 
-export const bookingFiltersSchema = z.object({
-  status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
-  date: z.string().max(50).optional(),
-  lessonTypeId: z.string().uuid().optional(),
-  riderMemberId: z.string().uuid().optional(),
-  ...paginationSchema.shape,
-});
+export const bookingFiltersSchema = z
+  .object({
+    status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
+    date: z.string().max(50).optional(),
+    lessonTypeId: z.string().uuid().optional(),
+    riderMemberId: z.string().uuid().optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export type BookingFiltersInput = z.infer<typeof bookingFiltersSchema>;
 
@@ -424,12 +438,14 @@ export type CreateCompetitionInput = z.output<typeof createCompetitionSchema>;
 export const updateCompetitionSchema = createCompetitionSchema.partial().strict();
 export type UpdateCompetitionInput = z.output<typeof updateCompetitionSchema>;
 
-export const competitionFiltersSchema = z.object({
-  status: z.enum(COMPETITION_STATUSES).optional(),
-  dateFrom: z.string().max(50).optional(),
-  dateTo: z.string().max(50).optional(),
-  ...paginationSchema.shape,
-});
+export const competitionFiltersSchema = z
+  .object({
+    status: z.enum(COMPETITION_STATUSES).optional(),
+    dateFrom: z.string().max(50).optional(),
+    dateTo: z.string().max(50).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export type CompetitionFiltersInput = z.output<typeof competitionFiltersSchema>;
 
@@ -601,11 +617,13 @@ export type CreateStaffInput = z.output<typeof createStaffSchema>;
 export const updateStaffSchema = createStaffSchema.partial().strict();
 export type UpdateStaffInput = z.output<typeof updateStaffSchema>;
 
-export const staffFiltersSchema = z.object({
-  search: z.string().max(200).optional(),
-  role: z.string().max(50).optional(),
-  ...paginationSchema.shape,
-});
+export const staffFiltersSchema = z
+  .object({
+    search: z.string().max(200).optional(),
+    role: z.string().max(50).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 // ─── Owners ───────────────────────────────────────────────────────────
 
@@ -655,17 +673,21 @@ export const updateExpenseSchema = createExpenseSchema
 export type UpdateExpenseFormValues = z.input<typeof updateExpenseSchema>;
 export type UpdateExpenseInput = z.output<typeof updateExpenseSchema>;
 
-export const expenseFiltersSchema = z.object({
-  category: z.string().max(100).optional(),
-  dateFrom: z.string().max(50).optional(),
-  dateTo: z.string().max(50).optional(),
-  ...paginationSchema.shape,
-});
+export const expenseFiltersSchema = z
+  .object({
+    category: z.string().max(100).optional(),
+    dateFrom: z.string().max(50).optional(),
+    dateTo: z.string().max(50).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
-export const invoiceFiltersSchema = z.object({
-  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).optional(),
-  ...paginationSchema.shape,
-});
+export const invoiceFiltersSchema = z
+  .object({
+    status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export type InvoiceFiltersInput = z.output<typeof invoiceFiltersSchema>;
 

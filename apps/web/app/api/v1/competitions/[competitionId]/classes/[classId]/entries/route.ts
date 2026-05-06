@@ -6,13 +6,11 @@ import {
   createCompetitionEntry,
   isParentOf,
 } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse,
-} from '@/lib/api-utils';
+  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -44,6 +42,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId, classId } = await params;
+      validateUuidParam('competitionId', competitionId);
+      validateUuidParam('classId', classId);
       const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
       if (mismatch) return mismatch;
       const { page, pageSize } = validateInput(paginationSchema, {
@@ -64,6 +64,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId, classId } = await params;
+      validateUuidParam('competitionId', competitionId);
+      validateUuidParam('classId', classId);
       const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
       if (mismatch) return mismatch;
       // Three valid registration paths, mirroring bookings/route.ts:

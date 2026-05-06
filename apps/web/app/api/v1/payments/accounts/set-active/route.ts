@@ -4,9 +4,11 @@ import { setActiveProvider } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
-const setActiveSchema = z.object({
-  provider: z.enum(['stripe', 'n_genius', 'ziina']),
-});
+const setActiveSchema = z
+  .object({
+    provider: z.enum(['stripe', 'n_genius', 'ziina']),
+  })
+  .strict();
 
 export async function POST(request: NextRequest) {
   return withAuth(

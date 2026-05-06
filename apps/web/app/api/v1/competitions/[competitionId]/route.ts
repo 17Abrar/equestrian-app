@@ -5,7 +5,7 @@ import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { getCompetitionById, updateCompetition, deleteCompetition } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string }>;
@@ -15,6 +15,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId } = await params;
+      validateUuidParam('competitionId', competitionId);
       const competition = await getCompetitionById(ctx.clubId, competitionId);
 
       if (!competition) {
@@ -31,6 +32,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId } = await params;
+      validateUuidParam('competitionId', competitionId);
       const body = await request.json();
       const data = validateInput(updateCompetitionSchema, body);
 
@@ -77,6 +79,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId } = await params;
+      validateUuidParam('competitionId', competitionId);
       const deleted = await deleteCompetition(ctx.clubId, competitionId);
 
       if (!deleted) {

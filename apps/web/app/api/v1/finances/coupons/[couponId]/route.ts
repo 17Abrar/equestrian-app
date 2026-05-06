@@ -5,7 +5,7 @@ import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { updateCoupon } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
@@ -45,6 +45,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { couponId } = await params;
+      validateUuidParam('couponId', couponId);
       const body = await request.json();
       const data = validateInput(updateCouponSchema, body);
 

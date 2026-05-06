@@ -1,13 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { createMedicationSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getMedications, createMedication, getHorseById } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse,
-} from '@/lib/api-utils';
+  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -17,6 +15,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
       const activeOnly = request.nextUrl.searchParams.get('activeOnly') === 'true';
       const { page, pageSize } = validateInput(paginationSchema, {
         page: request.nextUrl.searchParams.get('page') ?? undefined,
@@ -36,6 +35,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
 
       // Bind the horse to this tenant before insert. The horse_medications.horse_id
       // FK references horses(id) only — without this guard a member of Club B with

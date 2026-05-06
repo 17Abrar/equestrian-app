@@ -6,7 +6,7 @@ import {
   getMemberById,
   updateMember,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ memberId: string }>;
@@ -61,6 +61,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { memberId } = await params;
+      validateUuidParam('memberId', memberId);
       const member = await getMemberById(ctx.clubId, memberId);
 
       if (!member) {
@@ -77,6 +78,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { memberId } = await params;
+      validateUuidParam('memberId', memberId);
       const body = await request.json();
       const data = validateInput(updateStaffSchema, body);
 
@@ -122,6 +124,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { memberId } = await params;
+      validateUuidParam('memberId', memberId);
 
       const target = await getMemberById(ctx.clubId, memberId);
       if (!target) {

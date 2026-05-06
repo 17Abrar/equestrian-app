@@ -6,13 +6,11 @@ import {
   getMedicationByIds,
   getMemberById,
 } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse,
-} from '@/lib/api-utils';
+  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; medicationId: string }>;
@@ -22,6 +20,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId, medicationId } = await params;
+      validateUuidParam('horseId', horseId);
+      validateUuidParam('medicationId', medicationId);
       const { page, pageSize } = validateInput(paginationSchema, {
         page: request.nextUrl.searchParams.get('page') ?? undefined,
         pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
@@ -40,6 +40,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId, medicationId } = await params;
+      validateUuidParam('horseId', horseId);
+      validateUuidParam('medicationId', medicationId);
 
       // Verify the medication actually belongs to (this club, this horse).
       // Path params alone aren't trustworthy — the medication FK references

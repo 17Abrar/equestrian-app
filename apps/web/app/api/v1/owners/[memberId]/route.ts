@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { getMemberById, updateMember, deactivateMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 import { updateOwnerSchema } from '@equestrian/shared/schemas';
 
 interface RouteParams {
@@ -37,6 +37,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { memberId } = await params;
+      validateUuidParam('memberId', memberId);
       const { member, error } = await loadOwnerOrError(ctx.clubId, memberId);
       if (error) return error;
       return successResponse(member);
@@ -49,6 +50,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { memberId } = await params;
+      validateUuidParam('memberId', memberId);
       const { error } = await loadOwnerOrError(ctx.clubId, memberId);
       if (error) return error;
 
@@ -77,6 +79,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { memberId } = await params;
+      validateUuidParam('memberId', memberId);
       const { error } = await loadOwnerOrError(ctx.clubId, memberId);
       if (error) return error;
 

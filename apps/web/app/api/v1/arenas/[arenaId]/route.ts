@@ -1,12 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { updateArenaSchema } from '@equestrian/shared/schemas';
 import { getArenaById, updateArena, deleteArena } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
-} from '@/lib/api-utils';
+  validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ arenaId: string }>;
@@ -16,6 +14,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { arenaId } = await params;
+      validateUuidParam('arenaId', arenaId);
       const arena = await getArenaById(ctx.clubId, arenaId);
 
       if (!arena) {
@@ -32,6 +31,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { arenaId } = await params;
+      validateUuidParam('arenaId', arenaId);
       const body = await request.json();
       const data = validateInput(updateArenaSchema, body);
 
@@ -57,6 +57,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { arenaId } = await params;
+      validateUuidParam('arenaId', arenaId);
       const arena = await deleteArena(ctx.clubId, arenaId);
 
       if (!arena) {

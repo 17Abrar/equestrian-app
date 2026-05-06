@@ -12,12 +12,10 @@ import {
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
 import { bookings as bookingsTable, bookingSlots } from '@equestrian/db/schema';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
-} from '@/lib/api-utils';
+  validateInput, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 import { sendTriggeredEmail } from '@/lib/email';
@@ -32,6 +30,7 @@ interface RouteParams {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { bookingId } = await params;
+    validateUuidParam('bookingId', bookingId);
 
     // Staff (bookings:read / bookings:*) see any booking; riders and parents
     // (bookings:read_own / bookings:read_child) see only their own. Inline
@@ -64,6 +63,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
+      validateUuidParam('bookingId', bookingId);
       const body = await request.json();
       const data = validateInput(cancelBookingSchema, body);
 

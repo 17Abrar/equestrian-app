@@ -6,7 +6,7 @@ import {
   deleteAudience,
   resolveAudienceMembers,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 // audit M-1 (2026-05-05) — see the matching schema in
 // `app/api/v1/emails/audiences/route.ts` for rationale. The two
@@ -38,6 +38,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { audienceId } = await params;
+      validateUuidParam('audienceId', audienceId);
       const audience = await getAudienceById(ctx.clubId, audienceId);
       if (!audience) {
         return errorResponse('NOT_FOUND', 'Audience not found', 404);
@@ -57,6 +58,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { audienceId } = await params;
+      validateUuidParam('audienceId', audienceId);
       const body = await request.json();
       const data = validateInput(updateAudienceSchema, body);
 
@@ -81,6 +83,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { audienceId } = await params;
+      validateUuidParam('audienceId', audienceId);
       const result = await deleteAudience(ctx.clubId, audienceId);
       if (!result) {
         return errorResponse('NOT_FOUND', 'Audience not found', 404);

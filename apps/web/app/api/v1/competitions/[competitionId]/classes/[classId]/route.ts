@@ -6,7 +6,7 @@ import {
   deleteCompetitionClass,
   CompetitionClassHasEntriesError,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string; classId: string }>;
@@ -16,6 +16,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId, classId } = await params;
+      validateUuidParam('competitionId', competitionId);
+      validateUuidParam('classId', classId);
       const body = await request.json();
       const data = validateInput(updateCompetitionClassSchema, body);
 
@@ -57,6 +59,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId, classId } = await params;
+      validateUuidParam('competitionId', competitionId);
+      validateUuidParam('classId', classId);
 
       // See PATCH — bind the class to its competition before deletion.
       const existing = await getCompetitionClassById(ctx.clubId, classId);

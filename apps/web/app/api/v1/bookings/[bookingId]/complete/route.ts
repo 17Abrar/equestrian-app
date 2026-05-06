@@ -3,11 +3,9 @@ import {
   getBookingById,
   markBookingComplete,
 } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
-  errorResponse,
-} from '@/lib/api-utils';
+  errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -18,6 +16,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
+      validateUuidParam('bookingId', bookingId);
 
       const booking = await getBookingById(ctx.clubId, bookingId);
       if (!booking) {

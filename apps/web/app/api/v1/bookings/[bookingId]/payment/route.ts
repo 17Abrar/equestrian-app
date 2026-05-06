@@ -6,7 +6,7 @@ import {
   isParentOf,
   setBookingPaymentRef,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
+      validateUuidParam('bookingId', bookingId);
 
       // Body is optional — default mode when absent.
       const { mode = 'default' } = await parseOptionalBody(request, bodySchema);

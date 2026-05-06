@@ -14,11 +14,13 @@ import { logger } from '@/lib/logger';
 // templates served from the club's verified Resend domain. If we ever
 // need rich content, add a server-side allowlist (DOMPurify) — never
 // pass through caller-supplied HTML.
-const sendEmailSchema = z.object({
-  to: z.string().email('Invalid email address'),
-  subject: z.string().min(1, 'Subject is required').max(500),
-  body: z.string().min(1, 'Body is required').max(20_000),
-});
+const sendEmailSchema = z
+  .object({
+    to: z.string().email('Invalid email address'),
+    subject: z.string().min(1, 'Subject is required').max(500),
+    body: z.string().min(1, 'Body is required').max(20_000),
+  })
+  .strict();
 
 export async function POST(request: NextRequest) {
   return withAuth(

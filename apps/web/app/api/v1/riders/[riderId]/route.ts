@@ -1,12 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { updateRiderProfileSchema } from '@equestrian/shared/schemas';
 import { getRiderById, updateRiderProfile } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
-} from '@/lib/api-utils';
+  validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ riderId: string }>;
@@ -16,6 +14,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { riderId } = await params;
+      validateUuidParam('riderId', riderId);
       const rider = await getRiderById(ctx.clubId, riderId);
 
       if (!rider) {
@@ -32,6 +31,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { riderId } = await params;
+      validateUuidParam('riderId', riderId);
       const body = await request.json();
       const data = validateInput(updateRiderProfileSchema, body);
 

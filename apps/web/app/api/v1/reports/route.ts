@@ -8,11 +8,13 @@ import {
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
-const reportFiltersSchema = z.object({
-  type: z.enum(['revenue', 'lessons', 'horses', 'cancellations']),
-  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
+const reportFiltersSchema = z
+  .object({
+    type: z.enum(['revenue', 'lessons', 'horses', 'cancellations']),
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })
+  .strict();
 
 export async function GET(request: NextRequest) {
   return withAuth(

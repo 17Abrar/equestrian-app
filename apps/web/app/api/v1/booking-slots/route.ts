@@ -35,6 +35,9 @@ const bookingSlotFiltersSchema = z
     lessonTypeId: z.string().uuid('Invalid lesson type ID').optional(),
     coachMemberId: z.string().uuid('Invalid coach member ID').optional(),
   })
+  // Audit F-22 (2026-05-06): `.strict()` MUST precede `.refine()` —
+  // `.refine` returns ZodEffects which doesn't expose `.strict()`.
+  .strict()
   .refine(
     (data) => {
       if (!data.dateFrom || !data.dateTo) return true;
