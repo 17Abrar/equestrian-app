@@ -24,6 +24,17 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { assertEncryptionKeyConfigured } = await import('@equestrian/db/crypto');
     assertEncryptionKeyConfigured();
+
+    // Audit F-14 (2026-05-06 r2): warn-level startup check for env
+    // vars whose absence degrades behavior silently (Sentry stops
+    // reporting, Resend silently no-ops, Upstash falls back to in-
+    // process). Doesn't throw — degrades cleanly in dev/staging — but
+    // surfaces a single structured warn at boot so a typo'd Wrangler
+    // secret in prod is visible the moment the Worker starts.
+    if (process.env.NODE_ENV === 'production') {
+      const { assertProductionEnvConfigured } = await import('./lib/env-check');
+      assertProductionEnvConfigured();
+    }
   }
 }
 

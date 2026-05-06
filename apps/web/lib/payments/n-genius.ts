@@ -555,6 +555,17 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
             `N-Genius webhook outside freshness window (age=${ageMs}ms)`,
           );
         }
+        // Audit F-13 (2026-05-06 r2): early-warning band. A drifting
+        // Worker clock approaches the rejection thresholds silently —
+        // operators only learn about it when webhooks start being
+        // dropped. Surface a warn at >3min absolute drift so the
+        // problem is visible BEFORE the freshness window catches it.
+        if (Math.abs(ageMs) > 3 * 60_000) {
+          logger.warn('n_genius_webhook_clock_drift_warning', {
+            ageMs,
+            note: 'Worker clock is drifting toward the freshness-window threshold; investigate before events start being rejected.',
+          });
+        }
       }
     }
 
@@ -562,17 +573,43 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
 
     // Deterministic fallback when payload.eventId is absent. Using
     // `ng_${Date.now()}` would give every redelivery a unique key, defeating
-    // the webhook_events dedup table. Hash the stable triple (outlet, order
-    // reference, event name) so replays resolve to the same id.
-    const derivedEventId =
-      payload.eventId ??
-      'ng_' +
-        createHash('sha256')
-          .update(
-            `${payload.outletId ?? ''}|${fields.reference ?? ''}|${payload.eventName ?? ''}`,
-          )
-          .digest('hex')
-          .slice(0, 24);
+    // the webhook_events dedup table. Hash the stable composite so replays
+    // resolve to the same id.
+    //
+    // Audit F-8 (2026-05-06 r2). Pre-fix the hash was just (outlet,
+    // reference, eventName) — for partial-refund flows two distinct
+    // events both carry `eventName='PARTIALLY_REFUNDED'` with the same
+    // order reference, so the second event's derivedEventId collided
+    // with the first and the dedup table silently dropped it. Now: also
+    // include the event amount AND the most-recent refund amount when
+    // the embedded refunds list surfaces it, so each refund leg gets a
+    // distinct id. Also log `n_genius_event_id_derived` at warn so an
+    // operator notices when N-Genius starts omitting `eventId` and can
+    // request an integration update.
+    let derivedEventId: string;
+    if (payload.eventId) {
+      derivedEventId = payload.eventId;
+    } else {
+      const composite = [
+        payload.outletId ?? '',
+        fields.reference ?? '',
+        payload.eventName ?? '',
+        fields.amountValue ?? '',
+        fields.lastRefundAmountMinor ?? '',
+        fields.refundedTotalMinor ?? '',
+      ].join('|');
+      derivedEventId =
+        'ng_' +
+        createHash('sha256').update(composite).digest('hex').slice(0, 24);
+      logger.warn('n_genius_event_id_derived', {
+        outletId: payload.outletId,
+        reference: fields.reference,
+        eventName: payload.eventName,
+        amount: fields.amountValue,
+        lastRefundAmount: fields.lastRefundAmountMinor,
+        refundedTotal: fields.refundedTotalMinor,
+      });
+    }
 
     const status = mapState(payload.eventName ?? fields.state);
     // Audit F-4 (2026-05-06 comprehensive). Refund-amount surfacing
