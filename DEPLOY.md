@@ -63,12 +63,18 @@ wrangler secret put EMAIL_FROM
 wrangler secret put SENTRY_DSN
 wrangler secret put NEXT_PUBLIC_SENTRY_DSN
 
-# Daily cron secret (REQUIRED — without it the cron routes 503 every
-# fire). worker-entry.mjs sends this header on both schedules:
-#   - 02:00 UTC: `/api/cron/livery-billing` (livery invoices)
-#   - 02:15 UTC: `/api/cron/platform-billing` (Cavaliq subscription)
-# The split (audit pass-2 PROC-1) prevents a slow run on one cron from
-# starving the other inside a single 30s-CPU-budget Worker invocation.
+# Cron secret (REQUIRED — without it the cron routes 503 every fire).
+# worker-entry.mjs sends this header on every cron schedule:
+#   - 02:00 UTC daily: `/api/cron/livery-billing` (livery invoices)
+#   - 02:15 UTC daily: `/api/cron/platform-billing`
+#                       (Cavaliq subscription issuance + 7/14/30 reminders
+#                        + trial-ending nudges, see Round 6.1)
+#   - hourly (`0 * * * *`): `/api/cron/booking-reminders`
+#                            (24h-before-lesson reminders — hourly because
+#                             the 24h window must be hit in each club's
+#                             local timezone, not just UTC)
+# The split (audit pass-2 PROC-1) prevents one slow cron from starving
+# another inside a single 30s-CPU-budget Worker invocation.
 # Generate with: openssl rand -hex 32.
 wrangler secret put CRON_SECRET
 
