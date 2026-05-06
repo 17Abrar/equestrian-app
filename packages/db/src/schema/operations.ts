@@ -13,6 +13,7 @@ import {
   unique,
   check,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { taskStatusEnum, postTypeEnum } from './enums';
@@ -52,9 +53,13 @@ export const groomTasks = pgTable('groom_tasks', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id),
+  // Audit MED (2026-05-06 third pass): the inline single-column FK was
+  // dropped in migration 0038 and replaced with a composite
+  // `(horse_id, club_id) → horses(id, club_id)` declared in the
+  // table-extras below. Same pattern as 0017 used on the horse-health
+  // sub-tables — the DB layer rejects mismatched-tenant inserts even
+  // if a future handler skips the route-level precheck.
+  horseId: uuid('horse_id').notNull(),
   assignedToMemberId: uuid('assigned_to_member_id').references(() => clubMembers.id),
 
   taskType: varchar('task_type', { length: 100 }).notNull(),
@@ -72,6 +77,11 @@ export const groomTasks = pgTable('groom_tasks', {
   index('idx_groom_tasks_date').on(table.clubId, table.scheduledDate),
   index('idx_groom_tasks_assigned').on(table.assignedToMemberId, table.scheduledDate),
   index('idx_groom_tasks_horse').on(table.horseId, table.scheduledDate),
+  foreignKey({
+    name: 'groom_tasks_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const riderAchievements = pgTable('rider_achievements', {

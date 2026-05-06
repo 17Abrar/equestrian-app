@@ -8,6 +8,7 @@ import {
   text,
   index,
   unique,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { liveryInvoiceStatusEnum } from './enums';
 import { clubs } from './clubs';
@@ -21,12 +22,13 @@ export const liveryInvoices = pgTable(
     clubId: uuid('club_id')
       .notNull()
       .references(() => clubs.id, { onDelete: 'cascade' }),
-    horseId: uuid('horse_id')
-      .notNull()
-      .references(() => horses.id, { onDelete: 'cascade' }),
-    ownerMemberId: uuid('owner_member_id')
-      .notNull()
-      .references(() => clubMembers.id),
+    // Audit MED (2026-05-06 third pass): the inline single-column FKs
+    // were dropped in migration 0038 and replaced with composites
+    // declared in the table-extras below. Ensures that a future writer
+    // bypassing the route-level precheck cannot insert a row whose
+    // (horse_id, club_id) pair points at a horse in another club.
+    horseId: uuid('horse_id').notNull(),
+    ownerMemberId: uuid('owner_member_id').notNull(),
 
     invoiceNumber: varchar('invoice_number', { length: 50 }).notNull(),
     periodStart: date('period_start').notNull(),
@@ -63,5 +65,19 @@ export const liveryInvoices = pgTable(
     index('idx_livery_invoices_horse').on(table.horseId),
     index('idx_livery_invoices_status_due').on(table.status, table.dueDate),
     index('idx_livery_invoices_provider_payment').on(table.providerPaymentId),
+    foreignKey({
+      name: 'livery_invoices_horse_club_fk',
+      columns: [table.horseId, table.clubId],
+      foreignColumns: [horses.id, horses.clubId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'livery_invoices_owner_member_club_fk',
+      columns: [table.ownerMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
+    // ON DELETE NO ACTION on owner_member: invoices are financial
+    // records that should outlive the member's row; finance reports
+    // query historical invoices by owner_member_id even after the
+    // member departs.
   ],
 );

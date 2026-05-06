@@ -10,6 +10,7 @@ import {
   timestamp,
   unique,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import {
   paymentStatusEnum,
@@ -86,7 +87,13 @@ export const competitionEntries = pgTable(
     riderMemberId: uuid('rider_member_id')
       .notNull()
       .references(() => clubMembers.id),
-    horseId: uuid('horse_id').references(() => horses.id),
+    // Audit MED (2026-05-06 third pass): inline single-column FK was
+    // dropped in migration 0038 and replaced with the composite
+    // (horse_id, club_id) → horses(id, club_id) ON DELETE SET NULL
+    // declared in the table-extras below. `horse_id` is nullable so
+    // the composite uses SET NULL — preserves the entry row when a
+    // horse is later deleted.
+    horseId: uuid('horse_id'),
 
     // Audit AI-36 — promoted to pgEnum.
     status: competitionEntryStatusEnum('status').notNull().default('registered'),
@@ -106,6 +113,11 @@ export const competitionEntries = pgTable(
   (table) => [
     unique('competition_entries_class_rider_unique').on(table.classId, table.riderMemberId),
     index('idx_competition_entries_rider').on(table.riderMemberId),
+    foreignKey({
+      name: 'competition_entries_horse_club_fk',
+      columns: [table.horseId, table.clubId],
+      foreignColumns: [horses.id, horses.clubId],
+    }).onDelete('set null'),
   ],
 );
 

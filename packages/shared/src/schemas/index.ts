@@ -130,10 +130,12 @@ export const updateHorseSchema = createHorseSchema
 
 export type UpdateHorseInput = z.infer<typeof updateHorseSchema>;
 
-export const transferHorseOwnerSchema = z.object({
-  // `null` = school horse / no owner.
-  ownerMemberId: z.string().uuid().nullable(),
-});
+export const transferHorseOwnerSchema = z
+  .object({
+    // `null` = school horse / no owner.
+    ownerMemberId: z.string().uuid().nullable(),
+  })
+  .strict();
 
 export type TransferHorseOwnerInput = z.output<typeof transferHorseOwnerSchema>;
 
@@ -156,19 +158,21 @@ export type HorseFiltersInput = z.infer<typeof horseFiltersSchema>;
  * approval. `clubId` is required because a rider can be a member of multiple
  * stables and needs to pick which one will stable the horse.
  */
-export const registerHorseOwnershipSchema = z.object({
-  clubId: z.string().uuid('Select a stable'),
-  name: z.string().min(1, 'Name is required').max(255),
-  breed: z.string().max(100).optional(),
-  gender: z.string().max(20).optional(),
-  dateOfBirth: z.string().max(50).optional(),
-  color: z.string().max(100).optional(),
-  heightHands: optionalNumeric(z.number().positive()),
-  weightKg: optionalNumeric(z.number().positive()),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-  primaryPhotoUrl: z.string().url().max(2000).optional(),
-  notes: z.string().max(2000).optional(),
-});
+export const registerHorseOwnershipSchema = z
+  .object({
+    clubId: z.string().uuid('Select a stable'),
+    name: z.string().min(1, 'Name is required').max(255),
+    breed: z.string().max(100).optional(),
+    gender: z.string().max(20).optional(),
+    dateOfBirth: z.string().max(50).optional(),
+    color: z.string().max(100).optional(),
+    heightHands: optionalNumeric(z.number().positive()),
+    weightKg: optionalNumeric(z.number().positive()),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+    primaryPhotoUrl: z.string().url().max(2000).optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type RegisterHorseOwnershipFormValues = z.input<typeof registerHorseOwnershipSchema>;
 export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnershipSchema>;
@@ -181,24 +185,30 @@ export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnership
  * (50000 fils intended, 5000000 entered) before the cron issues a
  * 5-lakh AED invoice; see audit finding B-14.
  */
-export const approveHorseOwnershipSchema = z.object({
-  monthlyLiveryFeeMinor: numericField(
-    z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR),
-  ),
-  liveryStartDate: z.string().max(50).min(1, 'Start date is required'),
-});
+export const approveHorseOwnershipSchema = z
+  .object({
+    monthlyLiveryFeeMinor: numericField(
+      z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR),
+    ),
+    liveryStartDate: z.string().max(50).min(1, 'Start date is required'),
+  })
+  .strict();
 
 export type ApproveHorseOwnershipInput = z.output<typeof approveHorseOwnershipSchema>;
 
-export const declineHorseOwnershipSchema = z.object({
-  reason: z.string().min(1, 'Reason is required').max(1000),
-});
+export const declineHorseOwnershipSchema = z
+  .object({
+    reason: z.string().min(1, 'Reason is required').max(1000),
+  })
+  .strict();
 
 export type DeclineHorseOwnershipInput = z.output<typeof declineHorseOwnershipSchema>;
 
-export const retireHorseOwnershipSchema = z.object({
-  liveryEndDate: z.string().max(50).optional(),
-});
+export const retireHorseOwnershipSchema = z
+  .object({
+    liveryEndDate: z.string().max(50).optional(),
+  })
+  .strict();
 
 export type RetireHorseOwnershipInput = z.output<typeof retireHorseOwnershipSchema>;
 
@@ -231,38 +241,42 @@ export const riderFiltersSchema = z.object({
 
 export type RiderFiltersInput = z.infer<typeof riderFiltersSchema>;
 
-export const createRiderSchema = z.object({
-  displayName: z.string().min(1, 'Name is required').max(255),
-  email: z.string().email('Invalid email').max(255),
-  phone: z.string().max(50).optional(),
-  dateOfBirth: z.string().max(50).optional(),
-  weightKg: optionalNumeric(z.number().positive()),
-  heightCm: optionalNumeric(z.number().positive()),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-  emergencyContactName: z.string().max(255).optional(),
-  emergencyContactPhone: z.string().max(50).optional(),
-  emergencyContactRelation: z.string().max(100).optional(),
-  medicalNotes: z.string().max(5000).optional(),
-});
+export const createRiderSchema = z
+  .object({
+    displayName: z.string().min(1, 'Name is required').max(255),
+    email: z.string().email('Invalid email').max(255),
+    phone: z.string().max(50).optional(),
+    dateOfBirth: z.string().max(50).optional(),
+    weightKg: optionalNumeric(z.number().positive()),
+    heightCm: optionalNumeric(z.number().positive()),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+    emergencyContactName: z.string().max(255).optional(),
+    emergencyContactPhone: z.string().max(50).optional(),
+    emergencyContactRelation: z.string().max(100).optional(),
+    medicalNotes: z.string().max(5000).optional(),
+  })
+  .strict();
 
 export type CreateRiderInput = z.output<typeof createRiderSchema>;
 export type CreateRiderFormValues = z.input<typeof createRiderSchema>;
 
 // ─── Lesson Types ──────────────────────────────────────────────────────
 
-export const createLessonTypeSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255),
-  type: z.string().min(1, 'Type is required').max(100),
-  description: z.string().max(2000).optional(),
-  durationMinutes: numericField(z.number().int().min(15)).default(60),
-  price: numericField(z.number().int().min(0)),
-  currency: z.string().length(3).default('AED'),
-  maxRiders: numericField(z.number().int().min(1)).default(1),
-  minRiders: numericField(z.number().int().min(1)).default(1),
-  maxSessionsPerDay: optionalNumeric(z.number().int().positive()),
-  arenaId: z.string().uuid().optional(),
-  color: z.string().max(7).optional(),
-});
+export const createLessonTypeSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    type: z.string().min(1, 'Type is required').max(100),
+    description: z.string().max(2000).optional(),
+    durationMinutes: numericField(z.number().int().min(15)).default(60),
+    price: numericField(z.number().int().min(0)),
+    currency: z.string().length(3).default('AED'),
+    maxRiders: numericField(z.number().int().min(1)).default(1),
+    minRiders: numericField(z.number().int().min(1)).default(1),
+    maxSessionsPerDay: optionalNumeric(z.number().int().positive()),
+    arenaId: z.string().uuid().optional(),
+    color: z.string().max(7).optional(),
+  })
+  .strict();
 
 export type CreateLessonTypeFormValues = z.input<typeof createLessonTypeSchema>;
 export type CreateLessonTypeInput = z.output<typeof createLessonTypeSchema>;
@@ -272,13 +286,15 @@ export const updateLessonTypeSchema = createLessonTypeSchema.partial().strict();
 
 // ─── Arenas ────────────────────────────────────────────────────────────
 
-export const createArenaSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255),
-  capacity: optionalNumeric(z.number().int().positive()),
-  surfaceType: z.string().max(100).optional(),
-  hasLighting: z.boolean().default(false),
-  isIndoor: z.boolean().default(false),
-});
+export const createArenaSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    capacity: optionalNumeric(z.number().int().positive()),
+    surfaceType: z.string().max(100).optional(),
+    hasLighting: z.boolean().default(false),
+    isIndoor: z.boolean().default(false),
+  })
+  .strict();
 
 export type CreateArenaInput = z.infer<typeof createArenaSchema>;
 
@@ -287,15 +303,17 @@ export const updateArenaSchema = createArenaSchema.partial().strict();
 
 // ─── Booking Slots ─────────────────────────────────────────────────────
 
-export const createBookingSlotSchema = z.object({
-  lessonTypeId: z.string().uuid(),
-  arenaId: z.string().uuid().optional(),
-  coachMemberId: z.string().uuid().optional(),
-  date: z.string().max(50).min(1, 'Date is required'),
-  startTime: z.string().max(20).min(1, 'Start time is required'),
-  endTime: z.string().max(20).min(1, 'End time is required'),
-  maxRiders: numericField(z.number().int().min(1)),
-});
+export const createBookingSlotSchema = z
+  .object({
+    lessonTypeId: z.string().uuid(),
+    arenaId: z.string().uuid().optional(),
+    coachMemberId: z.string().uuid().optional(),
+    date: z.string().max(50).min(1, 'Date is required'),
+    startTime: z.string().max(20).min(1, 'Start time is required'),
+    endTime: z.string().max(20).min(1, 'End time is required'),
+    maxRiders: numericField(z.number().int().min(1)),
+  })
+  .strict();
 
 export type CreateBookingSlotInput = z.infer<typeof createBookingSlotSchema>;
 
@@ -309,54 +327,62 @@ export type CreateBookingSlotInput = z.infer<typeof createBookingSlotSchema>;
 // here means a future frontend change can't widen the contract.
 const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const createRecurringSlotsSchema = z.object({
-  lessonTypeId: z.string().uuid(),
-  arenaId: z.string().uuid().optional(),
-  coachMemberId: z.string().uuid().optional(),
-  startTime: z.string().max(20).min(1, 'Start time is required'),
-  endTime: z.string().max(20).min(1, 'End time is required'),
-  maxRiders: numericField(z.number().int().min(1)),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day').max(7),
-  dateFrom: z.string().regex(CALENDAR_DATE_RE, 'Start date must be YYYY-MM-DD'),
-  dateTo: z.string().regex(CALENDAR_DATE_RE, 'End date must be YYYY-MM-DD'),
-});
+export const createRecurringSlotsSchema = z
+  .object({
+    lessonTypeId: z.string().uuid(),
+    arenaId: z.string().uuid().optional(),
+    coachMemberId: z.string().uuid().optional(),
+    startTime: z.string().max(20).min(1, 'Start time is required'),
+    endTime: z.string().max(20).min(1, 'End time is required'),
+    maxRiders: numericField(z.number().int().min(1)),
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day').max(7),
+    dateFrom: z.string().regex(CALENDAR_DATE_RE, 'Start date must be YYYY-MM-DD'),
+    dateTo: z.string().regex(CALENDAR_DATE_RE, 'End date must be YYYY-MM-DD'),
+  })
+  .strict();
 
 export type CreateRecurringSlotsFormValues = z.input<typeof createRecurringSlotsSchema>;
 export type CreateRecurringSlotsInput = z.output<typeof createRecurringSlotsSchema>;
 
 // ─── Bookings ──────────────────────────────────────────────────────────
 
-export const guestRiderSchema = z.object({
-  name: z.string().min(1, 'Guest name is required').max(255),
-  email: z.string().email('Valid email required').max(255),
-  phone: z.string().min(1, 'Phone is required').max(50),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']),
-});
+export const guestRiderSchema = z
+  .object({
+    name: z.string().min(1, 'Guest name is required').max(255),
+    email: z.string().email('Valid email required').max(255),
+    phone: z.string().min(1, 'Phone is required').max(50),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']),
+  })
+  .strict();
 
 export type GuestRiderInput = z.infer<typeof guestRiderSchema>;
 
-export const createBookingSchema = z.object({
-  slotId: z.string().uuid(),
-  riderMemberId: z.string().uuid(),
-  horseId: z.string().uuid().optional(),
-  paymentMethod: z.enum([
-    'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
-    'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
-  ]).optional(),
-  couponCode: z.string().max(50).optional(),
-  autoMatchHorse: z.boolean().default(true),
-  // When present, this booking is for a guest (non-member). `riderMemberId`
-  // still refers to the signed-in booker; the guest's contact info rides on
-  // the booking row itself. Riders can only book themselves once per slot,
-  // but they can book multiple guests on the same slot (each by unique email).
-  guest: guestRiderSchema.optional(),
-});
+export const createBookingSchema = z
+  .object({
+    slotId: z.string().uuid(),
+    riderMemberId: z.string().uuid(),
+    horseId: z.string().uuid().optional(),
+    paymentMethod: z.enum([
+      'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
+      'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
+    ]).optional(),
+    couponCode: z.string().max(50).optional(),
+    autoMatchHorse: z.boolean().default(true),
+    // When present, this booking is for a guest (non-member). `riderMemberId`
+    // still refers to the signed-in booker; the guest's contact info rides on
+    // the booking row itself. Riders can only book themselves once per slot,
+    // but they can book multiple guests on the same slot (each by unique email).
+    guest: guestRiderSchema.optional(),
+  })
+  .strict();
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 
-export const cancelBookingSchema = z.object({
-  reason: z.string().min(1, 'Cancellation reason is required').max(1000),
-});
+export const cancelBookingSchema = z
+  .object({
+    reason: z.string().min(1, 'Cancellation reason is required').max(1000),
+  })
+  .strict();
 
 export const bookingFiltersSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
@@ -407,15 +433,17 @@ export const competitionFiltersSchema = z.object({
 
 export type CompetitionFiltersInput = z.output<typeof competitionFiltersSchema>;
 
-export const createCompetitionClassSchema = z.object({
-  name: z.string().min(1, 'Class name is required').max(255),
-  discipline: z.string().max(100).optional(),
-  level: z.string().max(100).optional(),
-  maxEntries: optionalNumeric(z.number().int().positive()),
-  entryFee: optionalNumeric(z.number().int().min(0)),
-  currency: z.string().length(3).default('AED'),
-  sortOrder: numericField(z.number().int().min(0)).default(0),
-});
+export const createCompetitionClassSchema = z
+  .object({
+    name: z.string().min(1, 'Class name is required').max(255),
+    discipline: z.string().max(100).optional(),
+    level: z.string().max(100).optional(),
+    maxEntries: optionalNumeric(z.number().int().positive()),
+    entryFee: optionalNumeric(z.number().int().min(0)),
+    currency: z.string().length(3).default('AED'),
+    sortOrder: numericField(z.number().int().min(0)).default(0),
+  })
+  .strict();
 
 export type CreateCompetitionClassInput = z.output<typeof createCompetitionClassSchema>;
 
@@ -431,45 +459,51 @@ const PAYMENT_METHODS = [
 // the body lets a rider POST `{ amount: 1 }` and pay 1 fil for a
 // full-price competition (same class of bug as the historical bookings
 // price-injection fix).
-export const createCompetitionEntrySchema = z.object({
-  riderMemberId: z.string().uuid(),
-  horseId: z.string().uuid().optional(),
-  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
-});
+export const createCompetitionEntrySchema = z
+  .object({
+    riderMemberId: z.string().uuid(),
+    horseId: z.string().uuid().optional(),
+    paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  })
+  .strict();
 
 export type CreateCompetitionEntryInput = z.output<typeof createCompetitionEntrySchema>;
 
-export const createCompetitionResultSchema = z.object({
-  entryId: z.string().uuid(),
-  placing: optionalNumeric(z.number().int().positive()),
-  timeSeconds: optionalNumeric(z.number().positive()),
-  faults: numericField(z.number().int().min(0)).default(0),
-  notes: z.string().max(2000).optional(),
-});
+export const createCompetitionResultSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    placing: optionalNumeric(z.number().int().positive()),
+    timeSeconds: optionalNumeric(z.number().positive()),
+    faults: numericField(z.number().int().min(0)).default(0),
+    notes: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type CreateCompetitionResultInput = z.output<typeof createCompetitionResultSchema>;
 
 // ─── Settings ─────────────────────────────────────────────────────────
 
-export const updateClubProfileSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  email: z.string().email().max(255).optional(),
-  phone: z.string().max(50).optional(),
-  address: z.string().max(500).optional(),
-  city: z.string().max(100).optional(),
-  country: z.string().max(100).optional(),
-  timezone: z.string().max(50).optional(),
-  currency: z.string().length(3).optional(),
-  // Nullable to match the underlying column (text, no NOT NULL) and the
-  // branding schema's shape — staff need to be able to *clear* the logo
-  // from the profile editor too, not just set a new one.
-  logoUrl: nullableOptionalUrl,
-  websiteUrl: optionalUrl,
-  socialInstagram: z.string().max(255).optional(),
-  socialFacebook: z.string().max(255).optional(),
-  socialTiktok: z.string().max(255).optional(),
-  description: z.string().max(2000).optional(),
-});
+export const updateClubProfileSchema = z
+  .object({
+    name: z.string().min(1).max(255).optional(),
+    email: z.string().email().max(255).optional(),
+    phone: z.string().max(50).optional(),
+    address: z.string().max(500).optional(),
+    city: z.string().max(100).optional(),
+    country: z.string().max(100).optional(),
+    timezone: z.string().max(50).optional(),
+    currency: z.string().length(3).optional(),
+    // Nullable to match the underlying column (text, no NOT NULL) and the
+    // branding schema's shape — staff need to be able to *clear* the logo
+    // from the profile editor too, not just set a new one.
+    logoUrl: nullableOptionalUrl,
+    websiteUrl: optionalUrl,
+    socialInstagram: z.string().max(255).optional(),
+    socialFacebook: z.string().max(255).optional(),
+    socialTiktok: z.string().max(255).optional(),
+    description: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type UpdateClubProfileInput = z.output<typeof updateClubProfileSchema>;
 
@@ -478,74 +512,88 @@ const hexColor = z
   .regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/, 'Must be a hex color like #6366f1')
   .transform((v) => v.toLowerCase());
 
-export const updateBrandingSchema = z.object({
-  brandPrimaryColor: hexColor.optional(),
-  brandSecondaryColor: hexColor.optional(),
-  logoUrl: nullableOptionalUrl,
-  coverPhotoUrl: nullableOptionalUrl,
-  faviconUrl: nullableOptionalUrl,
-});
+export const updateBrandingSchema = z
+  .object({
+    brandPrimaryColor: hexColor.optional(),
+    brandSecondaryColor: hexColor.optional(),
+    logoUrl: nullableOptionalUrl,
+    coverPhotoUrl: nullableOptionalUrl,
+    faviconUrl: nullableOptionalUrl,
+  })
+  .strict();
 
 export type UpdateBrandingInput = z.output<typeof updateBrandingSchema>;
 
 const notificationChannel = z.object({ email: z.boolean() });
 
-export const updateNotificationsSchema = z.object({
-  notificationPreferences: z.object({
-    booking_confirmation: notificationChannel.optional(),
-    booking_reminder_24h: notificationChannel.optional(),
-    booking_cancellation: notificationChannel.optional(),
-    payment_receipt: notificationChannel.optional(),
-    payment_failed: notificationChannel.optional(),
-    feed_alert: notificationChannel.optional(),
-    waitlist_promotion: notificationChannel.optional(),
-    rider_welcome: notificationChannel.optional(),
-    invoice_issued: notificationChannel.optional(),
-    // Round 8 / 8.5 — horse ownership + livery billing
-    horse_registration_submitted: notificationChannel.optional(),
-    horse_registration_approved: notificationChannel.optional(),
-    horse_registration_declined: notificationChannel.optional(),
-    livery_invoice_issued: notificationChannel.optional(),
-    livery_payment_received: notificationChannel.optional(),
-    livery_invoice_overdue: notificationChannel.optional(),
-  }),
-});
+export const updateNotificationsSchema = z
+  .object({
+    notificationPreferences: z
+      .object({
+        booking_confirmation: notificationChannel.optional(),
+        booking_reminder_24h: notificationChannel.optional(),
+        booking_cancellation: notificationChannel.optional(),
+        payment_receipt: notificationChannel.optional(),
+        payment_failed: notificationChannel.optional(),
+        feed_alert: notificationChannel.optional(),
+        waitlist_promotion: notificationChannel.optional(),
+        rider_welcome: notificationChannel.optional(),
+        invoice_issued: notificationChannel.optional(),
+        // Round 8 / 8.5 — horse ownership + livery billing
+        horse_registration_submitted: notificationChannel.optional(),
+        horse_registration_approved: notificationChannel.optional(),
+        horse_registration_declined: notificationChannel.optional(),
+        livery_invoice_issued: notificationChannel.optional(),
+        livery_payment_received: notificationChannel.optional(),
+        livery_invoice_overdue: notificationChannel.optional(),
+        // Round 6.2 — horse care reminders
+        horse_care_reminder: notificationChannel.optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 export type UpdateNotificationsInput = z.output<typeof updateNotificationsSchema>;
 
-export const updateDiscoverySchema = z.object({
-  isPublicListing: z.boolean().optional(),
-  // Only two modes: open (public, instant join) or invite_only (private).
-  // Legacy 'approval' values coming from old records are accepted for
-  // backwards compatibility — the join endpoint treats them as invite_only.
-  joinPolicy: z.enum(['open', 'invite_only', 'approval']).optional(),
-  shortDescription: z.string().max(280).nullable().optional(),
-});
+export const updateDiscoverySchema = z
+  .object({
+    isPublicListing: z.boolean().optional(),
+    // Only two modes: open (public, instant join) or invite_only (private).
+    // Legacy 'approval' values coming from old records are accepted for
+    // backwards compatibility — the join endpoint treats them as invite_only.
+    joinPolicy: z.enum(['open', 'invite_only', 'approval']).optional(),
+    shortDescription: z.string().max(280).nullable().optional(),
+  })
+  .strict();
 
 export type UpdateDiscoveryInput = z.output<typeof updateDiscoverySchema>;
 
-export const updateBookingRulesSchema = z.object({
-  advanceBookingDays: optionalNumeric(z.number().int().min(1).max(365)),
-  bookingCutoffHours: optionalNumeric(z.number().int().min(0)),
-  cancellationNoticeHours: optionalNumeric(z.number().int().min(0)),
-  defaultLessonDurationMinutes: optionalNumeric(z.number().int().min(15)),
-  allowOverbooking: z.boolean().optional(),
-  overbookingLimit: optionalNumeric(z.number().int().min(0)),
-  defaultCalendarView: z.enum(['day', 'week', 'month', 'agenda']).optional(),
-  lateCancellationFeePercent: optionalNumeric(z.number().min(0).max(100)),
-  noShowFeePercent: optionalNumeric(z.number().min(0).max(100)),
-});
+export const updateBookingRulesSchema = z
+  .object({
+    advanceBookingDays: optionalNumeric(z.number().int().min(1).max(365)),
+    bookingCutoffHours: optionalNumeric(z.number().int().min(0)),
+    cancellationNoticeHours: optionalNumeric(z.number().int().min(0)),
+    defaultLessonDurationMinutes: optionalNumeric(z.number().int().min(15)),
+    allowOverbooking: z.boolean().optional(),
+    overbookingLimit: optionalNumeric(z.number().int().min(0)),
+    defaultCalendarView: z.enum(['day', 'week', 'month', 'agenda']).optional(),
+    lateCancellationFeePercent: optionalNumeric(z.number().min(0).max(100)),
+    noShowFeePercent: optionalNumeric(z.number().min(0).max(100)),
+  })
+  .strict();
 
 export type UpdateBookingRulesInput = z.output<typeof updateBookingRulesSchema>;
 
 // ─── Staff ────────────────────────────────────────────────────────────
 
-export const createStaffSchema = z.object({
-  displayName: z.string().min(1, 'Name is required').max(255),
-  email: z.string().email().max(255),
-  phone: z.string().max(50).optional(),
-  role: z.enum(['club_manager', 'coach', 'groom']),
-});
+export const createStaffSchema = z
+  .object({
+    displayName: z.string().min(1, 'Name is required').max(255),
+    email: z.string().email().max(255),
+    phone: z.string().max(50).optional(),
+    role: z.enum(['club_manager', 'coach', 'groom']),
+  })
+  .strict();
 
 export type CreateStaffInput = z.output<typeof createStaffSchema>;
 
@@ -561,11 +609,13 @@ export const staffFiltersSchema = z.object({
 
 // ─── Owners ───────────────────────────────────────────────────────────
 
-export const createOwnerSchema = z.object({
-  displayName: z.string().min(1, 'Name is required').max(255),
-  email: z.string().email().max(255),
-  phone: z.string().max(50).optional(),
-});
+export const createOwnerSchema = z
+  .object({
+    displayName: z.string().min(1, 'Name is required').max(255),
+    email: z.string().email().max(255),
+    phone: z.string().max(50).optional(),
+  })
+  .strict();
 
 export type CreateOwnerInput = z.output<typeof createOwnerSchema>;
 
@@ -704,53 +754,61 @@ export const createHealthRecordSchema = z
 export type CreateHealthRecordFormValues = z.input<typeof createHealthRecordSchema>;
 export type CreateHealthRecordInput = z.output<typeof createHealthRecordSchema>;
 
-export const createMedicationSchema = z.object({
-  medicationName: z.string().min(1, 'Medication name is required').max(255),
-  dosage: z.string().min(1, 'Dosage is required').max(100),
-  frequency: z.string().min(1, 'Frequency is required').max(100),
-  timeOfDay: z.array(z.string().max(50)).max(10).optional(),
-  startDate: z.string().max(50).min(1, 'Start date is required'),
-  endDate: z.string().max(50).optional(),
-  isActive: z.boolean().default(true),
-  prescribedBy: z.string().max(255).optional(),
-  notes: z.string().max(2000).optional(),
-});
+export const createMedicationSchema = z
+  .object({
+    medicationName: z.string().min(1, 'Medication name is required').max(255),
+    dosage: z.string().min(1, 'Dosage is required').max(100),
+    frequency: z.string().min(1, 'Frequency is required').max(100),
+    timeOfDay: z.array(z.string().max(50)).max(10).optional(),
+    startDate: z.string().max(50).min(1, 'Start date is required'),
+    endDate: z.string().max(50).optional(),
+    isActive: z.boolean().default(true),
+    prescribedBy: z.string().max(255).optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type CreateMedicationInput = z.output<typeof createMedicationSchema>;
 // `.strict()` — see audit G-5.
 export const updateMedicationSchema = createMedicationSchema.partial().strict();
 
-export const createMedicationLogSchema = z.object({
-  medicationId: z.string().uuid(),
-  administeredAt: z.string().max(50).min(1),
-  administeredByMemberId: z.string().uuid().optional(),
-  wasAdministered: z.boolean().default(true),
-  skipReason: z.string().max(500).optional(),
-  notes: z.string().max(2000).optional(),
-});
+export const createMedicationLogSchema = z
+  .object({
+    medicationId: z.string().uuid(),
+    administeredAt: z.string().max(50).min(1),
+    administeredByMemberId: z.string().uuid().optional(),
+    wasAdministered: z.boolean().default(true),
+    skipReason: z.string().max(500).optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type CreateMedicationLogInput = z.output<typeof createMedicationLogSchema>;
 
-export const createFeedingPlanSchema = z.object({
-  mealName: z.string().min(1, 'Meal name is required').max(100),
-  feedType: z.string().max(255).optional(),
-  quantityKg: optionalNumeric(z.number().positive()),
-  supplements: z.array(z.string().max(100)).max(20).optional(),
-  notes: z.string().max(2000).optional(),
-  timeOfDay: z.string().max(50).optional(),
-});
+export const createFeedingPlanSchema = z
+  .object({
+    mealName: z.string().min(1, 'Meal name is required').max(100),
+    feedType: z.string().max(255).optional(),
+    quantityKg: optionalNumeric(z.number().positive()),
+    supplements: z.array(z.string().max(100)).max(20).optional(),
+    notes: z.string().max(2000).optional(),
+    timeOfDay: z.string().max(50).optional(),
+  })
+  .strict();
 
 export type CreateFeedingPlanFormValues = z.input<typeof createFeedingPlanSchema>;
 export type CreateFeedingPlanInput = z.output<typeof createFeedingPlanSchema>;
 export const updateFeedingPlanSchema = createFeedingPlanSchema.partial().strict();
 
-export const createExerciseScheduleSchema = z.object({
-  dayOfWeek: numericField(z.number().int().min(0).max(6)),
-  exerciseType: z.string().min(1, 'Exercise type is required').max(100),
-  durationMinutes: optionalNumeric(z.number().int().positive()),
-  intensity: z.string().max(20).optional(),
-  notes: z.string().max(2000).optional(),
-});
+export const createExerciseScheduleSchema = z
+  .object({
+    dayOfWeek: numericField(z.number().int().min(0).max(6)),
+    exerciseType: z.string().min(1, 'Exercise type is required').max(100),
+    durationMinutes: optionalNumeric(z.number().int().positive()),
+    intensity: z.string().max(20).optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type CreateExerciseScheduleFormValues = z.input<typeof createExerciseScheduleSchema>;
 export type CreateExerciseScheduleInput = z.output<typeof createExerciseScheduleSchema>;
@@ -761,13 +819,15 @@ const FILE_CATEGORIES = [
   'registration', 'insurance', 'purchase_agreement', 'vaccination_certificate', 'other',
 ] as const;
 
-export const createDocumentSchema = z.object({
-  fileName: z.string().min(1, 'File name is required').max(255),
-  fileUrl: z.string().url('Valid URL required').max(2000),
-  fileSizeBytes: optionalNumeric(z.number().int().positive()),
-  fileType: z.string().max(50).optional(),
-  category: z.enum(FILE_CATEGORIES).default('other'),
-  description: z.string().max(2000).optional(),
-});
+export const createDocumentSchema = z
+  .object({
+    fileName: z.string().min(1, 'File name is required').max(255),
+    fileUrl: z.string().url('Valid URL required').max(2000),
+    fileSizeBytes: optionalNumeric(z.number().int().positive()),
+    fileType: z.string().max(50).optional(),
+    category: z.enum(FILE_CATEGORIES).default('other'),
+    description: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export type CreateDocumentInput = z.output<typeof createDocumentSchema>;
