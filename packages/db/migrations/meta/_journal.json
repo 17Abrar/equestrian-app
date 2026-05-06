@@ -260,6 +260,13 @@
       "when": 1777248000025,
       "tag": "0036_booking_reminder_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1777248000026,
+      "tag": "0037_horse_care_reminder_sends",
+      "breakpoints": true
     }
   ]
 }

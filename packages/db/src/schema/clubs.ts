@@ -31,6 +31,14 @@ export interface NotificationPreferences {
   livery_invoice_issued?: { email: boolean };
   livery_payment_received?: { email: boolean };
   livery_invoice_overdue?: { email: boolean };
+  // Round 6.2 — horse care reminders (vaccination/farrier/dental due,
+  // vet follow-ups, insurance expiry, medication end). One umbrella
+  // toggle for all four kinds; the underlying cadence (7/1/0 for due
+  // dates, 30/7/1 for insurance, 7/1 for medication end) is fixed in
+  // the cron logic. Default-on; a club admin can flip it off in
+  // Settings → Notifications when their workflow uses an external
+  // calendar instead.
+  horse_care_reminder?: { email: boolean };
 }
 
 export const clubs = pgTable('clubs', {
@@ -102,6 +110,7 @@ export const clubs = pgTable('clubs', {
       livery_invoice_issued: { email: true },
       livery_payment_received: { email: true },
       livery_invoice_overdue: { email: true },
+      horse_care_reminder: { email: true },
     }),
 
   // Onboarding

@@ -1,5 +1,5 @@
-import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
-import { db } from '../index';
+import { eq, and, asc, desc, gte, isNull, lte, sql, SQL } from 'drizzle-orm';
+import { db, rawDb } from '../index';
 import {
   horseHealthRecords,
   horseMedications,
@@ -7,8 +7,10 @@ import {
   horseFeedingPlans,
   horseExerciseSchedules,
   horseDocuments,
+  horseCareReminderSends,
 } from '../schema/horse-health';
 import { horses } from '../schema/horses';
+import { clubs } from '../schema/clubs';
 import { decryptFields, encryptFields } from '../crypto';
 
 /**
@@ -494,4 +496,306 @@ export async function deleteDocument(clubId: string, horseId: string, documentId
     )
     .returning({ id: horseDocuments.id });
   return result[0] ?? null;
+}
+
+// ─── Round 6.2 — care reminder cron helpers ──────────────────────────
+//
+// Four sources, one dedup table. Every cron tick joins the source with
+// `clubs` (for tz/name/email) and `horses` (for the horse name + club
+// scope) and excludes soft-deleted horses + the dedup row for the
+// (kind, source_id, threshold) tuple. The cron then sends emails and
+// stamps a row into `horse_care_reminder_sends` per successful send.
+//
+// `today` is passed as a YYYY-MM-DD string so the queries compare
+// `date` columns without driver coercion. The cron resolves the
+// per-club timezone-aware "today" outside this layer, same as the
+// platform-billing reminder helpers.
+
+export interface CareReminderCandidate {
+  /** Source row id (horse_health_records.id, horses.id, or
+   *  horse_medications.id depending on `kind`). The cron uses this as
+   *  the dedup key. */
+  sourceId: string;
+  clubId: string;
+  clubName: string;
+  clubEmail: string | null;
+  clubTimezone: string;
+  clubLogoUrl: string | null;
+  horseId: string;
+  horseName: string;
+  /** YYYY-MM-DD — the underlying due/follow-up/expiry/end date. */
+  dueDate: string;
+  /** Pre-rendered care label for the email — populated per-source. */
+  careTypeLabel: string;
+  /** Free-form detail for the email's detail row (medication name +
+   *  dosage, vet name, insurance provider, etc). May be undefined. */
+  detail: string | null;
+}
+
+export interface CareReminderQueryArgs {
+  todayIso: string;
+  /** Look-ahead window (inclusive). The cron passes the largest
+   *  threshold (e.g. 30 for insurance) to fetch every row whose due
+   *  date is at most that many days out. */
+  lookAheadDays: number;
+}
+
+export async function findUpcomingHealthRecordDueDates(
+  args: CareReminderQueryArgs,
+): Promise<CareReminderCandidate[]> {
+  const cutoff = addIsoDays(args.todayIso, args.lookAheadDays);
+  const rows = await rawDb
+    .select({
+      sourceId: horseHealthRecords.id,
+      clubId: horseHealthRecords.clubId,
+      clubName: clubs.name,
+      clubEmail: clubs.email,
+      clubTimezone: clubs.timezone,
+      clubLogoUrl: clubs.logoUrl,
+      horseId: horseHealthRecords.horseId,
+      horseName: horses.name,
+      dueDate: horseHealthRecords.nextDueDate,
+      recordType: horseHealthRecords.recordType,
+      title: horseHealthRecords.title,
+      vetName: horseHealthRecords.vetName,
+    })
+    .from(horseHealthRecords)
+    .innerJoin(
+      horses,
+      and(
+        eq(horses.id, horseHealthRecords.horseId),
+        eq(horses.clubId, horseHealthRecords.clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
+    .innerJoin(clubs, and(eq(clubs.id, horseHealthRecords.clubId), isNull(clubs.deletedAt)))
+    .where(
+      and(
+        sql`${horseHealthRecords.nextDueDate} IS NOT NULL`,
+        lte(horseHealthRecords.nextDueDate, cutoff),
+      ),
+    )
+    .limit(500);
+  return rows.map((r) => ({
+    sourceId: r.sourceId,
+    clubId: r.clubId,
+    clubName: r.clubName,
+    clubEmail: r.clubEmail,
+    clubTimezone: r.clubTimezone,
+    clubLogoUrl: r.clubLogoUrl,
+    horseId: r.horseId,
+    horseName: r.horseName,
+    dueDate: r.dueDate as string,
+    careTypeLabel: humanizeCareLabel(r.recordType, r.title),
+    detail: r.vetName,
+  }));
+}
+
+export async function findUpcomingHealthRecordFollowUps(
+  args: CareReminderQueryArgs,
+): Promise<CareReminderCandidate[]> {
+  const cutoff = addIsoDays(args.todayIso, args.lookAheadDays);
+  const rows = await rawDb
+    .select({
+      sourceId: horseHealthRecords.id,
+      clubId: horseHealthRecords.clubId,
+      clubName: clubs.name,
+      clubEmail: clubs.email,
+      clubTimezone: clubs.timezone,
+      clubLogoUrl: clubs.logoUrl,
+      horseId: horseHealthRecords.horseId,
+      horseName: horses.name,
+      dueDate: horseHealthRecords.followUpDate,
+      title: horseHealthRecords.title,
+      vetName: horseHealthRecords.vetName,
+    })
+    .from(horseHealthRecords)
+    .innerJoin(
+      horses,
+      and(
+        eq(horses.id, horseHealthRecords.horseId),
+        eq(horses.clubId, horseHealthRecords.clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
+    .innerJoin(clubs, and(eq(clubs.id, horseHealthRecords.clubId), isNull(clubs.deletedAt)))
+    .where(
+      and(
+        eq(horseHealthRecords.followUpNeeded, true),
+        sql`${horseHealthRecords.followUpDate} IS NOT NULL`,
+        lte(horseHealthRecords.followUpDate, cutoff),
+      ),
+    )
+    .limit(500);
+  return rows.map((r) => ({
+    sourceId: r.sourceId,
+    clubId: r.clubId,
+    clubName: r.clubName,
+    clubEmail: r.clubEmail,
+    clubTimezone: r.clubTimezone,
+    clubLogoUrl: r.clubLogoUrl,
+    horseId: r.horseId,
+    horseName: r.horseName,
+    dueDate: r.dueDate as string,
+    careTypeLabel: 'Vet follow-up',
+    detail: r.vetName ? `Follow-up to: ${r.title} (${r.vetName})` : `Follow-up to: ${r.title}`,
+  }));
+}
+
+export async function findUpcomingHorseInsuranceExpiries(
+  args: CareReminderQueryArgs,
+): Promise<CareReminderCandidate[]> {
+  const cutoff = addIsoDays(args.todayIso, args.lookAheadDays);
+  const rows = await rawDb
+    .select({
+      sourceId: horses.id,
+      clubId: horses.clubId,
+      clubName: clubs.name,
+      clubEmail: clubs.email,
+      clubTimezone: clubs.timezone,
+      clubLogoUrl: clubs.logoUrl,
+      horseId: horses.id,
+      horseName: horses.name,
+      dueDate: horses.insuranceExpiry,
+      insuranceProvider: horses.insuranceProvider,
+      insurancePolicyNumber: horses.insurancePolicyNumber,
+    })
+    .from(horses)
+    .innerJoin(clubs, and(eq(clubs.id, horses.clubId), isNull(clubs.deletedAt)))
+    .where(
+      and(
+        sql`${horses.insuranceExpiry} IS NOT NULL`,
+        lte(horses.insuranceExpiry, cutoff),
+        isNull(horses.deletedAt),
+      ),
+    )
+    .limit(500);
+  return rows.map((r) => ({
+    sourceId: r.sourceId,
+    clubId: r.clubId,
+    clubName: r.clubName,
+    clubEmail: r.clubEmail,
+    clubTimezone: r.clubTimezone,
+    clubLogoUrl: r.clubLogoUrl,
+    horseId: r.horseId,
+    horseName: r.horseName,
+    dueDate: r.dueDate as string,
+    careTypeLabel: 'Insurance renewal',
+    detail: r.insuranceProvider
+      ? r.insurancePolicyNumber
+        ? `${r.insuranceProvider} (policy ${r.insurancePolicyNumber})`
+        : r.insuranceProvider
+      : null,
+  }));
+}
+
+export async function findUpcomingMedicationEnds(
+  args: CareReminderQueryArgs,
+): Promise<CareReminderCandidate[]> {
+  const cutoff = addIsoDays(args.todayIso, args.lookAheadDays);
+  const rows = await rawDb
+    .select({
+      sourceId: horseMedications.id,
+      clubId: horseMedications.clubId,
+      clubName: clubs.name,
+      clubEmail: clubs.email,
+      clubTimezone: clubs.timezone,
+      clubLogoUrl: clubs.logoUrl,
+      horseId: horseMedications.horseId,
+      horseName: horses.name,
+      dueDate: horseMedications.endDate,
+      medicationName: horseMedications.medicationName,
+      dosage: horseMedications.dosage,
+    })
+    .from(horseMedications)
+    .innerJoin(
+      horses,
+      and(
+        eq(horses.id, horseMedications.horseId),
+        eq(horses.clubId, horseMedications.clubId),
+        isNull(horses.deletedAt),
+      ),
+    )
+    .innerJoin(clubs, and(eq(clubs.id, horseMedications.clubId), isNull(clubs.deletedAt)))
+    .where(
+      and(
+        eq(horseMedications.isActive, true),
+        sql`${horseMedications.endDate} IS NOT NULL`,
+        lte(horseMedications.endDate, cutoff),
+        // Don't bother with end-dates that have already long passed —
+        // a stale active=true row that nobody zeroed out shouldn't
+        // continue to ping the team forever.
+        gte(horseMedications.endDate, addIsoDays(args.todayIso, -7)),
+      ),
+    )
+    .limit(500);
+  return rows.map((r) => ({
+    sourceId: r.sourceId,
+    clubId: r.clubId,
+    clubName: r.clubName,
+    clubEmail: r.clubEmail,
+    clubTimezone: r.clubTimezone,
+    clubLogoUrl: r.clubLogoUrl,
+    horseId: r.horseId,
+    horseName: r.horseName,
+    dueDate: r.dueDate as string,
+    careTypeLabel: 'Medication ending',
+    detail: `${r.medicationName} — ${r.dosage}`,
+  }));
+}
+
+/**
+ * Idempotent reminder-send recorder. Returns true on a fresh INSERT
+ * (caller should send the email) and false when the unique constraint
+ * already has a row (caller skips). Concurrent crons that win the same
+ * (kind, source_id, threshold_days) tuple resolve cleanly via the
+ * `ON CONFLICT DO NOTHING` clause.
+ */
+export async function recordHorseCareReminderSend(args: {
+  clubId: string;
+  kind: string;
+  sourceId: string;
+  thresholdDays: number;
+}): Promise<boolean> {
+  const inserted = await rawDb
+    .insert(horseCareReminderSends)
+    .values({
+      clubId: args.clubId,
+      kind: args.kind,
+      sourceId: args.sourceId,
+      thresholdDays: args.thresholdDays,
+    })
+    .onConflictDoNothing({
+      target: [
+        horseCareReminderSends.clubId,
+        horseCareReminderSends.kind,
+        horseCareReminderSends.sourceId,
+        horseCareReminderSends.thresholdDays,
+      ],
+    })
+    .returning({ id: horseCareReminderSends.id });
+  return inserted.length > 0;
+}
+
+function humanizeCareLabel(recordType: string, title: string): string {
+  // Fallback to title when the type slug is empty / unknown — a hand-
+  // entered "Vaccination" title is more useful than the literal slug.
+  const map: Record<string, string> = {
+    vaccination: 'Vaccination',
+    farrier: 'Farrier visit',
+    dental: 'Dental visit',
+    deworming: 'Deworming',
+    checkup: 'Checkup',
+    teeth_floating: 'Teeth floating',
+  };
+  if (recordType in map) {
+    return map[recordType] ?? title;
+  }
+  return title || 'Routine care';
+}
+
+function addIsoDays(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }

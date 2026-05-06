@@ -53,12 +53,17 @@
   //                        hit the 24h window in non-UTC clubs — daily-only
   //                        misses at the day boundary in zones with offsets
   //                        like Asia/Dubai (UTC+4).
+  //   03:00 UTC daily   — horse care reminders (`/api/cron/horse-care-reminders`).
+  //                       Round 6.2. Vaccination/farrier/dental due dates,
+  //                       vet follow-ups, insurance expiry, medication
+  //                       end. Sequenced after platform-billing's 02:15
+  //                       fire so each cron has its own 30s CPU budget.
   //
   // All are secured by CRON_SECRET comparison server-side, dispatched
   // by `worker-entry.mjs`'s `scheduled()` handler which routes by the
   // event's scheduled-time signature.
   "triggers": {
-    "crons": ["0 2 * * *", "15 2 * * *", "0 * * * *"]
+    "crons": ["0 2 * * *", "15 2 * * *", "0 * * * *", "0 3 * * *"]
   },
 
   // Custom domain binding. Cavaliq's root domain is served from this Worker.
