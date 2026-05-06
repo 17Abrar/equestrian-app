@@ -58,6 +58,12 @@ interface NGeniusConnectInput {
   realmName?: string;
   webhookHeaderName?: string;
   webhookHeaderValue?: string;
+  /**
+   * Audit LOW (2026-05-06): outlet's settlement currency. ISO 4217
+   * 3-letter code. Defaults to AED at the API schema layer when
+   * omitted, but the connect form should always send it.
+   */
+  defaultCurrency?: string;
   makeActive?: boolean;
 }
 

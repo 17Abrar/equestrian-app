@@ -40,6 +40,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
@@ -393,12 +400,26 @@ function StripeConnectDialog({ label }: { label: string }) {
 
 // ─── N-Genius credential dialog ───────────────────────────────────────
 
+// Audit LOW (2026-05-06): the outlet's settlement currency is captured
+// here so non-AED merchants (Saudi/SAR, Kuwait/KWD, etc.) can connect
+// without every payment 422-blocking on the currency-parity check.
+// GCC primary currencies enumerated; the rare merchant outside this
+// list can be unblocked by support adding the code to the list rather
+// than freeing the field — keeping the dropdown bounded prevents a
+// typo from corrupting the credentials row.
+const N_GENIUS_CURRENCIES = ['AED', 'SAR', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'USD'] as const;
+type NGeniusCurrency = (typeof N_GENIUS_CURRENCIES)[number];
+
 const nGeniusSchema = z.object({
   apiKey: z.string().min(1, 'Service account API key is required'),
   outletReference: z.string().min(1, 'Outlet reference is required'),
   realmName: z.string().optional(),
   webhookHeaderName: z.string().optional(),
   webhookHeaderValue: z.string().optional(),
+  // Required (no `.default()`) so Zod's input/output types stay in sync
+  // with the form's value type — the form's `defaultValues` below seeds
+  // 'AED' so the user is never presented with an empty selector.
+  defaultCurrency: z.enum(N_GENIUS_CURRENCIES),
 });
 type NGeniusForm = z.infer<typeof nGeniusSchema>;
 
@@ -414,6 +435,7 @@ function NGeniusConnectDialog({ label }: { label: string }) {
       realmName: '',
       webhookHeaderName: '',
       webhookHeaderValue: '',
+      defaultCurrency: 'AED',
     },
   });
 
@@ -425,6 +447,7 @@ function NGeniusConnectDialog({ label }: { label: string }) {
         realmName: values.realmName || undefined,
         webhookHeaderName: values.webhookHeaderName || undefined,
         webhookHeaderValue: values.webhookHeaderValue || undefined,
+        defaultCurrency: values.defaultCurrency,
         makeActive: true,
       });
       toast.success('N-Genius connected');
@@ -492,6 +515,37 @@ function NGeniusConnectDialog({ label }: { label: string }) {
                   <FormControl>
                     <Input placeholder="Tenant realm, if your outlet requires one" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="defaultCurrency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Settlement Currency</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={(v) => field.onChange(v as NGeniusCurrency)}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {N_GENIUS_CURRENCIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription className="text-xs">
+                    Match your N-Genius outlet&apos;s configured currency. Bookings in any
+                    other currency will be refused before reaching the provider.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
