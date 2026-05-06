@@ -162,6 +162,14 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
 // per tuple — Sentry's grouping still counts the dropped events via
 // alert-rule frequency conditions, and the first event in a window
 // always lands so the operator still gets paged.
+//
+// Audit F-17 (2026-05-06 r2). The map below is module-scope, which
+// in Cloudflare Workers means PER-ISOLATE — not global. Under
+// horizontal load, 100 concurrent requests across 100 isolates can
+// each fire 1 Sentry event per tuple, multiplying the cap. Sentry's
+// own grouping + alert frequency conditions handle this correctly,
+// but operators should know the cap is a per-isolate floor, not a
+// global ceiling.
 const FORWARD_BUCKET_WINDOW_MS = 1_000;
 const sentryForwardLastAt = new Map<string, number>();
 
