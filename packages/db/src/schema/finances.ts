@@ -94,12 +94,13 @@ export const liveryContracts = pgTable('livery_contracts', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  ownerMemberId: uuid('owner_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id),
+  // Audit MED (2026-05-06 third pass — adjacent-table follow-up):
+  // inline single-column FKs were dropped in migration 0039 and
+  // replaced with composite (col, club_id) → club_members(id, club_id)
+  // / horses(id, club_id) FKs declared in the table-extras below.
+  // Same defense-in-depth pattern as 0017 / 0019 / 0038.
+  ownerMemberId: uuid('owner_member_id').notNull(),
+  horseId: uuid('horse_id').notNull(),
 
   liveryType: liveryTypeEnum('livery_type').notNull(),
   monthlyCost: integer('monthly_cost').notNull(),
@@ -116,6 +117,20 @@ export const liveryContracts = pgTable('livery_contracts', {
   index('idx_livery_club').on(table.clubId),
   index('idx_livery_owner').on(table.ownerMemberId),
   index('idx_livery_horse').on(table.horseId),
+  // ON DELETE NO ACTION (no clause) on both composites — contracts
+  // are legal agreements; deleting the horse or the owner-member
+  // should require operators to deliberately end the contract first
+  // rather than silently cascading. Migration 0039.
+  foreignKey({
+    name: 'livery_contracts_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }),
+  foreignKey({
+    name: 'livery_contracts_owner_member_club_fk',
+    columns: [table.ownerMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const invoices = pgTable(

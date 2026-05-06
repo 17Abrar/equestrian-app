@@ -274,6 +274,13 @@
       "when": 1777248000027,
       "tag": "0038_extend_composite_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1777248000028,
+      "tag": "0039_extend_composite_fks_phase2",
+      "breakpoints": true
     }
   ]
 }
