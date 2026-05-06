@@ -73,6 +73,10 @@ export const riderPackages = pgTable('rider_packages', {
 }, (table) => [
   index('idx_rider_packages_rider').on(table.riderMemberId),
   index('idx_rider_packages_expiry').on(table.expiresAt),
+  // Audit F-4 / F-5 (2026-05-06 r3): FK target for composite
+  // (package_id, club_id) → rider_packages(id, club_id) on bookings
+  // and payments. Migration 0043.
+  unique('rider_packages_id_club_unique').on(table.id, table.clubId),
   foreignKey({
     name: 'rider_packages_package_club_fk',
     columns: [table.packageId, table.clubId],

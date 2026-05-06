@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, index, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, index, unique, foreignKey } from 'drizzle-orm/pg-core';
 import { joinRequestStatusEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -21,9 +21,11 @@ export const clubJoinRequests = pgTable(
     message: text('message'),
     // Audit AI-36 — promoted to pgEnum.
     status: joinRequestStatusEnum('status').notNull().default('pending'),
-    reviewedByMemberId: uuid('reviewed_by_member_id').references(() => clubMembers.id, {
-      onDelete: 'set null',
-    }),
+    // Audit F-2 (2026-05-06 r3): inline single-column FK dropped in
+    // migration 0043; replaced with composite (reviewed_by_member_id,
+    // club_id) → club_members(id, club_id) ON DELETE SET NULL declared
+    // in table-extras below.
+    reviewedByMemberId: uuid('reviewed_by_member_id'),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -32,6 +34,11 @@ export const clubJoinRequests = pgTable(
     unique('club_join_requests_unique_pending').on(table.clubId, table.clerkUserId),
     index('idx_join_requests_club_status').on(table.clubId, table.status, table.createdAt),
     index('idx_join_requests_user').on(table.clerkUserId),
+    foreignKey({
+      name: 'club_join_requests_reviewed_by_member_club_fk',
+      columns: [table.reviewedByMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }).onDelete('set null'),
   ],
 );
 
