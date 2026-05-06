@@ -6,15 +6,22 @@ import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
 // audit M-1 (2026-05-05) — preview must match POST/PATCH so the count
 // the user sees while building a filter is the same count the resolver
 // would deliver. Diverging schemas would re-introduce the original bug.
-const previewSchema = z.object({
-  filters: z
-    .object({
-      skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
-      activeWithinDays: z.number().int().min(1).max(3650).optional(),
-      minBookings: z.number().int().min(1).optional(),
-    })
-    .strict(),
-});
+// Audit F-7 (2026-05-06 r2): outer `.strict()`. The inner `filters`
+// was already strict but a request body of `{ filters: {...},
+// clubId: '<other>' }` parsed cleanly because the outer object
+// silently dropped the extra key. Mass-assignment hardening — every
+// other input schema in the codebase strict()s the outer.
+const previewSchema = z
+  .object({
+    filters: z
+      .object({
+        skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+        activeWithinDays: z.number().int().min(1).max(3650).optional(),
+        minBookings: z.number().int().min(1).optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 // POST returns the match count for an ad-hoc filter set without persisting an
 // audience. Used by the audience builder to show live feedback as the user
