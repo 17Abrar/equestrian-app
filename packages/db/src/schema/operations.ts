@@ -292,9 +292,14 @@ export const communityVotes = pgTable(
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id').references(() => clubs.id),
-  recipientMemberId: uuid('recipient_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit F-1 (2026-05-06 r3): inline single-column FK dropped in
+  // migration 0043; replaced with composite (recipient_member_id,
+  // club_id) → club_members(id, club_id) declared in the table-extras
+  // below. `clubId` is nullable for system-level notifications;
+  // Postgres MATCH SIMPLE skips composite-FK enforcement when any
+  // FK column is NULL, so the prior single-column semantics are
+  // preserved exactly.
+  recipientMemberId: uuid('recipient_member_id').notNull(),
 
   type: varchar('type', { length: 100 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
@@ -315,6 +320,11 @@ export const notifications = pgTable('notifications', {
 }, (table) => [
   index('idx_notifications_recipient').on(table.recipientMemberId, table.isRead),
   index('idx_notifications_date').on(table.recipientMemberId, table.createdAt),
+  foreignKey({
+    name: 'notifications_recipient_member_club_fk',
+    columns: [table.recipientMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const auditLog = pgTable('audit_log', {

@@ -212,12 +212,16 @@ export const payments = pgTable('payments', {
   // single-column inline `references(() => bookings.id)` was a
   // residual that drizzle-kit would have regenerated as a regression.
   bookingId: uuid('booking_id'),
-  // FK to `rider_packages.id` ON DELETE SET NULL added in migration
-  // 0035 (audit pass-2 schema-drift sweep). Previously a bare UUID,
-  // permitting cross-tenant smuggling of arbitrary rider-package IDs.
-  packageId: uuid('package_id').references(() => riderPackages.id, {
-    onDelete: 'set null',
-  }),
+  // Audit F-5 (2026-05-06 r3): the prior comment claimed migration
+  // 0035 had closed the cross-tenant smuggling gap on this column.
+  // It hadn't — 0035 only added a SINGLE-COLUMN FK, while every
+  // sibling tenant-scoped FK on this table (memberId, bookingId,
+  // liveryContractId, invoiceId) was promoted to a composite. The
+  // misleading "this is fixed" comment was its own hazard. Migration
+  // 0043 finally promotes this to the composite (package_id, club_id)
+  // → rider_packages(id, club_id) ON DELETE SET NULL declared in
+  // the table-extras below.
+  packageId: uuid('package_id'),
   // Audit F-12 (2026-05-06 comprehensive): single-column FKs dropped in
   // migration 0040; replaced with composites in table-extras below.
   // ON DELETE SET NULL preserves the payment row when the parent
@@ -263,6 +267,13 @@ export const payments = pgTable('payments', {
     name: 'payments_invoice_club_fk',
     columns: [table.invoiceId, table.clubId],
     foreignColumns: [invoices.id, invoices.clubId],
+  }).onDelete('set null'),
+  // Audit F-5 (2026-05-06 r3): composite (package_id, club_id) →
+  // rider_packages(id, club_id) ON DELETE SET NULL. Migration 0043.
+  foreignKey({
+    name: 'payments_package_club_fk',
+    columns: [table.packageId, table.clubId],
+    foreignColumns: [riderPackages.id, riderPackages.clubId],
   }).onDelete('set null'),
 ]);
 

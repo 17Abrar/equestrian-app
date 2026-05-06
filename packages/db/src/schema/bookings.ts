@@ -201,8 +201,15 @@ export const bookings = pgTable('bookings', {
   // captures the financial impact at booking time, so losing the link to
   // an expired/archived coupon doesn't corrupt finance reporting; keeping
   // NO ACTION blocked operators from cleaning up old coupons entirely.
-  couponId: uuid('coupon_id').references(() => coupons.id, { onDelete: 'set null' }),
-  packageId: uuid('package_id').references(() => riderPackages.id, { onDelete: 'set null' }),
+  //
+  // Audit F-3 + F-4 (2026-05-06 r3): inline single-column FKs dropped
+  // in migration 0043; replaced with composite (col, club_id) →
+  // parent(id, club_id) ON DELETE SET NULL declared in table-extras
+  // below. Defense-in-depth against any future writer that constructs
+  // booking rows programmatically without going through the route's
+  // tenant-scoped coupon/package validators.
+  couponId: uuid('coupon_id'),
+  packageId: uuid('package_id'),
 
   // Generic payment-provider reference. `paymentProvider` disambiguates which
   // adapter owns `providerPaymentId` (a Stripe PaymentIntent id, N-Genius
@@ -317,6 +324,17 @@ export const bookings = pgTable('bookings', {
     name: 'bookings_cancelled_by_member_club_fk',
     columns: [table.cancelledByMemberId, table.clubId],
     foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }).onDelete('set null'),
+  // Audit F-3 + F-4 (2026-05-06 r3). Migration 0043.
+  foreignKey({
+    name: 'bookings_coupon_club_fk',
+    columns: [table.couponId, table.clubId],
+    foreignColumns: [coupons.id, coupons.clubId],
+  }).onDelete('set null'),
+  foreignKey({
+    name: 'bookings_package_club_fk',
+    columns: [table.packageId, table.clubId],
+    foreignColumns: [riderPackages.id, riderPackages.clubId],
   }).onDelete('set null'),
   // Composite FK target for `payments.booking_id, club_id`. Tautologically
   // unique because `id` is the PK, but Postgres needs the explicit
