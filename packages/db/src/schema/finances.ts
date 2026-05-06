@@ -117,6 +117,9 @@ export const liveryContracts = pgTable('livery_contracts', {
   index('idx_livery_club').on(table.clubId),
   index('idx_livery_owner').on(table.ownerMemberId),
   index('idx_livery_horse').on(table.horseId),
+  // FK target for composite (livery_contract_id, club_id) →
+  // livery_contracts(id, club_id) on invoices and payments. Migration 0040.
+  unique('livery_contracts_id_club_unique').on(table.id, table.clubId),
   // ON DELETE NO ACTION (no clause) on both composites — contracts
   // are legal agreements; deleting the horse or the owner-member
   // should require operators to deliberately end the contract first
@@ -160,7 +163,9 @@ export const invoices = pgTable(
     sentAt: timestamp('sent_at', { withTimezone: true }),
     pdfUrl: text('pdf_url'),
 
-    liveryContractId: uuid('livery_contract_id').references(() => liveryContracts.id),
+    // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+    // migration 0040; replaced with composite below.
+    liveryContractId: uuid('livery_contract_id'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -170,10 +175,18 @@ export const invoices = pgTable(
     index('idx_invoices_club').on(table.clubId),
     index('idx_invoices_member').on(table.memberId),
     index('idx_invoices_status').on(table.clubId, table.status),
+    // FK target for composite (invoice_id, club_id) → invoices(id, club_id)
+    // on payments. Migration 0040.
+    unique('invoices_id_club_unique').on(table.id, table.clubId),
     foreignKey({
       name: 'invoices_member_club_fk',
       columns: [table.memberId, table.clubId],
       foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
+    foreignKey({
+      name: 'invoices_livery_contract_club_fk',
+      columns: [table.liveryContractId, table.clubId],
+      foreignColumns: [liveryContracts.id, liveryContracts.clubId],
     }),
   ],
 );
@@ -205,8 +218,12 @@ export const payments = pgTable('payments', {
   packageId: uuid('package_id').references(() => riderPackages.id, {
     onDelete: 'set null',
   }),
-  liveryContractId: uuid('livery_contract_id').references(() => liveryContracts.id),
-  invoiceId: uuid('invoice_id').references(() => invoices.id),
+  // Audit F-12 (2026-05-06 comprehensive): single-column FKs dropped in
+  // migration 0040; replaced with composites in table-extras below.
+  // ON DELETE SET NULL preserves the payment row when the parent
+  // livery contract or invoice is deleted (financial record).
+  liveryContractId: uuid('livery_contract_id'),
+  invoiceId: uuid('invoice_id'),
 
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
   stripeChargeId: varchar('stripe_charge_id', { length: 255 }),
@@ -237,6 +254,16 @@ export const payments = pgTable('payments', {
     columns: [table.bookingId, table.clubId],
     foreignColumns: [bookings.id, bookings.clubId],
   }).onDelete('set null'),
+  foreignKey({
+    name: 'payments_livery_contract_club_fk',
+    columns: [table.liveryContractId, table.clubId],
+    foreignColumns: [liveryContracts.id, liveryContracts.clubId],
+  }).onDelete('set null'),
+  foreignKey({
+    name: 'payments_invoice_club_fk',
+    columns: [table.invoiceId, table.clubId],
+    foreignColumns: [invoices.id, invoices.clubId],
+  }).onDelete('set null'),
 ]);
 
 export const expenses = pgTable('expenses', {
@@ -260,7 +287,9 @@ export const expenses = pgTable('expenses', {
   receiptUrl: text('receipt_url'),
   vendorName: varchar('vendor_name', { length: 255 }),
 
-  createdByMemberId: uuid('created_by_member_id').references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite below preserving SET NULL.
+  createdByMemberId: uuid('created_by_member_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -272,5 +301,10 @@ export const expenses = pgTable('expenses', {
     name: 'expenses_horse_club_fk',
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('set null'),
+  foreignKey({
+    name: 'expenses_created_by_member_club_fk',
+    columns: [table.createdByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
   }).onDelete('set null'),
 ]);

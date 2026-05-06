@@ -34,7 +34,9 @@ export const competitions = pgTable('competitions', {
   startDate: date('start_date').notNull(),
   endDate: date('end_date').notNull(),
   location: text('location'),
-  arenaId: uuid('arena_id').references(() => arenas.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite in table-extras below.
+  arenaId: uuid('arena_id'),
   disciplines: text('disciplines').array(),
   entryFee: integer('entry_fee'),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
@@ -49,6 +51,11 @@ export const competitions = pgTable('competitions', {
 }, (table) => [
   index('idx_competitions_club').on(table.clubId),
   index('idx_competitions_date').on(table.clubId, table.startDate),
+  foreignKey({
+    name: 'competitions_arena_club_fk',
+    columns: [table.arenaId, table.clubId],
+    foreignColumns: [arenas.id, arenas.clubId],
+  }),
 ]);
 
 export const competitionClasses = pgTable('competition_classes', {
@@ -72,6 +79,9 @@ export const competitionClasses = pgTable('competition_classes', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_competition_classes_competition').on(table.competitionId),
+  // FK target for composite (class_id, club_id) → competition_classes
+  // (id, club_id) on competition_entries. Migration 0040.
+  unique('competition_classes_id_club_unique').on(table.id, table.clubId),
 ]);
 
 export const competitionEntries = pgTable(
@@ -81,12 +91,10 @@ export const competitionEntries = pgTable(
     clubId: uuid('club_id')
       .notNull()
       .references(() => clubs.id, { onDelete: 'cascade' }),
-    classId: uuid('class_id')
-      .notNull()
-      .references(() => competitionClasses.id, { onDelete: 'cascade' }),
-    riderMemberId: uuid('rider_member_id')
-      .notNull()
-      .references(() => clubMembers.id),
+    // Audit F-8 (2026-05-06 comprehensive): single-column FKs dropped in
+    // migration 0040; replaced with composites in table-extras below.
+    classId: uuid('class_id').notNull(),
+    riderMemberId: uuid('rider_member_id').notNull(),
     // Audit MED (2026-05-06 third pass): inline single-column FK was
     // dropped in migration 0038 and replaced with the composite
     // (horse_id, club_id) → horses(id, club_id) ON DELETE SET NULL
@@ -113,11 +121,24 @@ export const competitionEntries = pgTable(
   (table) => [
     unique('competition_entries_class_rider_unique').on(table.classId, table.riderMemberId),
     index('idx_competition_entries_rider').on(table.riderMemberId),
+    // FK target for composite (entry_id, club_id) → competition_entries
+    // (id, club_id) on competition_results. Migration 0040.
+    unique('competition_entries_id_club_unique').on(table.id, table.clubId),
     foreignKey({
       name: 'competition_entries_horse_club_fk',
       columns: [table.horseId, table.clubId],
       foreignColumns: [horses.id, horses.clubId],
     }).onDelete('set null'),
+    foreignKey({
+      name: 'competition_entries_class_club_fk',
+      columns: [table.classId, table.clubId],
+      foreignColumns: [competitionClasses.id, competitionClasses.clubId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'competition_entries_rider_member_club_fk',
+      columns: [table.riderMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
   ],
 );
 
@@ -126,9 +147,10 @@ export const competitionResults = pgTable('competition_results', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  entryId: uuid('entry_id')
-    .notNull()
-    .references(() => competitionEntries.id, { onDelete: 'cascade' }),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite in table-extras below
+  // preserving ON DELETE CASCADE.
+  entryId: uuid('entry_id').notNull(),
 
   placing: integer('placing'),
   timeSeconds: numeric('time_seconds', { precision: 10, scale: 3 }),
@@ -143,4 +165,9 @@ export const competitionResults = pgTable('competition_results', {
   // producing duplicate rows that rank the same rider twice on the
   // leaderboard. See migration 0018.
   unique('competition_results_entry_unique').on(table.entryId),
+  foreignKey({
+    name: 'competition_results_entry_club_fk',
+    columns: [table.entryId, table.clubId],
+    foreignColumns: [competitionEntries.id, competitionEntries.clubId],
+  }).onDelete('cascade'),
 ]);

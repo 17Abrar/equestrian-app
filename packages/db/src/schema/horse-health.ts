@@ -45,7 +45,9 @@ export const horseHealthRecords = pgTable('horse_health_records', {
   productUsed: varchar('product_used', { length: 255 }),
   documentUrls: text('document_urls').array(),
 
-  createdByMemberId: uuid('created_by_member_id').references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite in table-extras below.
+  createdByMemberId: uuid('created_by_member_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -58,6 +60,11 @@ export const horseHealthRecords = pgTable('horse_health_records', {
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('cascade'),
+  foreignKey({
+    name: 'horse_health_records_created_by_member_club_fk',
+    columns: [table.createdByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const horseMedications = pgTable('horse_medications', {
@@ -82,6 +89,9 @@ export const horseMedications = pgTable('horse_medications', {
 }, (table) => [
   index('idx_medications_horse').on(table.horseId),
   index('idx_medications_active').on(table.horseId, table.isActive),
+  // FK target for composite (medication_id, club_id) → horse_medications
+  // (id, club_id) on horse_medication_logs. Migration 0040.
+  unique('horse_medications_id_club_unique').on(table.id, table.clubId),
   foreignKey({
     name: 'horse_medications_horse_club_fk',
     columns: [table.horseId, table.clubId],
@@ -94,13 +104,14 @@ export const horseMedicationLogs = pgTable('horse_medication_logs', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  medicationId: uuid('medication_id')
-    .notNull()
-    .references(() => horseMedications.id, { onDelete: 'cascade' }),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite in table-extras below
+  // preserving ON DELETE CASCADE.
+  medicationId: uuid('medication_id').notNull(),
   horseId: uuid('horse_id').notNull(),
 
   administeredAt: timestamp('administered_at', { withTimezone: true }).notNull(),
-  administeredByMemberId: uuid('administered_by_member_id').references(() => clubMembers.id),
+  administeredByMemberId: uuid('administered_by_member_id'),
   wasAdministered: boolean('was_administered').notNull().default(true),
   skipReason: text('skip_reason'),
   notes: text('notes'),
@@ -114,6 +125,16 @@ export const horseMedicationLogs = pgTable('horse_medication_logs', {
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('cascade'),
+  foreignKey({
+    name: 'horse_medication_logs_medication_club_fk',
+    columns: [table.medicationId, table.clubId],
+    foreignColumns: [horseMedications.id, horseMedications.clubId],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'horse_medication_logs_administered_by_member_club_fk',
+    columns: [table.administeredByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const horseFeedingPlans = pgTable('horse_feeding_plans', {
@@ -241,7 +262,9 @@ export const horseDocuments = pgTable('horse_documents', {
   fileType: varchar('file_type', { length: 50 }),
   category: fileCategoryEnum('category').notNull().default('other'),
   description: text('description'),
-  uploadedByMemberId: uuid('uploaded_by_member_id').references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite below.
+  uploadedByMemberId: uuid('uploaded_by_member_id'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -252,4 +275,9 @@ export const horseDocuments = pgTable('horse_documents', {
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('cascade'),
+  foreignKey({
+    name: 'horse_documents_uploaded_by_member_club_fk',
+    columns: [table.uploadedByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);

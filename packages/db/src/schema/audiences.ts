@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, jsonb, timestamp, index, foreignKey } from 'drizzle-orm/pg-core';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 
@@ -34,11 +34,18 @@ export const audiences = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
     filters: jsonb('filters').$type<AudienceFilters>().notNull().default({}),
-    createdByMemberId: uuid('created_by_member_id').references(() => clubMembers.id, {
-      onDelete: 'set null',
-    }),
+    // Audit F-8 (2026-05-06 comprehensive audit): inline single-column FK
+    // dropped in migration 0040; replaced with composite below.
+    createdByMemberId: uuid('created_by_member_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('idx_audiences_club').on(table.clubId)],
+  (table) => [
+    index('idx_audiences_club').on(table.clubId),
+    foreignKey({
+      name: 'audiences_created_by_member_club_fk',
+      columns: [table.createdByMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }).onDelete('set null'),
+  ],
 );

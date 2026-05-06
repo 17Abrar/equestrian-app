@@ -72,7 +72,14 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
     })
     .from(horses)
     .innerJoin(clubs, eq(clubs.id, horses.clubId))
-    .innerJoin(clubMembers, eq(clubMembers.id, horses.ownerMemberId))
+    // Audit F-1/F-9 (2026-05-06 comprehensive): bind clubMembers.clubId
+    // to horses.clubId so a future writer that bypasses the route-level
+    // membership check can't surface cross-tenant rows here. Migration
+    // 0040 also adds the matching composite FK at the schema layer.
+    .innerJoin(
+      clubMembers,
+      and(eq(clubMembers.id, horses.ownerMemberId), eq(clubMembers.clubId, horses.clubId)),
+    )
     .leftJoin(lastInvoiceSub, eq(lastInvoiceSub.horseId, horses.id))
     .where(
       and(

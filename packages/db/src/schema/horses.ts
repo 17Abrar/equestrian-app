@@ -10,6 +10,7 @@ import {
   timestamp,
   index,
   unique,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import {
   horseStatusEnum,
@@ -25,7 +26,13 @@ export const horses = pgTable('horses', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  ownerMemberId: uuid('owner_member_id').references(() => clubMembers.id),
+  // Audit F-1 (2026-05-06 comprehensive audit): inline single-column FK
+  // dropped in migration 0040; replaced with the composite
+  // (owner_member_id, club_id) → club_members(id, club_id) declared in
+  // table-extras below. ON DELETE NO ACTION (no clause): a member's
+  // departure must explicitly handle horse-ownership transfer rather
+  // than silently nulling the link.
+  ownerMemberId: uuid('owner_member_id'),
 
   // Basic info
   name: varchar('name', { length: 255 }).notNull(),
@@ -104,4 +111,9 @@ export const horses = pgTable('horses', {
   // the PK, but Postgres needs the explicit constraint to use the column
   // pair as an FK target. See migration 0017.
   unique('horses_id_club_unique').on(table.id, table.clubId),
+  foreignKey({
+    name: 'horses_owner_member_club_fk',
+    columns: [table.ownerMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
