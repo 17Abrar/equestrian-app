@@ -544,6 +544,46 @@ export async function applyLiveryInvoiceWebhook({
     return { invoiceId: invoice.id, clubId: invoice.clubId };
   }
 
+  // Audit F-1 (2026-05-06 round 2). Mirror the booking-flow
+  // amount/currency reconciliation (audit AI-21). Without this guard,
+  // a legitimately-signed event for a different invoice or a different
+  // amount on the same connected account silently marks the wrong
+  // invoice paid — e.g. a misrouted Ziina/N-Genius webhook can settle
+  // a 5,000 AED invoice against a 200 AED test transaction. The
+  // signature step gatekeeps third-party forgery; this gatekeeps
+  // intra-account misrouting.
+  if (event.amountReceivedMinorUnits == null) {
+    logger.warn('livery_webhook_no_amount_received', {
+      clubId: invoice.clubId,
+      invoiceId: invoice.id,
+      eventId: event.eventId,
+    });
+    return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+  if (
+    event.currency &&
+    event.currency.toUpperCase() !== invoice.currency.toUpperCase()
+  ) {
+    logger.error('livery_webhook_currency_mismatch', {
+      clubId: invoice.clubId,
+      invoiceId: invoice.id,
+      eventId: event.eventId,
+      eventCurrency: event.currency,
+      invoiceCurrency: invoice.currency,
+    });
+    return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+  if (event.amountReceivedMinorUnits < invoice.amountMinorUnits) {
+    logger.error('livery_webhook_amount_underfunded', {
+      clubId: invoice.clubId,
+      invoiceId: invoice.id,
+      eventId: event.eventId,
+      received: event.amountReceivedMinorUnits,
+      expected: invoice.amountMinorUnits,
+    });
+    return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+
   const paidAt = new Date();
   const updated = await markLiveryInvoicePaid(invoice.clubId, invoice.id, {
     paidAt,
