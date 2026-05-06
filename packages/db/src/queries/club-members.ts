@@ -1,7 +1,15 @@
-import { eq, and, asc, ilike, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, ilike, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '../index';
 import { clubMembers } from '../schema/club-members';
 import { escapeLikePattern } from '@equestrian/shared/utils';
+
+// `inArray` is typed against the column's enum literal union, but the
+// values reaching `getMembersByRole` originate from query-string params
+// (`string[]`) we can't narrow at the TS layer. Postgres rejects any
+// value outside the enum at query time, so a runtime guard adds nothing
+// the DB doesn't already provide. Casts to this alias unblock the type
+// system without weakening validation.
+type ClubMemberRole = (typeof clubMembers.role.enumValues)[number];
 
 type NewMember = typeof clubMembers.$inferInsert;
 type MemberCreate = Omit<NewMember, 'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'joinedAt'>;
@@ -27,7 +35,13 @@ export async function getMembersByRole(
   ];
 
   if (roles.length > 0) {
-    conditions.push(sql`${clubMembers.role} = ANY(${roles})`);
+    // P0 2026-05-06: switched from `sql\`= ANY(${roles})\`` to `inArray`.
+    // The raw template was generating `ANY(($3, $4, $5))` — Postgres
+    // parses that as a row constructor, not an array, and the implicit
+    // scalar-to-enum cast against the `role` user_role column failed
+    // with "malformed array literal" / "input syntax for type
+    // user_role". `inArray` generates `IN (...)` which casts cleanly.
+    conditions.push(inArray(clubMembers.role, roles as ClubMemberRole[]));
   }
 
   const where = and(...conditions);
@@ -66,11 +80,13 @@ interface StaffFilters {
 }
 
 export async function getStaffByClub(clubId: string, filters: StaffFilters) {
-  const staffRoles = ['club_manager', 'coach', 'groom'];
+  // P0 2026-05-06: same `sql\`= ANY(...)\`` → `inArray` swap as
+  // `getMembersByRole` above. See that comment for full context.
+  const staffRoles: ClubMemberRole[] = ['club_manager', 'coach', 'groom'];
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
     eq(clubMembers.isActive, true),
-    sql`${clubMembers.role} = ANY(${staffRoles})`,
+    inArray(clubMembers.role, staffRoles),
   ];
 
   if (filters.role) {
