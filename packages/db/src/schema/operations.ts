@@ -317,6 +317,16 @@ export const notifications = pgTable('notifications', {
   smsSent: boolean('sms_sent').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Audit F-6 (2026-05-06 r3). The previous schema omitted the
+  // standard `updated_at` companion to `created_at`, breaking the
+  // CLAUDE.md every-table-has-standard-timestamps invariant. Six
+  // mutable fields above (isRead, readAt, emailSent, pushSent,
+  // smsSent, plus the row-mutation when read_at flips) had no
+  // last-touched timestamp. Migration 0044 backfills with
+  // COALESCE(read_at, created_at). All `markNotificationRead` /
+  // `markDelivery*Sent` helpers must `updatedAt: new Date()` on
+  // every UPDATE.
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_notifications_recipient').on(table.recipientMemberId, table.isRead),
   index('idx_notifications_date').on(table.recipientMemberId, table.createdAt),

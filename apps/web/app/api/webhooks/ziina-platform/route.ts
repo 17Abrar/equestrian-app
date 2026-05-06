@@ -44,11 +44,22 @@ const PAID_EVENTS = new Set(['payment_intent.status.updated']);
 const HANDLED_EVENTS = new Set<string>([...PAID_EVENTS]);
 
 export async function POST(request: NextRequest) {
+  // Audit F-8 (2026-05-06 r3): hoist the signature-header check
+  // BEFORE the body read so a forgery without the header pays
+  // constant cost — matches the per-club Ziina route's ordering
+  // (`/api/webhooks/ziina/[clubId]`). Audit AI-15 — return identical
+  // 401 across all rejection paths so the response shape doesn't
+  // leak webhook config state.
+  const signature = request.headers.get('x-hmac-signature');
+  if (!signature) {
+    logger.warn('platform_webhook_missing_signature');
+    return new Response('Invalid signature', { status: 401 });
+  }
+
   const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.ziina, PROVIDER);
   if (body === null) {
     return new Response('Payload too large', { status: 413 });
   }
-  const signature = request.headers.get('x-hmac-signature');
 
   let event;
   try {

@@ -20,12 +20,21 @@ interface CompetitionCreate extends Omit<DrizzleCompetitionCreate, 'registration
 }
 type CompetitionUpdate = Partial<CompetitionCreate>;
 
-function toCompetitionValues(data: CompetitionCreate | CompetitionUpdate): Record<string, unknown> {
-  const result = { ...data };
+// Audit F-7 (2026-05-06 r3). Concrete return type — see horses.ts
+// for rationale. Adding a new Date/numeric column without updating
+// this helper now breaks the type.
+type DrizzleCompetitionInsert = Omit<DrizzleCompetitionCreate, 'registrationDeadline'> & {
+  registrationDeadline?: Date | null;
+};
+
+function toCompetitionValues<T extends CompetitionCreate | CompetitionUpdate>(
+  data: T,
+): T extends CompetitionCreate ? DrizzleCompetitionInsert : Partial<DrizzleCompetitionInsert> {
+  const result: Record<string, unknown> = { ...data };
   if (typeof result.registrationDeadline === 'string') {
     result.registrationDeadline = new Date(result.registrationDeadline);
   }
-  return result;
+  return result as never;
 }
 
 type NewClass = typeof competitionClasses.$inferInsert;
