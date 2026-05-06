@@ -53,6 +53,19 @@ const connectSchema = z.object({
     )
     .max(512)
     .optional(),
+  /**
+   * Audit LOW (2026-05-06): the outlet's settlement currency.
+   * Defaults to AED for the GCC-dominant tenant case but is captured
+   * here so SAR / KWD / etc. operators can connect without every
+   * payment 422-blocking on the currency-parity check downstream.
+   * 3-letter ISO 4217. The adapter's credential schema enforces the
+   * same constraint at the encryption boundary.
+   */
+  defaultCurrency: z
+    .string()
+    .length(3)
+    .regex(/^[A-Z]{3}$/, 'Currency must be a 3-letter ISO 4217 code (e.g. AED, SAR, KWD)')
+    .default('AED'),
   makeActive: z.boolean().default(true),
 })
   // Both header fields are paired — either set both or neither.
@@ -83,6 +96,7 @@ export async function POST(request: NextRequest) {
           credentials: {
             apiKey: data.apiKey,
             outletReference: data.outletReference,
+            defaultCurrency: data.defaultCurrency,
             ...(data.realmName ? { realmName: data.realmName } : {}),
             ...(data.webhookHeaderName
               ? { webhookHeaderName: data.webhookHeaderName }
