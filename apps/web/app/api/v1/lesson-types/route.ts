@@ -13,12 +13,14 @@ import { hasPermission } from '@/lib/permissions';
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      // Audit S-1: lesson types are pricing data riders need to render
-      // the booking form. Accept any of the booking-related read grants
-      // — staff (`bookings:read`), riders (`bookings:read_own`), parents
-      // (`bookings:read_child`), or anyone allowed to create bookings
-      // (`bookings:create` / `bookings:create_child`).
+      // Audit S-1 + F-7 (2026-05-06): lesson types are pricing data
+      // riders need to render the booking form. Accept the dedicated
+      // `lesson_types:read` (coaches/grooms/admin/manager) or any
+      // booking-related grant — staff (`bookings:read`), riders
+      // (`bookings:read_own`), parents (`bookings:read_child`), or
+      // anyone allowed to create bookings.
       const canRead =
+        hasPermission(ctx.orgRole, 'lesson_types:read') ||
         hasPermission(ctx.orgRole, 'bookings:read') ||
         hasPermission(ctx.orgRole, 'bookings:read_own') ||
         hasPermission(ctx.orgRole, 'bookings:read_child') ||
@@ -59,10 +61,10 @@ export async function POST(request: NextRequest) {
 
       return successResponse(lessonType, 201);
     },
-    // Lesson-type creation sets prices used at booking time; gating on
-    // `bookings:create` (which riders hold for self-service booking) would
-    // let any rider mint a price-1 lesson type and book against it. Match
-    // the PATCH/DELETE handlers below — admin/manager only.
-    { requiredPermission: 'bookings:update' },
+    // Audit F-7 (2026-05-06): dedicated `lesson_types:create` instead
+    // of piggybacking on `bookings:update`. Lesson-type creation sets
+    // prices used at booking time; the original gate's wildcard match
+    // worked but coupled rider booking permissions with staff config.
+    { requiredPermission: 'lesson_types:create' },
   );
 }

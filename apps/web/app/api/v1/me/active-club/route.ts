@@ -34,12 +34,15 @@ const CSRF_ALLOWED_ORIGINS = new Set(
 
 function isSameOriginRequest(request: NextRequest): boolean {
   const origin = request.headers.get('origin');
-  if (!origin) {
-    // Server-to-server callers (no Origin header — e.g. wrangler dev curl,
-    // monitoring probes) are never the CSRF threat model: a browser
-    // attacker can't strip Origin from a fetch with credentials. Allow.
-    return true;
-  }
+  // Audit F-6 (2026-05-06): require either a known Origin OR our custom
+  // CSRF header. The previous fall-open on missing Origin trusted a
+  // bigger surface than the comment claimed (legacy form submissions,
+  // some embedded WebViews omit Origin). The custom header is set by
+  // every `fetchJson` call; a cross-site form post can't set it without
+  // a CORS preflight the server refuses. Server-to-server callers
+  // (curl, monitoring probes) can pass either Origin or the header.
+  if (request.headers.get('x-cavaliq-csrf') === '1') return true;
+  if (!origin) return false;
   // Always-allow the request's own URL origin (handles localhost, preview
   // domains) plus the explicit allowlist for production.
   if (origin === request.nextUrl.origin) return true;

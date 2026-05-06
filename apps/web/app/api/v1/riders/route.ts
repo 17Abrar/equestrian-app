@@ -21,6 +21,26 @@ export async function GET(request: NextRequest) {
 
       const { data, total } = await getRidersByClub(ctx.clubId, filters);
 
+      // Audit F-20 (2026-05-06 comprehensive): rider profiles include
+      // decrypted medical notes (PHI) and emergency contact details.
+      // Staff with `riders:read` (admin / manager / coach) legitimately
+      // need the data, but the at-rest encryption layer doesn't tell us
+      // WHO read it. Emit a coarse audit-log row per response so a
+      // compromised coach token can't dump the roster's PHI without
+      // leaving a trail. One row per request (not per record) keeps the
+      // audit_log writable footprint bounded.
+      const medicalNoteRowCount = data.filter((r) => r.medicalNotes != null).length;
+      void ctx.audit({
+        action: 'rider_medical_notes.list_accessed',
+        resourceType: 'rider_list',
+        changes: {
+          page: { from: null, to: filters.page },
+          pageSize: { from: null, to: filters.pageSize },
+          rowsServed: { from: null, to: data.length },
+          rowsWithMedicalNotes: { from: null, to: medicalNoteRowCount },
+        },
+      });
+
       return paginatedResponse(data, {
         page: filters.page,
         pageSize: filters.pageSize,
