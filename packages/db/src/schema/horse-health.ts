@@ -11,6 +11,7 @@ import {
   numeric,
   index,
   foreignKey,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { fileCategoryEnum } from './enums';
 import { clubs } from './clubs';
@@ -185,6 +186,47 @@ export const horseExerciseSchedules = pgTable('horse_exercise_schedules', {
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('cascade'),
 ]);
+
+/**
+ * Round 6.2 — horse care reminders dedup table. The cron at
+ * `/api/cron/horse-care-reminders` writes one row each time an email
+ * lands for a particular (club, kind, source row, threshold) tuple.
+ * The unique constraint blocks double-sends; the row stays forever as
+ * an audit trail. Migration 0037.
+ *
+ * `kind` discriminates which underlying source the `source_id` points
+ * at:
+ *   - 'horse_health_record_due'      → horse_health_records.id (next_due_date)
+ *   - 'horse_health_record_followup' → horse_health_records.id (follow_up_date)
+ *   - 'horse_insurance'              → horses.id (insurance_expiry)
+ *   - 'horse_medication_end'         → horse_medications.id (end_date)
+ *
+ * Not declared as an enum because future reminder kinds will be added
+ * incrementally without a migration; the cron is the source of truth
+ * for which kinds it actually emits.
+ */
+export const horseCareReminderSends = pgTable(
+  'horse_care_reminder_sends',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clubId: uuid('club_id')
+      .notNull()
+      .references(() => clubs.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 50 }).notNull(),
+    sourceId: uuid('source_id').notNull(),
+    thresholdDays: integer('threshold_days').notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_horse_care_reminder_sends_club').on(table.clubId, table.sentAt),
+    unique('horse_care_reminder_sends_unique').on(
+      table.clubId,
+      table.kind,
+      table.sourceId,
+      table.thresholdDays,
+    ),
+  ],
+);
 
 export const horseDocuments = pgTable('horse_documents', {
   id: uuid('id').primaryKey().defaultRandom(),

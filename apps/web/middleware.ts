@@ -122,6 +122,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/livery-billing',
   '/api/cron/platform-billing',
   '/api/cron/booking-reminders',
+  '/api/cron/horse-care-reminders',
   '/api/v1/health',
   // Sentry's tunnel route — forwards client-side errors through our origin
   // so they aren't blocked by ad-blockers. Must be reachable unauthenticated.
