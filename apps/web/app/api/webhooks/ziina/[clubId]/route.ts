@@ -45,15 +45,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
   const clubId = parsedClubId.data;
 
-  const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.ziina, 'ziina');
-  if (body === null) {
-    return new Response('Payload too large', { status: 413 });
-  }
+  // Audit F-12 (2026-05-06 r2): hoist the signature-header check
+  // BEFORE the body read so a forgery without the header pays
+  // constant cost — no JSON parse, no HMAC compute. The size cap
+  // already gates pathological inputs; this just makes the unsigned-
+  // forgery path even cheaper.
   const signature = request.headers.get('x-hmac-signature');
-
   if (!signature) {
     logger.warn('ziina_webhook_missing_signature', { clubId });
     return new Response('Missing signature', { status: 400 });
+  }
+
+  const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.ziina, 'ziina');
+  if (body === null) {
+    return new Response('Payload too large', { status: 413 });
   }
 
   // Audit B-9: getWebhookConfigByClubProvider returns ONLY the webhook
