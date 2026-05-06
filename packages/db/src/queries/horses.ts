@@ -18,12 +18,28 @@ interface HorseCreate extends Omit<DrizzleHorseCreate, 'heightHands' | 'weightKg
 
 type HorseUpdate = Partial<HorseCreate>;
 
-function toDecimalStrings(data: HorseCreate | HorseUpdate): Record<string, unknown> {
-  const result = { ...data };
+// Audit F-7 (2026-05-06 r3). Pre-fix the helper returned
+// `Record<string, unknown>`, which let `db.insert(...).values(payload)`
+// accept the loose intermediate via the `as` cast at the call site.
+// A new numeric field added to `horses` would silently bypass the
+// String() conversion and produce a runtime crash. Returning the
+// concrete `DrizzleHorseCreate` (or its partial form) closes that
+// hole — adding a new numeric Drizzle column without updating this
+// helper now breaks the type.
+type DrizzleHorseInsert = Omit<DrizzleHorseCreate, 'heightHands' | 'weightKg' | 'weightLimitKg'> & {
+  heightHands?: string | null;
+  weightKg?: string | null;
+  weightLimitKg?: string | null;
+};
+
+function toDecimalStrings<T extends HorseCreate | HorseUpdate>(
+  data: T,
+): T extends HorseCreate ? DrizzleHorseInsert : Partial<DrizzleHorseInsert> {
+  const result: Record<string, unknown> = { ...data };
   if (result.heightHands != null) result.heightHands = String(result.heightHands);
   if (result.weightKg != null) result.weightKg = String(result.weightKg);
   if (result.weightLimitKg != null) result.weightLimitKg = String(result.weightLimitKg);
-  return result;
+  return result as never;
 }
 
 type OwnershipStatus = 'pending' | 'active' | 'retired' | 'declined';

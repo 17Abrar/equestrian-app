@@ -38,11 +38,19 @@ interface RiderProfileUpdate extends Omit<DrizzleRiderUpdate, 'weightKg' | 'heig
   heightCm?: number | string | null;
 }
 
-function toRiderDecimalStrings(data: RiderProfileUpdate): Record<string, unknown> {
-  const result = { ...data };
+// Audit F-7 (2026-05-06 r3). Concrete return type — see horses.ts
+// for rationale. Adding a new numeric column without updating this
+// helper now breaks the type.
+type DrizzleRiderProfileUpdate = Omit<DrizzleRiderUpdate, 'weightKg' | 'heightCm'> & {
+  weightKg?: string | null;
+  heightCm?: string | null;
+};
+
+function toRiderDecimalStrings(data: RiderProfileUpdate): DrizzleRiderProfileUpdate {
+  const result: Record<string, unknown> = { ...data };
   if (result.weightKg != null) result.weightKg = String(result.weightKg);
   if (result.heightCm != null) result.heightCm = String(result.heightCm);
-  return result;
+  return result as DrizzleRiderProfileUpdate;
 }
 
 interface RiderFilters {
