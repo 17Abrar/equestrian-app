@@ -58,6 +58,12 @@ export async function POST(request: NextRequest) {
   const unauthorized = await requireCronSecret(request, 'livery_cron');
   if (unauthorized) return unauthorized;
 
+  // Audit F-15 (2026-05-06): emit a started event before work begins so
+  // an alert rule can fire on "started without completed in 10 min".
+  // A cron that crashes the Worker before the catch handler runs leaves
+  // no completion log; the started/completed pair detects the absence.
+  logger.info('livery_cron_started');
+
   // UTC `today` is used as the SQL upper bound on candidates — it's a
   // conservative filter that catches every horse/invoice whose club-local
   // today is at or past the due/start date. The cron then filters per club
@@ -438,21 +444,20 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
         }
       }
 
-      // Send the email FIRST and only increment reminder_count on a
-      // successful send. The previous order incremented before sending, so a
-      // transient Resend outage on day 7 would burn the day-7 reminder slot
-      // — the next cron pass keys off reminder_count and would jump straight
-      // to the day-14 cadence, leaving the owner without the day-7 nudge.
-      // Synchronous send (sendTriggeredEmail, not sendTriggeredEmailAsync) so
-      // failures throw and we can skip the increment.
+      // Audit F-14 (2026-05-06): claim-first ordering. Increment
+      // reminder_count BEFORE sending so a partial-failure (mark
+      // succeeds, email fails) doesn't loop the cron into spamming the
+      // recipient on every subsequent pass. Trade-off documented:
+      // a failed send leaves the threshold unfulfilled (one missed
+      // nudge) instead of repeating it. Operator sees `livery_reminder
+      // _send_failed` and can re-trigger manually. Mirrors the booking-
+      // reminder cron pattern.
       //
       // Owners with no email on file get a one-shot `pending → overdue`
-      // status flip (no counter bump) so a future email patch resumes the
-      // 7/14/30-day cadence from scratch — see audit G-2. Without this
-      // fix, three reminder slots got burned on null-email rows and the
-      // invoice went permanently silent even after the admin added a
-      // contact address.
+      // status flip (no counter bump) so a future email patch resumes
+      // the 7/14/30-day cadence from scratch — see audit G-2.
       if (inv.ownerEmail) {
+        await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
         await sendTriggeredEmail({
           clubId: inv.clubId,
           trigger: 'livery_invoice_overdue',
@@ -470,7 +475,6 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
             payLink,
           }),
         });
-        await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
         sent += 1;
       } else {
         await markInvoiceOverdueOnly(inv.clubId, inv.invoiceId);

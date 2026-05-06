@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
   const unauthorized = await requireCronSecret(request, 'platform_billing_cron');
   if (unauthorized) return unauthorized;
 
+  // Audit F-15 (2026-05-06): see livery cron for rationale.
+  logger.info('platform_billing_cron_started');
+
   const utcToday = new Date().toISOString().slice(0, 10);
 
   try {
@@ -393,14 +396,17 @@ async function sendPlatformReminders(
         }
       }
 
-      // Send the email FIRST and only increment the reminder counter on
-      // a successful send. Out-of-order would burn a slot on a
-      // transient Resend outage and leave the next cron pass jumping
-      // straight to the next threshold (mirrors livery audit G-2).
-      // Clubs with no email on file get a one-shot `pending → overdue`
-      // status flip with no counter bump so the cadence resumes from
-      // scratch when the admin patches the email in.
+      // Audit F-14 (2026-05-06): claim-first ordering. Mark the
+      // invoice + bump reminder_count BEFORE sending, so a partial
+      // failure (mark succeeds, email fails or DB error after a
+      // successful send) doesn't loop the cron into spamming the club
+      // on every subsequent pass. A failed send leaves the threshold
+      // unfulfilled (one missed nudge) and operator sees
+      // `platform_reminder_email_rejected` to manually re-trigger.
+      // Clubs with no email get a one-shot `pending → overdue` status
+      // flip with no counter bump.
       if (inv.clubEmail) {
+        await markPlatformInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
         const result = await sendEmail({
           to: inv.clubEmail,
           subject:
@@ -429,14 +435,11 @@ async function sendPlatformReminders(
           }),
         });
         if (result.sent) {
-          await markPlatformInvoiceOverdueAndLogReminder(
-            inv.clubId,
-            inv.invoiceId,
-          );
           sent += 1;
         } else {
           // Email infra rejected (most often `EMAIL_FROM` unset in
-          // staging). Don't burn the reminder slot.
+          // staging). Threshold already burned per F-14; operator can
+          // re-send manually from the resolved error.
           logger.error('platform_reminder_email_rejected', {
             invoiceId: inv.invoiceId,
             clubId: inv.clubId,

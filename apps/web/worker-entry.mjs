@@ -80,11 +80,22 @@ export default {
         { path: '/api/cron/horse-care-reminders', label: 'horse_care' },
       ],
     };
-    const cronTargets =
-      KNOWN_CRON_TARGETS[event.cron] ?? [
-        { path: '/api/cron/livery-billing', label: 'livery' },
-        { path: '/api/cron/platform-billing', label: 'platform' },
-      ];
+    // Audit F-26 (2026-05-06 comprehensive). Hard-fail an unknown
+    // schedule rather than silently routing to livery+platform. The
+    // previous fallback meant a misconfigured wrangler.jsonc (e.g. an
+    // `0 * * * *` rewritten to `0 1 * * *` by accident) would silently
+    // double-fire the daily crons every hour AND drop every booking-
+    // reminder tick — the cron schedule is a load-bearing config, not
+    // a hint. Operators see `cron_scheduled_unknown_schedule` in
+    // Cloudflare Logpush; pair with a Sentry alert rule on the event.
+    const cronTargets = KNOWN_CRON_TARGETS[event.cron];
+    if (!cronTargets) {
+      console.error('cron_scheduled_unknown_schedule', {
+        cron: event.cron,
+        knownSchedules: Object.keys(KNOWN_CRON_TARGETS),
+      });
+      return;
+    }
 
     const tasks = cronTargets.map((target) => {
       const url = new URL(target.path, 'https://internal.worker/');
@@ -125,7 +136,7 @@ export default {
           // it lands in Cloudflare's observability tail. Operators
           // monitoring `cron_scheduled_failed` need a separate Logpush
           // alert rule until @sentry/cloudflare is wired into this entry —
-          // tracked by audit H-6.
+          // tracked by audit H-6 / F-35 (2026-05-06).
           console.error('cron_scheduled_failed', {
             cron: event.cron,
             target: target.label,

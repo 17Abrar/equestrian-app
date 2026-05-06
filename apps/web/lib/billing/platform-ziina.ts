@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { safeProviderPreview } from '@/lib/payments/types';
 
 /**
  * Platform-billing Ziina helper. Uses Cavaliq's OWN Ziina merchant
@@ -116,7 +117,7 @@ export async function createPlatformPaymentIntent(
     const text = await res.text().catch(() => '');
     throw new PlatformZiinaError(
       res.status === 401 || res.status === 403 ? 'AUTH_FAILED' : 'CREATE_PAYMENT_FAILED',
-      `Ziina platform payment-intent creation failed (${res.status}): ${text.slice(0, 200)}`,
+      `Ziina platform payment-intent creation failed (${res.status}): ${safeProviderPreview(text)}`,
       { retryable: res.status >= 500 || res.status === 429 },
     );
   }

@@ -15,6 +15,7 @@ import {
   type WebhookEvent,
   type PaymentIntentStatus,
   PaymentProviderError,
+  safeProviderPreview,
 } from './types';
 
 /**
@@ -100,7 +101,7 @@ async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
     const text = await res.text().catch(() => '');
     throw new PaymentProviderError(
       'AUTH_FAILED',
-      `N-Genius auth failed (${res.status}): ${text.slice(0, 200)}`,
+      `N-Genius auth failed (${res.status}): ${safeProviderPreview(text)}`,
       { retryable: res.status >= 500 || res.status === 429 },
     );
   }
@@ -339,7 +340,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       const text = await res.text().catch(() => '');
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
-        `N-Genius order creation failed (${res.status}): ${text.slice(0, 200)}`,
+        `N-Genius order creation failed (${res.status}): ${safeProviderPreview(text)}`,
         { retryable: res.status >= 500 || res.status === 429 },
       );
     }
@@ -434,7 +435,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       const text = await refundRes.text().catch(() => '');
       throw new PaymentProviderError(
         'REFUND_FAILED',
-        `N-Genius refund failed (${refundRes.status}): ${text.slice(0, 200)}`,
+        `N-Genius refund failed (${refundRes.status}): ${safeProviderPreview(text)}`,
       );
     }
 

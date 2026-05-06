@@ -38,6 +38,9 @@ export async function POST(request: NextRequest) {
   const unauthorized = await requireCronSecret(request, 'booking_reminder_cron');
   if (unauthorized) return unauthorized;
 
+  // Audit F-15 (2026-05-06): see livery cron for rationale.
+  logger.info('booking_reminder_cron_started');
+
   const now = new Date();
 
   try {
