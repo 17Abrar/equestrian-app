@@ -64,6 +64,11 @@ export function PayBookingDialog({
   onPaid,
 }: PayBookingDialogProps) {
   const createPayment = usePaymentForBooking();
+  // Audit F-32 (2026-05-06): destructure `mutateAsync` so the deps
+  // array can include the stable callback explicitly. Mirrors the
+  // booking-detail-page pattern; replaces the previous
+  // `eslint-disable-next-line react-hooks/exhaustive-deps`.
+  const createPaymentMutateAsync = createPayment.mutateAsync;
   const [payment, setPayment] = useState<BookingPaymentResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,8 +83,7 @@ export function PayBookingDialog({
     if (payment) return;
 
     let cancelled = false;
-    createPayment
-      .mutateAsync(bookingId)
+    createPaymentMutateAsync(bookingId)
       .then((res) => {
         if (cancelled) return;
         // Audit F-8: `fetchJson` throws on `!res.ok` — `res` is always a
@@ -104,10 +108,7 @@ export function PayBookingDialog({
     return () => {
       cancelled = true;
     };
-    // createPayment is a stable mutation object; including payment in deps would
-    // loop on state changes. We deliberately only trigger on open/booking change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, bookingId]);
+  }, [open, bookingId, payment, createPaymentMutateAsync]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

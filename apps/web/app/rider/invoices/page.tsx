@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { safeHref } from '@/lib/safe-href';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatCurrency, formatDate } from '@equestrian/shared/utils';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
@@ -148,8 +149,12 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
           )}
           {payable && invoice.payLink && (
             <Button size="sm" asChild className="mt-1">
+              {/* Audit F-18 (2026-05-06): server-stored URL still goes
+                  through safeHref — defense-in-depth at the render
+                  boundary. Mirrors the helper's adoption in
+                  livery-tab.tsx, subscription-panel.tsx, etc. */}
               <a
-                href={invoice.payLink}
+                href={safeHref(invoice.payLink)}
                 target="_blank"
                 rel="noopener noreferrer"
               >

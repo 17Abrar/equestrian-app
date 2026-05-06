@@ -1,4 +1,4 @@
-import { eq, and, desc, lt, sql, type SQL } from 'drizzle-orm';
+import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { auditLog } from '../schema/operations';
 
@@ -96,9 +96,24 @@ export async function getAuditLog(clubId: string, filters: AuditLogFilters) {
 
   const offset = (filters.page - 1) * filters.pageSize;
 
+  // Audit F-30 (2026-05-06): explicit projection. The audit_log row
+  // carries the JSONB `changes` column which can be multi-KB per row;
+  // a paginated list with `db.select()` hoists every byte over the
+  // wire on every load. Project only the columns the route surfaces.
   const [data, countResult] = await Promise.all([
     db
-      .select()
+      .select({
+        id: auditLog.id,
+        clubId: auditLog.clubId,
+        actorMemberId: auditLog.actorMemberId,
+        action: auditLog.action,
+        resourceType: auditLog.resourceType,
+        resourceId: auditLog.resourceId,
+        changes: auditLog.changes,
+        ipAddress: auditLog.ipAddress,
+        userAgent: auditLog.userAgent,
+        createdAt: auditLog.createdAt,
+      })
       .from(auditLog)
       .where(and(...conditions))
       .orderBy(desc(auditLog.createdAt))
@@ -153,7 +168,3 @@ export async function pruneAuditLog(retentionDays = 90, limit = 5000) {
   });
 }
 
-// Silence unused-import for `lt` — kept around so a future filtered
-// archive (e.g. `getAuditLogBefore(...)`) doesn't need to re-add the
-// import. Strip when that filter ships.
-export type _AuditLogLtUnused = typeof lt;

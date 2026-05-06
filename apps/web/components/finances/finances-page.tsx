@@ -171,11 +171,38 @@ function PaginationControls({
   );
 }
 
+// Audit F-28 (2026-05-06): content-shape skeletons that match the
+// row-card layout (avatar slot + two text lines + amount on right).
+// Replaces the previous bare `<Skeleton className="h-64" />` so the
+// loading view doesn't read as "still fetching the entire panel" and
+// rows don't layout-shift when they replace it.
+function FinanceRowListSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between rounded-lg border bg-card p-4"
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-5 w-20" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function InvoicesTab() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useInvoices({ page, pageSize: DEFAULT_PAGE_SIZE });
 
-  if (isLoading) return <Skeleton className="h-64" />;
+  if (isLoading) return <FinanceRowListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
 
   const invoices = data?.data ?? [];
@@ -215,7 +242,7 @@ function PaymentsTab() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = usePayments({ page, pageSize: DEFAULT_PAGE_SIZE });
 
-  if (isLoading) return <Skeleton className="h-64" />;
+  if (isLoading) return <FinanceRowListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
 
   const payments = data?.data ?? [];
@@ -255,7 +282,7 @@ function ExpensesTab() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: DEFAULT_PAGE_SIZE });
 
-  if (isLoading) return <Skeleton className="h-64" />;
+  if (isLoading) return <FinanceRowListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
 
   const expenses = data?.data ?? [];
@@ -531,7 +558,7 @@ function CouponsTab() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: DEFAULT_PAGE_SIZE });
 
-  if (isLoading) return <Skeleton className="h-64" />;
+  if (isLoading) return <FinanceRowListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
 
   const coupons = data?.data ?? [];

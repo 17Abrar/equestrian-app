@@ -79,8 +79,25 @@ export function AudiencesTab() {
     queryFn: () => fetchJson<ApiEnvelope<Audience[]>>('/api/v1/emails/audiences'),
   });
 
+  // Audit F-28 (2026-05-06): content-shape skeleton — audiences
+  // render as a card grid; mirror that shape so the loading view
+  // doesn't layout-shift when rows arrive.
   if (isLoading) {
-    return <Skeleton className="h-64" />;
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-lg border bg-card p-4 space-y-3">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-2/3" />
+            <div className="flex items-center justify-between pt-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-8 w-20" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
   if (isError) {
     return (

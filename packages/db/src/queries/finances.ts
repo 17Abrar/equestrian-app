@@ -133,8 +133,32 @@ export async function getExpensesByClub(clubId: string, filters: ExpenseFilters)
   const where = and(...conditions);
   const offset = (filters.page - 1) * filters.pageSize;
 
+  // Audit F-30 (2026-05-06): explicit projection. The previous
+  // `db.select()` hoisted every column over the wire including
+  // `receiptUrl` (potentially long signed URL) on a paginated list.
+  // Match `getPaymentsByClub`'s pattern.
   const [data, countResult] = await Promise.all([
-    db.select().from(expenses).where(where).orderBy(desc(expenses.date)).limit(filters.pageSize).offset(offset),
+    db
+      .select({
+        id: expenses.id,
+        clubId: expenses.clubId,
+        category: expenses.category,
+        description: expenses.description,
+        amount: expenses.amount,
+        currency: expenses.currency,
+        date: expenses.date,
+        horseId: expenses.horseId,
+        receiptUrl: expenses.receiptUrl,
+        vendorName: expenses.vendorName,
+        createdByMemberId: expenses.createdByMemberId,
+        createdAt: expenses.createdAt,
+        updatedAt: expenses.updatedAt,
+      })
+      .from(expenses)
+      .where(where)
+      .orderBy(desc(expenses.date))
+      .limit(filters.pageSize)
+      .offset(offset),
     db.select({ count: sql<number>`count(*)::int` }).from(expenses).where(where),
   ]);
 
@@ -258,8 +282,38 @@ export async function getCouponsByClub(clubId: string, filters: CouponFilters) {
   const where = and(...conditions);
   const offset = (filters.page - 1) * filters.pageSize;
 
+  // Audit F-30 (2026-05-06): explicit projection. Same rationale as
+  // getExpensesByClub — coupon table carries `applicableTypes` (text
+  // array) plus a wide set of cap/limit columns the list view doesn't
+  // need to surface row-by-row.
   const [data, countResult] = await Promise.all([
-    db.select().from(coupons).where(where).orderBy(desc(coupons.createdAt)).limit(filters.pageSize).offset(offset),
+    db
+      .select({
+        id: coupons.id,
+        clubId: coupons.clubId,
+        code: coupons.code,
+        discountType: coupons.discountType,
+        discountValue: coupons.discountValue,
+        maxDiscount: coupons.maxDiscount,
+        applicableTypes: coupons.applicableTypes,
+        minimumAmount: coupons.minimumAmount,
+        maxUses: coupons.maxUses,
+        maxUsesPerRider: coupons.maxUsesPerRider,
+        usageCount: coupons.usageCount,
+        firstTimeOnly: coupons.firstTimeOnly,
+        isStackable: coupons.isStackable,
+        status: coupons.status,
+        startsAt: coupons.startsAt,
+        expiresAt: coupons.expiresAt,
+        createdByMemberId: coupons.createdByMemberId,
+        createdAt: coupons.createdAt,
+        updatedAt: coupons.updatedAt,
+      })
+      .from(coupons)
+      .where(where)
+      .orderBy(desc(coupons.createdAt))
+      .limit(filters.pageSize)
+      .offset(offset),
     db.select({ count: sql<number>`count(*)::int` }).from(coupons).where(where),
   ]);
 
