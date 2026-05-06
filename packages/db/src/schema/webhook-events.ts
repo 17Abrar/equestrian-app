@@ -46,9 +46,22 @@ export const webhookEvents = pgTable(
     // Tenant scope (audit H-1, H-5). Nullable so events that arrive
     // without an obvious club mapping (e.g. unknown N-Genius outlet)
     // can still be persisted for replay; the route handler stamps it
-    // once the event resolves to an account. The unique key includes
-    // it so a future provider with non-globally-unique event IDs can't
-    // collide across tenants.
+    // once the event resolves to an account.
+    //
+    // Audit F-2 (2026-05-06 round 2). Note: the unique constraint
+    // BELOW is `(provider, event_id)` — `club_id` is NOT part of it.
+    // The previous version of this comment claimed it was, which was
+    // wrong. The current shape relies on each provider generating
+    // globally-unique event IDs per merchant account: Stripe `evt_…`
+    // are globally unique, and the N-Genius / Ziina adapters
+    // synthesize equivalent uniqueness (see `derivedEventId` in
+    // n-genius.ts and the body-hash composite in ziina.ts). The
+    // claim protocol (`claimWebhookEvent`) inserts BEFORE `club_id`
+    // is resolved, so a 3-column unique would silently break dedup
+    // for the NULL-club initial-insert case. If a future provider
+    // with merchant-scoped event IDs is added, the claim protocol
+    // needs to resolve club_id upfront — at which point the unique
+    // constraint can change in lockstep.
     clubId: uuid('club_id').references(() => clubs.id, { onDelete: 'set null' }),
     // Default reflects the two-phase claim protocol: a fresh row starts as
     // `'received'` (in-flight), the success path UPDATEs to `'processed'`,
