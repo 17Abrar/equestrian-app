@@ -583,21 +583,24 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     // Audit MED (2026-05-05 pass 2): write the POST-lock `recomputedAmount` /
     // `recomputedDiscount` if the coupon was locked above. Otherwise fall
     // through to caller-supplied values (no coupon path).
-    const insertValues = (
+    //
+    // Audit F-29 (2026-05-06): destructure `grossAmount` out before
+    // construction. `grossAmount` is a convention parameter on
+    // `BookingCreate` only — Drizzle's $inferInsert doesn't carry it.
+    // The previous shape used `as typeof bookings.$inferInsert` and a
+    // follow-up `as Record<string, unknown>` to mask it; both casts
+    // bypassed type safety at the only place where coupon-locked
+    // recomputed amounts merge with caller data.
+    const { grossAmount: _grossAmount, ...rest } = data;
+    const insertValues =
       recomputedAmount !== null && recomputedDiscount !== null
         ? {
-            ...data,
+            ...rest,
             clubId,
             amount: recomputedAmount,
             discountAmount: recomputedDiscount,
           }
-        : { ...data, clubId }
-    ) as typeof bookings.$inferInsert;
-    // `grossAmount` is a convention parameter on `BookingCreate` only —
-    // strip it before handing to Drizzle.
-    if ('grossAmount' in insertValues) {
-      delete (insertValues as Record<string, unknown>).grossAmount;
-    }
+        : { ...rest, clubId };
     const result = await tx.insert(bookings).values(insertValues).returning();
     const booking = result[0];
 

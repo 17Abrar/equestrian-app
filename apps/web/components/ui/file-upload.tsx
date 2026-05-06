@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
+import { safeHref } from '@/lib/safe-href';
 
 interface FileUploadProps {
   /** Current file URL (displays existing file) */
@@ -222,7 +223,10 @@ export function FileUpload({
         <FileText className="h-8 w-8 text-muted-foreground" />
         <div className="flex-1 min-w-0">
           <p className="truncate text-sm font-medium">{value.split('/').pop()}</p>
-          <a href={value} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+          {/* Audit F-19 (2026-05-06): server-returned R2 URL still
+              goes through safeHref at the render boundary —
+              defense-in-depth, matches documents-tab.tsx pattern. */}
+          <a href={safeHref(value)} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
             View file
           </a>
         </div>
