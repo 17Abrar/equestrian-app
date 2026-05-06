@@ -15,7 +15,9 @@
     "./livery-payment-received": "./src/livery-payment-received.tsx",
     "./livery-invoice-overdue": "./src/livery-invoice-overdue.tsx",
     "./subscription-invoice-issued": "./src/subscription-invoice-issued.tsx",
-    "./subscription-payment-received": "./src/subscription-payment-received.tsx"
+    "./subscription-payment-received": "./src/subscription-payment-received.tsx",
+    "./subscription-invoice-overdue": "./src/subscription-invoice-overdue.tsx",
+    "./trial-ending": "./src/trial-ending.tsx"
   },
   "dependencies": {
     "@equestrian/shared": "workspace:*",

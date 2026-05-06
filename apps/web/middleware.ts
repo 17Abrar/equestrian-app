@@ -121,6 +121,7 @@ const isPublicRoute = createRouteMatcher([
   // Cloudflare's scheduled() invocation has no user context.
   '/api/cron/livery-billing',
   '/api/cron/platform-billing',
+  '/api/cron/booking-reminders',
   '/api/v1/health',
   // Sentry's tunnel route — forwards client-side errors through our origin
   // so they aren't blocked by ad-blockers. Must be reachable unauthenticated.

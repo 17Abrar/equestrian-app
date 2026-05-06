@@ -253,6 +253,13 @@
       "when": 1777248000024,
       "tag": "0035_audit_pass_2_schema_drift",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1777248000025,
+      "tag": "0036_booking_reminder_tracking",
+      "breakpoints": true
     }
   ]
 }

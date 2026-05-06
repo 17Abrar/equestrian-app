@@ -56,16 +56,25 @@ export default {
       return;
     }
 
-    // Audit PROC-1 (2026-05-05 pass 2): dispatch by `event.cron` so the
-    // two billing runs no longer share a single 30-second-CPU-budget
-    // invocation. `0 2 * * *` fires the livery cron, `15 2 * * *` fires
-    // platform billing. Anything else falls back to running both
-    // (defensive — a misconfigured wrangler.jsonc or future schedule
-    // addition won't silently skip the cron the operator forgot to
-    // route).
+    // Audit PROC-1 (2026-05-05 pass 2) + Round 6.1: dispatch by
+    // `event.cron` so each billing pass and the hourly booking-reminder
+    // cron run on their own 30-second-CPU-budget invocation.
+    //   `0 2 * * *`  → livery billing
+    //   `15 2 * * *` → platform billing (issuance + reminders + trial)
+    //   `0 * * * *`  → booking-reminder cron (hourly)
+    // Unknown cron strings fall back to running every billing target
+    // (defensive — a misconfigured wrangler.jsonc shouldn't silently
+    // skip the cron the operator forgot to route). The hourly booking
+    // reminder is intentionally NOT in the fallback because triggering
+    // it on a non-hourly schedule wastes Resend quota; if the event
+    // string is unknown, only the safe-to-double-run billing crons
+    // fire.
     const KNOWN_CRON_TARGETS = {
       '0 2 * * *': [{ path: '/api/cron/livery-billing', label: 'livery' }],
       '15 2 * * *': [{ path: '/api/cron/platform-billing', label: 'platform' }],
+      '0 * * * *': [
+        { path: '/api/cron/booking-reminders', label: 'booking_reminders' },
+      ],
     };
     const cronTargets =
       KNOWN_CRON_TARGETS[event.cron] ?? [
