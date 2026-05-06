@@ -15,6 +15,7 @@ import {
   type WebhookEvent,
   type PaymentIntentStatus,
   PaymentProviderError,
+  safeProviderPreview,
 } from './types';
 
 /**
@@ -150,7 +151,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       const text = await res.text().catch(() => '');
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
-        `Ziina payment-intent creation failed (${res.status}): ${text.slice(0, 200)}`,
+        `Ziina payment-intent creation failed (${res.status}): ${safeProviderPreview(text)}`,
         { retryable: res.status >= 500 || res.status === 429 },
       );
     }
@@ -194,7 +195,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       const text = await res.text().catch(() => '');
       throw new PaymentProviderError(
         'REFUND_FAILED',
-        `Ziina refund failed (${res.status}): ${text.slice(0, 200)}`,
+        `Ziina refund failed (${res.status}): ${safeProviderPreview(text)}`,
       );
     }
 

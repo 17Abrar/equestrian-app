@@ -211,3 +211,34 @@ export class PaymentProviderError extends Error {
     }
   }
 }
+
+/**
+ * Audit F-16 (2026-05-06 comprehensive). Adapters embed up to 200
+ * characters of provider response body in their thrown error
+ * messages — a useful debug signal but a defense-in-depth gap when
+ * the response body echoes a cardholder name, last4, or rider email
+ * back. The logger's `scrubPiiInString` runs at the structured-log
+ * boundary, but provider-error messages also surface in `cause.
+ * message` and operator-visible toasts; sanitizing at the source
+ * keeps both layers safe.
+ *
+ * Strips email/phone shapes, then truncates to 200 chars.
+ */
+const PROVIDER_BODY_PII_PATTERNS: ReadonlyArray<{ regex: RegExp; replacement: string }> = [
+  { regex: /[\w.+-]+@[\w-]+\.[\w.-]+/g, replacement: '[REDACTED-EMAIL]' },
+  { regex: /\+\d[\d\s().-]{6,}\d/g, replacement: '[REDACTED-PHONE]' },
+  { regex: /\(\d{2,4}\)\s*\d[\d\s.-]{4,}\d/g, replacement: '[REDACTED-PHONE]' },
+  // Cardholder name labels — common shapes in N-Genius / Ziina error
+  // bodies. Conservative: only triggers when the label is present
+  // (won't strip a plain "John Doe" mid-sentence).
+  { regex: /(cardholder(?:Name)?\s*[:=]\s*)["']?[A-Za-z][\w\s.'-]{1,80}/gi, replacement: '$1[REDACTED-NAME]' },
+  { regex: /(name\s*[:=]\s*)["']?[A-Z][a-z]+\s+[A-Z][a-z]+/g, replacement: '$1[REDACTED-NAME]' },
+];
+
+export function safeProviderPreview(rawBody: string, maxChars = 200): string {
+  let scrubbed = rawBody;
+  for (const { regex, replacement } of PROVIDER_BODY_PII_PATTERNS) {
+    scrubbed = scrubbed.replace(regex, replacement);
+  }
+  return scrubbed.slice(0, maxChars);
+}

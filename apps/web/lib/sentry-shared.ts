@@ -5,8 +5,14 @@ import type { Breadcrumb, BreadcrumbHint, ErrorEvent, EventHint } from '@sentry/
 // `[REDACTED]` before the event leaves the server.
 //
 // Audit AI-37 — extended to cover PII keys (email/phone/name/user/customer)
-// since `sendDefaultPii: true` is on for triage value (IP/UA) but the URL
-// scrub must not leak query-string PII to the error vendor.
+// so URL scrubs never leak query-string PII to the error vendor.
+//
+// Audit F-27 (2026-05-06): NB — `sendDefaultPii` is currently set to
+// `false` in both `sentry.server.config.ts` and
+// `instrumentation-client.ts` (audit F-4 2026-05-05 turned it off).
+// IP/UA are NOT being sent today. The scrubbers below remain on as
+// defense-in-depth for any future opt-in. If `sendDefaultPii` flips
+// back to `true`, extend the SENSITIVE_QUERY_KEY pattern as needed.
 const SENSITIVE_QUERY_KEY =
   /code|state|token|secret|key|session|password|email|phone|name|user|customer/i;
 
