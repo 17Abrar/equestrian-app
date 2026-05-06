@@ -117,7 +117,7 @@ export async function createPlatformPaymentIntent(
     throw new PlatformZiinaError(
       res.status === 401 || res.status === 403 ? 'AUTH_FAILED' : 'CREATE_PAYMENT_FAILED',
       `Ziina platform payment-intent creation failed (${res.status}): ${text.slice(0, 200)}`,
-      { retryable: res.status >= 500 },
+      { retryable: res.status >= 500 || res.status === 429 },
     );
   }
 

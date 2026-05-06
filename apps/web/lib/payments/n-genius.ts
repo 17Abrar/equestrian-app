@@ -101,7 +101,7 @@ async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
     throw new PaymentProviderError(
       'AUTH_FAILED',
       `N-Genius auth failed (${res.status}): ${text.slice(0, 200)}`,
-      { retryable: res.status >= 500 },
+      { retryable: res.status >= 500 || res.status === 429 },
     );
   }
 
@@ -340,7 +340,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
         `N-Genius order creation failed (${res.status}): ${text.slice(0, 200)}`,
-        { retryable: res.status >= 500 },
+        { retryable: res.status >= 500 || res.status === 429 },
       );
     }
 
@@ -574,14 +574,32 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           .slice(0, 24);
 
     const status = mapState(payload.eventName ?? fields.state);
-    // For partial-refund events, surface the actual refund delta so the
-    // webhook handler can call `recordBookingRefund(amount)` and increment
-    // the running total — see audit C-1. The most recent refund entry
-    // is the delta of THIS event; total refunded gives a defensive lower
-    // bound when the latest entry isn't surfaced.
-    const refundAmountMinor =
-      status === 'partial_refunded' || status === 'refunded'
-        ? fields.lastRefundAmountMinor ?? fields.refundedTotalMinor
+    // Audit F-4 (2026-05-06 comprehensive). Refund-amount surfacing
+    // splits two paths so the webhook helper applies the right
+    // semantics:
+    //
+    //   - `refundAmountMinor` is a DELTA (the value of the most recent
+    //     refund entry). Used by the helper's per-event-delta branch
+    //     to call `recordBookingRefund(delta)`. Only set when the
+    //     embedded refunds list surfaced `lastRefundAmountMinor`.
+    //
+    //   - `refundCumulativeMinor` is the TOTAL refunded against the
+    //     payment leg. Used by the helper's cumulative-to-delta
+    //     branch (introduced in HIGH-3 for Stripe) to derive the
+    //     correct delta from `cumulative - priorLedger`. Falls back
+    //     here when the embedded refunds list is empty (some N-Genius
+    //     gateway versions don't expand it on PARTIALLY_REFUNDED).
+    //
+    // The pre-fix code returned the cumulative total in
+    // `refundAmountMinor`, which the helper treated as a delta and
+    // double-counted on the second partial refund.
+    const isRefundStatus = status === 'partial_refunded' || status === 'refunded';
+    const refundAmountMinor = isRefundStatus
+      ? fields.lastRefundAmountMinor
+      : undefined;
+    const refundCumulativeMinor =
+      isRefundStatus && fields.lastRefundAmountMinor === undefined
+        ? fields.refundedTotalMinor
         : undefined;
 
     return {
@@ -597,6 +615,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       amountReceivedMinorUnits: fields.amountValue,
       currency: fields.amountCurrency?.toUpperCase(),
       refundAmountMinor,
+      refundCumulativeMinor,
       // For partial refunds, signal `succeeded` so the webhook helper
       // can use `recordBookingRefund` (mirrors Stripe's path). Full
       // refund still goes through the existing `'refunded'` mapping.
