@@ -255,12 +255,14 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  horseId: uuid('horse_id')
-    .notNull()
-    .references(() => horses.id, { onDelete: 'cascade' }),
-  riderMemberId: uuid('rider_member_id')
-    .notNull()
-    .references(() => clubMembers.id, { onDelete: 'cascade' }),
+  // Audit MED (2026-05-06 third pass — adjacent-table follow-up):
+  // inline single-column FKs were dropped in migration 0039 and
+  // replaced with composite (col, club_id) → parent(id, club_id) FKs
+  // declared in the table-extras below. Both composites preserve the
+  // existing ON DELETE CASCADE semantics — a pairing record is
+  // meaningless without the horse + rider it pairs.
+  horseId: uuid('horse_id').notNull(),
+  riderMemberId: uuid('rider_member_id').notNull(),
   bookingId: uuid('booking_id')
     .notNull()
     .references(() => bookings.id, { onDelete: 'cascade' }),
@@ -271,6 +273,16 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_pairing_horse_rider').on(table.horseId, table.riderMemberId),
+  foreignKey({
+    name: 'horse_pairing_history_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'horse_pairing_history_rider_member_club_fk',
+    columns: [table.riderMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const waitlist = pgTable(
@@ -283,9 +295,14 @@ export const waitlist = pgTable(
     slotId: uuid('slot_id')
       .notNull()
       .references(() => bookingSlots.id),
-    riderMemberId: uuid('rider_member_id')
-      .notNull()
-      .references(() => clubMembers.id),
+    // Audit MED (2026-05-06 third pass — adjacent-table follow-up):
+    // inline single-column FK was dropped in migration 0039 and
+    // replaced with the composite (rider_member_id, club_id) →
+    // club_members(id, club_id) declared in the table-extras below.
+    // ON DELETE NO ACTION preserved — a member deletion is blocked
+    // at the DB layer if waitlist entries remain, forcing operators
+    // to clear the waitlist explicitly through the application path.
+    riderMemberId: uuid('rider_member_id').notNull(),
 
     position: integer('position').notNull(),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
@@ -298,5 +315,10 @@ export const waitlist = pgTable(
   (table) => [
     unique('waitlist_slot_rider_unique').on(table.slotId, table.riderMemberId),
     index('idx_waitlist_slot').on(table.slotId, table.position),
+    foreignKey({
+      name: 'waitlist_rider_member_club_fk',
+      columns: [table.riderMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
   ],
 );
