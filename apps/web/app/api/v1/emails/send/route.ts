@@ -54,9 +54,15 @@ export async function POST(request: NextRequest) {
       // hit by the same club more than once per 60s, regardless of which
       // staff member sent it. Bounds the blast radius of a compromised
       // admin and protects against accidental loops in front-end code.
+      // Audit LOW (2026-05-06): failClosed for the spam-relay surface.
+      // Without this, an Upstash outage drops the limiter to per-isolate
+      // in-memory counters (see `lib/rate-limit.ts:163-194`), and a
+      // compromised admin token + outage = a brief window of unbounded
+      // sends from the club's verified Resend domain. failClosed makes
+      // the outage page rather than degrade silently.
       const recipientLimit = await checkRateLimit(
         `email:recipient:${ctx.clubId}:${data.to.toLowerCase()}`,
-        { maxRequests: 1, windowMs: 60_000 },
+        { maxRequests: 1, windowMs: 60_000, failClosed: true },
       );
       if (!recipientLimit.allowed) {
         return errorResponse(
@@ -70,7 +76,7 @@ export async function POST(request: NextRequest) {
       // compromised admin to 500 sends/day per club.
       const clubDay = await checkRateLimit(
         `email:club_day:${ctx.clubId}`,
-        { maxRequests: 500, windowMs: 24 * 60 * 60_000 },
+        { maxRequests: 500, windowMs: 24 * 60 * 60_000, failClosed: true },
       );
       if (!clubDay.allowed) {
         return errorResponse(
@@ -139,7 +145,10 @@ export async function POST(request: NextRequest) {
       requiredPermission: 'emails:create',
       // Cap ad-hoc sends well below the default 60/min. Transactional email
       // flows (booking confirmation etc.) bypass this endpoint entirely.
-      rateLimit: { maxRequests: 20, windowMs: 60_000 },
+      // failClosed (audit LOW 2026-05-06) — same rationale as the inline
+      // recipient/club caps above; an Upstash outage must NOT lift the
+      // limit on a verified-sender spam relay surface.
+      rateLimit: { maxRequests: 20, windowMs: 60_000, failClosed: true },
       routeKey: 'emails:send',
     },
   );

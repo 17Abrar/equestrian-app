@@ -6,6 +6,7 @@ import {
   findUpcomingHorseInsuranceExpiries,
   findUpcomingMedicationEnds,
   recordHorseCareReminderSend,
+  getLastHorseCareReminderSentAt,
   type CareReminderCandidate,
 } from '@equestrian/db/queries';
 import { getTodayDateString } from '@equestrian/shared/utils';
@@ -52,6 +53,20 @@ const KIND_THRESHOLDS: Record<HorseCareReminderKind, readonly number[]> = {
   horse_insurance: [30, 7, 1],
   horse_medication_end: [7, 1],
 };
+
+/**
+ * Audit MED (2026-05-06 closeout): minimum gap between consecutive
+ * reminders for the same (kind, sourceId). Without this, a record
+ * CREATED late (admin backfills a vaccination 5 days overdue) burns
+ * through every applicable threshold on consecutive daily cron runs
+ * (7→1→0), spamming 2-3 emails for one care item. The gap caps the
+ * cadence to one email per care item per N days. 5 is large enough
+ * that the 7d → 1d → 0d sequence still hits all three slots over a
+ * normal lead-up window (record exists ≥7d before due date), but
+ * close enough that a late-registered record only emits one email
+ * the day it's discovered + one final urgent ping.
+ */
+const MIN_REMINDER_GAP_DAYS = 5;
 
 export async function POST(request: NextRequest) {
   const headerSecret = request.headers.get('x-cron-secret');
@@ -191,6 +206,28 @@ async function processKind(
       if (!candidate.clubEmail) {
         skipped += 1;
         continue;
+      }
+
+      // Audit MED (2026-05-06 closeout): minimum-gap guard. Before
+      // walking thresholds, check the most recent send for this
+      // (kind, sourceId). If we've sent within the last
+      // MIN_REMINDER_GAP_DAYS, skip — even if a smaller (more urgent)
+      // threshold would now match. Prevents the consecutive-day burst
+      // for late-registered records (admin backfills a vaccination
+      // 5 days overdue → without this, three emails on three days).
+      const lastSentAt = await getLastHorseCareReminderSentAt({
+        clubId: candidate.clubId,
+        kind,
+        sourceId: candidate.sourceId,
+      });
+      if (lastSentAt) {
+        const daysSinceLast =
+          (new Date(`${clubToday}T00:00:00Z`).getTime() - lastSentAt.getTime()) /
+          (24 * 60 * 60 * 1000);
+        if (daysSinceLast < MIN_REMINDER_GAP_DAYS) {
+          skipped += 1;
+          continue;
+        }
       }
 
       // Find the highest threshold this candidate currently satisfies.

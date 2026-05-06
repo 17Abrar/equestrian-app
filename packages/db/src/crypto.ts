@@ -53,6 +53,18 @@ function loadKey(): Buffer {
   return key;
 }
 
+/**
+ * Audit LOW (2026-05-06 closeout): exported so the web app's
+ * `instrumentation.ts:register()` can validate the env var at app
+ * boot rather than lazily on first encrypt. Throws the same errors as
+ * `loadKey()` (missing env, all-zeros in production, wrong byte
+ * count). Sub-millisecond cold-start cost. Idempotent — subsequent
+ * calls hit the module-level cache.
+ */
+export function assertEncryptionKeyConfigured(): void {
+  loadKey();
+}
+
 export function encryptField(plaintext: string | null | undefined): string | null {
   if (plaintext == null || plaintext === '') return null;
 

@@ -65,8 +65,43 @@ const SENSITIVE_KEYS = new Set([
   'guest_name',
 ]);
 
+// Audit LOW (2026-05-06 closeout): content-aware PII scrub. The
+// key-name denylist above catches the conventional shapes
+// (`{ email: ... }`, `{ phone: ... }`) but a future log call that
+// shapes its payload differently (e.g. `{ description: rider.email }`,
+// `{ note: 'reach out at +971 50 ...' }`) would bypass it. These
+// regexes scrub the string VALUES — defense-in-depth for unconventional
+// keys. Anchored to formats that produce few false positives:
+//   - email: standard local@domain.tld shape
+//   - phone: international (+CC ...) or 7+ consecutive digits with
+//            optional spaces/dashes (catches GCC formats: +971 50 123 4567)
+// Keep these conservative; over-scrubbing would corrupt legitimate
+// log data (e.g. UUIDs containing 7+ consecutive hex digits is fine
+// because hex non-digits break the run).
+const PII_PATTERNS: ReadonlyArray<{ regex: RegExp; replacement: string }> = [
+  { regex: /[\w.+-]+@[\w-]+\.[\w.-]+/g, replacement: '[REDACTED-EMAIL]' },
+  // Phone: optional `+`, then 7+ digits with optional separators.
+  // The `\b...\b` boundaries prevent matching mid-UUID.
+  {
+    regex: /\b\+?\d[\d\s().-]{6,}\d\b/g,
+    replacement: '[REDACTED-PHONE]',
+  },
+];
+
+function scrubPiiInString(value: string): string {
+  let out = value;
+  for (const { regex, replacement } of PII_PATTERNS) {
+    out = out.replace(regex, replacement);
+  }
+  return out;
+}
+
 function sanitize(data: unknown, depth = 0): unknown {
   if (depth > 5) return '[nested]';
+
+  if (typeof data === 'string') {
+    return scrubPiiInString(data);
+  }
 
   if (Array.isArray(data)) {
     return data.map((item) => sanitize(item, depth + 1));

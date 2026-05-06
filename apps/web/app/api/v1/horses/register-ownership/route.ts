@@ -124,7 +124,11 @@ export async function POST(request: NextRequest) {
       // Audit AI-22 — admins must review every pending registration.
       // Cap at 5/hour per rider so a runaway form can't backlog the
       // admin queue with hundreds of pending rows.
-      rateLimit: { maxRequests: 5, windowMs: 3_600_000 },
+      // failClosed (audit LOW 2026-05-06) — Upstash outage must NOT
+      // lift the cap; the abuse-bounded routes elsewhere
+      // (`coupons/validate`, `discover/clubs`, `clubs/[slug]/join`)
+      // already use this posture.
+      rateLimit: { maxRequests: 5, windowMs: 3_600_000, failClosed: true },
       routeKey: 'register_ownership',
     },
   );

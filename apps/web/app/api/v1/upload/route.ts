@@ -166,6 +166,11 @@ export async function POST(request: NextRequest) {
     // comfortably covers the legitimate flows (registration form,
     // documents tab) while bounding the abuse surface for any
     // authenticated rider in a club.
-    { rateLimit: { maxRequests: 10, windowMs: 60_000 }, routeKey: 'upload' },
+    // failClosed (audit LOW 2026-05-06) — Upstash outage must NOT lift
+    // the cap on a route that mints presigned PUT URLs to R2.
+    {
+      rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
+      routeKey: 'upload',
+    },
   );
 }

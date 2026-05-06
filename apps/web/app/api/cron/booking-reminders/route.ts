@@ -172,10 +172,16 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
         ? booking.guestName ?? 'Guest'
         : booking.riderName ?? 'there';
       if (!recipientEmail) {
-        // Member without a contact email or guest booking missing the
-        // optional guest email. Mark sent anyway so the cron doesn't
-        // keep re-considering this booking on every hourly pass.
-        await markBookingReminderSent(booking.clubId, booking.bookingId);
+        // Audit LOW (2026-05-06): the previous shape called
+        // `markBookingReminderSent` here so the cron wouldn't
+        // re-consider the booking every hour. But that permanently
+        // dedup'd a booking whose rider had no email at the moment of
+        // the cron pass — if the parent later adds a contact email,
+        // the reminder never fires. Just `continue` instead: the
+        // booking falls out of the [now+23h, now+25h] window naturally
+        // once the slot start time passes, so re-considering it across
+        // the few hourly passes between now and then is cheap and
+        // gives a late-added email a chance to receive the reminder.
         skipped += 1;
         continue;
       }

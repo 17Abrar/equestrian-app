@@ -777,6 +777,35 @@ export async function recordHorseCareReminderSend(args: {
   return inserted.length > 0;
 }
 
+/**
+ * Audit MED (2026-05-06): when WAS the most recent reminder sent for
+ * this (club, kind, source) tuple, regardless of which threshold? The
+ * cron uses this to enforce a minimum-gap rule between consecutive
+ * sends. Without it, a record CREATED late (admin backfills a
+ * vaccination 5 days overdue) would burst three emails on consecutive
+ * days as the cron walks each unsent threshold (7→1→0). Returns null
+ * when no reminder has ever been sent for this source.
+ */
+export async function getLastHorseCareReminderSentAt(args: {
+  clubId: string;
+  kind: string;
+  sourceId: string;
+}): Promise<Date | null> {
+  const rows = await rawDb
+    .select({ sentAt: horseCareReminderSends.sentAt })
+    .from(horseCareReminderSends)
+    .where(
+      and(
+        eq(horseCareReminderSends.clubId, args.clubId),
+        eq(horseCareReminderSends.kind, args.kind),
+        eq(horseCareReminderSends.sourceId, args.sourceId),
+      ),
+    )
+    .orderBy(desc(horseCareReminderSends.sentAt))
+    .limit(1);
+  return rows[0]?.sentAt ?? null;
+}
+
 function humanizeCareLabel(recordType: string, title: string): string {
   // Fallback to title when the type slug is empty / unknown — a hand-
   // entered "Vaccination" title is more useful than the literal slug.
