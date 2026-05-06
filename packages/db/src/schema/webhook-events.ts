@@ -29,6 +29,13 @@ import { clubs } from './clubs';
  * Old rows are not auto-expired. A retention cron should prune
  * `processed_at < now() - interval '30 days'` so the table doesn't grow
  * unbounded.
+ *
+ * Audit F-33 (2026-05-06): no `created_at` / `updated_at` by design.
+ * `last_attempted_at` doubles as the row-creation timestamp (defaultNow,
+ * NOT NULL); `processed_at` flips once on success. The pair carries
+ * the lifecycle data those columns would otherwise duplicate. This is
+ * the only table in the schema without the standard timestamp pair —
+ * documented here so a future schema reviewer doesn't add them back.
  */
 export const webhookEvents = pgTable(
   'webhook_events',

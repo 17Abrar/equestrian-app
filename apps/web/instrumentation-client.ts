@@ -3,6 +3,12 @@ import { scrubSentryBreadcrumb, scrubSentryEvent } from './lib/sentry-shared';
 
 // Next 15+ canonical client instrumentation. Loads automatically in the
 // browser bundle. The old `sentry.client.config.ts` filename is deprecated.
+//
+// Audit F-31 (2026-05-06): verified parity with sentry.server.config.ts
+// and sentry.edge.config.ts — all three init points wire the same
+// `scrubSentryEvent` / `scrubSentryBreadcrumb` from `./lib/sentry-shared`,
+// leave `sendDefaultPii` at default false (audit F-4), and respect the
+// `enabled` gate on missing DSN. No PII scrub gap across runtimes.
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   // `sendDefaultPii` left at default (false) — audit F-4 (2026-05-05).
