@@ -164,6 +164,31 @@ export async function applyPaymentWebhook({
     return null;
   }
 
+  // Audit F-3 (2026-05-06 comprehensive): refund webhooks with a non-
+  // terminal `refundStatus` (Stripe `charge.refund.updated` with status
+  // 'pending' for ACH/SEPA, 'requires_action', or 'canceled') must not
+  // drive booking state. Without this short-circuit, the fall-through
+  // below would set `paymentStatus='refunded'` while `refundedAmountMinor`
+  // stays at 0 — silent payment loss. Only `'succeeded'` (recorded via
+  // the cumulative or per-event delta branches) and `'failed'` (reversed
+  // via the branch below) drive booking-state mutation.
+  if (
+    isRefundEvent &&
+    event.refundStatus &&
+    event.refundStatus !== 'succeeded' &&
+    event.refundStatus !== 'failed'
+  ) {
+    logger.info('webhook_refund_non_terminal_status', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      provider,
+      eventType: event.eventType,
+      refundStatus: event.refundStatus,
+      currentPaymentStatus: bookingRef.currentPaymentStatus,
+    });
+    return { clubId, bookingId: bookingRef.bookingId };
+  }
+
   // A `pending → failed` refund transition (Stripe `charge.refund.updated`
   // with refund.status = 'failed') means money the rider thought they got
   // back actually never returned. Reverse the ledger entry so finance reports

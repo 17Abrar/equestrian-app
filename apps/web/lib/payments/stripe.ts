@@ -493,7 +493,14 @@ export const stripeAdapter: PaymentProviderAdapter = {
       case 'charge.failed': {
         const charge = event.data.object;
         providerPaymentId = piPaymentIntentId(charge.payment_intent);
-        amountReceivedMinorUnits = charge.amount;
+        // Audit F-34 (2026-05-06 comprehensive): `charge.amount` is the
+        // requested amount; `charge.amount_captured` is what the card
+        // actually paid on a partial-capture flow. The fields agree on
+        // a normal full-capture, so the `?? charge.amount` fallback is
+        // safe; on a partial capture or hold, `amount_captured` is the
+        // truth. Latent today (HANDLED_EVENTS doesn't include charge.*)
+        // but worth fixing while the code is fresh.
+        amountReceivedMinorUnits = charge.amount_captured ?? charge.amount;
         currency = charge.currency?.toUpperCase();
         const md = charge.metadata;
         if (md && typeof md.bookingId === 'string') {

@@ -151,7 +151,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
         `Ziina payment-intent creation failed (${res.status}): ${text.slice(0, 200)}`,
-        { retryable: res.status >= 500 },
+        { retryable: res.status >= 500 || res.status === 429 },
       );
     }
 
