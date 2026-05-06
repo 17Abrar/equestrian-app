@@ -288,6 +288,13 @@
       "when": 1777248000029,
       "tag": "0040_extend_composite_fks_phase3",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1777248000030,
+      "tag": "0041_audit_r2_composite_fks",
+      "breakpoints": true
     }
   ]
 }

@@ -26,9 +26,12 @@ export const riderProfiles = pgTable(
     // ON DELETE SET NULL (audit H-7). Without this, deleting a parent member
     // is FK-blocked by their child's profile. A child's profile survives the
     // parent leaving the club; the field becomes informational.
-    parentMemberId: uuid('parent_member_id').references(() => clubMembers.id, {
-      onDelete: 'set null',
-    }),
+    //
+    // Audit F-6 (2026-05-06 r2): inline single-column FK dropped in
+    // migration 0041; replaced with composite (parent_member_id, club_id)
+    // → club_members(id, club_id) ON DELETE SET NULL declared in
+    // table-extras below — closes the cross-tenant smuggle surface.
+    parentMemberId: uuid('parent_member_id'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -46,5 +49,10 @@ export const riderProfiles = pgTable(
       columns: [table.memberId, table.clubId],
       foreignColumns: [clubMembers.id, clubMembers.clubId],
     }).onDelete('cascade'),
+    foreignKey({
+      name: 'rider_profiles_parent_member_club_fk',
+      columns: [table.parentMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }).onDelete('set null'),
   ],
 );

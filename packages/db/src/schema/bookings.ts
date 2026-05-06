@@ -83,7 +83,10 @@ export const lessonTypes = pgTable('lesson_types', {
   maxRiders: integer('max_riders').notNull().default(1),
   minRiders: integer('min_riders').notNull().default(1),
   maxSessionsPerDay: integer('max_sessions_per_day'),
-  arenaId: uuid('arena_id').references(() => arenas.id),
+  // Audit F-5 (2026-05-06 r2): inline single-column FK dropped in
+  // migration 0041; replaced with composite (arena_id, club_id) →
+  // arenas(id, club_id) declared in table-extras below.
+  arenaId: uuid('arena_id'),
   isActive: boolean('is_active').notNull().default(true),
   color: varchar('color', { length: 7 }),
 
@@ -94,6 +97,11 @@ export const lessonTypes = pgTable('lesson_types', {
   // FK target for composite (lesson_type_id, club_id) → lesson_types
   // (id, club_id) on booking_slots and packages. Migration 0040.
   unique('lesson_types_id_club_unique').on(table.id, table.clubId),
+  foreignKey({
+    name: 'lesson_types_arena_club_fk',
+    columns: [table.arenaId, table.clubId],
+    foreignColumns: [arenas.id, arenas.clubId],
+  }),
 ]);
 
 export const bookingSlots = pgTable('booking_slots', {
