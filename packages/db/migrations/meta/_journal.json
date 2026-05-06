@@ -267,6 +267,13 @@
       "when": 1777248000026,
       "tag": "0037_horse_care_reminder_sends",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1777248000027,
+      "tag": "0038_extend_composite_fks",
+      "breakpoints": true
     }
   ]
 }

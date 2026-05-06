@@ -125,9 +125,14 @@ export const bookings = pgTable('bookings', {
   slotId: uuid('slot_id')
     .notNull()
     .references(() => bookingSlots.id),
-  riderMemberId: uuid('rider_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit MED (2026-05-06 third pass): inline single-column FK was
+  // dropped in migration 0038 and replaced with the composite
+  // (rider_member_id, club_id) → club_members(id, club_id) declared in
+  // the table-extras below. ON DELETE NO ACTION (no clause) because
+  // bookings are historical financial records — a member deletion has
+  // to cascade through (or detach) bookings explicitly via app-layer
+  // logic, never silently lose the rider linkage.
+  riderMemberId: uuid('rider_member_id').notNull(),
   // Audit AI-22 (2026-05-05 pass 2): composite FK declared in the
   // table-extras below as `bookings_horse_club_fk` (horseId, clubId)
   // -> horses(id, clubId) ON DELETE SET NULL — matches migration 0033.
@@ -226,6 +231,18 @@ export const bookings = pgTable('bookings', {
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('set null'),
+  // Audit MED (2026-05-06 third pass): composite FK ensures
+  // `riderMemberId` always matches the booking's own `clubId` — a
+  // future writer that bypasses the route-level `getMemberById(ctx
+  // .clubId, …)` precheck cannot smuggle a foreign-tenant member id
+  // in. NO ACTION on delete (no clause) because bookings are
+  // historical financial records that must outlive the member row.
+  // Migration 0038.
+  foreignKey({
+    name: 'bookings_rider_member_club_fk',
+    columns: [table.riderMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
   // Composite FK target for `payments.booking_id, club_id`. Tautologically
   // unique because `id` is the PK, but Postgres needs the explicit
   // constraint to use the column pair as an FK target. Matches the

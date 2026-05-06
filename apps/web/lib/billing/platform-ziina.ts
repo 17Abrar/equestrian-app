@@ -234,8 +234,18 @@ export function verifyPlatformWebhook(input: {
       ? payload.data.created_at
       : 'nots';
 
+  // Audit LOW (2026-05-06 third pass): mirror the per-club ziina handler's
+  // body-hash tie-breaker (`apps/web/lib/payments/ziina.ts`). Without it,
+  // two events sharing `(event, intent_id, status, created_at)` collide
+  // on the dedup composite and the second is silently
+  // `already_processed`. 16-hex slice = 64 bits, sufficient when the
+  // rest of the composite already carries entropy.
+  const bodyHashTie = createHash('sha256')
+    .update(input.body)
+    .digest('hex')
+    .slice(0, 16);
   const eventId = intentId
-    ? `${eventName}:${intentId}:${statusKey}:${createdKey}`
+    ? `${eventName}:${intentId}:${statusKey}:${createdKey}:${bodyHashTie}`
     : `${eventName}:` +
       createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 

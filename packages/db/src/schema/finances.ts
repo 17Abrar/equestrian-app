@@ -235,7 +235,13 @@ export const expenses = pgTable('expenses', {
   amount: integer('amount').notNull(),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
   date: date('date').notNull(),
-  horseId: uuid('horse_id').references(() => horses.id),
+  // Audit MED (2026-05-06 third pass): inline single-column FK was
+  // dropped in migration 0038 and replaced with the composite
+  // (horse_id, club_id) → horses(id, club_id) ON DELETE SET NULL
+  // declared in the table-extras below. SET NULL keeps the expense
+  // as an unattributed club-level cost when the horse it referenced
+  // is deleted.
+  horseId: uuid('horse_id'),
   receiptUrl: text('receipt_url'),
   vendorName: varchar('vendor_name', { length: 255 }),
 
@@ -247,4 +253,9 @@ export const expenses = pgTable('expenses', {
   index('idx_expenses_date').on(table.clubId, table.date),
   index('idx_expenses_horse').on(table.horseId),
   index('idx_expenses_category').on(table.clubId, table.category),
+  foreignKey({
+    name: 'expenses_horse_club_fk',
+    columns: [table.horseId, table.clubId],
+    foreignColumns: [horses.id, horses.clubId],
+  }).onDelete('set null'),
 ]);
