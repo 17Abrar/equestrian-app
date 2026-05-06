@@ -11,7 +11,9 @@ import {
   unique,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   bookingStatusEnum,
   paymentStatusEnum,
@@ -183,6 +185,14 @@ export const bookings = pgTable('bookings', {
   status: bookingStatusEnum('status').notNull().default('pending'),
   paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
   paymentMethod: paymentMethodEnum('payment_method'),
+  // Audit F-11 (2026-05-06 r2). All four monetary columns below are
+  // in MINOR units (fils for AED — 100 fils = 1 AED). Display layer
+  // divides by 100; provider adapters expect minor units. Only
+  // `refundedAmountMinor` carries the suffix in its name; the other
+  // three are minor-unit by codebase convention. Renaming would
+  // touch every reference and is deferred until the project grows
+  // enough that the convention isn't memorable. DO NOT divide by
+  // 100 in queries that consume these — that's display-only.
   amount: integer('amount'),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
   discountAmount: integer('discount_amount').notNull().default(0),
@@ -249,6 +259,17 @@ export const bookings = pgTable('bookings', {
   index('idx_bookings_horse').on(table.horseId),
   index('idx_bookings_status').on(table.clubId, table.status),
   index('idx_bookings_date').on(table.clubId, table.createdAt),
+  // Audit F-18 (2026-05-06 r2). DB-level CHECK that money columns
+  // can't go negative. App layer enforces this on every write path,
+  // but a direct DB write or a future bug that bypasses route
+  // validation now bounces at the DB. Migration 0042.
+  check('bookings_amount_nonneg', sql`${table.amount} IS NULL OR ${table.amount} >= 0`),
+  check('bookings_discount_nonneg', sql`${table.discountAmount} >= 0`),
+  check(
+    'bookings_cancellation_fee_nonneg',
+    sql`${table.cancellationFee} IS NULL OR ${table.cancellationFee} >= 0`,
+  ),
+  check('bookings_refunded_minor_nonneg', sql`${table.refundedAmountMinor} >= 0`),
   // Round 6.1 — supports the booking-reminder cron's "find upcoming
   // confirmed bookings that haven't been reminded yet" query. Composite
   // (slot_id, reminder_sent_at) lets a single index scan answer the

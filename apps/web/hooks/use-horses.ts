@@ -75,6 +75,13 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
   return useQuery({
+    // Audit F-16 (2026-05-06 r2): TanStack Query 5+ uses `hashKey()`
+    // which serializes filter objects deterministically — no cache
+    // collision risk. Trade-off: invalidations on `['horses']`
+    // evict every variant rather than the specific filter. That's
+    // acceptable here (list views use 30s staleTime; mutations
+    // explicitly invalidate the prefix). Flatten variants into
+    // primitive elements only if cache eviction noise grows.
     queryKey: ['horses', filters],
     queryFn: () => fetchJson<PaginatedResponse<Horse>>(`/api/v1/horses?${params.toString()}`),
     // STALE_TIME_FREQUENT (30s) dedupes back-to-back fetches (tab switches,

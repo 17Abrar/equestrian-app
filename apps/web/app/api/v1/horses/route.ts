@@ -7,6 +7,7 @@ import {
   paginatedResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
 } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
@@ -30,8 +31,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createHorseSchema, body);
+      // Audit F-15 (2026-05-06 r2): use `parseRequiredBody` (which
+      // enforces the route-level body cap + JSON-parse error handling)
+      // instead of inlining `request.json()` + `validateInput`. Mirrors
+      // the pattern used by every other v1 mutation route.
+      const data = await parseRequiredBody(request, createHorseSchema);
 
       // The owner dropdown is populated from the club's owner list, but a
       // caller hitting the API directly could pass any UUID. Verify the
