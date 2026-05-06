@@ -8,6 +8,7 @@ import {
   timestamp,
   unique,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import {
   couponStatusEnum,
@@ -26,12 +27,10 @@ export const packages = pgTable('packages', {
 
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
-  // FK to `lesson_types.id` ON DELETE SET NULL added in migration 0035
-  // (audit pass-2 schema-drift sweep). Previously a bare UUID, which
-  // permitted cross-tenant smuggling of arbitrary lesson-type IDs.
-  lessonTypeId: uuid('lesson_type_id').references(() => lessonTypes.id, {
-    onDelete: 'set null',
-  }),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite (lesson_type_id, club_id) →
+  // lesson_types(id, club_id) ON DELETE SET NULL in table-extras below.
+  lessonTypeId: uuid('lesson_type_id'),
   totalCredits: integer('total_credits').notNull(),
   price: integer('price').notNull(),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
@@ -42,6 +41,14 @@ export const packages = pgTable('packages', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_packages_club').on(table.clubId),
+  // FK target for composite (package_id, club_id) → packages(id, club_id)
+  // on rider_packages. Migration 0040.
+  unique('packages_id_club_unique').on(table.id, table.clubId),
+  foreignKey({
+    name: 'packages_lesson_type_club_fk',
+    columns: [table.lessonTypeId, table.clubId],
+    foreignColumns: [lessonTypes.id, lessonTypes.clubId],
+  }).onDelete('set null'),
 ]);
 
 export const riderPackages = pgTable('rider_packages', {
@@ -49,12 +56,10 @@ export const riderPackages = pgTable('rider_packages', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  packageId: uuid('package_id')
-    .notNull()
-    .references(() => packages.id),
-  riderMemberId: uuid('rider_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FKs dropped in
+  // migration 0040; replaced with composites in table-extras below.
+  packageId: uuid('package_id').notNull(),
+  riderMemberId: uuid('rider_member_id').notNull(),
 
   totalCredits: integer('total_credits').notNull(),
   usedCredits: integer('used_credits').notNull().default(0),
@@ -68,6 +73,16 @@ export const riderPackages = pgTable('rider_packages', {
 }, (table) => [
   index('idx_rider_packages_rider').on(table.riderMemberId),
   index('idx_rider_packages_expiry').on(table.expiresAt),
+  foreignKey({
+    name: 'rider_packages_package_club_fk',
+    columns: [table.packageId, table.clubId],
+    foreignColumns: [packages.id, packages.clubId],
+  }),
+  foreignKey({
+    name: 'rider_packages_rider_member_club_fk',
+    columns: [table.riderMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const coupons = pgTable(
@@ -100,13 +115,23 @@ export const coupons = pgTable(
     startsAt: timestamp('starts_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
 
-    createdByMemberId: uuid('created_by_member_id').references(() => clubMembers.id),
+    // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+    // migration 0040; replaced with composite below.
+    createdByMemberId: uuid('created_by_member_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     unique('coupons_club_code_unique').on(table.clubId, table.code),
     index('idx_coupons_status').on(table.clubId, table.status),
+    // FK target for composite (coupon_id, club_id) → coupons(id, club_id)
+    // on coupon_usages. Migration 0040.
+    unique('coupons_id_club_unique').on(table.id, table.clubId),
+    foreignKey({
+      name: 'coupons_created_by_member_club_fk',
+      columns: [table.createdByMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
   ],
 );
 
@@ -115,13 +140,13 @@ export const couponUsages = pgTable('coupon_usages', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  couponId: uuid('coupon_id')
-    .notNull()
-    .references(() => coupons.id, { onDelete: 'cascade' }),
-  riderMemberId: uuid('rider_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
-  bookingId: uuid('booking_id').references(() => bookings.id),
+  // Audit F-8/F-13 (2026-05-06 comprehensive): single-column FKs dropped
+  // in migration 0040; replaced with composites in table-extras below.
+  // `bookingId` ON DELETE behavior tightened from NO ACTION to SET NULL
+  // — preserves the usage ledger row when the linked booking is deleted.
+  couponId: uuid('coupon_id').notNull(),
+  riderMemberId: uuid('rider_member_id').notNull(),
+  bookingId: uuid('booking_id'),
 
   originalAmount: integer('original_amount').notNull(),
   discountAmount: integer('discount_amount').notNull(),
@@ -132,4 +157,19 @@ export const couponUsages = pgTable('coupon_usages', {
 }, (table) => [
   index('idx_coupon_usages_coupon').on(table.couponId),
   index('idx_coupon_usages_rider').on(table.couponId, table.riderMemberId),
+  foreignKey({
+    name: 'coupon_usages_coupon_club_fk',
+    columns: [table.couponId, table.clubId],
+    foreignColumns: [coupons.id, coupons.clubId],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'coupon_usages_rider_member_club_fk',
+    columns: [table.riderMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
+  foreignKey({
+    name: 'coupon_usages_booking_club_fk',
+    columns: [table.bookingId, table.clubId],
+    foreignColumns: [bookings.id, bookings.clubId],
+  }).onDelete('set null'),
 ]);

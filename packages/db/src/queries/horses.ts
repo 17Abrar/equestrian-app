@@ -563,7 +563,10 @@ export async function getHorsesOwnedByUser(
         createdAt: horses.createdAt,
       })
       .from(horses)
-      .innerJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
+      .innerJoin(
+      clubMembers,
+      and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
+    )
       .innerJoin(clubs, eq(horses.clubId, clubs.id))
       .where(where)
       .orderBy(desc(horses.createdAt))
@@ -572,7 +575,10 @@ export async function getHorsesOwnedByUser(
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(horses)
-      .innerJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
+      .innerJoin(
+      clubMembers,
+      and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
+    )
       .innerJoin(clubs, eq(horses.clubId, clubs.id))
       .where(where),
   ]);
@@ -615,7 +621,10 @@ export async function getHorseOwnershipByUser(clerkUserId: string, horseId: stri
       ownershipStatus: horses.ownershipStatus,
     })
     .from(horses)
-    .innerJoin(clubMembers, eq(horses.ownerMemberId, clubMembers.id))
+    .innerJoin(
+      clubMembers,
+      and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
+    )
     .where(
       and(
         eq(horses.id, horseId),

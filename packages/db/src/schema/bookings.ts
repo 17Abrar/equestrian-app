@@ -42,6 +42,9 @@ export const arenas = pgTable('arenas', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_arenas_club').on(table.clubId),
+  // FK target for composite (arena_id, club_id) → arenas(id, club_id)
+  // on booking_slots and competitions. Migration 0040.
+  unique('arenas_id_club_unique').on(table.id, table.clubId),
 ]);
 
 export const arenaSchedules = pgTable('arena_schedules', {
@@ -88,6 +91,9 @@ export const lessonTypes = pgTable('lesson_types', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_lesson_types_club').on(table.clubId),
+  // FK target for composite (lesson_type_id, club_id) → lesson_types
+  // (id, club_id) on booking_slots and packages. Migration 0040.
+  unique('lesson_types_id_club_unique').on(table.id, table.clubId),
 ]);
 
 export const bookingSlots = pgTable('booking_slots', {
@@ -95,11 +101,11 @@ export const bookingSlots = pgTable('booking_slots', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  lessonTypeId: uuid('lesson_type_id')
-    .notNull()
-    .references(() => lessonTypes.id),
-  arenaId: uuid('arena_id').references(() => arenas.id),
-  coachMemberId: uuid('coach_member_id').references(() => clubMembers.id),
+  // Audit F-8/F-13 (2026-05-06): inline single-column FKs dropped in
+  // migration 0040; replaced with composites in table-extras below.
+  lessonTypeId: uuid('lesson_type_id').notNull(),
+  arenaId: uuid('arena_id'),
+  coachMemberId: uuid('coach_member_id'),
 
   date: date('date').notNull(),
   startTime: time('start_time').notNull(),
@@ -115,6 +121,24 @@ export const bookingSlots = pgTable('booking_slots', {
   index('idx_slots_club_date').on(table.clubId, table.date),
   index('idx_slots_coach').on(table.coachMemberId, table.date),
   index('idx_slots_arena').on(table.arenaId, table.date),
+  // FK target for composite (slot_id, club_id) → booking_slots(id,
+  // club_id) on bookings + waitlist. Migration 0040.
+  unique('booking_slots_id_club_unique').on(table.id, table.clubId),
+  foreignKey({
+    name: 'booking_slots_lesson_type_club_fk',
+    columns: [table.lessonTypeId, table.clubId],
+    foreignColumns: [lessonTypes.id, lessonTypes.clubId],
+  }),
+  foreignKey({
+    name: 'booking_slots_arena_club_fk',
+    columns: [table.arenaId, table.clubId],
+    foreignColumns: [arenas.id, arenas.clubId],
+  }),
+  foreignKey({
+    name: 'booking_slots_coach_member_club_fk',
+    columns: [table.coachMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const bookings = pgTable('bookings', {
@@ -122,9 +146,11 @@ export const bookings = pgTable('bookings', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  slotId: uuid('slot_id')
-    .notNull()
-    .references(() => bookingSlots.id),
+  // Audit F-13 (2026-05-06): single-column FK dropped in migration
+  // 0040; replaced with composite (slot_id, club_id) → booking_slots
+  // (id, club_id) ON DELETE CASCADE in table-extras below — booking
+  // is meaningless without its slot.
+  slotId: uuid('slot_id').notNull(),
   // Audit MED (2026-05-06 third pass): inline single-column FK was
   // dropped in migration 0038 and replaced with the composite
   // (rider_member_id, club_id) → club_members(id, club_id) declared in
@@ -140,9 +166,11 @@ export const bookings = pgTable('bookings', {
   // residual from before 0033 and would silently regenerate as a
   // regression migration if drizzle-kit ever ran `generate`.
   horseId: uuid('horse_id'),
-  bookedByMemberId: uuid('booked_by_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06): single-column FK dropped in migration 0040;
+  // replaced with composite (booked_by_member_id, club_id) → club_members
+  // (id, club_id) in table-extras below. NO ACTION on delete (financial
+  // record).
+  bookedByMemberId: uuid('booked_by_member_id').notNull(),
 
   status: bookingStatusEnum('status').notNull().default('pending'),
   paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
@@ -179,15 +207,12 @@ export const bookings = pgTable('bookings', {
   cancellationReason: text('cancellation_reason'),
   cancellationFee: integer('cancellation_fee').default(0),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-  // ON DELETE SET NULL matches the SQL constraint
-  // `bookings_cancelled_by_member_id_club_members_id_fk` (audit AI-22
-  // pass 2). Cancellations should outlive the staff member who issued
-  // them — the audit row carries the actor identity at the time of
-  // action, the cancellation just loses its actor pointer.
-  cancelledByMemberId: uuid('cancelled_by_member_id').references(
-    () => clubMembers.id,
-    { onDelete: 'set null' },
-  ),
+  // Audit F-8 (2026-05-06): single-column FK dropped in migration 0040;
+  // replaced with composite in table-extras below, preserving the prior
+  // ON DELETE SET NULL semantics. Cancellations outlive the staff member
+  // who issued them — the audit row carries the actor identity at the
+  // time of action, the cancellation just loses its actor pointer.
+  cancelledByMemberId: uuid('cancelled_by_member_id'),
 
   // Guest bookings — the signed-in rider (riderMemberId) is booking on behalf
   // of someone who isn't a member of the stable. Guest contact details are
@@ -243,6 +268,27 @@ export const bookings = pgTable('bookings', {
     columns: [table.riderMemberId, table.clubId],
     foreignColumns: [clubMembers.id, clubMembers.clubId],
   }),
+  // Audit F-13 (2026-05-06 comprehensive): composite (slot_id, club_id)
+  // → booking_slots(id, club_id) ON DELETE CASCADE — a booking cannot
+  // outlive the slot it occupies; tighter than the prior NO ACTION.
+  // Migration 0040.
+  foreignKey({
+    name: 'bookings_slot_club_fk',
+    columns: [table.slotId, table.clubId],
+    foreignColumns: [bookingSlots.id, bookingSlots.clubId],
+  }).onDelete('cascade'),
+  // Audit F-8 (2026-05-06): bookedBy is the actor; preserves NO ACTION.
+  foreignKey({
+    name: 'bookings_booked_by_member_club_fk',
+    columns: [table.bookedByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
+  // Audit F-8 (2026-05-06): preserves SET NULL.
+  foreignKey({
+    name: 'bookings_cancelled_by_member_club_fk',
+    columns: [table.cancelledByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }).onDelete('set null'),
   // Composite FK target for `payments.booking_id, club_id`. Tautologically
   // unique because `id` is the PK, but Postgres needs the explicit
   // constraint to use the column pair as an FK target. Matches the
@@ -292,9 +338,11 @@ export const waitlist = pgTable(
     clubId: uuid('club_id')
       .notNull()
       .references(() => clubs.id, { onDelete: 'cascade' }),
-    slotId: uuid('slot_id')
-      .notNull()
-      .references(() => bookingSlots.id),
+    // Audit F-13 (2026-05-06): single-column FK dropped in migration
+    // 0040; replaced with composite (slot_id, club_id) → booking_slots
+    // (id, club_id) ON DELETE CASCADE in table-extras below — waitlist
+    // entry is meaningless without its slot.
+    slotId: uuid('slot_id').notNull(),
     // Audit MED (2026-05-06 third pass — adjacent-table follow-up):
     // inline single-column FK was dropped in migration 0039 and
     // replaced with the composite (rider_member_id, club_id) →
@@ -320,5 +368,10 @@ export const waitlist = pgTable(
       columns: [table.riderMemberId, table.clubId],
       foreignColumns: [clubMembers.id, clubMembers.clubId],
     }),
+    foreignKey({
+      name: 'waitlist_slot_club_fk',
+      columns: [table.slotId, table.clubId],
+      foreignColumns: [bookingSlots.id, bookingSlots.clubId],
+    }).onDelete('cascade'),
   ],
 );

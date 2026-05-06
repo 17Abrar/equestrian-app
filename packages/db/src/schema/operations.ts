@@ -60,7 +60,11 @@ export const groomTasks = pgTable('groom_tasks', {
   // sub-tables — the DB layer rejects mismatched-tenant inserts even
   // if a future handler skips the route-level precheck.
   horseId: uuid('horse_id').notNull(),
-  assignedToMemberId: uuid('assigned_to_member_id').references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FKs dropped in
+  // migration 0040; replaced with composites in table-extras below.
+  // `completedByMemberId` preserves SET NULL — task records outlive
+  // the member who completed them.
+  assignedToMemberId: uuid('assigned_to_member_id'),
 
   taskType: varchar('task_type', { length: 100 }).notNull(),
   description: text('description'),
@@ -68,7 +72,7 @@ export const groomTasks = pgTable('groom_tasks', {
   scheduledTime: time('scheduled_time'),
   status: taskStatusEnum('status').notNull().default('pending'),
   completedAt: timestamp('completed_at', { withTimezone: true }),
-  completedByMemberId: uuid('completed_by_member_id').references(() => clubMembers.id),
+  completedByMemberId: uuid('completed_by_member_id'),
   notes: text('notes'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -82,6 +86,16 @@ export const groomTasks = pgTable('groom_tasks', {
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('cascade'),
+  foreignKey({
+    name: 'groom_tasks_assigned_to_member_club_fk',
+    columns: [table.assignedToMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
+  foreignKey({
+    name: 'groom_tasks_completed_by_member_club_fk',
+    columns: [table.completedByMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }).onDelete('set null'),
 ]);
 
 export const riderAchievements = pgTable('rider_achievements', {
@@ -89,9 +103,9 @@ export const riderAchievements = pgTable('rider_achievements', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  riderMemberId: uuid('rider_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+  // migration 0040; replaced with composite below.
+  riderMemberId: uuid('rider_member_id').notNull(),
 
   achievementType: varchar('achievement_type', { length: 100 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
@@ -102,6 +116,11 @@ export const riderAchievements = pgTable('rider_achievements', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_achievements_rider').on(table.riderMemberId),
+  foreignKey({
+    name: 'rider_achievements_rider_member_club_fk',
+    columns: [table.riderMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
 ]);
 
 export const communityTopics = pgTable('community_topics', {
@@ -269,4 +288,13 @@ export const auditLog = pgTable('audit_log', {
   index('idx_audit_club').on(table.clubId, table.createdAt),
   index('idx_audit_actor').on(table.actorMemberId, table.createdAt),
   index('idx_audit_resource').on(table.resourceType, table.resourceId),
+  // Audit F-11 (2026-05-06 comprehensive): index added in migration 0033
+  // but never declared in the TS schema; drift was masking the (club_id,
+  // action, created_at DESC) hot path the audit-log filter relies on.
+  // Mirror it here so drizzle-kit `generate` doesn't drop the index.
+  index('idx_audit_log_club_action_date').on(
+    table.clubId,
+    table.action,
+    sql`${table.createdAt} DESC`,
+  ),
 ]);
