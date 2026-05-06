@@ -1,6 +1,32 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
+/**
+ * Audit NIT (2026-05-06): guarded R2_PUBLIC_URL parse so a malformed
+ * env var doesn't crash the build with an unhelpful "Invalid URL".
+ * Returns the matching `next/image` remotePatterns array (zero or one
+ * entry) and logs a diagnostic if the value can't parse.
+ */
+function parseR2PublicUrl(raw: string | undefined): Array<{
+  protocol: 'https';
+  hostname: string;
+  pathname: string;
+}> {
+  if (!raw) return [];
+  try {
+    const hostname = new URL(raw).hostname;
+    return [{ protocol: 'https', hostname, pathname: '/**' }];
+  } catch {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[next.config] R2_PUBLIC_URL is set but does not parse as a URL ` +
+        `(length: ${raw.length}, starts-with: '${raw.slice(0, 8)}'…). ` +
+        `Falling through with no R2 image pattern — uploaded images may 404.`,
+    );
+    return [];
+  }
+}
+
 // audit F-3 (2026-05-05) — CSP moved out of next.config.ts.
 //
 // The header is now built per-request in `middleware.ts` so each
@@ -39,15 +65,14 @@ const nextConfig: NextConfig = {
         hostname: 'img.clerk.com',
         pathname: '/**',
       },
-      ...(process.env.R2_PUBLIC_URL
-        ? [
-            {
-              protocol: 'https' as const,
-              hostname: new URL(process.env.R2_PUBLIC_URL).hostname,
-              pathname: '/**',
-            },
-          ]
-        : []),
+      // Audit NIT (2026-05-06): wrap `new URL(...)` in a guarded
+      // helper so a malformed `R2_PUBLIC_URL` value doesn't crash the
+      // build with a generic "Invalid URL" message that bears no
+      // breadcrumb back to the env var. Logs the offending value's
+      // shape (not the full string — could be sensitive) and falls
+      // through to no-pattern, letting the build continue and the
+      // operator notice the warning.
+      ...(parseR2PublicUrl(process.env.R2_PUBLIC_URL)),
     ],
   },
   async headers() {

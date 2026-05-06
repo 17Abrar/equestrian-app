@@ -52,6 +52,21 @@ const nGeniusCredentialsSchema = z.object({
   webhookHeaderName: z.string().min(1).optional(),
   /** Secret value that N-Genius will echo in the configured header on each delivery. */
   webhookHeaderValue: z.string().min(1).optional(),
+  /**
+   * Audit LOW (2026-05-06): the outlet's settlement currency. The
+   * previous shape hardcoded 'AED' at connect time, which would
+   * silently 422 every payment for a non-AED merchant (e.g. a Saudi
+   * operator on SAR) until support intervened. Capture it from the
+   * connect form so the per-payment currency-parity check
+   * (`bookings/[bookingId]/payment/route.ts`) can refuse early. ISO
+   * 4217 3-letter codes; defaults to 'AED' when omitted to preserve
+   * the dominant-tenant default without a UI break.
+   */
+  defaultCurrency: z
+    .string()
+    .length(3)
+    .regex(/^[A-Z]{3}$/, 'Currency must be a 3-letter ISO 4217 code (e.g. AED, SAR, KWD)')
+    .default('AED'),
 });
 
 type NGeniusCredentials = z.infer<typeof nGeniusCredentialsSchema>;
@@ -250,6 +265,12 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       realmName: input.credentials.realmName,
       webhookHeaderName: input.credentials.webhookHeaderName,
       webhookHeaderValue: input.credentials.webhookHeaderValue,
+      // Audit LOW (2026-05-06): default to AED at the schema level
+      // when the connect form omits this — preserves the existing UX
+      // for the dominant-tenant default without breaking the form for
+      // operators who haven't ship the currency dropdown yet. SAR /
+      // KWD / etc. operators pass it explicitly.
+      defaultCurrency: input.credentials.defaultCurrency,
     });
 
     // Round-trip the key against the identity endpoint so we reject bad
@@ -263,17 +284,16 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         hasRealmName: !!creds.realmName,
         hasWebhookHeader: !!(creds.webhookHeaderName && creds.webhookHeaderValue),
         webhookHeaderName: creds.webhookHeaderName ?? null,
-        // Audit MED (2026-05-05 pass 2): record the outlet's settlement
-        // currency so the booking-payment route's currency-parity check
+        // Audit MED (2026-05-05 pass 2) + LOW (2026-05-06): record the
+        // outlet's settlement currency so the booking-payment route's
+        // currency-parity check
         // (`apps/web/app/api/v1/bookings/[bookingId]/payment/route.ts`)
         // can refuse to drive a payment in a currency the merchant
-        // can't settle. N-Genius outlets are configured for a single
-        // currency at the merchant portal (the rare multi-currency
-        // outlet is opt-in and not in the GCC SaaS use case). AED is
-        // the default for the GCC market — operators on a non-AED
-        // outlet should override this in the connect form (TODO when
-        // we ship the multi-currency UI).
-        defaultCurrency: 'AED',
+        // can't settle. The credential schema now captures this from
+        // the connect form (defaulting to AED for the GCC dominant-
+        // tenant case) — non-AED operators (SAR, KWD, etc.) pass it
+        // explicitly.
+        defaultCurrency: creds.defaultCurrency,
       },
       credentials: { ...creds },
     };

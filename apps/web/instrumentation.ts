@@ -7,6 +7,24 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'edge') {
     await import('./sentry.edge.config');
   }
+
+  // Audit LOW (2026-05-06 closeout): validate ENCRYPTION_KEY at app
+  // boot rather than lazily on first encrypt. Without this, a deploy
+  // that forgot to set the secret (or set the all-zeros placeholder
+  // in prod) passes health checks and read-side smoke flows, then
+  // crashes the FIRST insert that touches an encrypted column (vet
+  // log, payment-account connect). The throw here surfaces during
+  // the deploy gate's startup probe instead of at midnight when an
+  // admin first writes a medication record. Sub-millisecond cost.
+  //
+  // Only fires in the Node runtime where encryption actually runs.
+  // The build step (`scripts/collect-page-data.mjs`) doesn't pass
+  // through `register()` so a missing key during build doesn't crash
+  // the build.
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { assertEncryptionKeyConfigured } = await import('@equestrian/db/crypto');
+    assertEncryptionKeyConfigured();
+  }
 }
 
 // Forward all request-scoped errors to Sentry so the unhandled-error branch
