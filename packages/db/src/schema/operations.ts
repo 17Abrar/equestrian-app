@@ -152,9 +152,11 @@ export const communityPosts = pgTable('community_posts', {
   topicId: uuid('topic_id')
     .notNull()
     .references(() => communityTopics.id),
-  authorMemberId: uuid('author_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit F-4 (2026-05-06 r2): inline single-column FK dropped in
+  // migration 0041; replaced with composite (author_member_id,
+  // author_club_id) → club_members(id, club_id) declared in
+  // table-extras below.
+  authorMemberId: uuid('author_member_id').notNull(),
   authorClubId: uuid('author_club_id')
     .notNull()
     .references(() => clubs.id),
@@ -181,13 +183,30 @@ export const communityPosts = pgTable('community_posts', {
 }, (table) => [
   index('idx_posts_topic_created').on(table.topicId, table.createdAt),
   index('idx_posts_author').on(table.authorMemberId),
+  // Audit F-10 (2026-05-06 r2): FK target for composite (post_id,
+  // author_club_id) → community_posts(id, author_club_id) on
+  // community_comments + community_votes. Migration 0041.
+  unique('community_posts_id_author_club_unique').on(table.id, table.authorClubId),
+  foreignKey({
+    name: 'community_posts_author_member_club_fk',
+    columns: [table.authorMemberId, table.authorClubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
+  // F-10 community_posts.topic_id INTENTIONALLY left as single-column FK.
+  // Topics can be system-level (`club_id IS NULL`); a naive composite
+  // would block per-club posts from referencing system topics. Solving
+  // that needs a partial constraint or a topic-club materialization;
+  // deferred until the community feature ships and the routes lock the
+  // model. Migration 0041 documents the same.
 ]);
 
 export const communityComments = pgTable('community_comments', {
   id: uuid('id').primaryKey().defaultRandom(),
-  postId: uuid('post_id')
-    .notNull()
-    .references(() => communityPosts.id, { onDelete: 'cascade' }),
+  // Audit F-10 (2026-05-06 r2): inline single-column FK dropped in
+  // migration 0041; replaced with composite (post_id, author_club_id)
+  // → community_posts(id, author_club_id) ON DELETE CASCADE declared
+  // in table-extras below.
+  postId: uuid('post_id').notNull(),
   // Self-referencing FK (audit C-11). Without this, a deleted parent
   // comment leaves orphan replies pointing at a defunct UUID and the
   // threaded view renders empty placeholders. ON DELETE CASCADE so a
@@ -197,9 +216,9 @@ export const communityComments = pgTable('community_comments', {
     (): import('drizzle-orm/pg-core').AnyPgColumn => communityComments.id,
     { onDelete: 'cascade' },
   ),
-  authorMemberId: uuid('author_member_id')
-    .notNull()
-    .references(() => clubMembers.id),
+  // Audit F-4 (2026-05-06 r2): inline single-column FK dropped in
+  // migration 0041; replaced with composite below.
+  authorMemberId: uuid('author_member_id').notNull(),
   authorClubId: uuid('author_club_id')
     .notNull()
     .references(() => clubs.id),
@@ -214,17 +233,35 @@ export const communityComments = pgTable('community_comments', {
 }, (table) => [
   index('idx_comments_post').on(table.postId),
   index('idx_comments_parent').on(table.parentCommentId),
+  // FK target for community_votes composites. Migration 0041.
+  unique('community_comments_id_author_club_unique').on(table.id, table.authorClubId),
+  foreignKey({
+    name: 'community_comments_author_member_club_fk',
+    columns: [table.authorMemberId, table.authorClubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }),
+  foreignKey({
+    name: 'community_comments_post_club_fk',
+    columns: [table.postId, table.authorClubId],
+    foreignColumns: [communityPosts.id, communityPosts.authorClubId],
+  }).onDelete('cascade'),
 ]);
 
 export const communityVotes = pgTable(
   'community_votes',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    memberId: uuid('member_id')
+    // Audit F-3 (2026-05-06 r2): tenant scope added in migration 0041
+    // (was the only post-launch-era exception to the every-tenant-table-
+    // has-club_id invariant). The composite FKs below close the
+    // cross-tenant vote-injection surface a future endpoint that
+    // accepts member-controlled `memberId` would otherwise leave open.
+    clubId: uuid('club_id')
       .notNull()
-      .references(() => clubMembers.id),
-    postId: uuid('post_id').references(() => communityPosts.id),
-    commentId: uuid('comment_id').references(() => communityComments.id),
+      .references(() => clubs.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id').notNull(),
+    postId: uuid('post_id'),
+    commentId: uuid('comment_id'),
     voteType: integer('vote_type').notNull(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -233,6 +270,22 @@ export const communityVotes = pgTable(
     unique('community_votes_member_post_unique').on(table.memberId, table.postId),
     unique('community_votes_member_comment_unique').on(table.memberId, table.commentId),
     check('vote_type_check', sql`${table.voteType} IN (1, -1)`),
+    index('idx_community_votes_club').on(table.clubId),
+    foreignKey({
+      name: 'community_votes_member_club_fk',
+      columns: [table.memberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
+    foreignKey({
+      name: 'community_votes_post_club_fk',
+      columns: [table.postId, table.clubId],
+      foreignColumns: [communityPosts.id, communityPosts.authorClubId],
+    }),
+    foreignKey({
+      name: 'community_votes_comment_club_fk',
+      columns: [table.commentId, table.clubId],
+      foreignColumns: [communityComments.id, communityComments.authorClubId],
+    }),
   ],
 );
 
