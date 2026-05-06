@@ -41,6 +41,32 @@ interface MembershipEvent {
   type: string;
 }
 
+/**
+ * Audit F-9 (2026-05-06 r2). Pulls `clerkOrgId` / `clerkUserId` off
+ * the verified event payload so post-verify logs carry the identifiers
+ * an operator filters Sentry by during incident triage. Both event
+ * shapes (organization.* and organizationMembership.*) are handled.
+ */
+function extractClerkIds(
+  event: OrganizationEvent | MembershipEvent,
+): { clerkOrgId: string | null; clerkUserId: string | null } {
+  if (event.type.startsWith('organizationMembership.')) {
+    const m = event as MembershipEvent;
+    return {
+      clerkOrgId: m.data.organization?.id ?? null,
+      clerkUserId: m.data.public_user_data?.user_id ?? null,
+    };
+  }
+  if (event.type.startsWith('organization.')) {
+    const o = event as OrganizationEvent;
+    return {
+      clerkOrgId: o.data.id ?? null,
+      clerkUserId: o.data.created_by ?? null,
+    };
+  }
+  return { clerkOrgId: null, clerkUserId: null };
+}
+
 function generateSlug(name: string): string {
   return name
     .toLowerCase()
@@ -62,6 +88,12 @@ function slugVariants(baseSlug: string): string[] {
 }
 
 export async function POST(request: Request) {
+  // Audit F-9 (2026-05-06 r2): generate a requestId at handler entry so
+  // every log line — pre-verify and post-verify — carries the same
+  // correlation tag. The other webhook handlers (Stripe, Ziina) stamp
+  // this consistently; Clerk previously only had svix-id.
+  const requestId = crypto.randomUUID();
+
   const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.clerk, 'clerk');
   if (body === null) {
     return new Response('Payload too large', { status: 413 });
@@ -73,13 +105,13 @@ export async function POST(request: Request) {
   const svixSignature = headersList.get('svix-signature');
 
   if (!svixId || !svixTimestamp || !svixSignature) {
-    logger.warn('clerk_webhook_missing_headers');
+    logger.warn('clerk_webhook_missing_headers', { requestId });
     return new Response('Missing svix headers', { status: 400 });
   }
 
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    logger.error('clerk_webhook_no_secret');
+    logger.error('clerk_webhook_no_secret', { requestId, svixId });
     return new Response('Webhook secret not configured', { status: 503 });
   }
 
@@ -94,13 +126,25 @@ export async function POST(request: Request) {
     }) as OrganizationEvent | MembershipEvent;
   } catch (error) {
     logger.error('clerk_webhook_verification_failed', {
+      requestId,
+      svixId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Invalid signature', { status: 400 });
   }
 
   const eventType = event.type;
-  logger.info('clerk_webhook_received', { type: eventType });
+  // Audit F-9: extract `clerkOrgId` / `clerkUserId` from the verified
+  // payload so every post-verify log line carries the customer-visible
+  // identifiers operators pivot on during incident triage.
+  const { clerkOrgId, clerkUserId } = extractClerkIds(event);
+  logger.info('clerk_webhook_received', {
+    requestId,
+    svixId,
+    type: eventType,
+    clerkOrgId,
+    clerkUserId,
+  });
 
   // Idempotency layer. Without this, an out-of-order Svix retry of a stale
   // `organizationMembership.updated` (role change to coach) AFTER
@@ -111,7 +155,13 @@ export async function POST(request: Request) {
   const claim = await claimWebhookEvent('clerk', svixId);
 
   if (claim.status === 'already_processed') {
-    logger.info('clerk_webhook_duplicate', { type: eventType, svixId });
+    logger.info('clerk_webhook_duplicate', {
+      requestId,
+      svixId,
+      type: eventType,
+      clerkOrgId,
+      clerkUserId,
+    });
     return new Response('OK', { status: 200 });
   }
 
@@ -119,7 +169,13 @@ export async function POST(request: Request) {
     // Another worker holds the claim. Return 503 so Svix retries — by then
     // either the in-flight worker has finished (→ already_processed) or
     // the stale window has elapsed and the retry can re-claim.
-    logger.info('clerk_webhook_in_flight', { type: eventType, svixId });
+    logger.info('clerk_webhook_in_flight', {
+      requestId,
+      svixId,
+      type: eventType,
+      clerkOrgId,
+      clerkUserId,
+    });
     return new Response('Processing in progress', { status: 503 });
   }
 
@@ -129,9 +185,12 @@ export async function POST(request: Request) {
     // 200 so Svix stops retrying and emit a high-priority alert so an
     // operator runs the org-resync procedure (audit B-12).
     logger.error('webhook_permanently_failed', {
+      requestId,
       provider: 'clerk',
       svixId,
       eventType,
+      clerkOrgId,
+      clerkUserId,
     });
     return new Response('OK', { status: 200 });
   }
