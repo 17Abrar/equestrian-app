@@ -3,6 +3,14 @@ import { db } from '../index';
 import { clubMembers } from '../schema/club-members';
 import { escapeLikePattern } from '@equestrian/shared/utils';
 
+// `inArray` is typed against the column's enum literal union, but the
+// values reaching `getMembersByRole` originate from query-string params
+// (`string[]`) we can't narrow at the TS layer. Postgres rejects any
+// value outside the enum at query time, so a runtime guard adds nothing
+// the DB doesn't already provide. Casts to this alias unblock the type
+// system without weakening validation.
+type ClubMemberRole = (typeof clubMembers.role.enumValues)[number];
+
 type NewMember = typeof clubMembers.$inferInsert;
 type MemberCreate = Omit<NewMember, 'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'joinedAt'>;
 type MemberUpdate = Partial<Omit<MemberCreate, 'clerkUserId'>>;
@@ -33,7 +41,7 @@ export async function getMembersByRole(
     // scalar-to-enum cast against the `role` user_role column failed
     // with "malformed array literal" / "input syntax for type
     // user_role". `inArray` generates `IN (...)` which casts cleanly.
-    conditions.push(inArray(clubMembers.role, roles));
+    conditions.push(inArray(clubMembers.role, roles as ClubMemberRole[]));
   }
 
   const where = and(...conditions);
@@ -74,11 +82,11 @@ interface StaffFilters {
 export async function getStaffByClub(clubId: string, filters: StaffFilters) {
   // P0 2026-05-06: same `sql\`= ANY(...)\`` → `inArray` swap as
   // `getMembersByRole` above. See that comment for full context.
-  const staffRoles = ['club_manager', 'coach', 'groom'] as const;
+  const staffRoles: ClubMemberRole[] = ['club_manager', 'coach', 'groom'];
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
     eq(clubMembers.isActive, true),
-    inArray(clubMembers.role, [...staffRoles]),
+    inArray(clubMembers.role, staffRoles),
   ];
 
   if (filters.role) {
