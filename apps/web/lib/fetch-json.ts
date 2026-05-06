@@ -38,7 +38,19 @@ function looksLikeEnvelope(value: unknown): boolean {
 }
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  // Audit F-6 (2026-05-06): every fetch carries a custom header that the
+  // server-side CSRF guard checks for in addition to Origin. The header
+  // is custom (browsers can't set it on a cross-site form post without
+  // CORS preflight, which the server refuses), so a missing-Origin POST
+  // from a malicious page can no longer reach the cookie-mutator.
+  const initWithCsrf: RequestInit = {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      'x-cavaliq-csrf': '1',
+    },
+  };
+  const res = await fetch(url, initWithCsrf);
   const data = (await res.json().catch(() => null)) as
     | { error?: { message?: string; code?: string } }
     | null;

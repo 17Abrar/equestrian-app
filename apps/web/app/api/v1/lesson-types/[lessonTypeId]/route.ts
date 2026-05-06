@@ -14,9 +14,10 @@ interface RouteParams {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
-      // Audit S-1: same as the list endpoint — accept any booking-related
-      // read/create grant so riders/parents can render the booking form.
+      // Audit S-1 + F-7 (2026-05-06): same as the list endpoint — accept
+      // the dedicated `lesson_types:read` or any booking-related grant.
       const canRead =
+        hasPermission(ctx.orgRole, 'lesson_types:read') ||
         hasPermission(ctx.orgRole, 'bookings:read') ||
         hasPermission(ctx.orgRole, 'bookings:read_own') ||
         hasPermission(ctx.orgRole, 'bookings:read_child') ||
@@ -62,7 +63,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       return successResponse(lessonType);
     },
-    { requiredPermission: 'bookings:update' },
+    // Audit F-7 (2026-05-06): dedicated lesson_types resource instead
+    // of piggybacking on bookings:update.
+    { requiredPermission: 'lesson_types:update' },
   );
 }
 
@@ -85,12 +88,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
       return successResponse(lessonType);
     },
-    // Audit MED-1 (2026-05-05): align with the matrix. `bookings:delete`
-    // wasn't in `permissions-shared.ts` — the route worked only because
-    // both `club_admin` (`*`) and `club_manager` (`bookings:*`) match
-    // via wildcard, and tightening the matrix later would silently 403
-    // every non-admin role. `bookings:update` (matches PATCH on the
-    // sibling endpoint) is the right gate here.
-    { requiredPermission: 'bookings:update' },
+    // Audit F-7 (2026-05-06): dedicated lesson_types:delete.
+    { requiredPermission: 'lesson_types:delete' },
   );
 }

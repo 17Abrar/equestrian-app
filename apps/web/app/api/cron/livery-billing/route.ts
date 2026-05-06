@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
 import { type NextRequest } from 'next/server';
 import {
   findHorsesDueForBilling,
@@ -28,7 +27,7 @@ const OPERATOR_ACTIONABLE_PAY_ERROR_CODES = new Set([
   'PROVIDER_NOT_CONFIGURED',
   'MISSING_CREDENTIALS',
 ]);
-import { errorResponse, successResponse } from '@/lib/api-utils';
+import { errorResponse, successResponse, requireCronSecret } from '@/lib/api-utils';
 import { LiveryInvoiceIssued } from '@equestrian/email-templates/livery-invoice-issued';
 import { LiveryInvoiceOverdue } from '@equestrian/email-templates/livery-invoice-overdue';
 
@@ -52,42 +51,12 @@ import { LiveryInvoiceOverdue } from '@equestrian/email-templates/livery-invoice
  * `reminder_count` against the 7/14/30-day threshold array.
  */
 export async function POST(request: NextRequest) {
-  const headerSecret = request.headers.get('x-cron-secret');
-  const expected = process.env.CRON_SECRET;
-
-  if (!expected) {
-    logger.error('livery_cron_secret_not_configured');
-    return errorResponse('NOT_CONFIGURED', 'CRON_SECRET not set', 503);
-  }
-
-  // Constant-time compare so an attacker can't learn the secret
-  // byte-by-byte via response timing. timingSafeEqual throws on length
-  // mismatch — we pad the shorter buffer to the expected length so a
-  // wrong-length header still pays the full O(n) compare and doesn't
-  // short-circuit faster than the right-length-but-wrong-value path
-  // (audit B-15).
-  const provided = Buffer.from(headerSecret ?? '', 'utf8');
-  const target = Buffer.from(expected, 'utf8');
-  const sameLength = provided.length === target.length;
-  const padded = sameLength ? provided : Buffer.alloc(target.length);
-  const compareResult = timingSafeEqual(padded, target);
-  const secretOk = sameLength && compareResult;
-  if (!secretOk) {
-    // Enrich so an operator hitting the alert can tell who's calling: a
-    // stale Cloudflare scheduled trigger from a previous deploy, internet
-    // noise, or active fuzzing. Don't log the provided secret value.
-    logger.warn('livery_cron_bad_secret', {
-      headerPresent: headerSecret !== null,
-      providedLength: provided.length,
-      ip:
-        request.headers.get('cf-connecting-ip') ??
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-        request.headers.get('x-real-ip') ??
-        'unknown',
-      userAgent: request.headers.get('user-agent') ?? 'unknown',
-    });
-    return errorResponse('UNAUTHORIZED', 'Bad cron secret', 401);
-  }
+  // Audit F-21 (2026-05-06): centralized cron-secret guard. The
+  // helper performs the same constant-time compare + length-padding +
+  // structured logging the inline check did, but a missing call shows
+  // up immediately on any new cron route.
+  const unauthorized = await requireCronSecret(request, 'livery_cron');
+  if (unauthorized) return unauthorized;
 
   // UTC `today` is used as the SQL upper bound on candidates — it's a
   // conservative filter that catches every horse/invoice whose club-local

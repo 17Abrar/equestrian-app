@@ -30,6 +30,10 @@ const PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'coupons:*',
     'packages:*',
     'competitions:*',
+    // Audit F-7 (2026-05-06): dedicated lesson_types resource so the
+    // CRUD routes don't piggyback on `bookings:update`. Splits "rider
+    // self-service booking creation" from "staff lesson-type config".
+    'lesson_types:*',
     'reports:read',
     'settings:*',
   ],
@@ -41,6 +45,9 @@ const PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'riders:read',
     'riders:update_notes',
     'competitions:read',
+    // Audit F-7: coaches read lesson-type details to populate the
+    // booking form (price, duration, max riders).
+    'lesson_types:read',
   ],
   horse_owner: [
     'horses:read_own',
@@ -65,7 +72,7 @@ const PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'horses:update_own',
   ],
   parent: ['bookings:create_child', 'bookings:read_child', 'bookings:cancel_own', 'profile:*', 'payments:*', 'competitions:read', 'competitions:register_child'],
-  groom: ['dashboard:read', 'horses:read', 'tasks:*', 'horses:update_care'],
+  groom: ['dashboard:read', 'horses:read', 'tasks:*', 'horses:update_care', 'lesson_types:read'],
   veterinarian: ['horses:read', 'horses:read_medical', 'horses:update_medical'],
 };
 

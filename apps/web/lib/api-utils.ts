@@ -93,6 +93,52 @@ export function validateInput<S extends ZodTypeAny>(
   return result.data;
 }
 
+// Audit F-21 (2026-05-06 comprehensive). Cron handlers verify a shared
+// secret in the `x-cron-secret` header. Extracting the check here means
+// a new cron route added to the public-route allowlist (apps/web/middleware
+// .ts) cannot reach business logic without explicitly calling this guard
+// — a single missed `requireCronSecret` line shows up immediately in
+// `gh pr` diff review rather than as a silently public mutator.
+//
+// Returns `null` when authorized (caller continues). Returns a
+// NextResponse to be returned directly when not authorized.
+export async function requireCronSecret(
+  request: Request,
+  eventName: string,
+): Promise<NextResponse | null> {
+  const { timingSafeEqual } = await import('node:crypto');
+  const headerSecret = request.headers.get('x-cron-secret');
+  const expected = process.env.CRON_SECRET;
+
+  if (!expected) {
+    logger.error(`${eventName}_secret_not_configured`);
+    return errorResponse('NOT_CONFIGURED', 'CRON_SECRET not set', 503);
+  }
+
+  const provided = Buffer.from(headerSecret ?? '', 'utf8');
+  const target = Buffer.from(expected, 'utf8');
+  const sameLength = provided.length === target.length;
+  // Pad the shorter buffer to the expected length so a wrong-length
+  // header still pays the full O(n) compare. Audit B-15.
+  const padded = sameLength ? provided : Buffer.alloc(target.length);
+  const compareResult = timingSafeEqual(padded, target);
+  const secretOk = sameLength && compareResult;
+  if (!secretOk) {
+    logger.warn(`${eventName}_bad_secret`, {
+      headerPresent: headerSecret !== null,
+      providedLength: provided.length,
+      ip:
+        request.headers.get('cf-connecting-ip') ??
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        request.headers.get('x-real-ip') ??
+        'unknown',
+    });
+    return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
+  }
+
+  return null;
+}
+
 const uuidParamSchema = z.string().uuid();
 
 /**

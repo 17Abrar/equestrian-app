@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
 import { type NextRequest } from 'next/server';
 import {
   findUpcomingHealthRecordDueDates,
@@ -14,7 +13,7 @@ import {
   HorseCareReminder,
   type HorseCareReminderKind,
 } from '@equestrian/email-templates/horse-care-reminder';
-import { errorResponse, successResponse } from '@/lib/api-utils';
+import { errorResponse, successResponse, requireCronSecret } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 /**
@@ -54,35 +53,9 @@ const KIND_THRESHOLDS: Record<HorseCareReminderKind, readonly number[]> = {
 };
 
 export async function POST(request: NextRequest) {
-  const headerSecret = request.headers.get('x-cron-secret');
-  const expected = process.env.CRON_SECRET;
-
-  if (!expected) {
-    logger.error('horse_care_reminder_cron_secret_not_configured');
-    return errorResponse('NOT_CONFIGURED', 'CRON_SECRET not set', 503);
-  }
-
-  // Constant-time compare with length-padding (mirrors livery + platform
-  // + booking-reminder cron pattern — audit B-15).
-  const provided = Buffer.from(headerSecret ?? '', 'utf8');
-  const target = Buffer.from(expected, 'utf8');
-  const sameLength = provided.length === target.length;
-  const padded = sameLength ? provided : Buffer.alloc(target.length);
-  const compareResult = timingSafeEqual(padded, target);
-  const secretOk = sameLength && compareResult;
-  if (!secretOk) {
-    logger.warn('horse_care_reminder_cron_bad_secret', {
-      headerPresent: headerSecret !== null,
-      providedLength: provided.length,
-      ip:
-        request.headers.get('cf-connecting-ip') ??
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-        request.headers.get('x-real-ip') ??
-        'unknown',
-      userAgent: request.headers.get('user-agent') ?? 'unknown',
-    });
-    return errorResponse('UNAUTHORIZED', 'Bad cron secret', 401);
-  }
+  // Audit F-21 (2026-05-06): centralized cron-secret guard.
+  const unauthorized = await requireCronSecret(request, 'horse_care_reminder_cron');
+  if (unauthorized) return unauthorized;
 
   const utcToday = new Date().toISOString().slice(0, 10);
 
