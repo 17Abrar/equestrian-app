@@ -8,20 +8,22 @@ import {
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
 import { bookings as bookingsTable } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
-const bodySchema = z.object({
-  /**
-   * Partial refund amount in minor units (fils). Omit to refund the
-   * remaining balance (original amount minus whatever has already been
-   * refunded). Must be <= `booking.amount - booking.refundedAmountMinor`.
-   */
-  amountMinorUnits: z.number().int().positive().optional(),
-  reason: z.string().max(500).optional(),
-});
+const bodySchema = z
+  .object({
+    /**
+     * Partial refund amount in minor units (fils). Omit to refund the
+     * remaining balance (original amount minus whatever has already been
+     * refunded). Must be <= `booking.amount - booking.refundedAmountMinor`.
+     */
+    amountMinorUnits: z.number().int().positive().optional(),
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
 
 interface RouteParams {
   params: Promise<{ bookingId: string }>;
@@ -62,6 +64,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
+      validateUuidParam('bookingId', bookingId);
 
       const data = await parseOptionalBody(request, bodySchema);
 

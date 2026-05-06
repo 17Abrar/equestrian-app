@@ -12,12 +12,14 @@ import { hasPermission } from '@/lib/permissions';
 // the slot's lesson type rather than trust client-supplied values. Without
 // this, a rider could probe a coupon's behaviour at any amount and binary-
 // search the maxDiscount cap. Audit AI-21.
-const validateCouponRequestSchema = z.object({
-  code: z.string().min(1),
-  slotId: z.string().uuid(),
-  riderMemberId: z.string().uuid(),
-  lessonType: z.string().optional(),
-});
+const validateCouponRequestSchema = z
+  .object({
+    code: z.string().min(1),
+    slotId: z.string().uuid(),
+    riderMemberId: z.string().uuid(),
+    lessonType: z.string().optional(),
+  })
+  .strict();
 
 export async function POST(request: NextRequest) {
   return withAuth(

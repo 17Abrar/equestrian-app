@@ -1,11 +1,9 @@
 import { type NextRequest } from 'next/server';
 import { getBookingById, getBookingSlotById, getClubById } from '@equestrian/db/queries';
 import { calculateCancellationFee } from '@equestrian/shared/utils';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
-  errorResponse,
-} from '@/lib/api-utils';
+  errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -16,6 +14,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
+      validateUuidParam('bookingId', bookingId);
 
       // Cancel-preview is a precondition to actually cancelling, so the gate
       // mirrors the DELETE handler in ../route.ts (bookings:cancel_own for

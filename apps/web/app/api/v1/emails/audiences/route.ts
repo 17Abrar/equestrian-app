@@ -27,11 +27,13 @@ const audienceFiltersSchema = z
   })
   .strict();
 
-const createAudienceSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).optional(),
-  filters: audienceFiltersSchema.default({}),
-});
+const createAudienceSchema = z
+  .object({
+    name: z.string().min(1).max(255),
+    description: z.string().max(2000).optional(),
+    filters: audienceFiltersSchema.default({}),
+  })
+  .strict();
 
 export async function GET(request: NextRequest) {
   return withAuth(

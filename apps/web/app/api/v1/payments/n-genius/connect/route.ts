@@ -68,6 +68,10 @@ const connectSchema = z.object({
     .default('AED'),
   makeActive: z.boolean().default(true),
 })
+  // Audit F-2 (2026-05-06): `.strict()` BEFORE `.refine()` — `.refine`
+  // returns ZodEffects which doesn't expose `.strict()`. Without this,
+  // a caller can sneak `{ ..., role: 'club_admin' }` through.
+  .strict()
   // Both header fields are paired — either set both or neither.
   .refine(
     (data) =>

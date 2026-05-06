@@ -10,10 +10,12 @@ import { logger } from '@/lib/logger';
 // `Number(searchParams.pageSize) || 25` path had no upper bound — a single
 // `?pageSize=999999999` request loaded the entire owners table for the club
 // into the Worker isolate.
-const ownerFiltersSchema = z.object({
-  search: z.string().optional(),
-  ...paginationSchema.shape,
-});
+const ownerFiltersSchema = z
+  .object({
+    search: z.string().max(200).optional(),
+    ...paginationSchema.shape,
+  })
+  .strict();
 
 export async function GET(request: NextRequest) {
   return withAuth(

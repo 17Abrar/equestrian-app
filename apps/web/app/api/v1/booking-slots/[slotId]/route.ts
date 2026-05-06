@@ -10,27 +10,31 @@ import {
   getArenaById,
 } from '@equestrian/db/queries';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { sendTriggeredEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
 
-const updateSlotSchema = z.object({
-  date: z.string().optional(),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  maxRiders: z.number().int().min(1).optional(),
-  arenaId: z.string().uuid().optional(),
-  coachMemberId: z.string().uuid().optional(),
-});
+const updateSlotSchema = z
+  .object({
+    date: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+    maxRiders: z.number().int().min(1).optional(),
+    arenaId: z.string().uuid().optional(),
+    coachMemberId: z.string().uuid().optional(),
+  })
+  .strict();
 
 // Match `cancelBookingSchema` — cancelling a slot ripple-cancels every
 // booking on it, so the rider-facing emails need a meaningful reason.
 // The previous shape (`reason` optional, body optional) let staff cancel
 // silently while individual booking cancellation required a reason.
-const cancelSlotSchema = z.object({
-  reason: z.string().min(1, 'Cancellation reason is required'),
-});
+const cancelSlotSchema = z
+  .object({
+    reason: z.string().min(1, 'Cancellation reason is required'),
+  })
+  .strict();
 
 interface RouteParams {
   params: Promise<{ slotId: string }>;
@@ -56,6 +60,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     const { slotId } = await params;
+
+    validateUuidParam('slotId', slotId);
     const slot = await getBookingSlotById(ctx.clubId, slotId);
 
     if (!slot) {
@@ -70,6 +76,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { slotId } = await params;
+      validateUuidParam('slotId', slotId);
       const body = await request.json();
       const data = validateInput(updateSlotSchema, body);
 
@@ -127,6 +134,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { slotId } = await params;
+      validateUuidParam('slotId', slotId);
 
       // A reason is now required (matches cancelBookingSchema). Malformed
       // or missing JSON is a 400 — propagate any error to the withAuth

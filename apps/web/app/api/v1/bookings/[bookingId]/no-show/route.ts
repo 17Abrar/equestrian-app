@@ -8,11 +8,9 @@ import {
   getMemberById,
 } from '@equestrian/db/queries';
 import { calculateNoShowFee, formatMoney } from '@equestrian/shared/utils';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
-  errorResponse,
-} from '@/lib/api-utils';
+  errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 import { sendTriggeredEmail } from '@/lib/email';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
@@ -25,6 +23,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { bookingId } = await params;
+      validateUuidParam('bookingId', bookingId);
 
       const booking = await getBookingById(ctx.clubId, bookingId);
       if (!booking) {

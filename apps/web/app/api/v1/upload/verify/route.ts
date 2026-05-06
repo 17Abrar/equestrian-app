@@ -7,13 +7,15 @@ import { deleteR2Object, verifyObjectMagicBytes } from '@/lib/storage';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
-const verifyRequestSchema = z.object({
-  /** The key returned by `POST /api/v1/upload` (e.g. `"<clubId>/horses/photos/<ts>-<name>"`). */
-  key: z.string().min(1).max(500),
-  /** The content-type originally declared at presign time — we re-check the
-   *  actual file bytes against this. */
-  contentType: z.string().min(1).max(100),
-});
+const verifyRequestSchema = z
+  .object({
+    /** The key returned by `POST /api/v1/upload` (e.g. `"<clubId>/horses/photos/<ts>-<name>"`). */
+    key: z.string().min(1).max(500),
+    /** The content-type originally declared at presign time — we re-check the
+     *  actual file bytes against this. */
+    contentType: z.string().min(1).max(100),
+  })
+  .strict();
 
 const KEY_PATTERN = /^[0-9a-f-]{36}\/[a-z][a-z0-9_/-]*\/\d+-[a-z0-9._-]+$/;
 

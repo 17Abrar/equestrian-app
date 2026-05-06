@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { transferHorseOwnerSchema } from '@equestrian/shared/schemas';
 import { getHorseById, getMemberById, updateHorse } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -24,6 +24,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
       const body = await request.json();
       const data = validateInput(transferHorseOwnerSchema, body);
 

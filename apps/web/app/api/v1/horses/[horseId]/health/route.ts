@@ -2,13 +2,11 @@ import { type NextRequest } from 'next/server';
 import { createHealthRecordSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getClubById, getHealthRecords, createHealthRecord, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse,
-} from '@/lib/api-utils';
+  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -19,6 +17,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
       const recordType = request.nextUrl.searchParams.get('recordType') ?? undefined;
       const { page, pageSize } = validateInput(paginationSchema, {
         page: request.nextUrl.searchParams.get('page') ?? undefined,
@@ -38,6 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
 
       // Bind the horse to this tenant before insert — see medications/route.ts
       // for the cross-tenant write scenario this guards against.

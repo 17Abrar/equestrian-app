@@ -1,13 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { createDocumentSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getDocuments, createDocument, getHorseById } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse,
-} from '@/lib/api-utils';
+  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -17,6 +15,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
       const category = request.nextUrl.searchParams.get('category') ?? undefined;
       const { page, pageSize } = validateInput(paginationSchema, {
         page: request.nextUrl.searchParams.get('page') ?? undefined,
@@ -36,6 +35,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
 
       // Bind the horse to this tenant before insert. The R2 file URL was already
       // verified against ctx.clubId by /api/v1/upload/verify, but the

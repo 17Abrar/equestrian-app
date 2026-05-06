@@ -14,9 +14,11 @@ import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
 import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
 import { logger } from '@/lib/logger';
 
-const setActiveClubSchema = z.object({
-  clubId: z.string().uuid(),
-});
+const setActiveClubSchema = z
+  .object({
+    clubId: z.string().uuid(),
+  })
+  .strict();
 
 // Same allowlist the CORS middleware reads. We re-check at the route level
 // so a cookie-mutating request from a non-cavaliq origin is refused even

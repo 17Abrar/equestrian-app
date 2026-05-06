@@ -4,7 +4,7 @@ import {
   getPlatformInvoiceForEmail,
   setPlatformInvoiceProviderRef,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 import {
   createPlatformPaymentIntent,
   PlatformZiinaError,
@@ -32,6 +32,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { invoiceId } = await params;
+      validateUuidParam('invoiceId', invoiceId);
 
       const invoice = await getPlatformInvoiceForEmail(ctx.clubId, invoiceId);
       if (!invoice) {

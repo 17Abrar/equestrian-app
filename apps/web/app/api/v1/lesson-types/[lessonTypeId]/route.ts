@@ -1,12 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { updateLessonTypeSchema } from '@equestrian/shared/schemas';
 import { getLessonTypeById, updateLessonType, deleteLessonType } from '@equestrian/db/queries';
-import {
-  withAuth,
+import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
-} from '@/lib/api-utils';
+  validateInput, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -29,6 +27,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
 
       const { lessonTypeId } = await params;
+
+      validateUuidParam('lessonTypeId', lessonTypeId);
       const lessonType = await getLessonTypeById(ctx.clubId, lessonTypeId);
 
       if (!lessonType) {
@@ -44,6 +44,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { lessonTypeId } = await params;
+      validateUuidParam('lessonTypeId', lessonTypeId);
       const body = await request.json();
       const data = validateInput(updateLessonTypeSchema, body);
 
@@ -69,6 +70,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { lessonTypeId } = await params;
+      validateUuidParam('lessonTypeId', lessonTypeId);
       const lessonType = await deleteLessonType(ctx.clubId, lessonTypeId);
 
       if (!lessonType) {

@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { createCompetitionClassSchema } from '@equestrian/shared/schemas';
 import { getCompetitionClasses, createCompetitionClass, getCompetitionById } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string }>;
@@ -11,6 +11,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId } = await params;
+      validateUuidParam('competitionId', competitionId);
       const classes = await getCompetitionClasses(ctx.clubId, competitionId);
       return successResponse(classes);
     },
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId } = await params;
+      validateUuidParam('competitionId', competitionId);
       const body = await request.json();
       const data = validateInput(createCompetitionClassSchema, body);
 

@@ -3,7 +3,7 @@ import {
   manualMarkLiveryInvoicePaid,
   getLiveryInvoiceForEmail,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { sendTriggeredEmail } from '@/lib/email';
 import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
 import { logger } from '@/lib/logger';
@@ -25,6 +25,7 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { invoiceId } = await params;
+      validateUuidParam('invoiceId', invoiceId);
       const paidAt = new Date();
 
       const invoice = await manualMarkLiveryInvoicePaid(

@@ -7,7 +7,7 @@ import {
   cancelPendingInvoicesForHorse,
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
-import { withAuth, successResponse, errorResponse, parseOptionalBody } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -25,6 +25,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
+      validateUuidParam('horseId', horseId);
       const data = await parseOptionalBody(request, retireHorseOwnershipSchema);
 
       const ownership = await getHorseOwnershipByUser(ctx.userId, horseId);

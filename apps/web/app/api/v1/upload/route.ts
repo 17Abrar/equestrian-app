@@ -36,6 +36,11 @@ const uploadRequestSchema = z
     // abuse.
     targetClubId: z.string().uuid().optional(),
   })
+  // Audit F-2 (2026-05-06): `.strict()` MUST precede `.superRefine` —
+  // ZodEffects produced by `.superRefine` doesn't expose `.strict()`.
+  // Without this, an unknown body key (`isAdmin`, etc.) was silently
+  // dropped instead of 400'ing.
+  .strict()
   .superRefine((data, ctx) => {
     const max = maxUploadSizeFor(data.contentType);
     if (data.fileSizeBytes > max) {

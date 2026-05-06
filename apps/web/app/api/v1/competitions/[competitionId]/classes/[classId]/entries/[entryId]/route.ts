@@ -6,13 +6,15 @@ import {
   isParentOf,
   withdrawCompetitionEntry,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
-const withdrawSchema = z.object({
-  reason: z.string().min(1, 'Withdrawal reason is required'),
-});
+const withdrawSchema = z
+  .object({
+    reason: z.string().min(1, 'Withdrawal reason is required'),
+  })
+  .strict();
 
 interface RouteParams {
   params: Promise<{ competitionId: string; classId: string; entryId: string }>;
@@ -21,6 +23,9 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { competitionId, classId, entryId } = await params;
+    validateUuidParam('competitionId', competitionId);
+    validateUuidParam('classId', classId);
+    validateUuidParam('entryId', entryId);
     // Audit A-4: bind URL's classId to URL's competitionId so a stale link
     // (`/competitions/X/classes/Y/...` where X is not Y's parent) returns
     // 404 instead of silently mutating an entry under the wrong audit

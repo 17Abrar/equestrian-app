@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { cancelLiveryInvoice } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ invoiceId: string }>;
@@ -14,6 +14,7 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { invoiceId } = await params;
+      validateUuidParam('invoiceId', invoiceId);
       const invoice = await cancelLiveryInvoice(ctx.clubId, invoiceId);
 
       if (!invoice) {
