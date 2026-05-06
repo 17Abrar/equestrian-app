@@ -6,7 +6,6 @@ import {
   findUpcomingHorseInsuranceExpiries,
   findUpcomingMedicationEnds,
   recordHorseCareReminderSend,
-  getLastHorseCareReminderSentAt,
   type CareReminderCandidate,
 } from '@equestrian/db/queries';
 import { getTodayDateString } from '@equestrian/shared/utils';
@@ -53,20 +52,6 @@ const KIND_THRESHOLDS: Record<HorseCareReminderKind, readonly number[]> = {
   horse_insurance: [30, 7, 1],
   horse_medication_end: [7, 1],
 };
-
-/**
- * Audit MED (2026-05-06 closeout): minimum gap between consecutive
- * reminders for the same (kind, sourceId). Without this, a record
- * CREATED late (admin backfills a vaccination 5 days overdue) burns
- * through every applicable threshold on consecutive daily cron runs
- * (7→1→0), spamming 2-3 emails for one care item. The gap caps the
- * cadence to one email per care item per N days. 5 is large enough
- * that the 7d → 1d → 0d sequence still hits all three slots over a
- * normal lead-up window (record exists ≥7d before due date), but
- * close enough that a late-registered record only emits one email
- * the day it's discovered + one final urgent ping.
- */
-const MIN_REMINDER_GAP_DAYS = 5;
 
 export async function POST(request: NextRequest) {
   const headerSecret = request.headers.get('x-cron-secret');
@@ -208,42 +193,37 @@ async function processKind(
         continue;
       }
 
-      // Audit MED (2026-05-06 closeout): minimum-gap guard. Before
-      // walking thresholds, check the most recent send for this
-      // (kind, sourceId). If we've sent within the last
-      // MIN_REMINDER_GAP_DAYS, skip — even if a smaller (more urgent)
-      // threshold would now match. Prevents the consecutive-day burst
-      // for late-registered records (admin backfills a vaccination
-      // 5 days overdue → without this, three emails on three days).
-      const lastSentAt = await getLastHorseCareReminderSentAt({
-        clubId: candidate.clubId,
-        kind,
-        sourceId: candidate.sourceId,
-      });
-      if (lastSentAt) {
-        const daysSinceLast =
-          (new Date(`${clubToday}T00:00:00Z`).getTime() - lastSentAt.getTime()) /
-          (24 * 60 * 60 * 1000);
-        if (daysSinceLast < MIN_REMINDER_GAP_DAYS) {
-          skipped += 1;
-          continue;
-        }
-      }
-
-      // Find the highest threshold this candidate currently satisfies.
-      // Iterate descending so we pick the largest unsent threshold —
-      // that emits the most-recently-applicable reminder when a
-      // candidate slipped past earlier thresholds (e.g. a record
-      // created 6 days before its due date never had a 7-day window
-      // to fire in).
+      // Audit MED (2026-05-06 closeout, REVISED): cadence-window logic
+      // — only fire a threshold when daysUntil falls within its
+      // *natural* window, defined as the half-open range
+      // (nextSmallerThreshold, threshold]. For [7, 1, 0]:
+      //   t=7  fires when daysUntil ∈ (1, 7]  (i.e. 2..7)
+      //   t=1  fires when daysUntil ∈ (0, 1]  (i.e. exactly 1)
+      //   t=0  fires when daysUntil ∈ (-∞, 0] (today or overdue)
+      //
+      // Why this shape closes the audit gap correctly: a normal-flow
+      // record (created ≥7d before due) hits each window exactly once
+      // and emits 3 emails over the natural cadence (-7d, -1d, day-of).
+      // A late-registered record (admin backfills 5d overdue,
+      // daysUntil=-5) only hits the t=0 window — ONE email, no burst.
+      //
+      // The previous shape (descending iteration, claim largest unsent)
+      // double-emitted across consecutive days for late records: day-0
+      // fired t=7, day-1 fired t=1, day-2 fired t=0. This shape is
+      // self-limiting because the windows don't overlap.
+      //
+      // Iterate from largest threshold to smallest so the natural
+      // order is preserved if multiple windows technically fit (e.g.
+      // a hypothetical thresholds=[7, 7] — currently impossible but
+      // future-proof). Each threshold only matches its narrow window.
       let chosenThreshold: number | undefined;
-      for (const t of thresholds) {
-        if (daysUntil > t) continue;
-        // (chosenThreshold === undefined → first match in descending
-        // iteration; remember and keep iterating so we prefer the
-        // already-sent threshold over a smaller unsent one — but the
-        // CAS in `recordHorseCareReminderSend` is the source of truth.
-        // Simplest: try the threshold; if already sent, move to next.)
+      for (let i = 0; i < thresholds.length; i++) {
+        const t = thresholds[i]!;
+        const nextSmaller =
+          i + 1 < thresholds.length ? thresholds[i + 1]! : Number.NEGATIVE_INFINITY;
+        const inWindow = daysUntil <= t && daysUntil > nextSmaller;
+        if (!inWindow) continue;
+
         const claimed = await recordHorseCareReminderSend({
           clubId: candidate.clubId,
           kind,

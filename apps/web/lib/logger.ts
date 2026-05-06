@@ -71,21 +71,23 @@ const SENSITIVE_KEYS = new Set([
 // shapes its payload differently (e.g. `{ description: rider.email }`,
 // `{ note: 'reach out at +971 50 ...' }`) would bypass it. These
 // regexes scrub the string VALUES — defense-in-depth for unconventional
-// keys. Anchored to formats that produce few false positives:
+// keys. The patterns are deliberately conservative to avoid corrupting
+// legitimate non-PII log data (booking numbers, invoice ids, UUIDs):
 //   - email: standard local@domain.tld shape
-//   - phone: international (+CC ...) or 7+ consecutive digits with
-//            optional spaces/dashes (catches GCC formats: +971 50 123 4567)
-// Keep these conservative; over-scrubbing would corrupt legitimate
-// log data (e.g. UUIDs containing 7+ consecutive hex digits is fine
-// because hex non-digits break the run).
+//   - phone (international): leading `+CC` then digits/separators —
+//     covers `+971 50 123 4567`, `+1-555-1234`. The required `+` is
+//     what discriminates a phone number from a plain integer id, so
+//     plain `12345678` (booking/invoice) is NOT redacted.
+//   - phone (parenthesized): `(212) 555-1234` style. The opening `(`
+//     before the area code is the discriminator.
+// Domestic phones written as bare digits without separators are NOT
+// redacted (e.g. `0501234567` — would be indistinguishable from an
+// invoice number). The conventional `phone` / `guest_phone` keys
+// already redact those at the key-name layer.
 const PII_PATTERNS: ReadonlyArray<{ regex: RegExp; replacement: string }> = [
   { regex: /[\w.+-]+@[\w-]+\.[\w.-]+/g, replacement: '[REDACTED-EMAIL]' },
-  // Phone: optional `+`, then 7+ digits with optional separators.
-  // The `\b...\b` boundaries prevent matching mid-UUID.
-  {
-    regex: /\b\+?\d[\d\s().-]{6,}\d\b/g,
-    replacement: '[REDACTED-PHONE]',
-  },
+  { regex: /\+\d[\d\s().-]{6,}\d/g, replacement: '[REDACTED-PHONE]' },
+  { regex: /\(\d{2,4}\)\s*\d[\d\s.-]{4,}\d/g, replacement: '[REDACTED-PHONE]' },
 ];
 
 function scrubPiiInString(value: string): string {
