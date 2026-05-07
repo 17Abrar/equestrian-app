@@ -31,6 +31,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Audit F-62 follow-up: gitleaks-action calls the GitHub API to list
+    # PR commits, which requires `pull-requests: read`. The default
+    # `GITHUB_TOKEN` permissions on this repo are minimal, so grant the
+    # smallest scope that lets the scanner work.
+    permissions:
+      contents: read
+      pull-requests: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
