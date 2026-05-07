@@ -208,6 +208,11 @@ export const bookings = pgTable('bookings', {
   // 100 in queries that consume these — that's display-only.
   amount: integer('amount'),
   currency: varchar('currency', { length: 3 }).notNull().default('AED'),
+  // Audit F-71 (2026-05-07 r4 — informational): `.notNull().default(0)` on
+  // the TS side; SQL is `NOT NULL DEFAULT 0` after the migration-0028
+  // backfill. Verified in sync — no drift. Migration 0014 originally
+  // added the column nullable, 0028 tightened it; the schema mirrors
+  // the post-tightening shape.
   discountAmount: integer('discount_amount').notNull().default(0),
   refundedAmountMinor: integer('refunded_amount_minor').notNull().default(0),
   // ON DELETE SET NULL (audit H-14). The booking's `discountAmount` snapshot
@@ -415,6 +420,12 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
   }).onDelete('cascade'),
 ]);
 
+// Audit F-70 (2026-05-07 r4): waitlist queue is append-only. A rider
+// either consumes their slot (entry promoted to a booking) or expires
+// out (status flip to 'expired'); both transitions write a NEW row in
+// the booking flow rather than mutating this entry. Therefore no
+// `updated_at` column. If a future flow needs in-place mutation (e.g.
+// position bump), add `updated_at` here AND in SQL.
 export const waitlist = pgTable(
   'waitlist',
   {

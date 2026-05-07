@@ -97,11 +97,11 @@ export default function RiderProfilePage() {
   const me = meData?.data;
   const profile = profileData?.data ?? null;
 
-  // Audit MED-13 (2026-05-05): the auto-open effect fired on every
-  // refetch where `profile` transiently went null, popping the editor
-  // mid-session. Removed — the derived `showEditor` below already
-  // covers the visual case (force editor whenever profile is null OR
-  // user explicitly clicked Edit).
+  // Audit MED-13 (2026-05-05) + F-64 (2026-05-07 r4): the auto-open
+  // effect was popping the editor mid-session whenever `profile`
+  // transiently went null on refetch. Replaced — the derived
+  // `showEditor` below already covers the visual case (force editor
+  // whenever profile is null OR user explicitly clicked Edit).
   const [editing, setEditing] = useState(false);
 
   if (meLoading || profileLoading) return <ProfileSkeleton />;

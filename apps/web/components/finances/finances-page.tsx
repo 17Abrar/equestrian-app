@@ -14,8 +14,8 @@ import {
 import { formatMoney, toMajorUnits, formatDate } from '@equestrian/shared/utils';
 import {
   useFinanceOverview, useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense,
-  usePayments, useInvoices, useCoupons, useCreateCoupon,
-  type Expense,
+  usePayments, useInvoices, useCoupons, useCreateCoupon, useUpdateCoupon,
+  type Expense, type Coupon,
 } from '@/hooks/use-finances';
 import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
@@ -207,7 +207,17 @@ function InvoicesTab() {
 
   const invoices = data?.data ?? [];
 
-  if (invoices.length === 0) return <EmptyState title="No invoices yet" description="Invoices will appear here when created." />;
+  if (invoices.length === 0) {
+    // Audit F-20 (2026-05-07 r4): invoices are auto-issued by livery + booking
+    // flows; the helpful CTA is to set up livery contracts (the upstream).
+    return (
+      <EmptyState
+        title="No invoices yet"
+        description="Livery contracts and bookings will generate invoices here."
+        action={{ label: 'View livery contracts', href: '/horses' }}
+      />
+    );
+  }
 
   return (
     <div>
@@ -247,7 +257,17 @@ function PaymentsTab() {
 
   const payments = data?.data ?? [];
 
-  if (payments.length === 0) return <EmptyState title="No payments yet" description="Payments will appear here when processed." />;
+  if (payments.length === 0) {
+    // Audit F-20 (2026-05-07 r4): payments are recorded against bookings; CTA
+    // points to the bookings list where charges originate.
+    return (
+      <EmptyState
+        title="No payments yet"
+        description="Booking and livery payments will appear here once collected."
+        action={{ label: 'Open bookings', href: '/bookings' }}
+      />
+    );
+  }
 
   return (
     <div>
@@ -280,6 +300,8 @@ function PaymentsTab() {
 
 function ExpensesTab() {
   const [page, setPage] = useState(1);
+  // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
+  const [addOpen, setAddOpen] = useState(false);
   const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: DEFAULT_PAGE_SIZE });
 
   if (isLoading) return <FinanceRowListSkeleton />;
@@ -290,11 +312,15 @@ function ExpensesTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <AddExpenseDialog />
+        <AddExpenseDialog open={addOpen} onOpenChange={setAddOpen} />
       </div>
 
       {expenses.length === 0 ? (
-        <EmptyState title="No expenses yet" description="Track your stable expenses here." />
+        <EmptyState
+          title="No expenses yet"
+          description="Track your stable expenses here."
+          action={{ label: 'Add Expense', onClick: () => setAddOpen(true) }}
+        />
       ) : (
         <>
           <Table>
@@ -480,8 +506,13 @@ function DeleteExpenseButton({ expense }: { expense: Expense }) {
   );
 }
 
-function AddExpenseDialog() {
-  const [open, setOpen] = useState(false);
+function AddExpenseDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createExpense = useCreateExpense();
 
   const form = useForm<CreateExpenseFormValues, unknown, CreateExpenseInput>({
@@ -494,7 +525,7 @@ function AddExpenseDialog() {
       await createExpense.mutateAsync(data);
       toast.success('Expense added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('expense.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to add expense');
@@ -502,7 +533,7 @@ function AddExpenseDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Expense</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Add Expense</DialogTitle></DialogHeader>
@@ -556,6 +587,8 @@ function CouponsTab() {
   // in the club's configured currency.
   const currency = settings?.data.currency ?? 'AED';
   const [page, setPage] = useState(1);
+  // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
+  const [addOpen, setAddOpen] = useState(false);
   const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: DEFAULT_PAGE_SIZE });
 
   if (isLoading) return <FinanceRowListSkeleton />;
@@ -573,11 +606,15 @@ function CouponsTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <AddCouponDialog />
+        <AddCouponDialog open={addOpen} onOpenChange={setAddOpen} />
       </div>
 
       {coupons.length === 0 ? (
-        <EmptyState title="No coupons yet" description="Create promo codes for your riders." />
+        <EmptyState
+          title="No coupons yet"
+          description="Create promo codes for your riders."
+          action={{ label: 'Create Coupon', onClick: () => setAddOpen(true) }}
+        />
       ) : (
         <>
           <Table>
@@ -588,6 +625,7 @@ function CouponsTab() {
                 <TableHead>Usage</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Expires</TableHead>
+                <TableHead className="w-[120px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -600,6 +638,9 @@ function CouponsTab() {
                   <TableCell>{c.usageCount}{c.maxUses ? ` / ${c.maxUses}` : ''}</TableCell>
                   <TableCell><Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge></TableCell>
                   <TableCell className="text-muted-foreground">{c.expiresAt ? formatDate(c.expiresAt) : 'Never'}</TableCell>
+                  <TableCell className="text-right">
+                    <CouponStatusActions coupon={c} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -611,8 +652,82 @@ function CouponsTab() {
   );
 }
 
-function AddCouponDialog() {
-  const [open, setOpen] = useState(false);
+// Audit F-52 (2026-05-07 r4): coupons UI was missing a destructive
+// affordance. Per the audit's recommendation (b) we expose status
+// transitions via the existing PATCH route — pause an active coupon,
+// resume a paused one, expire either. No new API needed.
+function CouponStatusActions({ coupon }: { coupon: Coupon }) {
+  const updateCoupon = useUpdateCoupon(coupon.id);
+
+  async function setStatus(status: 'active' | 'paused' | 'expired', successMessage: string) {
+    try {
+      await updateCoupon.mutateAsync({ status });
+      toast.success(successMessage);
+    } catch (err) {
+      reportMutationError('coupon.update', err, { couponId: coupon.id });
+      toast.error(err instanceof Error ? err.message : 'Failed to update coupon');
+    }
+  }
+
+  // Already-expired and exhausted coupons cannot be reactivated.
+  if (coupon.status === 'expired' || coupon.status === 'exhausted') {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex justify-end gap-1">
+      {coupon.status === 'paused' ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={updateCoupon.isPending}
+          onClick={() => setStatus('active', 'Coupon resumed')}
+        >
+          Resume
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={updateCoupon.isPending}
+          onClick={() => setStatus('paused', 'Coupon paused')}
+        >
+          Pause
+        </Button>
+      )}
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button size="icon" variant="ghost" aria-label={`Expire coupon ${coupon.code}`}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Expire coupon {coupon.code}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The code will stop working for new bookings. Existing usages stay
+              attached to past bookings. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => setStatus('expired', 'Coupon expired')}>
+              Expire
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function AddCouponDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createCoupon = useCreateCoupon();
 
   const form = useForm<CreateCouponFormValues, unknown, CreateCouponInput>({
@@ -625,7 +740,7 @@ function AddCouponDialog() {
       await createCoupon.mutateAsync(data);
       toast.success('Coupon created');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('coupon.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create coupon');
@@ -633,7 +748,7 @@ function AddCouponDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Create Coupon</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Create Coupon</DialogTitle></DialogHeader>

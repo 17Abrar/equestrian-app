@@ -392,12 +392,13 @@ export const stripeAdapter: PaymentProviderAdapter = {
     // avoids the dummy-key instance the prior implementation needed and
     // saves a per-webhook HTTP-agent allocation. Audit F-6 (2026-05-05).
     // Audit LOW (2026-05-05 pass 2): pin tolerance explicitly. Stripe's
-    // SDK default is 300 (5 min) — sufficient for healthy clocks but a
-    // Worker with severe clock skew would silently drop legitimate
-    // webhooks while passing the silent-default invariant on review.
-    // Stating the value documents the contract; 300 also matches the
-    // staleness window we use elsewhere for webhook claim recovery.
-    const STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
+    // Audit F-40 (2026-05-07 r4): tightened from 300s (Stripe SDK default)
+    // to 120s. Cloudflare Workers run on NTP-synced clocks, so the older
+    // 5-min slack was paying for nothing. Tighter window narrows the
+    // event-replay surface if a `whsec_…` ever leaks (an attacker with
+    // the secret could otherwise craft fresh-but-valid signatures within
+    // tolerance). 120s still absorbs typical isolate clock drift.
+    const STRIPE_WEBHOOK_TOLERANCE_SECONDS = 120;
 
     let event: Stripe.Event;
     try {

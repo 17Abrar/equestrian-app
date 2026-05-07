@@ -31,9 +31,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Audit F-62 follow-up: gitleaks-action calls the GitHub API to list
+    # PR commits, which requires `pull-requests: read`. The default
+    # `GITHUB_TOKEN` permissions on this repo are minimal, so grant the
+    # smallest scope that lets the scanner work.
+    permissions:
+      contents: read
+      pull-requests: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # gitleaks needs full history to scan the diff against base.
+          # Audit F-62 (2026-05-07 r4): pre-commit hook (scripts/git-hooks/
+          # pre-commit) is the primary defense, but `git commit --no-verify`
+          # defeats it. CI is the belt-and-braces catch.
+          fetch-depth: 0
+
+      # Audit F-62 (2026-05-07 r4): scan the pushed commits for committed
+      # secrets (API keys, tokens, certificates, private keys). Catches
+      # the `--no-verify` and fresh-clone-without-pnpm-prepare cases that
+      # bypass the pre-commit hook. Configured via the default ruleset
+      # which matches Stripe, AWS, Sentry, Slack, etc.
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -75,6 +99,14 @@ jobs:
       # to the placeholder, this step picks it up and the next typecheck
       # would fail on a real reference (or pass if no code uses it yet —
       # either way, no `unknown` slips through).
+      #
+      # Audit F-75 (2026-05-07 r4): `wrangler types` enumerates ONLY
+      # `vars` from wrangler.jsonc — Worker secrets (set via
+      # `wrangler secret put`) are NEVER in the generated file by
+      # design. Per-release verification of secrets presence MUST be
+      # done via `wrangler secret list cavaliq` (see DEPLOY.md).
+      # Touching cloudflare-env.d.ts to add secret declarations would
+      # be silently overwritten on the next `cf:typegen` run.
       - name: Regenerate Cloudflare env types
         run: pnpm --filter @equestrian/web cf:typegen
 

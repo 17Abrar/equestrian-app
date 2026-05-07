@@ -39,12 +39,35 @@ import { BrandingForm } from '@/components/settings/branding-form';
 import { DiscoveryForm } from '@/components/settings/discovery-form';
 import { SubscriptionPanel } from '@/components/settings/subscription-panel';
 
+// Audit F-51 (2026-05-07 r4): content-shape skeleton mirroring the title +
+// 8-tab TabsList + form-card layout used by the Settings page. Replaces
+// the single h-96 rectangle that didn't match the rendered shape.
 function SettingsSkeleton() {
   return (
     <div className="space-y-6">
+      {/* Title */}
       <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-10 w-64" />
-      <Skeleton className="h-96" />
+      {/* TabsList — 8 tabs in one row */}
+      <div className="flex gap-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-24" />
+        ))}
+      </div>
+      {/* Form card */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="mt-2 h-4 w-64" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

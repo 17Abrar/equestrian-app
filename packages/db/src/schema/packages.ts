@@ -148,6 +148,10 @@ export const coupons = pgTable(
   ],
 );
 
+// Audit F-70 (2026-05-07 r4): write-once usage ledger. A coupon
+// application is recorded once at booking time; refunds/voids leave
+// the row in place so historical reporting stays accurate. No
+// `updated_at` by design — `usedAt` is the lifecycle timestamp.
 export const couponUsages = pgTable('coupon_usages', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')

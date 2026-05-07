@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, type DefaultValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -78,19 +78,31 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function AddBookingDialog() {
-  const [open, setOpen] = useState(false);
+// Audit F-20 (2026-05-07 r4): allow caller to drive the dialog open state
+// (e.g. from an EmptyState CTA). Falls back to internal state when no props
+// are passed so existing call sites keep working.
+interface AddBookingDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AddBookingDialog(props: AddBookingDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = props.open ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    if (props.onOpenChange) props.onOpenChange(next);
+    else setInternalOpen(next);
+  };
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponError, setCouponError] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
 
-  // Audit LOW (2026-05-05 pass 2): the unavoidable corner of RHF + Zod
-  // typing. The Zod schema makes `paymentMethod` required (no
-  // undefined), but we want the form to start with no selection so the
-  // submit-time validation message fires correctly. `defaultValues` is
-  // typed against `FieldValues` which inherits `FormValues`'s required
-  // `paymentMethod`. The `Partial` cast tells TS we're intentionally
-  // omitting it; runtime behavior is unchanged.
+  // Audit F-56 (2026-05-07 r4): use RHF's `DefaultValues<T>` helper
+  // instead of the prior `as Partial<FormValues> as FormValues` chain.
+  // `DefaultValues<T>` intentionally allows partial defaults — the Zod
+  // schema makes `paymentMethod` required, but we want the form to
+  // start with no selection so the submit-time validation message
+  // fires. One single cast, scoped to RHF's exact contract.
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -100,7 +112,7 @@ export function AddBookingDialog() {
       riderMemberId: '',
       horseId: '__none__',
       couponCode: '',
-    } as Partial<FormValues> as FormValues,
+    } as DefaultValues<FormValues>,
   });
 
   // Watch fields that drive cascading queries / state resets.

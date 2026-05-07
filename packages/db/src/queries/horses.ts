@@ -135,6 +135,11 @@ export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
   };
 }
 
+// Audit F-21 (2026-05-07 r4): export row type derived from the projection
+// so api-client / hook consumers can `import type { HorseListRow }` instead
+// of redeclaring inline. Starter pattern — wider rollout deferred.
+export type HorseListRow = Awaited<ReturnType<typeof getHorsesByClub>>['data'][number];
+
 /** Cheap count for the admin "Pending approvals" badge. */
 export async function getPendingOwnershipCount(clubId: string) {
   const result = await db
@@ -270,8 +275,22 @@ export async function getAvailableHorsesForMatching(
   // perf cost as before.
   riderMemberId?: string,
 ) {
+  // Audit F-58 (2026-05-07 r4): project only the columns the matcher
+  // consumes (~9 of 55). Same pattern as F-8 on the list view — keeps
+  // payload small on every booking-creation path and removes future
+  // decryption cost when encrypted-at-rest medical fields land.
   const availableHorses = await db
-    .select()
+    .select({
+      id: horses.id,
+      name: horses.name,
+      status: horses.status,
+      skillLevel: horses.skillLevel,
+      weightLimitKg: horses.weightLimitKg,
+      minRiderAge: horses.minRiderAge,
+      maxLessonsPerDay: horses.maxLessonsPerDay,
+      mandatoryRestDays: horses.mandatoryRestDays,
+      temperament: horses.temperament,
+    })
     .from(horses)
     .where(
       and(
@@ -368,6 +387,12 @@ export async function getAvailableHorsesForMatching(
     pairingHistory: pairingMap.get(horse.id) ?? [],
   }));
 }
+
+// Audit F-21 (2026-05-07 r4): exported row type so consumers can import the
+// shape instead of redeclaring it.
+export type HorseAvailableForMatching = Awaited<
+  ReturnType<typeof getAvailableHorsesForMatching>
+>[number];
 
 export async function softDeleteHorse(clubId: string, horseId: string) {
   const result = await db

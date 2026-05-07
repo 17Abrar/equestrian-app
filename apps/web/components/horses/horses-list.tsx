@@ -232,6 +232,7 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
         <EmptyState
           title="No pending registrations"
           description="When a rider registers a horse they own, it'll show up here for you to review."
+          action={{ label: 'View active horses', href: '/horses' }}
         />
       )}
 

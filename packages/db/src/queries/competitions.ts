@@ -174,6 +174,12 @@ export async function deleteCompetition(clubId: string, competitionId: string) {
 
 // ─── Competition Classes ──────────────────────────────────────────────
 
+// Audit F-57 (2026-05-07 r4): defensive cap. Realistic class counts are
+// well under 50 — `.limit(200)` is belt-and-braces against a misconfigured
+// or malicious bulk-import that would otherwise turn the competition
+// detail page into a DoS vector.
+const COMPETITION_CLASSES_HARD_CAP = 200;
+
 export async function getCompetitionClasses(clubId: string, competitionId: string) {
   return db
     .select()
@@ -184,7 +190,8 @@ export async function getCompetitionClasses(clubId: string, competitionId: strin
         eq(competitionClasses.competitionId, competitionId),
       ),
     )
-    .orderBy(asc(competitionClasses.sortOrder), asc(competitionClasses.name));
+    .orderBy(asc(competitionClasses.sortOrder), asc(competitionClasses.name))
+    .limit(COMPETITION_CLASSES_HARD_CAP);
 }
 
 export async function getCompetitionClassById(clubId: string, classId: string) {
@@ -569,6 +576,13 @@ export async function getCompetitionsForCalendar(clubId: string, dateFrom: strin
       and(
         eq(competitions.clubId, clubId),
         eq(competitions.isActive, true),
+        // Audit F-68 (2026-05-07 r4 — informational): these LOOK like
+        // raw concatenations but Drizzle parameterizes `${dateTo}` /
+        // `${dateFrom}` — they're bound parameters, not string interp.
+        // No SQL injection. Kept as `sql` template (rather than the
+        // typed `lte()`/`gte()` helpers) only because Drizzle's helpers
+        // would emit `IS NULL` for the optional case the route already
+        // guarantees is non-null.
         sql`${competitions.startDate} <= ${dateTo}`,
         sql`${competitions.endDate} >= ${dateFrom}`,
       ),

@@ -413,6 +413,19 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       );
     }
 
+    // Audit F-41 (2026-05-07 r4): hard-fail when the original payment is
+    // missing a currencyCode. The previous silent default to 'AED' would
+    // mis-issue refunds for SAR/KWD/etc. merchants whose order lookup
+    // returned a malformed payload. Forcing the operator to investigate is
+    // safer than crediting the wrong currency.
+    const refundCurrencyCode = payment.amount.currencyCode;
+    if (!refundCurrencyCode) {
+      throw new PaymentProviderError(
+        'REFUND_NO_CURRENCY',
+        'N-Genius refund: original payment lookup returned no currency code; refusing to default.',
+      );
+    }
+
     const refundRes = await fetch(
       `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}/payments/${encodeURIComponent(payment._id)}/refund`,
       {
@@ -424,7 +437,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         },
         body: JSON.stringify({
           amount: {
-            currencyCode: payment.amount.currencyCode ?? 'AED',
+            currencyCode: refundCurrencyCode,
             value: refundAmount,
           },
         }),

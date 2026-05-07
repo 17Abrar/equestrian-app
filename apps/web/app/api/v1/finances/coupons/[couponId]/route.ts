@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { couponBaseSchema, couponPercentageRefine } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { updateCoupon } from '@equestrian/db/queries';
@@ -37,8 +38,16 @@ interface RouteParams {
 // piggybacking on Drizzle's spread into SET. The percentage refine is
 // re-applied so a partial update from {discountType:'percentage'} →
 // discountValue:250 still 422s. Audit AI-21.
+//
+// Audit F-52 (2026-05-07 r4): allow operator-driven status transitions
+// (active ↔ paused, both → expired). The DB enum also includes
+// 'exhausted' but that's transitioned automatically by validateCoupon
+// when usageCount hits maxUses — we don't expose it to the PATCH API.
 const updateCouponSchema = couponBaseSchema
   .partial()
+  .extend({
+    status: z.enum(['active', 'paused', 'expired']).optional(),
+  })
   .superRefine(couponPercentageRefine);
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {

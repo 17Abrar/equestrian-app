@@ -299,6 +299,9 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
   const [date, setDate] = useState<string>('');
   const [page, setPage] = useState(1);
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
+  // Audit F-20 (2026-05-07 r4): lift dialog open state so EmptyState CTA
+  // can trigger the same Add Booking flow as the header button.
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useBookings({
     status,
@@ -333,7 +336,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
           <p className="mt-1 text-muted-foreground">View and manage lesson bookings</p>
         </div>
-        {canCreate && <AddBookingDialog />}
+        {canCreate && <AddBookingDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       {/* Filters */}
@@ -393,6 +396,11 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
         <EmptyState
           title="No bookings yet"
           description="Bookings will appear here once riders start booking lessons"
+          action={
+            canCreate
+              ? { label: 'Create booking', onClick: () => setAddOpen(true) }
+              : undefined
+          }
         />
       )}
 

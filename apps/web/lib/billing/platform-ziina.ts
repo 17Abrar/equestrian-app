@@ -27,6 +27,13 @@ function getPlatformApiKey(): string {
   return key;
 }
 
+// Audit F-39 (2026-05-07 r4): drive Ziina sandbox `test` flag from env so
+// staging / preview workers can issue test payments. Defaults to live so
+// production behavior is unchanged.
+function isPlatformZiinaTestMode(): boolean {
+  return process.env.PLATFORM_ZIINA_TEST_MODE === 'true';
+}
+
 function authHeaders(extra: Record<string, string> = {}) {
   return {
     Authorization: `Bearer ${getPlatformApiKey()}`,
@@ -109,7 +116,9 @@ export async function createPlatformPaymentIntent(
       success_url: input.returnUrl,
       cancel_url: input.returnUrl,
       failure_url: input.returnUrl,
-      test: false,
+      // Audit F-39 (2026-05-07 r4): driven from env so staging can run
+      // sandbox flows without a code change.
+      test: isPlatformZiinaTestMode(),
     }),
   });
 

@@ -333,6 +333,8 @@ function ClassRow({
 }
 
 function EntriesSection({ competitionId, classId }: { competitionId: string; classId: string }) {
+  // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
+  const [addOpen, setAddOpen] = useState(false);
   const { data, isLoading, isError, refetch } = useCompetitionEntries(competitionId, classId);
 
   if (isLoading) return <Skeleton className="h-32" />;
@@ -343,11 +345,20 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <AddEntryForm competitionId={competitionId} classId={classId} />
+        <AddEntryForm
+          competitionId={competitionId}
+          classId={classId}
+          open={addOpen}
+          onOpenChange={setAddOpen}
+        />
       </div>
 
       {entries.length === 0 ? (
-        <EmptyState title="No entries yet" description="Add entries manually or riders can register through the app." />
+        <EmptyState
+          title="No entries yet"
+          description="Add entries manually or riders can register through the app."
+          action={{ label: 'Add Entry', onClick: () => setAddOpen(true) }}
+        />
       ) : (
         <Table>
       <TableHeader>
@@ -385,6 +396,8 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
 }
 
 function ResultsSection({ competitionId, classId }: { competitionId: string; classId: string }) {
+  // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
+  const [addOpen, setAddOpen] = useState(false);
   const { data, isLoading, isError, refetch } = useCompetitionResults(competitionId, classId);
   const entriesQuery = useCompetitionEntries(competitionId, classId);
 
@@ -397,11 +410,21 @@ function ResultsSection({ competitionId, classId }: { competitionId: string; cla
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <AddResultForm competitionId={competitionId} classId={classId} entries={entries} />
+        <AddResultForm
+          competitionId={competitionId}
+          classId={classId}
+          entries={entries}
+          open={addOpen}
+          onOpenChange={setAddOpen}
+        />
       </div>
 
       {results.length === 0 ? (
-        <EmptyState title="No results yet" description="Add results after the competition." />
+        <EmptyState
+          title="No results yet"
+          description="Add results after the competition."
+          action={{ label: 'Add Result', onClick: () => setAddOpen(true) }}
+        />
       ) : (
         <Table>
           <TableHeader>
@@ -512,8 +535,17 @@ function AddClassForm({ competitionId, currency }: { competitionId: string; curr
 
 // ─── Add Entry Form ──────────────────────────────────────────────────
 
-function AddEntryForm({ competitionId, classId }: { competitionId: string; classId: string }) {
-  const [open, setOpen] = useState(false);
+function AddEntryForm({
+  competitionId,
+  classId,
+  open,
+  onOpenChange,
+}: {
+  competitionId: string;
+  classId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createEntry = useCreateCompetitionEntry(competitionId, classId);
   const { data: ridersData } = useRiders({ page: 1, pageSize: MAX_PAGE_SIZE });
   const { data: horsesData } = useHorses({ page: 1, pageSize: MAX_PAGE_SIZE });
@@ -537,7 +569,7 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
       await createEntry.mutateAsync(data);
       toast.success('Entry added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('competition.entry.create', err, { competitionId });
       toast.error(err instanceof Error ? err.message : 'Failed to add entry');
@@ -545,7 +577,7 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Entry</Button>
       </DialogTrigger>
@@ -594,8 +626,19 @@ function AddEntryForm({ competitionId, classId }: { competitionId: string; class
 
 // ─── Add Result Form ─────────────────────────────────────────────────
 
-function AddResultForm({ competitionId, classId, entries }: { competitionId: string; classId: string; entries: CompetitionEntry[] }) {
-  const [open, setOpen] = useState(false);
+function AddResultForm({
+  competitionId,
+  classId,
+  entries,
+  open,
+  onOpenChange,
+}: {
+  competitionId: string;
+  classId: string;
+  entries: CompetitionEntry[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createResult = useCreateCompetitionResult(competitionId, classId);
   const form = useForm<
     z.input<typeof createCompetitionResultSchema>,
@@ -612,7 +655,7 @@ function AddResultForm({ competitionId, classId, entries }: { competitionId: str
       await createResult.mutateAsync(data);
       toast.success('Result added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('competition.result.create', err, { competitionId });
       toast.error(err instanceof Error ? err.message : 'Failed to add result');
@@ -620,7 +663,7 @@ function AddResultForm({ competitionId, classId, entries }: { competitionId: str
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Result</Button>
       </DialogTrigger>

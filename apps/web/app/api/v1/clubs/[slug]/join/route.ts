@@ -11,6 +11,8 @@ import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { sendTriggeredEmail } from '@/lib/email';
 import { WelcomeRider } from '@equestrian/email-templates/welcome-rider';
+import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
+import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -145,10 +147,24 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    return successResponse(
+    // Audit F-66 (2026-05-07 r4): set the active-club cookie INLINE on
+    // the join response. Previously the client had to make a second
+    // POST /me/active-club roundtrip to update the cookie; in between,
+    // `getTenantContext` could resolve to a different club via the
+    // most-recently-joined fallback, briefly showing the wrong tenant
+    // in optimistic UIs. Cookie attributes mirror /me/active-club's.
+    const response = successResponse(
       { status: 'joined', clubId: club.id, slug: club.slug, memberId: member.id },
       201,
     );
+    response.cookies.set(ACTIVE_CLUB_COOKIE, club.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: ACTIVE_CLUB_COOKIE_TTL_SECONDS,
+    });
+    return response;
   } catch (error) {
     logger.error('join_club_failed', {
       error: error instanceof Error ? error.message : 'Unknown error',

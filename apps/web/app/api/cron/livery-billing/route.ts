@@ -82,24 +82,24 @@ export async function POST(request: NextRequest) {
   // the operator misses the alert — see audit H-6. Per-iteration
   // catches inside the helpers already report their own row failures;
   // this guard catches everything else.
+  //
+  // Audit F-61 (2026-05-07 r4): pruneAuditLog runs FIRST (independent of
+  // issuance/reminders) so a persistent billing failure doesn't freeze
+  // audit-log retention. Wrapped in its own try/catch so a prune
+  // failure can't suppress issuance + reminders.
+  let auditPruned = 0;
+  try {
+    const result = await pruneAuditLog();
+    auditPruned = result.pruned;
+  } catch (err) {
+    logger.warn('audit_log_prune_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   try {
     const issued = await issueDueInvoices(utcToday);
     const reminded = await sendReminders(utcToday);
-
-    // Audit F-9: piggyback on the daily cron to prune old audit_log rows
-    // (90-day retention, capped at 5000 rows per run so a sustained
-    // backlog won't blow the wall-clock budget). Wrapped in a separate
-    // catch so a failure here doesn't suppress the issuance + reminder
-    // result the operator actually cares about.
-    let auditPruned = 0;
-    try {
-      const result = await pruneAuditLog();
-      auditPruned = result.pruned;
-    } catch (err) {
-      logger.warn('audit_log_prune_failed', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
 
     logger.info('livery_cron_completed', {
       utcToday,
@@ -123,6 +123,8 @@ export async function POST(request: NextRequest) {
       utcToday,
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
+      // Even on failure, surface that retention DID run (or didn't).
+      auditLogPruned: auditPruned,
     });
     return errorResponse('CRON_FAILED', 'Cron run failed', 500);
   }

@@ -1,5 +1,5 @@
-import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
-import { db, rawDb, writeTransaction } from '../index';
+import { sql } from 'drizzle-orm';
+import { rawDb, writeTransaction } from '../index';
 import { auditLog } from '../schema/operations';
 
 export interface CreateAuditEntryParams {
@@ -11,15 +11,6 @@ export interface CreateAuditEntryParams {
   changes?: Record<string, { from: unknown; to: unknown }>;
   ipAddress?: string;
   userAgent?: string;
-}
-
-interface AuditLogFilters {
-  actorMemberId?: string;
-  action?: string;
-  resourceType?: string;
-  resourceId?: string;
-  page: number;
-  pageSize: number;
 }
 
 const IP_PATTERN = /^[\da-f.:]+$/i;
@@ -78,59 +69,10 @@ export async function createAuditEntry(
   }
 }
 
-export async function getAuditLog(clubId: string, filters: AuditLogFilters) {
-  const conditions: SQL[] = [eq(auditLog.clubId, clubId)];
-
-  if (filters.actorMemberId) {
-    conditions.push(eq(auditLog.actorMemberId, filters.actorMemberId));
-  }
-  if (filters.action) {
-    conditions.push(eq(auditLog.action, filters.action));
-  }
-  if (filters.resourceType) {
-    conditions.push(eq(auditLog.resourceType, filters.resourceType));
-  }
-  if (filters.resourceId) {
-    conditions.push(eq(auditLog.resourceId, filters.resourceId));
-  }
-
-  const offset = (filters.page - 1) * filters.pageSize;
-
-  // Audit F-30 (2026-05-06): explicit projection. The audit_log row
-  // carries the JSONB `changes` column which can be multi-KB per row;
-  // a paginated list with `db.select()` hoists every byte over the
-  // wire on every load. Project only the columns the route surfaces.
-  const [data, countResult] = await Promise.all([
-    db
-      .select({
-        id: auditLog.id,
-        clubId: auditLog.clubId,
-        actorMemberId: auditLog.actorMemberId,
-        action: auditLog.action,
-        resourceType: auditLog.resourceType,
-        resourceId: auditLog.resourceId,
-        changes: auditLog.changes,
-        ipAddress: auditLog.ipAddress,
-        userAgent: auditLog.userAgent,
-        createdAt: auditLog.createdAt,
-      })
-      .from(auditLog)
-      .where(and(...conditions))
-      .orderBy(desc(auditLog.createdAt))
-      .limit(filters.pageSize)
-      .offset(offset),
-    db
-      // ::int cast — Postgres returns count(*) as bigint which @neondatabase/
-      // serverless surfaces as a string in the JSON output; the `<number>`
-      // generic was lying. Mirrors every other count query in the codebase.
-      // See audit F-16.
-      .select({ count: sql<number>`count(*)::int` })
-      .from(auditLog)
-      .where(and(...conditions)),
-  ]);
-
-  return { data, total: Number(countResult[0]?.count ?? 0) };
-}
+// Audit F-63 (2026-05-07 r4): `getAuditLog` was a dead export — staged
+// for an admin audit-log viewer that hasn't shipped. Deleted to reduce
+// unmaintained surface area; restore (with row-level role check) when
+// the viewer route lands. The `pruneAuditLog` retention path stays.
 
 /**
  * Daily-cron retention prune for audit_log. Audit F-9 — every withAuth

@@ -233,6 +233,16 @@ const PROVIDER_BODY_PII_PATTERNS: ReadonlyArray<{ regex: RegExp; replacement: st
   // (won't strip a plain "John Doe" mid-sentence).
   { regex: /(cardholder(?:Name)?\s*[:=]\s*)["']?[A-Za-z][\w\s.'-]{1,80}/gi, replacement: '$1[REDACTED-NAME]' },
   { regex: /(name\s*[:=]\s*)["']?[A-Z][a-z]+\s+[A-Z][a-z]+/g, replacement: '$1[REDACTED-NAME]' },
+  // Audit F-74 (2026-05-07 r4): bare 13-19 digit runs (PAN length range,
+  // optionally space- or dash-grouped). N-Genius edge cases have been
+  // observed to echo a card number in error bodies. The match doesn't
+  // Luhn-validate (false positives on plain numeric ids are acceptable
+  // because the redaction is a one-way scrub on operator-facing text);
+  // Luhn would be defense-in-depth but adding it here only inside a
+  // regex-replace path isn't worth the complexity. Run before email
+  // patterns so a "card: 4111 1111…" line gets the digits scrubbed
+  // even if a label-prefix regex matches first.
+  { regex: /\b(?:\d[ -]*?){13,19}\b/g, replacement: '[REDACTED-CARD]' },
 ];
 
 export function safeProviderPreview(rawBody: string, maxChars = 200): string {

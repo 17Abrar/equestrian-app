@@ -6,6 +6,11 @@ type NewArena = typeof arenas.$inferInsert;
 type ArenaCreate = Omit<NewArena, 'id' | 'clubId' | 'createdAt' | 'updatedAt'>;
 type ArenaUpdate = Partial<ArenaCreate>;
 
+// Audit F-59 (2026-05-07 r4): explicit list-row projection. Same pattern
+// as the F-8 horses sweep and the F-58 matching projection — keeps
+// payload narrow and guards against silently-bigger responses when new
+// columns get added to the wide table. The detail GET (`getArenaById`)
+// keeps the wide projection.
 export async function getArenasByClub(
   clubId: string,
   { page, pageSize }: { page: number; pageSize: number },
@@ -14,7 +19,18 @@ export async function getArenasByClub(
   const where = and(eq(arenas.clubId, clubId), eq(arenas.isActive, true));
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: arenas.id,
+        clubId: arenas.clubId,
+        name: arenas.name,
+        capacity: arenas.capacity,
+        surfaceType: arenas.surfaceType,
+        hasLighting: arenas.hasLighting,
+        isIndoor: arenas.isIndoor,
+        isActive: arenas.isActive,
+        createdAt: arenas.createdAt,
+        updatedAt: arenas.updatedAt,
+      })
       .from(arenas)
       .where(where)
       .orderBy(asc(arenas.name))
@@ -27,6 +43,9 @@ export async function getArenasByClub(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+// Audit F-21 (2026-05-07 r4): row type derived from the projection.
+export type ArenaListItem = Awaited<ReturnType<typeof getArenasByClub>>['items'][number];
 
 /**
  * Audit MED (2026-05-05 pass 2): forward-creation paths (booking-slots

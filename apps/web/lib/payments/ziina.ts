@@ -38,6 +38,10 @@ const API_BASE_URL = process.env.ZIINA_API_BASE_URL ?? 'https://api-v2.ziina.com
 const ziinaCredentialsSchema = z.object({
   apiKey: z.string().min(1),
   webhookSigningSecret: z.string().min(1).optional(),
+  // Audit F-39 (2026-05-07 r4): Ziina's `test` flag drives sandbox flows.
+  // Default `false` (live) keeps existing prod behavior; merchants in
+  // sandbox mode can opt in via the connect-time credentials blob.
+  testMode: z.boolean().optional(),
 });
 
 type ZiinaCredentials = z.infer<typeof ziinaCredentialsSchema>;
@@ -143,7 +147,9 @@ export const ziinaAdapter: PaymentProviderAdapter = {
         success_url: input.returnUrl,
         cancel_url: input.returnUrl,
         failure_url: input.returnUrl,
-        test: false,
+        // Audit F-39 (2026-05-07 r4): driven from credentials so a merchant
+        // in Ziina sandbox can verify their integration without a code change.
+        test: creds.testMode ?? false,
       }),
     });
 

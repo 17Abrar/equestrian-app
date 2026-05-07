@@ -74,6 +74,9 @@ interface ApiEnvelope<T> {
 // ─── Tab root ─────────────────────────────────────────────────────────
 
 export function AudiencesTab() {
+  // Audit F-20 (2026-05-07 r4): lift create-dialog open state so EmptyState
+  // CTA shares the same flow as the header trigger.
+  const [createOpen, setCreateOpen] = useState(false);
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['audiences'],
     queryFn: () => fetchJson<ApiEnvelope<Audience[]>>('/api/v1/emails/audiences'),
@@ -120,13 +123,14 @@ export function AudiencesTab() {
               Named rider segments — reuse them to target specific groups in your emails.
             </CardDescription>
           </div>
-          <AudienceFormDialog mode="create" />
+          <AudienceFormDialog mode="create" open={createOpen} onOpenChange={setCreateOpen} />
         </CardHeader>
         <CardContent>
           {audiences.length === 0 ? (
             <EmptyState
               title="No audiences yet"
               description="Create a segment to target riders by skill, activity, or custom filters."
+              action={{ label: 'New Audience', onClick: () => setCreateOpen(true) }}
             />
           ) : (
             <div className="space-y-2">
@@ -225,6 +229,10 @@ function AudienceRow({ audience }: { audience: Audience }) {
 interface AudienceFormDialogProps {
   mode: 'create' | 'edit';
   audience?: Audience;
+  // Audit F-20 (2026-05-07 r4): optional controlled open state so EmptyState
+  // CTA can drive the create flow alongside the header trigger.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Audit MED (2026-05-05 pass 2): converted from `useState` + ad-hoc
@@ -248,8 +256,18 @@ const audienceFormSchema = z.object({
 
 type AudienceFormValues = z.infer<typeof audienceFormSchema>;
 
-function AudienceFormDialog({ mode, audience }: AudienceFormDialogProps) {
-  const [open, setOpen] = useState(false);
+function AudienceFormDialog({
+  mode,
+  audience,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: AudienceFormDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOnOpenChange) controlledOnOpenChange(next);
+    else setInternalOpen(next);
+  };
   const qc = useQueryClient();
   const [filters, setFilters] = useState<AudienceFilters>(audience?.filters ?? {});
 
