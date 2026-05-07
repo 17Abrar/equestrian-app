@@ -109,7 +109,16 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
     });
 }
 
-export async function findHorseBillingAnchor(horseId: string) {
+/**
+ * Audit F-35 (2026-05-07 r5): clubId scope is now mandatory. The
+ * composite FK on `(horse_id, club_id)` already prevents cross-tenant
+ * rows from being inserted, so this is defense-in-depth — a future
+ * migration that loosens the constraint would otherwise re-open the
+ * cross-tenant read. CLAUDE.md rule #11 ("EVERY query MUST include
+ * the club_id tenant scope") applies even when an upstream invariant
+ * happens to enforce it.
+ */
+export async function findHorseBillingAnchor(clubId: string, horseId: string) {
   const latest = await rawDb
     .select({
       id: liveryInvoices.id,
@@ -118,7 +127,7 @@ export async function findHorseBillingAnchor(horseId: string) {
       status: liveryInvoices.status,
     })
     .from(liveryInvoices)
-    .where(eq(liveryInvoices.horseId, horseId))
+    .where(and(eq(liveryInvoices.horseId, horseId), eq(liveryInvoices.clubId, clubId)))
     .orderBy(desc(liveryInvoices.periodStart))
     .limit(1);
   return latest[0] ?? null;
@@ -156,11 +165,25 @@ export async function createLiveryInvoice(input: CreateInvoiceInput) {
     status: 'pending',
   };
   // rawDb — cron runs outside tenant context; status check is horse-scoped.
+  //
+  // Audit F-4 (2026-05-07 r5): the unique constraint on
+  // `(horse_id, period_start)` is the partial index
+  // `livery_invoices_unique_horse_period_active` (migration 0027) with a
+  // `WHERE status <> 'cancelled'` predicate. Postgres requires the
+  // ON CONFLICT predicate to match — without `targetWhere`, the insert
+  // raises SQLSTATE 42P10 ("no unique or exclusion constraint matching
+  // the ON CONFLICT specification") instead of behaving as a quiet
+  // no-op. The cron's idempotency contract relies on this being a
+  // no-op on retries against horses with an outstanding invoice.
   const result = await rawDb
     .insert(liveryInvoices)
     .values(values)
     .onConflictDoNothing({
       target: [liveryInvoices.horseId, liveryInvoices.periodStart],
+      // `where` here is Drizzle 0.45 spelling for the index predicate
+      // matching the partial unique
+      // `livery_invoices_unique_horse_period_active` (migration 0027).
+      where: sql`status <> 'cancelled'`,
     })
     .returning();
   return result[0] ?? null;
@@ -360,7 +383,32 @@ export async function markInvoiceOverdueOnly(clubId: string, invoiceId: string) 
   return result[0] ?? null;
 }
 
-/** Attach a provider payment reference to an already-created invoice. */
+/**
+ * Attach a provider payment reference to an already-created invoice.
+ *
+ * Audit F-2 (2026-05-07 r5): CAS guard mirrors `setBookingPaymentRef`
+ * (bookings.ts) — the WHERE refuses to overwrite an existing
+ * `provider_payment_id` with a different value, and refuses to act on
+ * terminal-state rows (paid/cancelled). Without this, two races corrupt
+ * the ledger:
+ *
+ *   1. Reminder-regeneration race: cron mints a fresh intent on day-7
+ *      AND day-14 reminders. If the owner pays the day-7 link
+ *      concurrently with the day-14 regeneration, the day-14 cron
+ *      overwrites `providerPaymentId = PI_new` BEFORE Ziina's `payment_
+ *      intent.status.updated` for `PI_old` lands. The webhook lookup
+ *      for `PI_old` then misses → invoice stays pending → owner thinks
+ *      they paid → money sits unreconciled in the merchant balance.
+ *
+ *   2. Cancelled-invoice writeback: an invoice that's been cancelled
+ *      between cron read and write should not have its provider ref
+ *      updated — terminal-state predicate guards this.
+ *
+ * Returns null when the CAS rejects (caller's signal that the row is
+ * already pointed at this intent OR is in a terminal state); behaves
+ * the same as today's "no row matched" path for callers, which all
+ * already null-handle the result.
+ */
 export async function setInvoiceProviderRef(
   clubId: string,
   invoiceId: string,
@@ -376,7 +424,14 @@ export async function setInvoiceProviderRef(
       payLink,
       updatedAt: new Date(),
     })
-    .where(and(eq(liveryInvoices.id, invoiceId), eq(liveryInvoices.clubId, clubId)))
+    .where(
+      and(
+        eq(liveryInvoices.id, invoiceId),
+        eq(liveryInvoices.clubId, clubId),
+        sql`(${liveryInvoices.providerPaymentId} IS NULL OR ${liveryInvoices.providerPaymentId} = ${providerPaymentId})`,
+        inArray(liveryInvoices.status, ['pending', 'overdue']),
+      ),
+    )
     .returning();
   return result[0] ?? null;
 }
@@ -681,11 +736,19 @@ export async function createLiveryInvoiceWithGeneratedNumber(
           payLink: input.payLink,
           status: 'pending',
         };
+        // Audit F-4 (2026-05-07 r5): mirror the predicate on the
+        // partial unique index. See createLiveryInvoice for the same
+        // fix; both sites share the same idempotency contract.
         const inserted = await tx
           .insert(liveryInvoices)
           .values(values)
           .onConflictDoNothing({
             target: [liveryInvoices.horseId, liveryInvoices.periodStart],
+            // `where` here is Drizzle 0.45 spelling for the index
+            // predicate matching the partial unique
+            // `livery_invoices_unique_horse_period_active` (migration
+            // 0027). See createLiveryInvoice for the same fix.
+            where: sql`status <> 'cancelled'`,
           })
           .returning();
         return inserted[0] ?? null;

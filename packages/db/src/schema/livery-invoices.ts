@@ -65,8 +65,24 @@ export const liveryInvoices = pgTable(
     index('idx_livery_invoices_club').on(table.clubId),
     index('idx_livery_invoices_owner_status').on(table.ownerMemberId, table.status),
     index('idx_livery_invoices_horse').on(table.horseId),
-    index('idx_livery_invoices_status_due').on(table.status, table.dueDate),
-    index('idx_livery_invoices_provider_payment').on(table.providerPaymentId),
+    // Audit F-13 (2026-05-07 r5): both indexes are PARTIAL in SQL (migration
+    // 0010:48-58). Without `.where(...)` here, `drizzle-kit generate` would
+    // emit DROP+CREATE-as-full migrations and silently strip the predicates,
+    // leading to 5-10× index storage growth and slower
+    // `findOverdueInvoicesForReminders` cron passes.
+    index('idx_livery_invoices_status_due')
+      .on(table.status, table.dueDate)
+      .where(sql`status IN ('pending', 'overdue')`),
+    index('idx_livery_invoices_provider_payment')
+      .on(table.providerPaymentId)
+      .where(sql`provider_payment_id IS NOT NULL`),
+    // Audit F-14 (2026-05-07 r5): unique on `(club_id, invoice_number)`
+    // declared by migration 0022. The runtime depends on this — the 23505
+    // retry loop in `createLiveryInvoiceWithGeneratedNumber` catches this
+    // exact constraint name. A `db:push` against TS-only schema would
+    // create a DB without it, allowing concurrent crons to mint dup
+    // invoice numbers. Mirrors `platform_subscription_invoices_club_number_unique`.
+    unique('livery_invoices_club_number_unique').on(table.clubId, table.invoiceNumber),
     foreignKey({
       name: 'livery_invoices_horse_club_fk',
       columns: [table.horseId, table.clubId],

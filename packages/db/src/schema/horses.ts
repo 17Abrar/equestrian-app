@@ -108,6 +108,17 @@ export const horses = pgTable('horses', {
   index('idx_horses_skill').on(table.clubId, table.skillLevel),
   index('idx_horses_owner').on(table.ownerMemberId),
   index('idx_horses_deleted').on(table.deletedAt),
+  // Audit F-39 (2026-05-07 r5): two partial indexes from migration 0009.
+  // Without these `.where(...)` declarations, `drizzle-kit generate`
+  // would emit DROP+CREATE-as-full migrations and silently strip the
+  // predicates, forcing the admin Pending Approvals tab to a full table
+  // scan.
+  index('idx_horses_ownership_pending')
+    .on(table.clubId, sql`${table.ownershipSubmittedAt} DESC`)
+    .where(sql`ownership_status = 'pending' AND deleted_at IS NULL`),
+  index('idx_horses_owner_status')
+    .on(table.ownerMemberId, table.ownershipStatus)
+    .where(sql`owner_member_id IS NOT NULL AND deleted_at IS NULL`),
   // FK target for composite (horse_id, club_id) -> horses(id, club_id) on
   // every horse sub-resource table. Tautologically unique because id is
   // the PK, but Postgres needs the explicit constraint to use the column

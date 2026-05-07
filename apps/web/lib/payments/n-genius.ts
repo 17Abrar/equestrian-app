@@ -168,6 +168,12 @@ function extractOrderFields(order: unknown): {
    *  per-refund object (REFUNDED events embed the refund as the latest
    *  entry in `payment.refunds`). Undefined for non-refund events. */
   lastRefundAmountMinor: number | undefined;
+  /** Audit F-22 / F-24 (2026-05-07 r5): the description we stamped at
+   *  create-time in `merchantAttributes.cavaliqDescription`. N-Genius
+   *  echoes merchantAttributes back in webhook order payloads. The
+   *  webhook helper parses `[booking:UUID]` from this for fast-succeed
+   *  recovery. */
+  cavaliqDescription: string | undefined;
 } {
   if (!order || typeof order !== 'object') {
     return {
@@ -178,10 +184,12 @@ function extractOrderFields(order: unknown): {
       amountCurrency: undefined,
       refundedTotalMinor: undefined,
       lastRefundAmountMinor: undefined,
+      cavaliqDescription: undefined,
     };
   }
   const o = order as {
     reference?: string;
+    merchantAttributes?: { cavaliqDescription?: string };
     _embedded?: {
       payment?: Array<{
         state?: string;
@@ -252,6 +260,7 @@ function extractOrderFields(order: unknown): {
     amountCurrency: payment?.amount?.currencyCode,
     refundedTotalMinor,
     lastRefundAmountMinor,
+    cavaliqDescription: o.merchantAttributes?.cavaliqDescription,
   };
 }
 
@@ -307,6 +316,18 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // N-Genius limits orderReference to 35 chars alphanumeric.
     const orderReference = input.idempotencyKey.replace(/[^A-Za-z0-9]/g, '').slice(0, 35);
 
+    // Audit F-22 / F-24 (2026-05-07 r5): N-Genius echoes
+    // `merchantAttributes` in webhook order payloads. Pass the full
+    // description (which the booking-payment route stamps with a
+    // `[booking:UUID]` marker) through a custom attribute so the
+    // webhook helper can recover the bookingId on the instant-succeed
+    // race window where `setBookingPaymentRef` hasn't yet written the
+    // provider_payment_id back to the booking row. Stays in
+    // `merchantAttributes` (a free-form bag the merchant owns) rather
+    // than `description` (which N-Genius doesn't define on the order
+    // create body for v2). Truncate to 200 chars to stay well under
+    // any realistic gateway limit; the marker fits in the first 80.
+    const cavaliqDescription = input.description?.slice(0, 200);
     const body = {
       action: 'SALE' as const,
       amount: {
@@ -317,6 +338,9 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         redirectUrl: input.returnUrl,
         cancelUrl: input.returnUrl,
         skipConfirmationPage: true,
+        ...(cavaliqDescription
+          ? { cavaliqDescription }
+          : {}),
       },
       emailAddress: input.metadata?.riderEmail,
       orderReference,
@@ -390,15 +414,67 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       _embedded?: {
         payment?: Array<{
           _id?: string;
+          state?: string;
           amount?: { value?: number; currencyCode?: string };
+          outstandingAmount?: { value?: number };
         }>;
       };
+      outstandingAmount?: { value?: number };
     };
 
-    const payment = order._embedded?.payment?.[0];
-    if (!payment?._id || !payment.amount) {
-      throw new PaymentProviderError('NO_PAYMENT_LEG', 'N-Genius order has no capturable payment');
+    // Audit F-45 (2026-05-07 r5): pre-fix this took `payment[0]`
+    // unconditionally. N-Genius orders can carry multiple payments
+    // (split-tender, retries-after-decline) and array order isn't
+    // documented as deterministic. Refunding the wrong leg returned
+    // 200 SUCCESS against a $0-or-already-refunded payment with no
+    // post-refund reconciliation.
+    //
+    // The correct SALE leg is the most recent CAPTURED / PURCHASED /
+    // PURCHASE entry — if a refund amount was specified by the
+    // caller, prefer the entry whose `amount.value` matches (split-
+    // tender disambiguation). Falls back to the most-recent eligible
+    // entry when no exact match exists. Throws if nothing matches.
+    const ELIGIBLE_PAYMENT_STATES = new Set([
+      'CAPTURED',
+      'PURCHASED',
+      'PURCHASE',
+    ]);
+    const eligiblePayments = (order._embedded?.payment ?? []).filter(
+      (p) => p?._id && p?.amount && p.state && ELIGIBLE_PAYMENT_STATES.has(p.state),
+    );
+    if (eligiblePayments.length === 0) {
+      throw new PaymentProviderError(
+        'NO_PAYMENT_LEG',
+        'N-Genius order has no captured / purchased payment leg to refund',
+      );
     }
+    // When the caller passed an explicit amount, prefer the entry that
+    // matches (split-tender disambiguation: $30 + $20 captures, refund
+    // request for $20 should hit the $20 leg, not the $30).
+    const explicitMatch = input.amountMinorUnits
+      ? eligiblePayments.find(
+          (p) => p.amount?.value === input.amountMinorUnits,
+        )
+      : undefined;
+    // Fall back to the LAST eligible entry — newest-first per N-Genius
+    // documented retry-after-decline behavior, where the array grows
+    // over time. Belt-and-braces: if the array is mid-mutation server-
+    // side, the last entry is the most-recently committed one.
+    const payment =
+      explicitMatch ??
+      eligiblePayments[eligiblePayments.length - 1];
+    if (!payment || !payment._id || !payment.amount) {
+      throw new PaymentProviderError(
+        'NO_PAYMENT_LEG',
+        'N-Genius order has no capturable payment',
+      );
+    }
+    const preRefundOutstanding =
+      typeof order.outstandingAmount?.value === 'number'
+        ? order.outstandingAmount.value
+        : typeof payment.outstandingAmount?.value === 'number'
+          ? payment.outstandingAmount.value
+          : undefined;
 
     // Audit H-7: refuse the silent zero-amount fallback. Either an explicit
     // refund amount was passed, or N-Genius returned the original payment
@@ -453,6 +529,67 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     }
 
     const refund = (await refundRes.json()) as { _id?: string; state?: string };
+
+    // Audit F-45 (2026-05-07 r5): post-refund reconciliation. After
+    // we've issued the refund, fetch the order again and assert that
+    // `outstandingAmount` decreased by at least `refundAmount`.
+    // Without this, a successful HTTP 200 from N-Genius against a
+    // mis-targeted leg (somehow past the filter above — partial-
+    // capture edge cases) silently records a $0 refund. Best-effort:
+    // a failure here doesn't roll back the refund (we can't, the
+    // money is already gone) but logs loudly so an operator can
+    // reconcile.
+    if (
+      preRefundOutstanding !== undefined &&
+      (refund.state === 'SUCCESS' || refund.state === 'CAPTURED')
+    ) {
+      try {
+        const reconcileRes = await fetch(
+          `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/vnd.ni-payment.v2+json',
+            },
+          },
+        );
+        if (reconcileRes.ok) {
+          const reconcileOrder = (await reconcileRes.json()) as {
+            outstandingAmount?: { value?: number };
+            _embedded?: {
+              payment?: Array<{
+                outstandingAmount?: { value?: number };
+              }>;
+            };
+          };
+          const postOutstanding =
+            typeof reconcileOrder.outstandingAmount?.value === 'number'
+              ? reconcileOrder.outstandingAmount.value
+              : typeof reconcileOrder._embedded?.payment?.[0]?.outstandingAmount?.value === 'number'
+                ? reconcileOrder._embedded.payment[0].outstandingAmount.value
+                : undefined;
+          if (postOutstanding !== undefined) {
+            const delta = preRefundOutstanding - postOutstanding;
+            if (delta < refundAmount) {
+              logger.error('n_genius_refund_outstanding_did_not_decrease', {
+                providerPaymentId: input.providerPaymentId,
+                paymentLegId: payment._id,
+                requestedRefund: refundAmount,
+                preOutstanding: preRefundOutstanding,
+                postOutstanding,
+                delta,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('n_genius_refund_reconcile_lookup_failed', {
+          providerPaymentId: input.providerPaymentId,
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+    }
 
     return {
       providerRefundId: refund._id ?? `refund_${input.idempotencyKey}`,
@@ -552,16 +689,34 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     };
 
     // Replay-window enforcement (audit B-13). Reject events older than
-    // ~10 minutes — N-Genius retries on bounded backoff so a legitimate
-    // event won't take that long to land. The constant-time secret
-    // compare is the primary defence; this is belt-and-braces against
-    // a leaked secret + captured-body replay.
+    // ~90 seconds — N-Genius retries on bounded backoff so a legitimate
+    // event won't take that long to land, and Stripe's documented signed-
+    // webhook tolerance is 5 min (we go tighter because the
+    // payload-controlled `eventTime` field below is the attacker's own
+    // surface, not a server-stamped timestamp). The constant-time
+    // secret compare is the primary defence; this is belt-and-braces
+    // against a leaked secret + captured-body replay.
+    //
+    // Audit F-20 (2026-05-07 r5): tightened from 10 min → 90 s. N-Genius
+    // does NOT HMAC-sign the body — they echo a shared secret in a
+    // custom header. A leaked (header, body) pair captured from a
+    // legitimate delivery can be replayed to forge events for arbitrary
+    // references. The 10-min window was generous enough to cover
+    // realistic attack scenarios. 90 s tracks Stripe parity; the
+    // payload-controlled `eventTime` means this is defense-in-depth,
+    // not a hard auth boundary.
+    const FRESHNESS_WINDOW_MS = 90 * 1_000;
+    // The negative-side window (clock skew) stays at 5 min — N-Genius
+    // can stamp eventTime up to a few seconds in the future and a
+    // Worker clock drift in either direction shouldn't reject
+    // legitimate deliveries.
+    const FUTURE_SKEW_MS = 5 * 60_000;
     const eventTime = payload.paymentDate ?? payload.createdDateTime;
     if (eventTime) {
       const eventMs = Date.parse(eventTime);
       if (Number.isFinite(eventMs)) {
         const ageMs = Date.now() - eventMs;
-        if (ageMs > 10 * 60_000 || ageMs < -5 * 60_000) {
+        if (ageMs > FRESHNESS_WINDOW_MS || ageMs < -FUTURE_SKEW_MS) {
           logger.warn('n_genius_webhook_outside_freshness_window', { ageMs });
           throw new PaymentProviderError(
             'WEBHOOK_REPLAY',
@@ -571,9 +726,10 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         // Audit F-13 (2026-05-06 r2): early-warning band. A drifting
         // Worker clock approaches the rejection thresholds silently —
         // operators only learn about it when webhooks start being
-        // dropped. Surface a warn at >3min absolute drift so the
-        // problem is visible BEFORE the freshness window catches it.
-        if (Math.abs(ageMs) > 3 * 60_000) {
+        // dropped. Surface a warn at >50% of the freshness window so
+        // the problem is visible BEFORE the freshness window catches
+        // it.
+        if (Math.abs(ageMs) > FRESHNESS_WINDOW_MS / 2) {
           logger.warn('n_genius_webhook_clock_drift_warning', {
             ageMs,
             note: 'Worker clock is drifting toward the freshness-window threshold; investigate before events start being rejected.',
@@ -671,6 +827,9 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       // can use `recordBookingRefund` (mirrors Stripe's path). Full
       // refund still goes through the existing `'refunded'` mapping.
       refundStatus: status === 'partial_refunded' ? 'succeeded' : undefined,
+      // Audit F-22 / F-24 (2026-05-07 r5): defense-in-depth recovery
+      // path — see types.ts WebhookEvent.descriptionForRecovery.
+      descriptionForRecovery: fields.cavaliqDescription,
       data: payload,
     };
   },

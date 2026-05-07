@@ -402,10 +402,18 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
     }
 
     // Check registration deadline
+    //
+    // Audit F-35 (2026-05-07 r5): scope to clubId. The composite FK on
+    // `(id, club_id)` already prevents cross-tenant rows from existing,
+    // so this is defense-in-depth — a future migration that loosens
+    // the FK (e.g. system-level competitions) would silently re-enable
+    // cross-tenant deadline reads without it. CLAUDE.md rule #11
+    // ("EVERY query MUST include the club_id tenant scope") applies
+    // even when an upstream FK happens to enforce it.
     const comp = await tx
       .select({ registrationDeadline: competitions.registrationDeadline, status: competitions.status })
       .from(competitions)
-      .where(eq(competitions.id, cls.competitionId))
+      .where(and(eq(competitions.id, cls.competitionId), eq(competitions.clubId, clubId)))
       .limit(1);
 
     const competition = comp[0];

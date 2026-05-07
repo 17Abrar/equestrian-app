@@ -10,6 +10,7 @@ import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUu
 import { hasPermission } from '@/lib/permissions';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
+import { withProviderRetry } from '@/lib/payments/retry';
 import { logger } from '@/lib/logger';
 
 // Audit F-36 (2026-05-07 r4): `.strict()` so future contributors who add
@@ -217,10 +218,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // since they can't render Stripe Elements inline. Adapters that don't
         // implement `createHostedCheckout` fall through to `createPayment`,
         // which for N-Genius and Ziina already returns a redirect URL.
-        const result =
-          mode === 'hosted' && adapter.createHostedCheckout
-            ? await adapter.createHostedCheckout(paymentInput)
-            : await adapter.createPayment(paymentInput);
+        //
+        // Audit F-23 (2026-05-07 r5): wrap the adapter call in
+        // `withProviderRetry`. The idempotencyKey
+        // (`booking_${booking.id}`) is stable, so a transient 5xx /
+        // 429 from Stripe / N-Genius / Ziina (each adapter sets
+        // `retryable: true` on those) gets one or two retries before
+        // bubbling out to the catch branch below. Mirrors
+        // `lib/email.ts` `sendWithRetry`.
+        const result = await withProviderRetry(
+          () =>
+            mode === 'hosted' && adapter.createHostedCheckout
+              ? adapter.createHostedCheckout(paymentInput)
+              : adapter.createPayment(paymentInput),
+          {
+            label: 'booking_payment_init',
+            context: {
+              bookingId,
+              clubId: ctx.clubId,
+              provider: account.provider,
+            },
+          },
+        );
 
         const updated = await setBookingPaymentRef(ctx.clubId, bookingId, {
           paymentProvider: account.provider,
