@@ -1,7 +1,8 @@
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, and, asc, gte, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { clubPaymentAccounts } from '../schema/finances';
 import { bookings } from '../schema/bookings';
+import { liveryInvoices } from '../schema/livery-invoices';
 import { encryptField, decryptField } from '../crypto';
 
 type NewPaymentAccount = typeof clubPaymentAccounts.$inferInsert;
@@ -417,10 +418,22 @@ export async function adminGetActivePaymentAccount(
  * Webhook-time lookup: resolve `{ clubId, bookingId }` from a provider's
  * payment id. Used when the webhook payload doesn't carry the club id in a
  * header/URL and we must trace back through the booking row. Uses `rawDb`.
+ *
+ * Audit F-11 / F-18 (2026-05-07 r5): when the caller has the URL's
+ * clubId in hand — every per-club webhook receiver does, since the URL
+ * pattern is `/api/webhooks/<provider>/[clubId]` — pass it here. The
+ * lookup binds `(providerPaymentId, provider)` AND `clubId`, so a
+ * future cross-tenant `provider_payment_id` collision (Ziina docs
+ * reserve the right to reuse intent ids across merchants under
+ * specific edge cases; Stripe Connect platform tenants share `pi_…`
+ * namespace) can never resolve to another club's booking. Optional
+ * for legacy callers; mirrors `findLiveryInvoiceByProviderPayment`'s
+ * signature exactly.
  */
 export async function findBookingByProviderPaymentId(
   providerPaymentId: string,
   provider: PaymentProvider,
+  clubId?: string,
 ): Promise<{
   clubId: string;
   bookingId: string;
@@ -434,6 +447,13 @@ export async function findBookingByProviderPaymentId(
   refundedAmountMinor: number;
   currency: string;
 } | null> {
+  const conditions = [
+    eq(bookings.providerPaymentId, providerPaymentId),
+    eq(bookings.paymentProvider, provider),
+  ];
+  if (clubId) {
+    conditions.push(eq(bookings.clubId, clubId));
+  }
   const rows = await rawDb
     .select({
       id: bookings.id,
@@ -445,12 +465,7 @@ export async function findBookingByProviderPaymentId(
       currency: bookings.currency,
     })
     .from(bookings)
-    .where(
-      and(
-        eq(bookings.providerPaymentId, providerPaymentId),
-        eq(bookings.paymentProvider, provider),
-      ),
-    )
+    .where(and(...conditions))
     .limit(1);
 
   const row = rows[0];
@@ -532,6 +547,100 @@ export async function findBookingByIdForWebhook(
         currency: row.currency,
       }
     : null;
+}
+
+/**
+ * Audit F-20 (2026-05-07 r5): defense-in-depth check that a provider's
+ * `reference` (or `provider_payment_id`) was issued by us in the last
+ * 24 hours. N-Genius webhook auth is a shared-secret echo — there's no
+ * body-binding. A leaked (header, body) pair lets the attacker craft
+ * fresh REFUNDED / PURCHASED events for ANY reference. Pairing the
+ * tightened freshness window (90 s) with this lookup adds a
+ * "reference must be one we minted recently" gate so an attacker
+ * needs both the secret AND a recently-issued reference to forge a
+ * useful event.
+ *
+ * NOT load-bearing — the freshness window is the primary fix. This is
+ * belt-and-braces. The query checks both `bookings.providerPaymentId`
+ * (booking flow) and `liveryInvoices.providerPaymentId` (livery flow).
+ * Returns true if either has a row created in the last 24h whose
+ * provider_payment_id matches AND clubId matches the URL-bound club.
+ */
+export async function wasProviderPaymentIssuedRecently(
+  providerPaymentId: string,
+  provider: PaymentProvider,
+  clubId: string,
+  windowMs: number = 24 * 60 * 60 * 1000,
+): Promise<boolean> {
+  const cutoff = new Date(Date.now() - windowMs);
+  const bookingHit = await rawDb
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.providerPaymentId, providerPaymentId),
+        eq(bookings.paymentProvider, provider),
+        eq(bookings.clubId, clubId),
+        gte(bookings.createdAt, cutoff),
+      ),
+    )
+    .limit(1);
+  if (bookingHit[0]) return true;
+
+  const invoiceHit = await rawDb
+    .select({ id: liveryInvoices.id })
+    .from(liveryInvoices)
+    .where(
+      and(
+        eq(liveryInvoices.providerPaymentId, providerPaymentId),
+        eq(liveryInvoices.paymentProvider, provider),
+        eq(liveryInvoices.clubId, clubId),
+        gte(liveryInvoices.createdAt, cutoff),
+      ),
+    )
+    .limit(1);
+  return invoiceHit.length > 0;
+}
+
+/**
+ * Audit F-22 / F-24 (2026-05-07 r5): defense-in-depth recovery path
+ * for the booking-payment write race against instant-succeed Stripe /
+ * Apple Pay / Ziina / N-Genius events. The route stamps
+ * `[booking:UUID]` into the description at intent creation
+ * (`apps/web/app/api/v1/bookings/[bookingId]/payment/route.ts:207`);
+ * adapters surface that string back as `WebhookEvent.descriptionForRecovery`.
+ * When neither `findBookingByProviderPaymentId` (TOCTOU race —
+ * `setBookingPaymentRef` hadn't yet written) NOR
+ * `findBookingByIdForWebhook` (provider doesn't carry metadata —
+ * Ziina / N-Genius) resolves a booking, the helper extracts the UUID
+ * from this string and looks up the booking by id within the URL-bound
+ * club's tenant.
+ *
+ * Returns the same shape as `findBookingByIdForWebhook` — a uuid that
+ * doesn't belong to this club returns null (so a description spoofed
+ * by a colliding event from another tenant can't bridge tenants).
+ */
+const BOOKING_DESCRIPTION_MARKER_REGEX = /\[booking:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]/;
+
+export async function findBookingByIdInDescription(
+  description: string | undefined,
+  clubId: string,
+): Promise<{
+  clubId: string;
+  bookingId: string;
+  currentPaymentStatus: string;
+  currentProviderPaymentId: string | null;
+  bookingStatus: string;
+  amount: number | null;
+  refundedAmountMinor: number;
+  currency: string;
+} | null> {
+  if (!description) return null;
+  const match = BOOKING_DESCRIPTION_MARKER_REGEX.exec(description);
+  if (!match) return null;
+  const candidateBookingId = match[1];
+  if (!candidateBookingId) return null;
+  return findBookingByIdForWebhook(candidateBookingId, clubId);
 }
 
 /**

@@ -198,18 +198,44 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
       overrideClubId: clubId,
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
-    if (!bookingResult) {
-      await applyLiveryInvoiceWebhook({ provider: 'stripe', event, clubId });
+
+    // Audit F-19 (2026-05-07 r5): when the booking helper resolved
+    // a club but found no booking (`kind: 'no_target'`), fall through
+    // to the livery invoice helper. If THAT also returns `no_target`,
+    // mark the dedup row permanently_failed so the alert fires for
+    // operators. Pre-fix the route silently flipped dedup to
+    // `processed` and we'd lose every misrouted webhook with no
+    // signal.
+    let invoiceResult: Awaited<ReturnType<typeof applyLiveryInvoiceWebhook>> = null;
+    const bookingMissed = !bookingResult || bookingResult.kind === 'no_target';
+    if (bookingMissed) {
+      invoiceResult = await applyLiveryInvoiceWebhook({
+        provider: 'stripe',
+        event,
+        clubId,
+      });
     }
+
     // Audit MED (2026-05-05 pass 2): if applyPaymentWebhook signalled
     // a permanent failure (e.g. paid event for a cancelled booking),
     // record it as such so the `webhook_permanently_failed` alert
-    // fires for an operator. Otherwise mark processed.
-    if (bookingResult?.permanentFailureReason) {
+    // fires for an operator.
+    if (bookingResult?.kind === 'matched' && bookingResult.permanentFailureReason) {
       await markWebhookEventPermanentlyFailed(
         'stripe',
         event.eventId,
         bookingResult.permanentFailureReason,
+      );
+    } else if (
+      bookingMissed &&
+      (!invoiceResult || invoiceResult.kind === 'no_target')
+    ) {
+      // Both the booking AND the livery invoice helpers came up empty
+      // — neither side can ever resolve this event. F-19 escalation.
+      await markWebhookEventPermanentlyFailed(
+        'stripe',
+        event.eventId,
+        `No booking or livery invoice matched providerPaymentId=${event.providerPaymentId ?? 'unknown'}`,
       );
     } else {
       await markWebhookEventProcessed('stripe', event.eventId);

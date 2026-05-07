@@ -9,6 +9,7 @@ import {
   createPlatformPaymentIntent,
   PlatformZiinaError,
 } from '@/lib/billing/platform-ziina';
+import { withProviderRetry } from '@/lib/payments/retry';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -51,13 +52,29 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         // Idempotency key includes Date.now() so each refresh produces a
         // fresh Ziina intent — without that, a stale (expired) intent
         // would just be returned again.
-        const intent = await createPlatformPaymentIntent({
-          amountMinorUnits: invoice.amountMinorUnits,
-          currency: invoice.currency,
-          idempotencyKey: `platform:${ctx.clubId}:${invoice.periodStart}:r${Date.now()}`,
-          message: `Cavaliq subscription — ${club.name} — ${invoice.periodStart}`,
-          returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
-        });
+        //
+        // Audit F-23 (2026-05-07 r5): wrap in `withProviderRetry`. The
+        // operation_id we send to Ziina is unique per refresh
+        // (`Date.now()` suffix), so a transient 5xx / 429 from Ziina
+        // returns a fresh intent on retry — duplicate-intent risk is
+        // bounded by the same retry-bound (max 3 attempts).
+        const intent = await withProviderRetry(
+          () =>
+            createPlatformPaymentIntent({
+              amountMinorUnits: invoice.amountMinorUnits,
+              currency: invoice.currency,
+              idempotencyKey: `platform:${ctx.clubId}:${invoice.periodStart}:r${Date.now()}`,
+              message: `Cavaliq subscription — ${club.name} — ${invoice.periodStart}`,
+              returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
+            }),
+          {
+            label: 'platform_pay_link_refresh',
+            context: {
+              clubId: ctx.clubId,
+              invoiceId,
+            },
+          },
+        );
 
         const updated = await setPlatformInvoiceProviderRef(
           ctx.clubId,

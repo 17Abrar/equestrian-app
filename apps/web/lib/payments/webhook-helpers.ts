@@ -2,6 +2,7 @@ import { after } from 'next/server';
 import {
   attachWebhookEventClub,
   findBookingByIdForWebhook,
+  findBookingByIdInDescription,
   findBookingByProviderPaymentId,
   findPaymentAccountByExternalId,
   recordBookingRefund,
@@ -13,12 +14,136 @@ import {
 } from '@equestrian/db/queries';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
-import { rawDb } from '@equestrian/db';
-import { clubs, clubMembers, horses } from '@equestrian/db/schema';
+import { rawDb, writeTransaction } from '@equestrian/db';
+import { bookings, clubs, clubMembers, horses } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import type { PaymentIntentStatus, WebhookEvent } from './types';
 import type { ProviderName } from './types';
+
+/**
+ * Audit F-3 (2026-05-07 r5): how many times to retry the cumulative→
+ * delta computation under FOR UPDATE before escalating to permanent
+ * failure. Bounded so a sustained writer (concurrent admin refund loop)
+ * can't pin the webhook handler.
+ */
+const CUMULATIVE_REFUND_RETRY_ATTEMPTS = 3;
+
+/**
+ * Audit F-3 / F-21 (2026-05-07 r5): apply a cumulative refund target
+ * against the live booking ledger inside a `writeTransaction` with
+ * `SELECT … FOR UPDATE`. Recomputes `delta = cumulative - liveLedger`
+ * after taking the lock so the value is current; updates the ledger
+ * with the same CAS that `recordBookingRefund` uses.
+ *
+ * Retries up to `CUMULATIVE_REFUND_RETRY_ATTEMPTS` times when the CAS
+ * inside the transaction rejects (which under FOR UPDATE shouldn't
+ * happen, but a future writer that bypasses the lock would surface it).
+ * On exhausted attempts, returns `kind: 'exhausted'` so the caller can
+ * escalate via `markWebhookEventPermanentlyFailed`.
+ *
+ * Returns `over_refund` when the cumulative target itself exceeds the
+ * booking amount — a genuine state divergence between us and the
+ * provider that needs operator review.
+ */
+type CumulativeRefundResult =
+  | {
+      kind: 'recorded';
+      delta: number;
+      paymentStatus: string;
+      refundedAmountMinor: number;
+    }
+  | { kind: 'already_recorded'; liveLedger: number }
+  | { kind: 'over_refund'; bookingAmount: number; liveLedger: number }
+  | { kind: 'exhausted'; lastSeenLedger: number };
+
+async function applyCumulativeRefundFromWebhook(args: {
+  clubId: string;
+  bookingId: string;
+  cumulativeTarget: number;
+  eventType: string;
+}): Promise<CumulativeRefundResult> {
+  let lastSeenLedger = 0;
+  for (let attempt = 0; attempt < CUMULATIVE_REFUND_RETRY_ATTEMPTS; attempt += 1) {
+    const result = await writeTransaction(async (tx) => {
+      const lockedRows = await tx
+        .select({
+          amount: bookings.amount,
+          refundedAmountMinor: bookings.refundedAmountMinor,
+          paymentStatus: bookings.paymentStatus,
+        })
+        .from(bookings)
+        .where(and(eq(bookings.id, args.bookingId), eq(bookings.clubId, args.clubId)))
+        .for('update')
+        .limit(1);
+
+      const locked = lockedRows[0];
+      if (!locked || locked.amount == null) {
+        return { kind: 'over_refund' as const, bookingAmount: 0, liveLedger: 0 };
+      }
+
+      const liveLedger = locked.refundedAmountMinor;
+      const delta = args.cumulativeTarget - liveLedger;
+      if (delta <= 0) {
+        return { kind: 'already_recorded' as const, liveLedger };
+      }
+
+      const newRefunded = liveLedger + delta;
+      if (newRefunded > locked.amount) {
+        return {
+          kind: 'over_refund' as const,
+          bookingAmount: locked.amount,
+          liveLedger,
+        };
+      }
+
+      const newStatus = newRefunded >= locked.amount ? 'refunded' : 'partial';
+
+      const updated = await tx
+        .update(bookings)
+        .set({
+          refundedAmountMinor: newRefunded,
+          paymentStatus: newStatus,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(bookings.id, args.bookingId),
+            eq(bookings.clubId, args.clubId),
+            // Belt-and-braces CAS — under FOR UPDATE this is a
+            // tautology. Guards a future writer that bypasses the lock.
+            eq(bookings.refundedAmountMinor, liveLedger),
+          ),
+        )
+        .returning({
+          paymentStatus: bookings.paymentStatus,
+          refundedAmountMinor: bookings.refundedAmountMinor,
+        });
+
+      const updatedRow = updated[0];
+      if (!updatedRow) {
+        return { kind: 'cas_skip' as const, liveLedger };
+      }
+
+      return {
+        kind: 'recorded' as const,
+        delta,
+        paymentStatus: updatedRow.paymentStatus,
+        refundedAmountMinor: updatedRow.refundedAmountMinor,
+      };
+    });
+
+    if (result.kind === 'recorded') {
+      return result;
+    }
+    if (result.kind === 'already_recorded' || result.kind === 'over_refund') {
+      return result;
+    }
+    // CAS skip — record last-seen ledger and retry.
+    lastSeenLedger = result.liveLedger;
+  }
+  return { kind: 'exhausted', lastSeenLedger };
+}
 
 /**
  * Maps our canonical intent status to the `payments.status` enum stored on
@@ -49,6 +174,39 @@ export interface HandleWebhookOptions {
 }
 
 /**
+ * Result of `applyPaymentWebhook`. Three terminal kinds:
+ *
+ *  - `matched`: the event resolved to a booking and the helper applied
+ *    the lifecycle. The route marks the dedup row `processed` (or
+ *    `permanently_failed` when `permanentFailureReason` is set).
+ *  - `no_target`: the helper resolved a club but couldn't find a
+ *    booking for the event. The route should fall back to
+ *    `applyLiveryInvoiceWebhook`; if THAT also returns no_target, the
+ *    route marks dedup `permanently_failed` so the
+ *    `webhook_permanently_failed` alert fires (audit F-19).
+ *  - `null`: club itself couldn't be resolved (no clubId from URL,
+ *    no providerAccountId, no matching booking). Route returns 200
+ *    OK without writing dedup state.
+ */
+export type ApplyPaymentWebhookResult =
+  | {
+      kind: 'matched';
+      clubId: string;
+      bookingId: string;
+      /**
+       * Audit MED (2026-05-05 pass 2): when set, the caller MUST call
+       * `markWebhookEventPermanentlyFailed` rather than
+       * `markWebhookEventProcessed` — the event resolved to a booking
+       * in a state where applying it would corrupt the ledger
+       * (e.g. paid event for a cancelled booking, or F-3 cumulative
+       * CAS retry exhausted). Replaying won't help; an operator needs
+       * to step in.
+       */
+      permanentFailureReason?: string;
+    }
+  | { kind: 'no_target'; clubId: string };
+
+/**
  * Common post-verification flow: resolve the club, enter its tenant context,
  * and update the booking's payment status. Idempotent — replaying the same
  * event results in the same final state.
@@ -58,18 +216,7 @@ export async function applyPaymentWebhook({
   event,
   overrideClubId,
   isRefundEvent,
-}: HandleWebhookOptions): Promise<{
-  clubId: string;
-  bookingId: string;
-  /**
-   * Audit MED (2026-05-05 pass 2): when set, the caller MUST call
-   * `markWebhookEventPermanentlyFailed` rather than `markWebhookEventProcessed`
-   * — the event resolved to a booking in a state where applying it
-   * would corrupt the ledger (e.g. paid event for a cancelled booking).
-   * Replaying won't help; an operator needs to step in.
-   */
-  permanentFailureReason?: string;
-} | null> {
+}: HandleWebhookOptions): Promise<ApplyPaymentWebhookResult | null> {
   // 1. Resolve clubId via one of three paths, in priority order.
   let clubId = overrideClubId;
 
@@ -80,6 +227,17 @@ export async function applyPaymentWebhook({
 
   // 2. Fallback: match the provider_payment_id against an existing booking.
   //    Useful for Ziina where account_id isn't always in the payload.
+  //
+  // Audit F-11 / F-18 (2026-05-07 r5): when we already have a clubId from
+  // the URL or external-id lookup, scope the provider-payment-id query to
+  // that tenant. Without this scope, a future cross-tenant
+  // `provider_payment_id` collision (Ziina docs reserve the right to
+  // reuse intent ids across merchants under specific edge cases) would
+  // resolve the wrong club's bookingRef and silently no-op every CAS
+  // downstream — leaving forever-pending bookings the operator can't
+  // trace. When `clubId` is still undefined here, the lookup falls
+  // through unscoped (legacy callers); the no-club branch below then
+  // handles that case.
   let bookingRef: {
     clubId: string;
     bookingId: string;
@@ -90,7 +248,11 @@ export async function applyPaymentWebhook({
     currency: string;
   } | null = null;
   if (event.providerPaymentId) {
-    bookingRef = await findBookingByProviderPaymentId(event.providerPaymentId, provider);
+    bookingRef = await findBookingByProviderPaymentId(
+      event.providerPaymentId,
+      provider,
+      clubId,
+    );
     if (!clubId) clubId = bookingRef?.clubId;
   }
 
@@ -122,17 +284,54 @@ export async function applyPaymentWebhook({
   // per-club observability query) so a failure stays at warn — but
   // we want it to consistently succeed instead of probabilistically
   // succeed.
-  after(async () => {
+  //
+  // Audit F-34 (2026-05-07 r5): only stamp the clubId when the
+  // resolved bookingRef belongs to THIS club (or no bookingRef has
+  // been resolved yet — the lookup may still find a match later via
+  // metadata or description-recovery, and that path will be tenant-
+  // scoped). Without this gate, a cross-tenant provider_payment_id
+  // collision (resolved before F-11/F-18 scoping landed) would record
+  // a foreign booking's clubId on the webhook_events row. F-11/F-18
+  // makes this correct-by-construction; this guard is belt-and-braces
+  // for any future caller that reaches the helper without an
+  // override clubId.
+  //
+  // Audit F-48 (2026-05-07 r5): mirror `lib/email.ts`'s try/catch
+  // fallback. `after()` throws when called outside a request lifecycle
+  // (e.g. from a cron run that didn't establish one); pre-fix that
+  // throw silently dropped the UPDATE with no log. Now we fall back
+  // to a bare `void task()` so the work runs even when after() is
+  // unavailable, and a warn surfaces the situation.
+  if (!bookingRef || bookingRef.clubId === clubId) {
+    const attachTask = async () => {
+      try {
+        await attachWebhookEventClub(provider, event.eventId, clubId);
+      } catch (err) {
+        logger.warn('attach_webhook_club_failed', {
+          provider,
+          eventId: event.eventId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    };
     try {
-      await attachWebhookEventClub(provider, event.eventId, clubId);
+      after(attachTask);
     } catch (err) {
-      logger.warn('attach_webhook_club_failed', {
+      logger.warn('attach_webhook_after_unavailable_falling_back_to_void', {
         provider,
         eventId: event.eventId,
         error: err instanceof Error ? err.message : String(err),
       });
+      void attachTask();
     }
-  });
+  } else {
+    logger.warn('attach_webhook_club_skipped_cross_tenant', {
+      provider,
+      eventId: event.eventId,
+      urlClubId: clubId,
+      bookingClubId: bookingRef.clubId,
+    });
+  }
 
   // (Removed a duplicate findBookingByProviderPaymentId call here that
   // re-ran the same query with the same args — the lookup at line 70
@@ -168,16 +367,60 @@ export async function applyPaymentWebhook({
     }
   }
 
+  // Audit F-22 / F-24 (2026-05-07 r5): last-ditch defense-in-depth —
+  // parse the booking UUID out of the description we stamped at intent
+  // creation. Stripe carries metadata.bookingId so the previous fallback
+  // already resolves it; N-Genius and Ziina don't carry metadata, so
+  // before this fix a fast-succeed event for those providers landed
+  // before `setBookingPaymentRef` and stayed forever-pending until
+  // manual reconciliation. The booking-payment route stamps
+  // `[booking:UUID]` into the description (see route.ts:207); adapters
+  // surface that as `event.descriptionForRecovery`. The lookup is
+  // tenant-scoped via `findBookingByIdForWebhook` so a description
+  // spoofed by another tenant's event can't bridge tenants.
+  if (!bookingRef) {
+    const descriptionFallback = await findBookingByIdInDescription(
+      event.descriptionForRecovery,
+      clubId,
+    );
+    if (descriptionFallback) {
+      logger.info('webhook_booking_resolved_via_description', {
+        clubId,
+        bookingId: descriptionFallback.bookingId,
+        provider,
+        eventType: event.eventType,
+        hadStoredProviderPaymentId: descriptionFallback.currentProviderPaymentId !== null,
+      });
+      bookingRef = {
+        clubId: descriptionFallback.clubId,
+        bookingId: descriptionFallback.bookingId,
+        currentPaymentStatus: descriptionFallback.currentPaymentStatus,
+        bookingStatus: descriptionFallback.bookingStatus,
+        amount: descriptionFallback.amount,
+        refundedAmountMinor: descriptionFallback.refundedAmountMinor,
+        currency: descriptionFallback.currency,
+      };
+    }
+  }
+
   if (!bookingRef) {
     // Event is for a payment we don't have a booking for. Could be a test
     // event, a payment created outside the app, or a genuine unknown.
+    //
+    // Audit F-19 (2026-05-07 r5): return `no_target` so the receiver
+    // can fall back to `applyLiveryInvoiceWebhook`; if THAT also misses,
+    // the route marks the dedup row `permanently_failed` (instead of
+    // silently `processed`). Pre-fix, the dedup row flipped to
+    // `processed` and the alert fires zero signal — operators couldn't
+    // distinguish "we silently dropped 50 webhooks because Stripe was
+    // retrying for a deleted club" from "no traffic."
     logger.info('webhook_no_booking_for_event', {
       provider,
       eventType: event.eventType,
       providerPaymentId: event.providerPaymentId ?? null,
       bookingId: event.bookingId ?? null,
     });
-    return null;
+    return { kind: 'no_target', clubId };
   }
 
   // Audit F-3 (2026-05-06 comprehensive): refund webhooks with a non-
@@ -202,7 +445,7 @@ export async function applyPaymentWebhook({
       refundStatus: event.refundStatus,
       currentPaymentStatus: bookingRef.currentPaymentStatus,
     });
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   // A `pending → failed` refund transition (Stripe `charge.refund.updated`
@@ -239,7 +482,7 @@ export async function applyPaymentWebhook({
         currentPaymentStatus: bookingRef.currentPaymentStatus,
       });
     }
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   // Successful refund event with a known delta — increment the booking's
@@ -262,85 +505,136 @@ export async function applyPaymentWebhook({
   // This must run BEFORE the per-event-delta branch below, because a
   // single event can carry only one or the other and we prefer the
   // explicit delta when present.
-  let derivedRefundDelta: number | undefined = event.refundAmountMinor;
-  // Audit F-13 (2026-05-07 r4): when CAS skip happens AND the delta
-  // was cumulative-derived, the snapshot ledger (loaded ~hundreds of
-  // ms earlier) may be stale relative to a concurrent admin refund.
-  // The CAS rejection is silent at info-level; track the source so
-  // we can escalate to warn and surface the silent-drop case to
-  // operators.
-  let derivedFromCumulative = false;
-  if (
+  const explicitDelta = event.refundAmountMinor;
+  const cumulativeTarget =
     isRefundEvent &&
     event.refundStatus === 'succeeded' &&
-    derivedRefundDelta == null &&
+    explicitDelta == null &&
     typeof event.refundCumulativeMinor === 'number' &&
     event.refundCumulativeMinor > 0
-  ) {
-    const ledger = bookingRef.refundedAmountMinor;
-    const delta = event.refundCumulativeMinor - ledger;
-    if (delta > 0) {
-      derivedRefundDelta = delta;
-      derivedFromCumulative = true;
-      logger.info('webhook_refund_cumulative_to_delta', {
+      ? event.refundCumulativeMinor
+      : undefined;
+
+  // Audit F-3 / F-21 (2026-05-07 r5): when the delta is cumulative-
+  // derived, the prior implementation read `bookingRef.refundedAmountMinor`
+  // (a snapshot loaded hundreds of ms earlier in the resolve-club path)
+  // and computed `delta = cumulative − snapshot` OUTSIDE any lock. A
+  // concurrent admin refund (via the booking-refund route's
+  // `writeTransaction` + FOR UPDATE) could advance the live ledger
+  // between the snapshot and the recordBookingRefund CAS. The CAS
+  // would then reject the cumulative-derived delta — and the helper
+  // logged-and-returned, leaving the books undercounted. Real impact:
+  // Stripe says cumulative=$50, our ledger says $20; admin push made
+  // it $50 in between; webhook computed delta=$30, CAS rejected, ledger
+  // stuck at $20 instead of $50. Silent payment loss in finance reports.
+  //
+  // The fix: when cumulative-derived, run the read+CAS pair inside a
+  // `writeTransaction` with `SELECT … FOR UPDATE` on the booking row,
+  // recompute delta against the LIVE ledger, retry on CAS-skip up to
+  // `CUMULATIVE_REFUND_RETRY_ATTEMPTS` (3). On exhausted attempts,
+  // signal `permanentFailureReason` so the route flips dedup to
+  // `permanently_failed` and the alert fires — operators can manually
+  // reconcile against the provider's cumulative. Mirrors the pattern
+  // in `bookings/[bookingId]/refund/route.ts`.
+  //
+  // The per-event-delta path (Stripe `charge.refund.updated` with an
+  // explicit refund.amount, N-Genius `PARTIALLY_REFUNDED` with a
+  // surfaced `lastRefundAmountMinor`) doesn't need the retry — those
+  // deltas are absolute and addable, so the existing
+  // `recordBookingRefund` (which itself uses writeTransaction + FOR
+  // UPDATE) handles concurrency cleanly.
+  if (cumulativeTarget !== undefined) {
+    const result = await applyCumulativeRefundFromWebhook({
+      clubId,
+      bookingId: bookingRef.bookingId,
+      cumulativeTarget,
+      eventType: event.eventType,
+    });
+
+    if (result.kind === 'recorded') {
+      logger.info('booking_refund_recorded_from_webhook', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
-        cumulative: event.refundCumulativeMinor,
-        priorLedger: ledger,
-        delta,
+        refundAmountMinor: result.delta,
+        newPaymentStatus: result.paymentStatus,
+        newRefundedAmountMinor: result.refundedAmountMinor,
       });
-    } else {
-      // Cumulative <= existing ledger means we've already recorded
-      // this (or more). Replay or out-of-order event — no-op.
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+    }
+
+    if (result.kind === 'already_recorded') {
+      // Cumulative <= live ledger means we've already recorded this
+      // (or more). Replay or out-of-order event — no-op.
       logger.info('webhook_refund_cumulative_already_recorded', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
-        cumulative: event.refundCumulativeMinor,
-        priorLedger: ledger,
+        cumulative: cumulativeTarget,
+        liveLedger: result.liveLedger,
       });
-      return { clubId, bookingId: bookingRef.bookingId };
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
     }
+
+    if (result.kind === 'over_refund') {
+      // Cumulative target exceeds booking.amount — provider state vs.
+      // our ledger genuinely diverges (refunded more than was charged).
+      // Operator must reconcile.
+      logger.error('booking_refund_cumulative_exceeds_booking', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        cumulative: cumulativeTarget,
+        bookingAmount: result.bookingAmount,
+      });
+      return {
+        kind: 'matched',
+        clubId,
+        bookingId: bookingRef.bookingId,
+        permanentFailureReason: `Refund cumulative (${cumulativeTarget}) exceeds booking amount (${result.bookingAmount}) — manual reconciliation required`,
+      };
+    }
+
+    // result.kind === 'exhausted' — F-3 escalation path. Three FOR UPDATE
+    // retries failed to apply the cumulative-derived delta because a
+    // sustained concurrent writer kept advancing the ledger between
+    // each lock release and the next read. This is operator-actionable.
+    logger.error('booking_refund_cumulative_cas_exhausted', {
+      clubId,
+      bookingId: bookingRef.bookingId,
+      eventType: event.eventType,
+      cumulativeTarget,
+      attempts: CUMULATIVE_REFUND_RETRY_ATTEMPTS,
+      finalLedger: result.lastSeenLedger,
+      note: 'Sustained concurrent writer prevented cumulative refund apply. Operator should reconcile against provider cumulative.',
+    });
+    return {
+      kind: 'matched',
+      clubId,
+      bookingId: bookingRef.bookingId,
+      permanentFailureReason: `Cumulative refund retry exhausted after ${CUMULATIVE_REFUND_RETRY_ATTEMPTS} attempts (target=${cumulativeTarget}, lastLedger=${result.lastSeenLedger}) — manual reconciliation required`,
+    };
   }
 
   if (
     isRefundEvent &&
     event.refundStatus === 'succeeded' &&
-    derivedRefundDelta &&
-    derivedRefundDelta > 0
+    explicitDelta &&
+    explicitDelta > 0
   ) {
     const recorded = await recordBookingRefund(
       clubId,
       bookingRef.bookingId,
-      derivedRefundDelta,
+      explicitDelta,
     );
     if (recorded) {
       logger.info('booking_refund_recorded_from_webhook', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
-        refundAmountMinor: derivedRefundDelta,
+        refundAmountMinor: explicitDelta,
         newPaymentStatus: recorded.paymentStatus,
         newRefundedAmountMinor: recorded.refundedAmountMinor,
-      });
-    } else if (derivedFromCumulative) {
-      // Audit F-13 (2026-05-07 r4): CAS skip on a cumulative-derived
-      // delta means the snapshot ledger was stale — a concurrent
-      // admin refund advanced the ledger between our snapshot and
-      // the CAS. The cumulative target is still authoritative; the
-      // operator needs to reconcile (e.g., manually push the ledger
-      // to the cumulative). Escalate to warn so it surfaces in
-      // observability.
-      logger.warn('booking_refund_cumulative_cas_skip', {
-        clubId,
-        bookingId: bookingRef.bookingId,
-        eventType: event.eventType,
-        attemptedDelta: derivedRefundDelta,
-        cumulativeTarget: event.refundCumulativeMinor ?? null,
-        snapshotLedger: bookingRef.refundedAmountMinor,
-        currentPaymentStatus: bookingRef.currentPaymentStatus,
-        note: 'Snapshot ledger was stale; concurrent admin refund advanced it. Operator should reconcile against provider cumulative.',
       });
     } else {
       // CAS conflict OR ledger already at this total OR the refund would
@@ -350,11 +644,11 @@ export async function applyPaymentWebhook({
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
-        refundAmountMinor: derivedRefundDelta,
+        refundAmountMinor: explicitDelta,
         currentPaymentStatus: bookingRef.currentPaymentStatus,
       });
     }
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   // Partial-refund events that we mapped via `partial_refunded` but which
@@ -369,7 +663,7 @@ export async function applyPaymentWebhook({
       eventType: event.eventType,
       currentPaymentStatus: bookingRef.currentPaymentStatus,
     });
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   // Refund events on an already-'partial' booking: the refund route is the
@@ -383,7 +677,7 @@ export async function applyPaymentWebhook({
       bookingId: bookingRef.bookingId,
       eventType: event.eventType,
     });
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   const nextStatus = isRefundEvent
@@ -392,7 +686,7 @@ export async function applyPaymentWebhook({
 
   if (!nextStatus) {
     // Nothing to update.
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   // Don't downgrade from a terminal state back to `pending` — webhooks
@@ -408,7 +702,7 @@ export async function applyPaymentWebhook({
       from: bookingRef.currentPaymentStatus,
       to: nextStatus,
     });
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   if (!event.providerPaymentId) {
@@ -421,7 +715,7 @@ export async function applyPaymentWebhook({
       provider,
       eventType: event.eventType,
     });
-    return { clubId, bookingId: bookingRef.bookingId };
+    return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
   // Booking-status guard (audit AI-24). A payment_intent.succeeded landing
@@ -454,6 +748,7 @@ export async function applyPaymentWebhook({
     // `webhook_permanently_failed` alert fires for an operator to
     // review (refund manually, or reattach the booking).
     return {
+      kind: 'matched',
       clubId,
       bookingId: bookingRef.bookingId,
       permanentFailureReason: `Payment received for a ${bookingRef.bookingStatus} booking — manual reconciliation required`,
@@ -472,7 +767,7 @@ export async function applyPaymentWebhook({
         bookingId: bookingRef.bookingId,
         eventId: event.eventId,
       });
-      return { clubId, bookingId: bookingRef.bookingId };
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
     }
     if (event.amountReceivedMinorUnits == null) {
       logger.warn('webhook_no_amount_received', {
@@ -480,7 +775,7 @@ export async function applyPaymentWebhook({
         bookingId: bookingRef.bookingId,
         eventId: event.eventId,
       });
-      return { clubId, bookingId: bookingRef.bookingId };
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
     }
     if (
       event.currency &&
@@ -493,7 +788,7 @@ export async function applyPaymentWebhook({
         eventCurrency: event.currency,
         bookingCurrency: bookingRef.currency,
       });
-      return { clubId, bookingId: bookingRef.bookingId };
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
     }
     if (event.amountReceivedMinorUnits < bookingRef.amount) {
       logger.error('webhook_amount_underfunded', {
@@ -503,7 +798,7 @@ export async function applyPaymentWebhook({
         received: event.amountReceivedMinorUnits,
         expected: bookingRef.amount,
       });
-      return { clubId, bookingId: bookingRef.bookingId };
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
     }
     // Audit F-12 (2026-05-07 r4): warn-level overfund. We still mark the
     // booking paid (the rider has paid; refusing the apply would leave them
@@ -550,8 +845,24 @@ export async function applyPaymentWebhook({
     });
   }
 
-  return { clubId, bookingId: bookingRef.bookingId };
+  return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
 }
+
+/**
+ * Result of `applyLiveryInvoiceWebhook`. Mirrors
+ * `ApplyPaymentWebhookResult` so the receiver routes can pattern-match
+ * on `kind` consistently across both helpers.
+ *
+ *  - `matched`: the event resolved to an invoice and the helper applied
+ *    the lifecycle.
+ *  - `no_target`: the helper looked but found no invoice. The route
+ *    should mark dedup `permanently_failed` if `applyPaymentWebhook`
+ *    also returned `no_target` (audit F-19).
+ *  - `null`: no `providerPaymentId` on the event — nothing to look up.
+ */
+export type ApplyLiveryInvoiceWebhookResult =
+  | { kind: 'matched'; invoiceId: string; clubId: string }
+  | { kind: 'no_target' };
 
 /**
  * Livery invoice webhook application — mirrors applyPaymentWebhook but for
@@ -578,7 +889,7 @@ export async function applyLiveryInvoiceWebhook({
    * collision.
    */
   clubId?: string;
-}): Promise<{ invoiceId: string; clubId: string } | null> {
+}): Promise<ApplyLiveryInvoiceWebhookResult | null> {
   if (!event.providerPaymentId) return null;
 
   const invoice = await findLiveryInvoiceByProviderPayment(
@@ -586,18 +897,23 @@ export async function applyLiveryInvoiceWebhook({
     provider,
     clubId,
   );
-  if (!invoice) return null;
+  // Audit F-19 (2026-05-07 r5): no_target so the receiver route can
+  // mark dedup `permanently_failed` when applyPaymentWebhook also
+  // missed. Pre-fix the helper returned plain `null` here, which the
+  // route conflated with "no providerPaymentId" and silently flipped
+  // dedup to `processed`.
+  if (!invoice) return { kind: 'no_target' };
 
   // Only "succeeded" transitions the invoice to paid. A pending/failed event
   // shouldn't downgrade a paid invoice, and marking overdue from here would
   // conflict with the billing cron's day-count logic.
   if (event.status !== 'succeeded') {
-    return { invoiceId: invoice.id, clubId: invoice.clubId };
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
 
   if (invoice.status === 'paid' || invoice.status === 'cancelled') {
     // Already terminal — webhook replay, idempotent no-op.
-    return { invoiceId: invoice.id, clubId: invoice.clubId };
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
 
   // Audit F-1 (2026-05-06 round 2). Mirror the booking-flow
@@ -614,7 +930,7 @@ export async function applyLiveryInvoiceWebhook({
       invoiceId: invoice.id,
       eventId: event.eventId,
     });
-    return { invoiceId: invoice.id, clubId: invoice.clubId };
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
   if (
     event.currency &&
@@ -627,7 +943,7 @@ export async function applyLiveryInvoiceWebhook({
       eventCurrency: event.currency,
       invoiceCurrency: invoice.currency,
     });
-    return { invoiceId: invoice.id, clubId: invoice.clubId };
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
   if (event.amountReceivedMinorUnits < invoice.amountMinorUnits) {
     logger.error('livery_webhook_amount_underfunded', {
@@ -637,7 +953,7 @@ export async function applyLiveryInvoiceWebhook({
       received: event.amountReceivedMinorUnits,
       expected: invoice.amountMinorUnits,
     });
-    return { invoiceId: invoice.id, clubId: invoice.clubId };
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
   // Audit F-12 (2026-05-07 r4): symmetric overfund branch — mirrors the
   // booking flow. Don't block the apply (the club has paid); surface the
@@ -661,7 +977,7 @@ export async function applyLiveryInvoiceWebhook({
   });
 
   if (!updated) {
-    return { invoiceId: invoice.id, clubId: invoice.clubId };
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
 
   // Fetch what we need for the email — owner contact, club name, horse name.
@@ -713,7 +1029,7 @@ export async function applyLiveryInvoiceWebhook({
     provider,
   });
 
-  return { invoiceId: invoice.id, clubId: invoice.clubId };
+  return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
 }
 
 /**

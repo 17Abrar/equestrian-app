@@ -11,6 +11,7 @@ import { bookings as bookingsTable } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
+import { withProviderRetry } from '@/lib/payments/retry';
 import { logger } from '@/lib/logger';
 
 const bodySchema = z
@@ -210,13 +211,40 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return { kind: 'not-refundable' as const, status: locked.paymentStatus };
           }
 
-          const refund = await adapter.refund({
-            account,
-            providerPaymentId: lockedProviderPaymentId,
-            amountMinorUnits: finalAmount,
-            reason: data.reason,
-            idempotencyKey: `refund_${bookingId}_${liveSoFar}_${finalAmount}`,
-          });
+          // Audit F-44 (2026-05-07 r5): append a monotonic
+          // `Date.now()` suffix so a refund-amount sequence that
+          // happens to repeat a (booking, refundedSoFar, amount)
+          // tuple within Stripe's 24h idempotency-TTL window mints a
+          // FRESH refund instead of returning the original. Concrete
+          // bug: admin refunds $50 (key=refund_X_0_5000), the refund
+          // is reversed via `charge.refund.updated failed`, then
+          // admin refunds $50 AGAIN within 24h — pre-fix Stripe
+          // returned the first refund's response without issuing a
+          // new refund and `recordBookingRefund` bumped the ledger
+          // even though no money moved.
+          // Server-stamped (not client-controlled) so this is safe
+          // against client-side replay; the FOR UPDATE lock above
+          // already serializes admin-side double-clicks. The within-
+          // millisecond resolution is fine for this purpose since
+          // the refund route is rate-limited to 10/min.
+          const refund = await withProviderRetry(
+            () =>
+              adapter.refund({
+                account,
+                providerPaymentId: lockedProviderPaymentId,
+                amountMinorUnits: finalAmount,
+                reason: data.reason,
+                idempotencyKey: `refund_${bookingId}_${liveSoFar}_${finalAmount}_${Date.now()}`,
+              }),
+            {
+              label: 'booking_refund',
+              context: {
+                bookingId,
+                clubId: ctx.clubId,
+                provider,
+              },
+            },
+          );
 
           // Inside the transaction, the CAS in recordBookingRefund is a
           // tautology — we hold the row lock — but it's cheap and

@@ -144,19 +144,43 @@ interface PayIntentResult {
   payLink?: string;
 }
 
-// Cache active payment accounts by clubId for the duration of the cron run
-// so we don't re-fetch + re-decrypt credentials for every invoice from the
-// same club.
-type AccountCache = Map<string, PaymentAccountWithCredentials | null>;
+/**
+ * Audit F-43 (2026-05-07 r5): per-entry TTL on the account cache.
+ * Cron runs can iterate hundreds of horses/invoices in a single Worker
+ * invocation; pre-fix the cache survived the entire run, so a club
+ * that rotated Stripe / N-Genius keys mid-cron continued to fail every
+ * subsequent invoice with `AUTH_FAILED` against the cached old
+ * credentials. The cache is now stamped with `loadedAt`; entries
+ * older than `ACCOUNT_CACHE_TTL_MS` are re-fetched. Additionally,
+ * `invalidateAccountCacheForClub` is called from `createPayIntent`'s
+ * catch branch on any `PaymentProviderError` so the next call for the
+ * same club picks up the rotated credentials (or the fact that the
+ * account was disconnected).
+ */
+const ACCOUNT_CACHE_TTL_MS = 30_000;
+
+interface AccountCacheEntry {
+  account: PaymentAccountWithCredentials | null;
+  loadedAt: number;
+}
+
+type AccountCache = Map<string, AccountCacheEntry>;
 
 async function getAccountCached(
   clubId: string,
   cache: AccountCache,
 ): Promise<PaymentAccountWithCredentials | null> {
-  if (cache.has(clubId)) return cache.get(clubId)!;
+  const cached = cache.get(clubId);
+  if (cached && Date.now() - cached.loadedAt < ACCOUNT_CACHE_TTL_MS) {
+    return cached.account;
+  }
   const account = await adminGetActivePaymentAccount(clubId);
-  cache.set(clubId, account);
+  cache.set(clubId, { account, loadedAt: Date.now() });
   return account;
+}
+
+function invalidateAccountCacheForClub(clubId: string, cache: AccountCache): void {
+  cache.delete(clubId);
 }
 
 /**
@@ -186,6 +210,13 @@ async function createPayIntent(args: {
    */
   reference: string;
   idempotencyKey: string;
+  /**
+   * Audit F-43 (2026-05-07 r5): account cache passed in so the catch
+   * branch can invalidate this club's entry on any
+   * `PaymentProviderError`. The next horse/invoice for the same club
+   * then re-fetches credentials, picking up rotations done mid-cron.
+   */
+  accountCache?: AccountCache;
 }): Promise<PayIntentResult | null> {
   try {
     const adapter = getAdapter(args.account.provider);
@@ -234,6 +265,14 @@ async function createPayIntent(args: {
     } else {
       logger.warn('livery_payment_intent_failed', fields);
     }
+    // Audit F-43 (2026-05-07 r5): invalidate the cached account on
+    // any PaymentProviderError so the next horse/invoice for this
+    // club re-fetches credentials. Covers AUTH_FAILED after a key
+    // rotation, ACCOUNT_NOT_CONNECTED after a disconnect, and the
+    // rest of the operator-actionable codes.
+    if (args.accountCache && err instanceof PaymentProviderError) {
+      invalidateAccountCacheForClub(args.clubId, args.accountCache);
+    }
     return null;
   }
 }
@@ -256,7 +295,7 @@ async function issueDueInvoices(utcToday: string): Promise<{ issued: number; ski
         skipped += 1;
         continue;
       }
-      const anchor = await findHorseBillingAnchor(horse.horseId);
+      const anchor = await findHorseBillingAnchor(horse.clubId, horse.horseId);
       const period = nextBillingPeriod(horse, anchor, clubToday);
       if (!period) {
         skipped += 1;
@@ -285,6 +324,7 @@ async function issueDueInvoices(utcToday: string): Promise<{ issued: number; ski
             clubId: horse.clubId,
             reference: period.periodStart,
             idempotencyKey: `livery:${horse.horseId}:${period.periodStart}`,
+            accountCache,
           })
         : null;
 
@@ -434,6 +474,7 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
           clubId: inv.clubId,
           reference: inv.invoiceNumber,
           idempotencyKey: `livery:${inv.invoiceId}:reminder:${inv.reminderCount + 1}`,
+          accountCache,
         });
         if (refreshed) {
           await setInvoiceProviderRef(
