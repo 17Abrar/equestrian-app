@@ -10,9 +10,13 @@ import { withAuth, successResponse, errorResponse, validateInput, validateUuidPa
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
+// Audit F-18 (2026-05-07 r4): cap the reason at 500 chars. The freeform
+// text lands on the entry row itself; the parallel audit_log carve-out
+// (see below) drops the value from `changes` so a typed-out personal
+// phone or email doesn't sit in the 90-day-retained log alongside.
 const withdrawSchema = z
   .object({
-    reason: z.string().min(1, 'Withdrawal reason is required'),
+    reason: z.string().min(1, 'Withdrawal reason is required').max(500),
   })
   .strict();
 
@@ -106,11 +110,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       reason: data.reason,
     });
 
+    // Audit F-18 (2026-05-07 r4): drop the freeform `reason` from
+    // audit_log.changes — it lives on the entry row already and the
+    // action + resourceId prove the withdraw happened. Avoids
+    // 90-day-retention of a parent's typed-out personal email/phone.
     void ctx.audit({
       action: 'competition_entry.withdraw',
       resourceType: 'competition_entry',
       resourceId: entryId,
-      changes: { reason: { from: null, to: data.reason } },
     });
 
     return successResponse(entry);

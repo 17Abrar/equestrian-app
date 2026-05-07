@@ -10,6 +10,7 @@ import { sendTriggeredEmail } from '@/lib/email';
 import { BookingReminder } from '@equestrian/email-templates/booking-reminder';
 import { errorResponse, successResponse, requireCronSecret } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
+import { MS_PER_HOUR } from '@equestrian/shared/constants';
 
 /**
  * Round 6.1 — hourly cron that sends a 24h-before-lesson reminder to
@@ -135,7 +136,7 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // windows; the CAS on `reminder_sent_at` ensures only the first
       // one to win the UPDATE actually sends.
       const hoursFromNow =
-        (slotInstant.getTime() - now.getTime()) / (60 * 60 * 1000);
+        (slotInstant.getTime() - now.getTime()) / MS_PER_HOUR;
       if (hoursFromNow < 23 || hoursFromNow > 25) {
         skipped += 1;
         continue;

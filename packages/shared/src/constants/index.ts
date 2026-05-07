@@ -59,7 +59,8 @@ export const MAX_MONTHLY_LIVERY_FEE_MINOR = 10_000_000;
 
 // Time arithmetic — shared across server + client so a 30-day cookie TTL
 // or a "year-in-ms" math expression doesn't drift between callsites.
-// Audit F-12.
+// Audit F-12 / F-27.
+export const MS_PER_HOUR = 3_600_000;
 export const MS_PER_DAY = 86_400_000;
 export const MS_PER_YEAR_AVG = 365.25 * MS_PER_DAY;
 export const ACTIVE_CLUB_COOKIE_TTL_SECONDS = 60 * 60 * 24 * 30;

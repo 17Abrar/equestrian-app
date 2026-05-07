@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { createBookingSlotSchema } from '@equestrian/shared/schemas';
 import { isDateInPast } from '@equestrian/shared/utils';
+import { MS_PER_DAY } from '@equestrian/shared/constants';
 import {
   getBookingSlotsByClub,
   createBookingSlot,
@@ -44,7 +45,7 @@ const bookingSlotFiltersSchema = z
       const from = Date.parse(data.dateFrom);
       const to = Date.parse(data.dateTo);
       if (Number.isNaN(from) || Number.isNaN(to)) return true;
-      const days = (to - from) / 86_400_000;
+      const days = (to - from) / MS_PER_DAY;
       return days <= MAX_SLOT_RANGE_DAYS;
     },
     { message: `Date range cannot exceed ${MAX_SLOT_RANGE_DAYS} days` },

@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getCompetitionsForCalendar } from '@equestrian/db/queries';
+import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
 
 const MAX_CALENDAR_RANGE_DAYS = 90;
@@ -18,7 +19,7 @@ const calendarFiltersSchema = z
       const from = Date.parse(d.dateFrom);
       const to = Date.parse(d.dateTo);
       if (Number.isNaN(from) || Number.isNaN(to)) return true;
-      return (to - from) / 86_400_000 <= MAX_CALENDAR_RANGE_DAYS;
+      return (to - from) / MS_PER_DAY <= MAX_CALENDAR_RANGE_DAYS;
     },
     { message: `Date range cannot exceed ${MAX_CALENDAR_RANGE_DAYS} days` },
   );

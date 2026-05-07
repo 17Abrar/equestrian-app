@@ -13,6 +13,7 @@ import {
 import {
   PLATFORM_TIER_PRICES_MINOR,
   PLATFORM_INVOICE_DUE_DAYS,
+  MS_PER_DAY,
 } from '@equestrian/shared/constants';
 import { getTodayDateString } from '@equestrian/shared/utils';
 import {
@@ -556,7 +557,7 @@ async function sendTrialEndingNudges(
 function daysBetween(fromIso: string, toIso: string): number {
   const from = new Date(fromIso + 'T00:00:00Z').getTime();
   const to = new Date(toIso + 'T00:00:00Z').getTime();
-  return Math.floor((to - from) / 86_400_000);
+  return Math.floor((to - from) / MS_PER_DAY);
 }
 
 function addDays(dateIso: string, days: number): string {
