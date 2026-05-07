@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createStaffSchema, staffFiltersSchema } from '@equestrian/shared/schemas';
 import { getStaffByClub, createMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createStaffSchema, body);
+      // Audit F-63 (2026-05-07 r5).
+      const data = await parseRequiredBody(request, createStaffSchema);
 
       const member = await createMember(ctx.clubId, {
         clerkUserId: `manual_${randomUUID()}`,

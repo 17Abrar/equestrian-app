@@ -38,6 +38,28 @@ const nullableOptionalUrl = z
   .nullable()
   .optional();
 
+// Audit F-38 (2026-05-07 r5): a datetime-local input emits
+// `2026-12-31T23:59` (no timezone) — `z.string().datetime()` rejects
+// that because the strict ISO-8601 grammar requires a Z or ±HH:MM
+// offset. Routes that accept BOTH the form value AND a fully-qualified
+// ISO string (competitions, etc.) need a slightly looser predicate
+// that still refuses arbitrary strings: any value that won't parse
+// into a valid Date will hit `new Date('invalid')` → `Invalid Date`
+// downstream and Drizzle's timestamp column then bubbles a Postgres
+// 22008 → 500. The refinement below catches that at the edge.
+const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+function isParseableDateString(value: string): boolean {
+  if (DATETIME_LOCAL_RE.test(value)) return true;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms);
+}
+const parseableDateTime = z
+  .string()
+  .max(50)
+  .refine(isParseableDateString, {
+    message: 'Must be a valid ISO-8601 datetime (e.g. 2026-12-31T23:59 or 2026-12-31T23:59:00Z)',
+  });
+
 // ─── Common ────────────────────────────────────────────────────────────
 
 // Audit F-69 (2026-05-07 r4): `.strict()` on the export so direct
@@ -433,7 +455,13 @@ export const createCompetitionSchema = z
     disciplines: z.array(z.string().max(100)).max(50).optional(),
     entryFee: optionalNumeric(z.number().int().min(0)),
     currency: z.string().length(3).default('AED'),
-    registrationDeadline: z.string().max(50).optional(),
+    // Audit F-38 (2026-05-07 r5): refuse arbitrary strings — the route
+    // either passes this through `parseDateTimeLocal` (datetime-local
+    // form value, no TZ) or through `new Date(...)` directly (ISO with
+    // Z / offset). Either path crashes Drizzle's `timestamp` column on
+    // a malformed input. `parseableDateTime` accepts both forms and
+    // rejects everything else.
+    registrationDeadline: parseableDateTime.optional(),
     maxParticipants: optionalNumeric(z.number().int().positive()),
     status: z.enum(COMPETITION_STATUSES).default('draft'),
   })
@@ -805,7 +833,13 @@ export const updateMedicationSchema = createMedicationSchema.partial().strict();
 export const createMedicationLogSchema = z
   .object({
     medicationId: z.string().uuid(),
-    administeredAt: z.string().max(50).min(1),
+    // Audit F-38 (2026-05-07 r5): ISO-8601 strict datetime. The route
+    // converts via `new Date(data.administeredAt)` and Drizzle's
+    // `timestamp` column rejects an `Invalid Date` with Postgres 22008
+    // (datetime-field-overflow), surfacing as a 500 INTERNAL_ERROR with
+    // no field-level context. `.datetime()` rejects malformed input at
+    // the validation layer with a 400 + path: ['administeredAt'] payload.
+    administeredAt: z.string().datetime(),
     administeredByMemberId: z.string().uuid().optional(),
     wasAdministered: z.boolean().default(true),
     skipReason: z.string().max(500).optional(),

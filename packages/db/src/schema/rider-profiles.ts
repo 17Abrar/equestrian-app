@@ -44,6 +44,17 @@ export const riderProfiles = pgTable(
     index('idx_rider_profiles_club').on(table.clubId),
     index('idx_rider_profiles_member').on(table.memberId),
     index('idx_rider_profiles_skill').on(table.clubId, table.skillLevel),
+    // Audit F-42 (2026-05-07 r5): the CASCADE here is a fallback only
+    // — `bookings.rider_member_club_fk` is NO ACTION (audit rule for
+    // financial member_id columns), so any attempt to DELETE a club
+    // member with prior bookings is rejected at the bookings constraint
+    // before this rider_profiles row is ever cascaded. The CASCADE
+    // exists so a future hard-delete admin tool that ALSO purges the
+    // member's bookings (or anonymises them via member_id rewrite)
+    // doesn't have to remember to clean rider_profiles separately.
+    // For voluntary "leave the club" flows we set
+    // `club_members.is_active = false` and never delete the row, so
+    // this constraint is unreachable in production today.
     foreignKey({
       name: 'rider_profiles_member_club_fk',
       columns: [table.memberId, table.clubId],

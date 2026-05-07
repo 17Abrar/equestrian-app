@@ -103,9 +103,29 @@ export async function listPaymentAccounts(
 ): Promise<{ items: PaymentAccountSummary[]; total: number }> {
   const offset = (page - 1) * pageSize;
   const where = eq(clubPaymentAccounts.clubId, clubId);
+  // Audit F-32 (2026-05-07 r5): drop `encryptedCredentials` from the
+  // SELECT projection. The column carries an AES-GCM ciphertext blob
+  // (per-club Stripe / N-Genius / Ziina API keys, plus webhook signing
+  // secrets) that's stripped server-side by `toSummary` before
+  // serialization — but pulling it over the wire from Postgres on
+  // every list refetch is wasted bandwidth / memory and a small
+  // defense-in-depth gain (never serialize what you never load).
   const [rows, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: clubPaymentAccounts.id,
+        clubId: clubPaymentAccounts.clubId,
+        provider: clubPaymentAccounts.provider,
+        status: clubPaymentAccounts.status,
+        isActive: clubPaymentAccounts.isActive,
+        externalAccountId: clubPaymentAccounts.externalAccountId,
+        metadata: clubPaymentAccounts.metadata,
+        lastError: clubPaymentAccounts.lastError,
+        connectedAt: clubPaymentAccounts.connectedAt,
+        disconnectedAt: clubPaymentAccounts.disconnectedAt,
+        createdAt: clubPaymentAccounts.createdAt,
+        updatedAt: clubPaymentAccounts.updatedAt,
+      })
       .from(clubPaymentAccounts)
       .where(where)
       .orderBy(asc(clubPaymentAccounts.provider))
@@ -117,7 +137,10 @@ export async function listPaymentAccounts(
       .where(where),
   ]);
 
-  return { items: rows.map(toSummary), total: count[0]?.count ?? 0 };
+  // Already a `PaymentAccountSummary`-shaped projection — no `toSummary`
+  // call needed (and `toSummary` requires the full row including the
+  // dropped `encryptedCredentials` column).
+  return { items: rows, total: count[0]?.count ?? 0 };
 }
 
 /** Returns the one active account, or null if no provider is connected yet. */

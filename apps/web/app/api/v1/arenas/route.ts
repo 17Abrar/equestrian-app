@@ -6,6 +6,7 @@ import {
   successResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
   paginatedResponse,
 } from '@/lib/api-utils';
 
@@ -27,8 +28,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createArenaSchema, body);
+      // Audit F-63 (2026-05-07 r5).
+      const data = await parseRequiredBody(request, createArenaSchema);
 
       const arena = await createArena(ctx.clubId, data);
 

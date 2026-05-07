@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createOwnerSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getOwnersByClub, createMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 // Reuse `paginationSchema` (caps `pageSize` at 100). The previous
@@ -38,8 +38,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createOwnerSchema, body);
+      // Audit F-63 (2026-05-07 r5).
+      const data = await parseRequiredBody(request, createOwnerSchema);
 
       const member = await createMember(ctx.clubId, {
         clerkUserId: `manual_${randomUUID()}`,

@@ -8,6 +8,7 @@ import {
   successResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
 } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 import { sendTriggeredEmail } from '@/lib/email';
@@ -54,8 +55,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createRiderSchema, body);
+      // Audit F-63 (2026-05-07 r5).
+      const data = await parseRequiredBody(request, createRiderSchema);
 
       const result = await createRider(ctx.clubId, data);
 

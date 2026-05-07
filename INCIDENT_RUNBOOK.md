@@ -75,9 +75,16 @@ bookings; `webhook_no_club_resolved` or `webhook_permanently_failed`
 log lines.
 
 1. Verify the provider's webhook endpoint is still configured —
-   Stripe / Ziina / N-Genius dashboards. Stripe specifically: rotate
-   the webhook signing secret if it was leaked, then update
-   `STRIPE_WEBHOOK_SECRET` in wrangler.
+   Stripe / Ziina / N-Genius dashboards. Stripe specifically:
+   instruct the affected club admin to rotate the webhook signing
+   secret in their Stripe dashboard, then re-paste it into Cavaliq
+   Settings → Payments. There is no platform-level
+   `STRIPE_WEBHOOK_SECRET` to update — Cavaliq is non-Connect, so
+   each club's Stripe webhook signing secret lives encrypted in
+   `club_payment_accounts.encrypted_credentials` and is rotated
+   per-club. Same applies to N-Genius custom-header tokens and
+   Ziina HMAC secrets — all per-club, all in the same encrypted
+   credentials blob (audit F-53, 2026-05-07 r5).
 2. Check `webhook_events` table for the affected provider:
    `SELECT status, count(*) FROM webhook_events
     WHERE provider = 'stripe' AND last_attempted_at > now() - interval '1 hour'

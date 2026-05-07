@@ -4,7 +4,7 @@ import { getRiderById, updateRiderProfile } from '@equestrian/db/queries';
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput, validateUuidParam } from '@/lib/api-utils';
+  parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ riderId: string }>;
@@ -32,8 +32,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { riderId } = await params;
       validateUuidParam('riderId', riderId);
-      const body = await request.json();
-      const data = validateInput(updateRiderProfileSchema, body);
+      // Audit F-63 (2026-05-07 r5).
+      const data = await parseRequiredBody(request, updateRiderProfileSchema);
 
       const rider = await updateRiderProfile(ctx.clubId, riderId, data);
 

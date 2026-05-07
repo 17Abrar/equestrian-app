@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
 import { getRiderByMemberId, upsertRiderProfileByMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 
 // Rider-profile rows model rider-only attributes (skill level, emergency
 // contacts, medical notes). Coaches/grooms/vets shouldn't accidentally
@@ -76,8 +76,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const data = validateInput(updateMyProfileSchema, body);
+    // Audit F-63 (2026-05-07 r5).
+    const data = await parseRequiredBody(request, updateMyProfileSchema);
 
     const profile = await upsertRiderProfileByMember(ctx.clubId, ctx.memberId, data);
     if (!profile) {

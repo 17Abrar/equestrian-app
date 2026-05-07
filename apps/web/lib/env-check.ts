@@ -68,4 +68,19 @@ export function assertProductionEnvConfigured(): void {
       note: 'Production env vars missing — features degrade silently. Verify Wrangler secrets.',
     });
   }
+
+  // Audit F-10 (2026-05-07 r5): PLATFORM_ZIINA_TEST_MODE drives the
+  // Ziina sandbox `test` flag. It MUST be unset (or `false`) in
+  // production — `true` means platform-billing payment intents would
+  // hit Ziina sandbox and never settle. A staging template that leaks
+  // into prod (e.g. via copy-paste of a wrangler env block) is the
+  // exact failure mode this warn catches at boot.
+  if (process.env.PLATFORM_ZIINA_TEST_MODE === 'true' && process.env.NODE_ENV === 'production') {
+    logger.warn('env_misconfigured', {
+      missing: [
+        'PLATFORM_ZIINA_TEST_MODE === "true" in production — platform-billing payment intents will hit Ziina sandbox and never settle. Unset this var (staging-only).',
+      ],
+      note: 'PLATFORM_ZIINA_TEST_MODE is staging-only. See ENV.md and DEPLOY.md.',
+    });
+  }
 }

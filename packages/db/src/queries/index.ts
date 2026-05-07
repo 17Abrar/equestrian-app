@@ -17,3 +17,4 @@ export * from './discovery';
 export * from './livery-invoices';
 export * from './platform-billing';
 export * from './webhook-events';
+export * from './notifications';
