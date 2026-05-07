@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   format,
   startOfMonth,
@@ -40,14 +41,45 @@ export function MonthView({ currentDate, slots, competitions, onDayClick }: Mont
     weeks.push(week);
   }
 
+  // Audit F-23 (2026-05-07 r4): the month grid renders 6 × 7 = 42 cells, and
+  // every parent state change (navigation, slot click) re-runs the layout.
+  // The previous `slots.filter(...)` per cell was O(cells × slots) per render
+  // — for a 90-day window with ~30 slots/day, ~113k comparisons each pass.
+  // Pre-bucket once by date string; cell lookup drops to O(1).
+  const slotsByDate = useMemo(() => {
+    const map = new Map<string, BookingSlot[]>();
+    for (const s of slots) {
+      const arr = map.get(s.date);
+      if (arr) arr.push(s);
+      else map.set(s.date, [s]);
+    }
+    return map;
+  }, [slots]);
+
+  const competitionsByDate = useMemo(() => {
+    const map = new Map<string, CalendarCompetition[]>();
+    for (const c of competitions) {
+      // Multi-day competitions span every date between start and end. The
+      // grid only renders ~42 dates so this is cheap; iterating the spanned
+      // range once at memo time is still cheaper than the per-cell scan.
+      const start = new Date(`${c.startDate}T00:00:00Z`);
+      const end = new Date(`${c.endDate}T00:00:00Z`);
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        const key = d.toISOString().slice(0, 10);
+        const arr = map.get(key);
+        if (arr) arr.push(c);
+        else map.set(key, [c]);
+      }
+    }
+    return map;
+  }, [competitions]);
+
   function getSlotsForDate(date: Date): BookingSlot[] {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return slots.filter((s) => s.date === dateStr);
+    return slotsByDate.get(format(date, 'yyyy-MM-dd')) ?? [];
   }
 
   function getCompetitionsForDate(date: Date): CalendarCompetition[] {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return competitions.filter((c) => c.startDate <= dateStr && c.endDate >= dateStr);
+    return competitionsByDate.get(format(date, 'yyyy-MM-dd')) ?? [];
   }
 
   return (

@@ -6,7 +6,6 @@ import {
   updateBookingSlot,
   cancelBookingSlot,
   getMemberById,
-  getMemberByIdIncludingDeactivated,
   getClubById,
   getArenaById,
 } from '@equestrian/db/queries';
@@ -190,23 +189,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             await Promise.all(
               cancelledBookings.map(async (booking) => {
                 try {
-                  let recipientEmail: string | null = null;
-                  let riderName: string | null = null;
-
-                  if (booking.guestEmail) {
-                    recipientEmail = booking.guestEmail;
-                    riderName = booking.guestName ?? 'Guest';
-                  } else {
-                    // Audit F-30 (2026-05-07 r4): post-response
-                    // cancellation email batch — historical view; rider
-                    // may have been deactivated since booking creation.
-                    const member = await getMemberByIdIncludingDeactivated(
-                      ctx.clubId,
-                      booking.riderMemberId,
-                    );
-                    recipientEmail = member?.email ?? null;
-                    riderName = member?.displayName ?? '';
-                  }
+                  // Audit F-24 (2026-05-07 r4): rider email + displayName
+                  // are now joined inside `cancelBookingSlot` so we don't
+                  // fan out N `getMemberById` round-trips here. The query
+                  // does not filter on `isActive`, so historical riders
+                  // who left the club still receive the cancellation
+                  // notice (matches the prior F-30 carve-out).
+                  const recipientEmail = booking.guestEmail ?? booking.riderEmail;
+                  const riderName = booking.guestEmail
+                    ? (booking.guestName ?? 'Guest')
+                    : (booking.riderDisplayName ?? '');
 
                   if (!recipientEmail) return;
 

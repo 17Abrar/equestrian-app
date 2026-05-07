@@ -270,7 +270,7 @@ export async function cancelBookingSlot(clubId: string, slotId: string, reason?:
 
     if (!slot) return null;
 
-    const cancelledBookings = await tx
+    const cancelledRows = await tx
       .update(bookings)
       .set({
         status: 'cancelled',
@@ -298,6 +298,44 @@ export async function cancelBookingSlot(clubId: string, slotId: string, reason?:
         guestEmail: bookings.guestEmail,
         guestName: bookings.guestName,
       });
+
+    // Audit F-24 (2026-05-07 r4): the route's after() handler used to fan out
+    // N `getMemberById` queries (one per cancelled rider) to look up email +
+    // displayName for the cancellation notice. For a 25-rider group lesson
+    // that's 25 separate Neon HTTP round-trips per slot cancellation. Bundle
+    // the lookup into one tenant-scoped IN-list query and return rider
+    // email/displayName alongside each booking. The SELECT does not filter
+    // on `isActive` — historical-view consumers (e.g., post-cancellation
+    // emails to riders who later left the club) need to surface deactivated
+    // members the same way `getMemberByIdIncludingDeactivated` does.
+    const memberIds = Array.from(
+      new Set(cancelledRows.map((r) => r.riderMemberId).filter((id): id is string => !!id)),
+    );
+    const memberRows = memberIds.length
+      ? await tx
+          .select({
+            id: clubMembers.id,
+            email: clubMembers.email,
+            displayName: clubMembers.displayName,
+          })
+          .from(clubMembers)
+          .where(
+            and(
+              eq(clubMembers.clubId, clubId),
+              inArray(clubMembers.id, memberIds),
+            ),
+          )
+      : [];
+    const memberMap = new Map(memberRows.map((m) => [m.id, m]));
+
+    const cancelledBookings = cancelledRows.map((row) => {
+      const member = row.riderMemberId ? memberMap.get(row.riderMemberId) : null;
+      return {
+        ...row,
+        riderEmail: member?.email ?? null,
+        riderDisplayName: member?.displayName ?? null,
+      };
+    });
 
     return { slot, cancelledBookings };
   });

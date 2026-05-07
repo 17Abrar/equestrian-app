@@ -22,12 +22,12 @@ import {
 import {
   useApproveHorseOwnership,
   useDeclineHorseOwnership,
-  type Horse,
+  type HorseListItem,
 } from '@/hooks/use-horses';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 interface PendingApprovalCardProps {
-  horse: Horse;
+  horse: HorseListItem;
 }
 
 export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
@@ -138,7 +138,7 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
 }
 
 interface DialogProps {
-  horse: Horse;
+  horse: HorseListItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
