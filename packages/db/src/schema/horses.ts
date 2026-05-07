@@ -11,7 +11,9 @@ import {
   index,
   unique,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   horseStatusEnum,
   skillLevelEnum,
@@ -116,4 +118,12 @@ export const horses = pgTable('horses', {
     columns: [table.ownerMemberId, table.clubId],
     foreignColumns: [clubMembers.id, clubMembers.clubId],
   }),
+  // Audit F-2 (2026-05-07 r4): SQL CHECK from migration 0024 — schema
+  // drift fix. An active livery contract must either have zero monthly
+  // fee (unbilled active horse) OR a billing start date set; prevents
+  // a billing-cron crash on `null` start_date for an active row.
+  check(
+    'horses_active_requires_livery_start',
+    sql`${table.ownershipStatus} <> 'active' OR COALESCE(${table.monthlyLiveryFeeMinor}, 0) = 0 OR ${table.liveryStartDate} IS NOT NULL`,
+  ),
 ]);

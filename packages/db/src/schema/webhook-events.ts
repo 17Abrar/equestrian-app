@@ -7,7 +7,9 @@ import {
   text,
   unique,
   index,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { webhookEventStatusEnum } from './enums';
 import { clubs } from './clubs';
 
@@ -89,5 +91,8 @@ export const webhookEvents = pgTable(
     // (audit H-5) — surfaces "all events for club X" for ops dashboards
     // without a full-table scan.
     index('idx_webhook_events_club_status').on(table.clubId, table.status),
+    // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 —
+    // schema drift fix. Attempt counter cannot go negative.
+    check('webhook_events_attempt_count_nonneg_check', sql`${table.attemptCount} >= 0`),
   ],
 );

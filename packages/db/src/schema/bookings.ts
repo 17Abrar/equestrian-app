@@ -54,9 +54,11 @@ export const arenaSchedules = pgTable('arena_schedules', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  arenaId: uuid('arena_id')
-    .notNull()
-    .references(() => arenas.id, { onDelete: 'cascade' }),
+  // Audit F-67 (2026-05-07 r4): inline single-column FK dropped in
+  // migration 0045; replaced with composite below. Schema-completeness
+  // — table currently has no consumers but the every-tenant-FK-is-
+  // composite invariant applies uniformly.
+  arenaId: uuid('arena_id').notNull(),
 
   dayOfWeek: integer('day_of_week').notNull(),
   openTime: time('open_time').notNull(),
@@ -68,6 +70,11 @@ export const arenaSchedules = pgTable('arena_schedules', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_arena_schedules').on(table.arenaId, table.dayOfWeek),
+  foreignKey({
+    name: 'arena_schedules_arena_club_fk',
+    columns: [table.arenaId, table.clubId],
+    foreignColumns: [arenas.id, arenas.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const lessonTypes = pgTable('lesson_types', {
@@ -131,6 +138,12 @@ export const bookingSlots = pgTable('booking_slots', {
   index('idx_slots_club_date').on(table.clubId, table.date),
   index('idx_slots_coach').on(table.coachMemberId, table.date),
   index('idx_slots_arena').on(table.arenaId, table.date),
+  // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 — schema
+  // drift fix.
+  check(
+    'booking_slots_current_riders_bounds_check',
+    sql`${table.currentRiders} >= 0 AND ${table.currentRiders} <= ${table.maxRiders}`,
+  ),
   // FK target for composite (slot_id, club_id) → booking_slots(id,
   // club_id) on bookings + waitlist. Migration 0040.
   unique('booking_slots_id_club_unique').on(table.id, table.clubId),
@@ -270,6 +283,12 @@ export const bookings = pgTable('bookings', {
   // can't go negative. App layer enforces this on every write path,
   // but a direct DB write or a future bug that bypasses route
   // validation now bounces at the DB. Migration 0042.
+  // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 — schema
+  // drift fix. Refund total cannot exceed booking amount.
+  check(
+    'bookings_refund_le_amount_check',
+    sql`${table.refundedAmountMinor} >= 0 AND ${table.refundedAmountMinor} <= COALESCE(${table.amount}, 0)`,
+  ),
   check('bookings_amount_nonneg', sql`${table.amount} IS NULL OR ${table.amount} >= 0`),
   check('bookings_discount_nonneg', sql`${table.discountAmount} >= 0`),
   check(
@@ -356,9 +375,10 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
   // meaningless without the horse + rider it pairs.
   horseId: uuid('horse_id').notNull(),
   riderMemberId: uuid('rider_member_id').notNull(),
-  bookingId: uuid('booking_id')
-    .notNull()
-    .references(() => bookings.id, { onDelete: 'cascade' }),
+  // Audit F-35 (2026-05-07 r4): inline single-column FK dropped in
+  // migration 0045; replaced with composite (booking_id, club_id) →
+  // bookings(id, club_id) ON DELETE CASCADE in table-extras below.
+  bookingId: uuid('booking_id').notNull(),
 
   rating: integer('rating'),
   notes: text('notes'),
@@ -366,6 +386,9 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_pairing_horse_rider').on(table.horseId, table.riderMemberId),
+  // Audit F-11 (2026-05-07 r4): SQL index from migration 0028 — schema
+  // drift fix.
+  index('idx_pairing_club_rider').on(table.clubId, table.riderMemberId),
   foreignKey({
     name: 'horse_pairing_history_horse_club_fk',
     columns: [table.horseId, table.clubId],
@@ -375,6 +398,11 @@ export const horsePairingHistory = pgTable('horse_pairing_history', {
     name: 'horse_pairing_history_rider_member_club_fk',
     columns: [table.riderMemberId, table.clubId],
     foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'horse_pairing_history_booking_club_fk',
+    columns: [table.bookingId, table.clubId],
+    foreignColumns: [bookings.id, bookings.clubId],
   }).onDelete('cascade'),
 ]);
 

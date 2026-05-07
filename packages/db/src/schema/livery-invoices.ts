@@ -9,7 +9,9 @@ import {
   index,
   unique,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { liveryInvoiceStatusEnum } from './enums';
 import { clubs } from './clubs';
 import { horses } from './horses';
@@ -79,5 +81,8 @@ export const liveryInvoices = pgTable(
     // records that should outlive the member's row; finance reports
     // query historical invoices by owner_member_id even after the
     // member departs.
+    // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 —
+    // schema drift fix.
+    check('livery_invoices_period_range_check', sql`${table.periodStart} <= ${table.periodEnd}`),
   ],
 );

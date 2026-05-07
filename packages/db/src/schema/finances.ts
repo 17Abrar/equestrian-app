@@ -11,7 +11,9 @@ import {
   unique,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   liveryTypeEnum,
   paymentMethodEnum,
@@ -87,6 +89,12 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   unique('club_payment_accounts_club_provider_unique').on(table.clubId, table.provider),
   index('idx_payment_accounts_club').on(table.clubId),
   index('idx_payment_accounts_active').on(table.clubId, table.isActive),
+  // Audit F-11 (2026-05-07 r4): partial UNIQUE
+  // `idx_payment_accounts_one_active_per_club` (migration 0028 line
+  // 19) enforces "at most one provider per club marked active at a
+  // time". Drizzle has no partial-unique builder; the constraint
+  // lives at the SQL layer only and does NOT appear here. Keep this
+  // comment so a future schema reviewer doesn't add the global form.
 ]);
 
 export const liveryContracts = pgTable('livery_contracts', {
@@ -275,6 +283,12 @@ export const payments = pgTable('payments', {
     columns: [table.packageId, table.clubId],
     foreignColumns: [riderPackages.id, riderPackages.clubId],
   }).onDelete('set null'),
+  // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 — schema
+  // drift fix. Refunded total cannot exceed payment amount.
+  check(
+    'payments_refund_le_amount_check',
+    sql`COALESCE(${table.refundedAmount}, 0) >= 0 AND COALESCE(${table.refundedAmount}, 0) <= ${table.amount}`,
+  ),
 ]);
 
 export const expenses = pgTable('expenses', {

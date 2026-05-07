@@ -12,7 +12,9 @@ import {
   index,
   foreignKey,
   unique,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { fileCategoryEnum } from './enums';
 import { clubs } from './clubs';
 import { horses } from './horses';
@@ -97,6 +99,12 @@ export const horseMedications = pgTable('horse_medications', {
     columns: [table.horseId, table.clubId],
     foreignColumns: [horses.id, horses.clubId],
   }).onDelete('cascade'),
+  // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 —
+  // schema drift fix. End date (when set) must be on or after start.
+  check(
+    'horse_medications_date_range_check',
+    sql`${table.endDate} IS NULL OR ${table.startDate} <= ${table.endDate}`,
+  ),
 ]);
 
 export const horseMedicationLogs = pgTable('horse_medication_logs', {
@@ -239,7 +247,13 @@ export const horseCareReminderSends = pgTable(
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index('idx_horse_care_reminder_sends_club').on(table.clubId, table.sentAt),
+    // Audit F-37 (2026-05-07 r4): mirror SQL DESC on sent_at column —
+    // matches migration 0037 exactly so drizzle-kit generate doesn't
+    // emit a recreate-without-DESC migration.
+    index('idx_horse_care_reminder_sends_club').on(
+      table.clubId,
+      sql`${table.sentAt} DESC`,
+    ),
     unique('horse_care_reminder_sends_unique').on(
       table.clubId,
       table.kind,
