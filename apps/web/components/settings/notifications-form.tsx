@@ -1,12 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 import { Mail, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+} from '@/components/ui/form';
 import {
   useUpdateSettings,
   type ClubSettings,
@@ -120,11 +130,43 @@ const TRIGGERS: TriggerInfo[] = [
   },
 ];
 
+// Audit F-30 (2026-05-07 r5): RHF schema. Each trigger key maps to a
+// boolean (the `email` channel toggle). The save handler converts the
+// flat `Record<string, boolean>` back into the nested
+// `{ key: { email: value } }` shape the API expects.
+const notificationsFormSchema = z.object(
+  TRIGGERS.reduce<Record<string, z.ZodBoolean>>((acc, t) => {
+    acc[t.key] = z.boolean();
+    return acc;
+  }, {}),
+);
+type NotificationsFormValues = Record<string, boolean>;
+
+function prefsToFormValues(
+  prefs: NotificationPreferences | undefined,
+): NotificationsFormValues {
+  return TRIGGERS.reduce<NotificationsFormValues>((acc, t) => {
+    acc[t.key] = prefs?.[t.key]?.email ?? true;
+    return acc;
+  }, {});
+}
+
+function formValuesToPrefs(values: NotificationsFormValues): NotificationPreferences {
+  const result: NotificationPreferences = {};
+  for (const key of Object.keys(values)) {
+    const triggerKey = key as keyof NotificationPreferences;
+    result[triggerKey] = { email: values[key] ?? true };
+  }
+  return result;
+}
+
 export function NotificationsForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
-  const [prefs, setPrefs] = useState<NotificationPreferences>(
-    settings.notificationPreferences ?? {},
-  );
+
+  const form = useForm<NotificationsFormValues>({
+    resolver: zodResolver(notificationsFormSchema),
+    defaultValues: prefsToFormValues(settings.notificationPreferences),
+  });
 
   // Audit MED (2026-05-05 pass 2): the previous shape initialised `prefs`
   // from the prop ONCE — a parallel mutation that invalidated the cached
@@ -132,32 +174,24 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
   // form's optimistic refetch) updated the prop but left this `prefs`
   // stale. Toggling here would then write the *stale* state, silently
   // overwriting the just-saved values from the other path. The effect
-  // resyncs whenever `settings` shifts; the dep on `notificationPreferences`
-  // (rather than the whole `settings` object) avoids re-running on
-  // unrelated field changes.
+  // resyncs whenever `settings.notificationPreferences` shifts. RHF's
+  // `reset` is the correct way to re-seed a form from new props.
   useEffect(() => {
-    setPrefs(settings.notificationPreferences ?? {});
+    form.reset(prefsToFormValues(settings.notificationPreferences));
+    // form is a stable reference; re-running on prefs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.notificationPreferences]);
 
-  function toggle(key: keyof NotificationPreferences, value: boolean) {
-    setPrefs((current) => ({
-      ...current,
-      [key]: { email: value },
-    }));
-  }
-
-  async function onSave() {
+  async function onSave(values: NotificationsFormValues) {
     try {
-      await updateSettings.mutateAsync({ notificationPreferences: prefs });
+      await updateSettings.mutateAsync({
+        notificationPreferences: formValuesToPrefs(values),
+      });
       toast.success('Notification preferences saved');
     } catch (err) {
       reportMutationError('settings.notifications.save', err);
       toast.error(err instanceof Error ? err.message : 'Failed to save preferences');
     }
-  }
-
-  function isEnabled(key: keyof NotificationPreferences): boolean {
-    return prefs[key]?.email ?? true;
   }
 
   const riderTriggers = TRIGGERS.filter((t) => t.recipient === 'rider');
@@ -172,73 +206,76 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
           available to riders via their booking history either way.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <section>
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            Sent to riders and owners
-          </div>
-          <div className="space-y-1 rounded-lg border">
-            {riderTriggers.map((trigger, idx) => (
-              <div key={trigger.key}>
-                <TriggerRow
-                  trigger={trigger}
-                  enabled={isEnabled(trigger.key)}
-                  onToggle={(v) => toggle(trigger.key, v)}
-                />
-                {idx < riderTriggers.length - 1 && <Separator />}
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSave)} className="space-y-6">
+            <section>
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                Sent to riders and owners
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-            <Bell className="h-4 w-4 text-muted-foreground" />
-            Sent to club staff
-          </div>
-          <div className="space-y-1 rounded-lg border">
-            {adminTriggers.map((trigger, idx) => (
-              <div key={trigger.key}>
-                <TriggerRow
-                  trigger={trigger}
-                  enabled={isEnabled(trigger.key)}
-                  onToggle={(v) => toggle(trigger.key, v)}
-                />
-                {idx < adminTriggers.length - 1 && <Separator />}
+              <div className="space-y-1 rounded-lg border">
+                {riderTriggers.map((trigger, idx) => (
+                  <div key={trigger.key}>
+                    <TriggerRow form={form} trigger={trigger} />
+                    {idx < riderTriggers.length - 1 && <Separator />}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
+            </section>
 
-        <div className="flex justify-end">
-          <Button onClick={onSave} disabled={updateSettings.isPending}>
-            {updateSettings.isPending ? 'Saving...' : 'Save preferences'}
-          </Button>
-        </div>
+            <section>
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <Bell className="h-4 w-4 text-muted-foreground" />
+                Sent to club staff
+              </div>
+              <div className="space-y-1 rounded-lg border">
+                {adminTriggers.map((trigger, idx) => (
+                  <div key={trigger.key}>
+                    <TriggerRow form={form} trigger={trigger} />
+                    {idx < adminTriggers.length - 1 && <Separator />}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={updateSettings.isPending}>
+                {updateSettings.isPending ? 'Saving...' : 'Save preferences'}
+              </Button>
+            </div>
+          </form>
+        </Form>
       </CardContent>
     </Card>
   );
 }
 
 interface TriggerRowProps {
+  form: ReturnType<typeof useForm<NotificationsFormValues>>;
   trigger: TriggerInfo;
-  enabled: boolean;
-  onToggle: (value: boolean) => void;
 }
 
-function TriggerRow({ trigger, enabled, onToggle }: TriggerRowProps) {
+function TriggerRow({ form, trigger }: TriggerRowProps) {
   return (
-    <div className="flex items-start justify-between gap-4 px-4 py-3">
-      <div className="space-y-0.5">
-        <p className="text-sm font-medium">{trigger.title}</p>
-        <p className="text-xs text-muted-foreground">{trigger.description}</p>
-      </div>
-      <Switch
-        checked={enabled}
-        onCheckedChange={onToggle}
-        aria-label={`Toggle ${trigger.title}`}
-      />
-    </div>
+    <FormField
+      control={form.control}
+      name={trigger.key}
+      render={({ field }) => (
+        <FormItem className="flex items-start justify-between gap-4 px-4 py-3 space-y-0">
+          <div className="space-y-0.5">
+            <FormLabel className="text-sm font-medium">{trigger.title}</FormLabel>
+            <p className="text-xs text-muted-foreground">{trigger.description}</p>
+          </div>
+          <FormControl>
+            <Switch
+              checked={field.value}
+              onCheckedChange={field.onChange}
+              aria-label={`Toggle ${trigger.title}`}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
   );
 }

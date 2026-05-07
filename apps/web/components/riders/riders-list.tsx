@@ -10,6 +10,7 @@ import { createRiderSchema, type CreateRiderFormValues, type CreateRiderInput } 
 import { useRiders, useCreateRider } from '@/hooks/use-riders';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -300,10 +301,10 @@ function AddRiderDialog({
             </div>
             <div className="grid grid-cols-3 gap-4">
               <FormField control={form.control} name="weightKg" render={({ field }) => (
-                <FormItem><FormLabel>Weight (kg)</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Weight (kg)</FormLabel><FormControl><NumberInput step="0.1" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="heightCm" render={({ field }) => (
-                <FormItem><FormLabel>Height (cm)</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Height (cm)</FormLabel><FormControl><NumberInput step="0.1" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="skillLevel" render={({ field }) => (
                 <FormItem>

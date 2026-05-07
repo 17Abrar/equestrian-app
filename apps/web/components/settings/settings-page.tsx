@@ -8,6 +8,7 @@ import { updateClubProfileSchema, updateBookingRulesSchema, type UpdateClubProfi
 import { useClubSettings, useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { FileUpload } from '@/components/ui/file-upload';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -340,7 +341,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
               <FormField control={form.control} name="advanceBookingDays" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Advance Booking Window (days)</FormLabel>
-                  <FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormControl><NumberInput {...field} /></FormControl>
                   <FormDescription>How far in advance riders can book</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -348,7 +349,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
               <FormField control={form.control} name="bookingCutoffHours" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Booking Cutoff (hours)</FormLabel>
-                  <FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormControl><NumberInput {...field} /></FormControl>
                   <FormDescription>Minimum hours before lesson start to book</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -356,7 +357,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
               <FormField control={form.control} name="cancellationNoticeHours" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Cancellation Notice (hours)</FormLabel>
-                  <FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormControl><NumberInput {...field} /></FormControl>
                   <FormDescription>Hours before lesson to cancel without penalty</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -364,14 +365,14 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
               <FormField control={form.control} name="defaultLessonDurationMinutes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Default Lesson Duration (min)</FormLabel>
-                  <FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormControl><NumberInput {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="lateCancellationFeePercent" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Late Cancellation Fee (%)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" min="0" max="100" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormControl><NumberInput step="0.01" min="0" max="100" {...field} /></FormControl>
                   <FormDescription>Percentage of lesson price charged for late cancellations (0 = no fee)</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -379,7 +380,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
               <FormField control={form.control} name="noShowFeePercent" render={({ field }) => (
                 <FormItem>
                   <FormLabel>No-Show Fee (%)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" min="0" max="100" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                  <FormControl><NumberInput step="0.01" min="0" max="100" {...field} /></FormControl>
                   <FormDescription>Percentage of lesson price charged when a rider doesn&apos;t show up</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -411,7 +412,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
                 <FormField control={form.control} name="overbookingLimit" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Overbooking Limit</FormLabel>
-                    <FormControl><Input type="number" className="w-20" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl>
+                    <FormControl><NumberInput className="w-20" {...field} /></FormControl>
                   </FormItem>
                 )} />
               )}

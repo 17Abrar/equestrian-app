@@ -1,42 +1,63 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 import { ExternalLink, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { safeHref } from '@/lib/safe-href';
 
+// Audit F-30 (2026-05-07 r5): converted from `useState` per field to
+// useForm + zodResolver. Inline validation messages replace the
+// previous flat-form pattern. The schema mirrors the server contract
+// (settings update endpoint) — `joinPolicy` derived from
+// `isPublicListing` on save so the two stay in sync.
+const discoveryFormSchema = z.object({
+  isPublicListing: z.boolean(),
+  shortDescription: z
+    .string()
+    .max(280, 'Up to 280 characters'),
+});
+type DiscoveryFormValues = z.infer<typeof discoveryFormSchema>;
+
 export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
-  const [isPublicListing, setIsPublicListing] = useState(settings.isPublicListing ?? false);
-  // Only two modes now: public-listed = open to everyone, private = invite-only.
-  // The "approval" policy was removed — the user wants zero gatekeeping on joins.
-  const [joinPolicy, setJoinPolicy] = useState<'open' | 'invite_only'>(
-    settings.joinPolicy === 'open' ? 'open' : 'invite_only',
-  );
-  const [shortDescription, setShortDescription] = useState(settings.shortDescription ?? '');
 
-  function handlePublicToggle(next: boolean) {
-    setIsPublicListing(next);
-    // Turning the public listing on defaults to "open" so riders can join
-    // without friction. Turning it off assumes "invite only" (the club isn't
-    // advertised anywhere).
-    setJoinPolicy(next ? 'open' : 'invite_only');
-  }
+  const form = useForm<DiscoveryFormValues>({
+    resolver: zodResolver(discoveryFormSchema),
+    defaultValues: {
+      isPublicListing: settings.isPublicListing ?? false,
+      shortDescription: settings.shortDescription ?? '',
+    },
+  });
 
-  async function onSave() {
+  const shortDescription = form.watch('shortDescription') ?? '';
+
+  async function onSave(values: DiscoveryFormValues) {
     try {
       await updateSettings.mutateAsync({
-        isPublicListing,
-        joinPolicy,
-        shortDescription: shortDescription.trim() || null,
+        isPublicListing: values.isPublicListing,
+        // Turning the public listing on defaults to "open" so riders can join
+        // without friction. Turning it off assumes "invite_only" (the club
+        // isn't advertised anywhere).
+        joinPolicy: values.isPublicListing ? 'open' : 'invite_only',
+        shortDescription: values.shortDescription.trim() || null,
       });
       toast.success('Discovery settings updated');
     } catch (err) {
@@ -63,62 +84,81 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
             and has a shareable profile page.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="is-public">Let riders discover and join instantly</Label>
-              <p className="text-xs text-muted-foreground">
-                Your club appears on the public stable directory at{' '}
-                <code className="rounded bg-muted px-1">/discover</code>, and any signed-in
-                rider can join with one tap — no approval step. Turn this off to keep the club
-                invite-only.
-              </p>
-            </div>
-            <Switch
-              id="is-public"
-              checked={isPublicListing}
-              onCheckedChange={handlePublicToggle}
-            />
-          </div>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSave)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="isPublicListing"
+                render={({ field }) => (
+                  <FormItem className="flex items-start justify-between gap-4 rounded-lg border p-4 space-y-0">
+                    <div className="space-y-1">
+                      <FormLabel>Let riders discover and join instantly</FormLabel>
+                      <FormDescription>
+                        Your club appears on the public stable directory at{' '}
+                        <code className="rounded bg-muted px-1">/discover</code>,
+                        and any signed-in rider can join with one tap — no
+                        approval step. Turn this off to keep the club
+                        invite-only.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
 
-          <div className="space-y-2">
-            <Label htmlFor="short-description">Short description</Label>
-            <p className="text-xs text-muted-foreground">
-              Up to 280 characters. Shown on club cards in the directory.
-            </p>
-            <Textarea
-              id="short-description"
-              rows={3}
-              maxLength={280}
-              placeholder="One line that makes a rider want to join."
-              value={shortDescription}
-              onChange={(e) => setShortDescription(e.target.value)}
-            />
-            <p className="text-right text-xs text-muted-foreground">
-              {shortDescription.length} / 280
-            </p>
-          </div>
+              <FormField
+                control={form.control}
+                name="shortDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Short description</FormLabel>
+                    <FormDescription>
+                      Up to 280 characters. Shown on club cards in the directory.
+                    </FormDescription>
+                    <FormControl>
+                      <Textarea
+                        rows={3}
+                        maxLength={280}
+                        placeholder="One line that makes a rider want to join."
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-right text-xs text-muted-foreground">
+                      {shortDescription.length} / 280
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <div className="flex items-center justify-between rounded-lg bg-muted/30 p-4">
-            <div>
-              <p className="text-sm font-medium">Your public URL</p>
-              <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                cavaliq.com{publicUrl}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={safeHref(publicUrl)} target="_blank" rel="noopener noreferrer">
-                Preview
-                <ExternalLink className="ml-2 h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </div>
+              <div className="flex items-center justify-between rounded-lg bg-muted/30 p-4">
+                <div>
+                  <p className="text-sm font-medium">Your public URL</p>
+                  <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    cavaliq.com{publicUrl}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={safeHref(publicUrl)} target="_blank" rel="noopener noreferrer">
+                    Preview
+                    <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
 
-          <div className="flex justify-end">
-            <Button onClick={onSave} disabled={updateSettings.isPending}>
-              {updateSettings.isPending ? 'Saving...' : 'Save discovery settings'}
-            </Button>
-          </div>
+              <div className="flex justify-end">
+                <Button type="submit" disabled={updateSettings.isPending}>
+                  {updateSettings.isPending ? 'Saving...' : 'Save discovery settings'}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 

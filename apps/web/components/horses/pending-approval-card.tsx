@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 import { Check, X, Rabbit } from 'lucide-react';
 import { formatDate } from '@equestrian/shared/utils';
@@ -9,7 +12,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -20,11 +22,49 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
   useApproveHorseOwnership,
   useDeclineHorseOwnership,
   type HorseListItem,
 } from '@/hooks/use-horses';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+
+// Audit F-30 (2026-05-07 r5): UI-side schema for the Approve dialog.
+// The shared `approveHorseOwnershipSchema` expects `monthlyLiveryFeeMinor`
+// (server contract = minor units). The dialog inputs major units (AED)
+// for human-readability, so the form schema validates that input shape
+// and the submit handler converts to minor units before calling the
+// mutation. Inline `text-xs text-destructive` errors replace the
+// `toast.error('Enter a valid fee')` pattern per CLAUDE.md "Show
+// validation errors inline (below the field, in red)."
+const approveFormSchema = z.object({
+  feeMajorUnits: z
+    .union([z.literal(''), z.coerce.number().min(0, 'Enter a valid fee (0 or more)')])
+    .refine((v) => v !== '', { message: 'Enter a fee (0 or more)' }),
+  liveryStartDate: z
+    .string()
+    .min(1, 'Pick a start date')
+    .max(50),
+});
+type ApproveFormValues = z.input<typeof approveFormSchema>;
+type ApproveFormOutput = z.output<typeof approveFormSchema>;
+
+const declineFormSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(1, 'Please add a reason — the owner will see this')
+    .max(1000, 'Reason can be at most 1000 characters'),
+});
+type DeclineFormValues = z.infer<typeof declineFormSchema>;
 
 interface PendingApprovalCardProps {
   horse: HorseListItem;
@@ -145,31 +185,31 @@ interface DialogProps {
 
 function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
   const approve = useApproveHorseOwnership(horse.id);
-  const [fee, setFee] = useState('');
-  // Default start date = today, in the admin's local TZ. ISO YYYY-MM-DD.
-  const [startDate, setStartDate] = useState(
-    () => new Date().toISOString().slice(0, 10),
-  );
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const feeNumber = Number(fee);
-    if (Number.isNaN(feeNumber) || feeNumber < 0) {
-      toast.error('Enter a valid fee (0 or more)');
-      return;
-    }
-    if (!startDate) {
-      toast.error('Pick a start date');
-      return;
-    }
+  // Default start date = today in the admin's local TZ. ISO YYYY-MM-DD.
+  const form = useForm<ApproveFormValues, unknown, ApproveFormOutput>({
+    resolver: zodResolver(approveFormSchema),
+    defaultValues: {
+      feeMajorUnits: '',
+      liveryStartDate: new Date().toISOString().slice(0, 10),
+    },
+  });
+
+  async function onSubmit(values: ApproveFormOutput) {
+    // `feeMajorUnits` is `number | ''` post-resolver; the refine above
+    // ensures non-empty, so the cast is safe at this point.
+    const feeNumber = typeof values.feeMajorUnits === 'number'
+      ? values.feeMajorUnits
+      : Number(values.feeMajorUnits);
     try {
       await approve.mutateAsync({
         // User enters AED major units; DB stores minor units (fils).
         monthlyLiveryFeeMinor: Math.round(feeNumber * 100),
-        liveryStartDate: startDate,
+        liveryStartDate: values.liveryStartDate,
       });
       toast.success(`${horse.name} approved`);
       onOpenChange(false);
+      form.reset();
     } catch (err) {
       reportMutationError('horse_ownership.approve', err, { horseId: horse.id });
       toast.error(err instanceof Error ? err.message : 'Failed to approve');
@@ -187,50 +227,63 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="fee">Monthly livery fee</Label>
-            <Input
-              id="fee"
-              type="number"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              placeholder="e.g. 2500"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
-              required
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="feeMajorUnits"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Monthly livery fee</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder="e.g. 2500"
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Enter 0 if you&apos;re housing the horse gratis or billing
+                    off-platform.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <p className="text-xs text-muted-foreground">
-              Enter 0 if you&apos;re housing the horse gratis or billing off-platform.
-            </p>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="start-date">Livery starts</Label>
-            <Input
-              id="start-date"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              required
+            <FormField
+              control={form.control}
+              name="liveryStartDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Livery starts</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={approve.isPending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={approve.isPending}>
-              {approve.isPending ? 'Approving…' : 'Approve'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={approve.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={approve.isPending}>
+                {approve.isPending ? 'Approving…' : 'Approve'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -238,19 +291,18 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
 
 function DeclineDialog({ horse, open, onOpenChange }: DialogProps) {
   const decline = useDeclineHorseOwnership(horse.id);
-  const [reason, setReason] = useState('');
+  const form = useForm<DeclineFormValues>({
+    resolver: zodResolver(declineFormSchema),
+    defaultValues: { reason: '' },
+  });
+  const reasonValue = form.watch('reason') ?? '';
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!reason.trim()) {
-      toast.error('Please add a reason — the owner will see this');
-      return;
-    }
+  async function onSubmit(values: DeclineFormValues) {
     try {
-      await decline.mutateAsync(reason.trim());
+      await decline.mutateAsync(values.reason);
       toast.success(`${horse.name} declined`);
       onOpenChange(false);
-      setReason('');
+      form.reset();
     } catch (err) {
       reportMutationError('horse_ownership.decline', err, { horseId: horse.id });
       toast.error(err instanceof Error ? err.message : 'Failed to decline');
@@ -268,41 +320,47 @@ function DeclineDialog({ horse, open, onOpenChange }: DialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="reason">Reason</Label>
-            <Textarea
-              id="reason"
-              rows={5}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. We&apos;re at capacity this season but can revisit in 2 months. Please resubmit then."
-              maxLength={1000}
-              required
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="reason"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reason</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={5}
+                      placeholder="e.g. We're at capacity this season but can revisit in 2 months. Please resubmit then."
+                      maxLength={1000}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>{reasonValue.length} / 1000</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <p className="text-xs text-muted-foreground">
-              {reason.length} / 1000
-            </p>
-          </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={decline.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={decline.isPending}
-            >
-              {decline.isPending ? 'Declining…' : 'Decline'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={decline.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={decline.isPending}
+              >
+                {decline.isPending ? 'Declining…' : 'Decline'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
