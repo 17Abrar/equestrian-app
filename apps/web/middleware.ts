@@ -123,6 +123,8 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/platform-billing',
   '/api/cron/booking-reminders',
   '/api/cron/horse-care-reminders',
+  // F-43 (2026-05-07 r4): cold-start env-binding self-check.
+  '/api/cron/_self-check',
   '/api/v1/health',
   // Sentry's tunnel route — forwards client-side errors through our origin
   // so they aren't blocked by ad-blockers. Must be reachable unauthenticated.
