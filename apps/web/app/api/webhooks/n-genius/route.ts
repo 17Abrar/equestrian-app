@@ -12,6 +12,7 @@ import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/w
 import { PaymentProviderError } from '@/lib/payments/types';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/request-ip';
 import { logger } from '@/lib/logger';
 
 /**
@@ -80,11 +81,8 @@ async function handlePost(request: NextRequest) {
   // attacker bursting against the webhook would be most effective. The
   // platform-Ziina + per-club Ziina routes already fail closed; align
   // n-genius with them. Mirrors the F-17 fix in `ziina-platform/route.ts`.
-  const ip =
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  // Audit r5 F-46 (2026-05-07): IP resolver moved to `lib/request-ip.ts`.
+  const ip = getClientIp(request);
   const rl = await checkRateLimit(`webhook:n_genius:${ip}`, {
     maxRequests: 60,
     windowMs: 60_000,

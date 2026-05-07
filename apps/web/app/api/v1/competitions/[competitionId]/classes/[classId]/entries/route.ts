@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { createCompetitionEntrySchema, paginationSchema } from '@equestrian/shared/schemas';
+import { createCompetitionEntrySchema } from '@equestrian/shared/schemas';
 import {
   getCompetitionClassById,
   getCompetitionEntries,
@@ -10,7 +10,8 @@ import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
+  parsePagination,
+  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -46,15 +47,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       validateUuidParam('classId', classId);
       const mismatch = await assertClassBelongsToCompetition(ctx.clubId, competitionId, classId);
       if (mismatch) return mismatch;
-      const { page, pageSize } = validateInput(paginationSchema, {
-        page: request.nextUrl.searchParams.get('page') ?? undefined,
-        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
-      });
+      const { page, pageSize } = parsePagination(request);
       const { items, total } = await getCompetitionEntries(ctx.clubId, classId, {
         page,
         pageSize,
       });
-      return paginatedResponse(items, { page, pageSize, total });
+      return paginatedListResponse(items, page, pageSize, total);
     },
     { requiredPermission: 'competitions:read' },
   );

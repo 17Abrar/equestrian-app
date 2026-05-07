@@ -17,6 +17,7 @@ import { sendEmailAsync } from '@/lib/email';
 import { SubscriptionPaymentReceived } from '@equestrian/email-templates/subscription-payment-received';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/request-ip';
 
 /**
  * Webhook receiver for Cavaliq's PLATFORM Ziina account — distinct from
@@ -51,11 +52,8 @@ export async function POST(request: NextRequest) {
   // platform`) and any caller could spam it indefinitely; the only
   // bound was the body cap, but the route still pays JSON.parse +
   // HMAC compute on every request. Mirrors the n-genius pattern.
-  const ip =
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  // Audit r5 F-46 (2026-05-07): IP resolver moved to `lib/request-ip.ts`.
+  const ip = getClientIp(request);
   const rl = await checkRateLimit(`webhook:ziina_platform:${ip}`, {
     maxRequests: 60,
     windowMs: 60_000,

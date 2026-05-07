@@ -6,6 +6,7 @@ import { horses } from '../schema/horses';
 import { coupons, couponUsages } from '../schema/packages';
 import { riderProfiles } from '../schema/rider-profiles';
 import { calculateCouponDiscount } from '@equestrian/shared/utils';
+import { MS_PER_HOUR } from '@equestrian/shared/constants';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -1063,7 +1064,8 @@ export async function markBookingComplete(
  */
 export async function findUpcomingBookingsForReminder(now: Date) {
   const today = now.toISOString().slice(0, 10);
-  const twoDaysOut = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+  // Audit r5 F-59 (2026-05-07): use the shared MS_PER_HOUR constant.
+  const twoDaysOut = new Date(now.getTime() + 48 * MS_PER_HOUR)
     .toISOString()
     .slice(0, 10);
 

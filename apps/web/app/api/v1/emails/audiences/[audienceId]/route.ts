@@ -5,6 +5,8 @@ import {
   updateAudience,
   deleteAudience,
   resolveAudienceMembers,
+  countAudienceMembers,
+  MEMBERS_PREVIEW_CAP,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 
@@ -49,11 +51,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       if (!audience) {
         return errorResponse('NOT_FOUND', 'Audience not found', 404);
       }
-      const members = await resolveAudienceMembers(ctx.clubId, audience.filters ?? {});
+      // Audit r5 F-1 (2026-05-07): cap the projection at MEMBERS_PREVIEW_CAP
+      // and surface the SQL-side total separately. Previously this returned
+      // the full active rider roster on every detail GET — for a 10k-club,
+      // hundreds of KB and an unbounded scan per request.
+      const filters = audience.filters ?? {};
+      const [members, memberCount] = await Promise.all([
+        resolveAudienceMembers(ctx.clubId, filters, { limit: MEMBERS_PREVIEW_CAP }),
+        countAudienceMembers(ctx.clubId, filters),
+      ]);
       return successResponse({
         ...audience,
-        memberCount: members.length,
+        memberCount,
         members,
+        memberPreviewCap: MEMBERS_PREVIEW_CAP,
+        memberPreviewTruncated: memberCount > members.length,
       });
     },
     { requiredPermission: 'emails:read' },

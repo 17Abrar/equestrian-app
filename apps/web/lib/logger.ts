@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { PHI_KEYS } from '@equestrian/shared/constants';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -20,7 +21,14 @@ interface LogEntry {
 // recipient identity for debugging, hash it (e.g. `hashEmail(...)`) before
 // passing — the redactor matches on key name, so a `recipientHash` field
 // passes through cleanly.
-const SENSITIVE_KEYS = new Set([
+// Audit r5 F-9 (2026-05-07): merge in the canonical PHI key list so that
+// a freshly-decrypted health/medication record spread into `logger.info`
+// is scrubbed by key name before reaching stdout / Sentry. The list also
+// covers snake_case forms (`medical_notes`) since callers occasionally
+// log raw DB rows. Audit r5 F-51 (2026-05-07): Stripe `acct_…` IDs are
+// infrastructure metadata that lets an attacker correlate clubs across
+// leaked logs — redact `externalAccountId` / `providerAccountId`.
+const SENSITIVE_KEYS = new Set<string>([
   // Auth / secrets
   'password',
   'token',
@@ -63,6 +71,17 @@ const SENSITIVE_KEYS = new Set([
   'guest_phone',
   'guestname',
   'guest_name',
+  // PHI — folded in from `NOTIFICATION_FORBIDDEN_FIELDS` (canonical list
+  // at `packages/shared/src/constants/index.ts:PHI_KEYS`). Both casings
+  // (camelCase + snake_case) covered because callers occasionally log
+  // raw DB rows. The lookup itself is already lower-cased.
+  ...PHI_KEYS.map((k) => k.toLowerCase()),
+  'vet_instructions',
+  // Stripe / payment-provider account ids — F-51.
+  'externalaccountid',
+  'external_account_id',
+  'provideraccountid',
+  'provider_account_id',
 ]);
 
 // Audit LOW (2026-05-06 closeout): content-aware PII scrub. The
@@ -90,23 +109,50 @@ const PII_PATTERNS: ReadonlyArray<{ regex: RegExp; replacement: string }> = [
   { regex: /\(\d{2,4}\)\s*\d[\d\s.-]{4,}\d/g, replacement: '[REDACTED-PHONE]' },
 ];
 
-function scrubPiiInString(value: string): string {
+// Audit r5 F-50 (2026-05-07): UAE/GCC bare-digits phones (e.g.
+// `0501234567`) don't carry a `+` prefix or parens, so they look
+// indistinguishable from invoice / booking / transaction numbers in
+// the global value scrub. Applying this regex globally would corrupt
+// `bookingNumber: 'INV-12345678'` (false-negative — saved by the
+// `INV-` prefix) and `transactionId: '0123456789012345'` (false-
+// POSITIVE — would partially redact). Gate the pattern on context:
+// only run on values whose PARENT KEY is a free-text field where a
+// staff member would plausibly type a phone in prose ("rider's number
+// is 0501234567"). The list deliberately omits `description` / `notes`
+// because those are PHI keys and already get whole-value redaction
+// at the key-name layer above.
+const BARE_GCC_PHONE_PATTERN = /\b0[5-9]\d{8}\b/g;
+const FREE_TEXT_KEYS = new Set([
+  'note',
+  'message',
+  'comment',
+  'reason',
+  'detail',
+  'details',
+  'body',
+  'text',
+]);
+
+function scrubPiiInString(value: string, parentKey?: string): string {
   let out = value;
   for (const { regex, replacement } of PII_PATTERNS) {
     out = out.replace(regex, replacement);
   }
+  if (parentKey && FREE_TEXT_KEYS.has(parentKey.toLowerCase())) {
+    out = out.replace(BARE_GCC_PHONE_PATTERN, '[REDACTED-PHONE]');
+  }
   return out;
 }
 
-function sanitize(data: unknown, depth = 0): unknown {
+function sanitize(data: unknown, depth = 0, parentKey?: string): unknown {
   if (depth > 5) return '[nested]';
 
   if (typeof data === 'string') {
-    return scrubPiiInString(data);
+    return scrubPiiInString(data, parentKey);
   }
 
   if (Array.isArray(data)) {
-    return data.map((item) => sanitize(item, depth + 1));
+    return data.map((item) => sanitize(item, depth + 1, parentKey));
   }
 
   if (data !== null && typeof data === 'object') {
@@ -115,7 +161,7 @@ function sanitize(data: unknown, depth = 0): unknown {
       if (SENSITIVE_KEYS.has(key.toLowerCase())) {
         result[key] = '[REDACTED]';
       } else {
-        result[key] = sanitize(value, depth + 1);
+        result[key] = sanitize(value, depth + 1, key);
       }
     }
     return result;
