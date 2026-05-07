@@ -11,6 +11,7 @@ import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -32,8 +33,25 @@ const DAYS = [
   { value: 6, label: 'Sat' },
 ];
 
-export function CreateRecurringSlotsDialog() {
-  const [open, setOpen] = useState(false);
+// Audit F-66 (2026-05-07 r5): optional controlled open/onOpenChange so
+// the calendar's empty-state CTA can drive the same dialog the header
+// trigger uses.
+interface CreateRecurringSlotsDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function CreateRecurringSlotsDialog({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: CreateRecurringSlotsDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    controlledOnOpenChange?.(next);
+  };
   const createSlots = useCreateRecurringSlots();
   const lessonTypesQuery = useLessonTypes();
   const arenasQuery = useArenas();
@@ -143,7 +161,7 @@ export function CreateRecurringSlotsDialog() {
                 <FormItem><FormLabel>End Time *</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem><FormLabel>Max Riders *</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Riders *</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
 

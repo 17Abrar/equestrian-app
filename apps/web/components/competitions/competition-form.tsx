@@ -8,6 +8,7 @@ import { createCompetitionSchema, type CreateCompetitionFormValues, type CreateC
 import { useCreateCompetition } from '@/hooks/use-competitions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -170,7 +171,7 @@ export function CompetitionForm() {
                     <FormItem>
                       <FormLabel>Default Entry Fee</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="e.g. 15000" {...field} value={(field.value as number | undefined) ?? ''} />
+                        <NumberInput placeholder="e.g. 15000" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -184,7 +185,7 @@ export function CompetitionForm() {
                     <FormItem>
                       <FormLabel>Max Participants</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="Leave empty for unlimited" {...field} value={(field.value as number | undefined) ?? ''} />
+                        <NumberInput placeholder="Leave empty for unlimited" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

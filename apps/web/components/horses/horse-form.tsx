@@ -14,6 +14,7 @@ import {
 import { useOwnerMembers } from '@/hooks/use-staff';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { FileUpload } from '@/components/ui/file-upload';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -282,7 +283,7 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
                 <FormItem>
                   <FormLabel>Height (hands)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.1" placeholder="e.g. 15.2" {...field} value={(field.value as number | undefined) ?? ''} />
+                    <NumberInput step="0.1" placeholder="e.g. 15.2" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -295,7 +296,7 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
                 <FormItem>
                   <FormLabel>Weight (kg)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} />
+                    <NumberInput placeholder="e.g. 500" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -364,7 +365,7 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
                 <FormItem>
                   <FormLabel>Weight Limit (kg)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="Max rider weight" {...field} value={(field.value as number | undefined) ?? ''} />
+                    <NumberInput placeholder="Max rider weight" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -377,7 +378,7 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
                 <FormItem>
                   <FormLabel>Min Rider Age</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="Minimum age" {...field} value={(field.value as number | undefined) ?? ''} />
+                    <NumberInput placeholder="Minimum age" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -390,7 +391,7 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
                 <FormItem>
                   <FormLabel>Max Lessons/Day</FormLabel>
                   <FormControl>
-                    <Input type="number" {...field} value={(field.value as number | undefined) ?? ''} />
+                    <NumberInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

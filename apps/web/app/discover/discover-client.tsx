@@ -125,11 +125,7 @@ export function DiscoverClient() {
 
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-64" />
-            ))}
-          </div>
+          <DiscoverGridSkeleton />
         ) : isError ? (
           <Card>
             <CardContent className="py-12 text-center">
@@ -144,8 +140,25 @@ export function DiscoverClient() {
             <CardContent className="py-12 text-center">
               <h2 className="text-lg font-semibold">No stables yet</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Check back soon — more stables are joining every week.
+                {/* Audit F-29 (2026-05-07 r5): give riders a CTA when
+                    the search yields nothing — clearing the search
+                    restores the full listing. The button only renders
+                    when `search` actually has a value, so the absolute
+                    "no stables on the platform" empty case still reads
+                    as "check back soon." */}
+                {search
+                  ? 'No stables matched your search.'
+                  : 'Check back soon — more stables are joining every week.'}
               </p>
+              {search && (
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setSearch('')}
+                >
+                  Clear search
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -247,5 +260,33 @@ function ClubCard({ club }: { club: PublicClub }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+// Audit F-5 (2026-05-07 r5): card-shaped skeleton matching ClubCard
+// (cover photo block + logo overlay + name/badge row + location +
+// description + "View club" CTA row).
+function DiscoverGridSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="overflow-hidden rounded-xl border bg-card"
+        >
+          <Skeleton className="h-32 w-full rounded-none" />
+          <div className="space-y-2 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-3/4" />
+            <Skeleton className="h-4 w-20 pt-1" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

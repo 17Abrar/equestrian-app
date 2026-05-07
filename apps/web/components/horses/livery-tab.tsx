@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -45,6 +44,7 @@ import { formatCurrency } from '@equestrian/shared/utils';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { safeHref } from '@/lib/safe-href';
+import { LiveryInvoicesTableSkeleton } from './horse-tab-skeletons';
 
 interface LiveryTabProps {
   horse: Horse;
@@ -250,6 +250,12 @@ function InvoicesCard({
   const [cancelTarget, setCancelTarget] = useState<
     { id: string; invoiceNumber: string } | null
   >(null);
+  // Audit F-28 (2026-05-07 r5): mark-paid is now confirmation-gated
+  // because the financial side-effects (hides from outstanding totals,
+  // stops reminder cron) are irreversible — same logic as cancel.
+  const [markPaidTarget, setMarkPaidTarget] = useState<
+    { id: string; invoiceNumber: string; amountMinorUnits: number; currency: string } | null
+  >(null);
 
   const invoices = invoicesQuery.data?.data ?? [];
 
@@ -265,13 +271,27 @@ function InvoicesCard({
     }
   }
 
+  async function onConfirmMarkPaid() {
+    if (!markPaidTarget) return;
+    try {
+      await markPaid.mutateAsync(markPaidTarget.id);
+      toast.success('Marked paid');
+      setMarkPaidTarget(null);
+    } catch (err) {
+      reportMutationError('livery_invoice.mark_paid', err, {
+        invoiceId: markPaidTarget.id,
+      });
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Livery invoices</CardTitle>
       </CardHeader>
       <CardContent>
-        {invoicesQuery.isLoading && <Skeleton className="h-32 w-full" />}
+        {invoicesQuery.isLoading && <LiveryInvoicesTableSkeleton />}
 
         {invoicesQuery.isError && (
           <p className="text-sm text-destructive">
@@ -349,20 +369,14 @@ function InvoicesCard({
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={async () => {
-                                // Audit F-9: convert from .then/.catch to
-                                // await + try/catch and call reportMutationError
-                                // so Sentry sees financial-action failures.
-                                try {
-                                  await markPaid.mutateAsync(inv.id);
-                                  toast.success('Marked paid');
-                                } catch (err) {
-                                  reportMutationError('livery_invoice.mark_paid', err, {
-                                    invoiceId: inv.id,
-                                  });
-                                  toast.error(err instanceof Error ? err.message : 'Failed');
-                                }
-                              }}
+                              onClick={() =>
+                                setMarkPaidTarget({
+                                  id: inv.id,
+                                  invoiceNumber: inv.invoiceNumber,
+                                  amountMinorUnits: inv.amountMinorUnits,
+                                  currency: inv.currency,
+                                })
+                              }
                               disabled={markPaid.isPending}
                               title="Mark paid"
                             >
@@ -420,6 +434,49 @@ function InvoicesCard({
               className="bg-destructive hover:bg-destructive/90"
             >
               {cancelInvoice.isPending ? 'Cancelling…' : 'Cancel invoice'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Audit F-28 (2026-05-07 r5): confirmation-gated mark-paid.
+          Surfaces invoice number + amount so the user verifies they're
+          recording payment against the right ledger row before the cron
+          stops chasing it. */}
+      <AlertDialog
+        open={!!markPaidTarget}
+        onOpenChange={(open) => !open && setMarkPaidTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Mark invoice {markPaidTarget?.invoiceNumber} paid?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {markPaidTarget && (
+                <>
+                  This records payment of{' '}
+                  <strong>
+                    {formatCurrency(
+                      markPaidTarget.amountMinorUnits,
+                      markPaidTarget.currency,
+                    )}
+                  </strong>{' '}
+                  against the ledger and stops reminder emails for this
+                  invoice. There is no undo.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={markPaid.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onConfirmMarkPaid}
+              disabled={markPaid.isPending}
+            >
+              {markPaid.isPending ? 'Marking…' : 'Mark paid'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
