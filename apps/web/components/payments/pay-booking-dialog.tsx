@@ -82,9 +82,13 @@ export function PayBookingDialog({
     }
     if (payment) return;
 
+    // Audit F-71 (2026-05-07 r5 PR Sigma): inner-async-IIFE replaces the
+     // `.then().catch()` chain (CLAUDE.md: "Do NOT use `.then()` chains.
+     // Use `async/await`.").
     let cancelled = false;
-    createPaymentMutateAsync(bookingId)
-      .then((res) => {
+    void (async () => {
+      try {
+        const res = await createPaymentMutateAsync(bookingId);
         if (cancelled) return;
         // Audit F-8: `fetchJson` throws on `!res.ok` — `res` is always a
         // success envelope here. Don't drop the response into a silent
@@ -98,12 +102,12 @@ export function PayBookingDialog({
             'Could not start payment';
           setError(message);
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         reportMutationError('payment.create', err, { bookingId });
         setError(err instanceof Error ? err.message : 'Could not start payment');
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;

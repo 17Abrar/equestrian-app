@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
@@ -11,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useHorses, type Horse } from '@/hooks/use-horses';
+import { HorseListSkeleton } from '@/components/skeletons';
 
 // Map the `horse_status` enum to a display tone + label. Kept in sync with
 // packages/db/src/schema/enums.ts `horseStatusEnum`.
@@ -34,14 +34,14 @@ export default function HorsesScreen() {
   }, [refetch]);
 
   // API client returns the discriminated union — split success/error for UI.
-  const errorMessage =
-    data && 'success' in data && !data.success
-      ? data.error?.message ?? 'Unable to load horses'
-      : null;
+  const errorMessage = data && !data.success ? data.error.message : null;
 
+  // Audit F-7 (2026-05-07 r5 PR Sigma): `useHorses` now returns
+  // `PaginatedApiResponse<Horse>`. Narrowing on `data.success` is
+  // sufficient — the cast to `Horse[]` is gone.
   const horses = useMemo<Horse[]>(() => {
-    if (!data || !('success' in data) || !data.success) return [];
-    return 'data' in data ? (data.data as Horse[]) : [];
+    if (!data || !data.success) return [];
+    return data.data;
   }, [data]);
 
   return (
@@ -58,9 +58,10 @@ export default function HorsesScreen() {
           </Text>
         </View>
 
+        {/* Loading — audit F-31: HorseCard-shaped skeletons */}
         {isLoading && (
-          <View className="items-center py-10">
-            <ActivityIndicator size="large" color="#374151" />
+          <View className="pt-2">
+            <HorseListSkeleton count={4} />
           </View>
         )}
 

@@ -27,7 +27,14 @@ import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { fetchJson } from '@/lib/fetch-json';
 
-type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
+// Audit F-57 (2026-05-07 r5 PR Sigma): tuple-derived union so the
+// `onValueChange` boundary can `.includes()` rather than `as`-cast.
+const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
+type SkillLevel = (typeof SKILL_LEVELS)[number];
+
+function isSkillLevel(v: string): v is SkillLevel {
+  return SKILL_LEVELS.includes(v as SkillLevel);
+}
 
 interface RiderProfile {
   id: string;
@@ -295,7 +302,12 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <Label>Skill level</Label>
-          <Select value={skillLevel} onValueChange={(v) => setSkillLevel(v as SkillLevel)}>
+          <Select
+            value={skillLevel}
+            onValueChange={(v) => {
+              if (isSkillLevel(v)) setSkillLevel(v);
+            }}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
