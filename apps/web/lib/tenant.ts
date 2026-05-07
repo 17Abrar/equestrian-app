@@ -6,7 +6,6 @@ import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { type UserRole } from '@equestrian/shared/types';
-import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
 import { mapClerkRoleToAppRole } from './clerk-roles';
 import { logger } from './logger';
 
@@ -175,28 +174,38 @@ export async function getTenantContext(): Promise<TenantContext> {
     : undefined;
   const primary = chosen ?? memberships[0]!;
 
-  // If the cookie pointed somewhere the user no longer belongs, rewrite it to
-  // the fallback club. Two reasons: (a) the next request gets a direct cookie
-  // match instead of falling through this branch again, and (b) UI code that
-  // reads the cookie client-side won't still be advertising the stale club.
-  // `cookieStore.set` is only supported inside a Route Handler/Server Action
-  // context, so wrap in a try/catch — RSC contexts will throw and we just
-  // leave the cookie as-is (the server branch still resolves correctly).
+  // Audit F-32 (2026-05-07 r4): the previous shape silently rewrote
+  // the cookie to the fallback club when the cookie's chosen membership
+  // was missing from the active-memberships SELECT. Two scenarios trip
+  // this branch:
+  //   1. The user voluntarily left the chosen club (UI deletion).
+  //   2. An admin at the chosen club deactivated the user.
+  //
+  // For (1) it's harmless. For (2) the silent rewrite means a rider who
+  // was kicked out of Club A gets their session moved to Club B with no
+  // UI signal — their state changes without consent. Switch from
+  // "rewrite to fallback" to "clear the cookie" (`maxAge: 0`). The GET
+  // resolver still resolves to the most-recently-joined club for THIS
+  // request via `primary = chosen ?? memberships[0]`, but the next
+  // request's GET runs without a stale cookie pointer — and the next
+  // explicit `/api/v1/me/active-club` POST is what writes a fresh
+  // cookie. This makes the cookie a positive signal of user intent,
+  // not a hidden derivative of the most recent membership.
   if (activeClubCookie && !chosen) {
     try {
-      cookieStore.set(ACTIVE_CLUB_COOKIE, primary.clubId, {
+      cookieStore.set(ACTIVE_CLUB_COOKIE, '', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: ACTIVE_CLUB_COOKIE_TTL_SECONDS,
+        maxAge: 0,
       });
     } catch (err) {
       // RSC read-only context throws here — that's expected, the next
       // mutation (e.g. /me/active-club POST) will correct the cookie.
       // Logged at debug so the legitimate RSC path doesn't spam Sentry,
       // but a non-RSC failure (e.g. handler crash) is still observable.
-      logger.debug('active_club_cookie_rewrite_skipped', {
+      logger.debug('active_club_cookie_clear_skipped', {
         userId,
         error: err instanceof Error ? err.message : String(err),
       });

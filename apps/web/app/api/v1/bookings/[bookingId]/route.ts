@@ -7,7 +7,7 @@ import {
   adminGetPaymentAccountByProvider,
   getBookingById,
   getBookingSlotById,
-  getMemberById,
+  getMemberByIdIncludingDeactivated,
   getClubById,
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
@@ -405,7 +405,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // past response flush on Cloudflare Workers.
       after(async () => {
         try {
-          const riderMember = await getMemberById(ctx.clubId, existing.riderMemberId);
+          // Audit F-30 (2026-05-07 r4): post-response cancellation
+          // email — historical view; rider may have been deactivated
+          // between booking creation and cancellation.
+          const riderMember = await getMemberByIdIncludingDeactivated(
+            ctx.clubId,
+            existing.riderMemberId,
+          );
           if (!riderMember?.email) return;
 
           const feeDisplay = fee > 0

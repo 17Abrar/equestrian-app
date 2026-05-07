@@ -6,6 +6,7 @@ import {
   updateBookingSlot,
   cancelBookingSlot,
   getMemberById,
+  getMemberByIdIncludingDeactivated,
   getClubById,
   getArenaById,
 } from '@equestrian/db/queries';
@@ -196,7 +197,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
                     recipientEmail = booking.guestEmail;
                     riderName = booking.guestName ?? 'Guest';
                   } else {
-                    const member = await getMemberById(
+                    // Audit F-30 (2026-05-07 r4): post-response
+                    // cancellation email batch — historical view; rider
+                    // may have been deactivated since booking creation.
+                    const member = await getMemberByIdIncludingDeactivated(
                       ctx.clubId,
                       booking.riderMemberId,
                     );

@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import {
   attachWebhookEventClub,
   findBookingByIdForWebhook,
@@ -110,12 +111,27 @@ export async function applyPaymentWebhook({
   // `idx_webhook_events_club_status` index. Best-effort: a failure
   // here doesn't fail the request — the event is already claimed and
   // will process either way.
-  void attachWebhookEventClub(provider, event.eventId, clubId).catch((err) => {
-    logger.warn('attach_webhook_club_failed', {
-      provider,
-      eventId: event.eventId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+  //
+  // Audit F-46 (2026-05-07 r4): the previous shape was bare
+  // `void ... .catch(...)` — fire-and-forget. On Cloudflare Workers
+  // the response can flush and the isolate evict before the UPDATE
+  // commits, dropping the side-effect write. Wrap in Next.js `after()`
+  // (14.2+) which hooks into the Worker's `ctx.waitUntil` so the
+  // promise is guaranteed to settle before the isolate is recycled.
+  // The UPDATE is non-critical (idempotent index optimization for the
+  // per-club observability query) so a failure stays at warn — but
+  // we want it to consistently succeed instead of probabilistically
+  // succeed.
+  after(async () => {
+    try {
+      await attachWebhookEventClub(provider, event.eventId, clubId);
+    } catch (err) {
+      logger.warn('attach_webhook_club_failed', {
+        provider,
+        eventId: event.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   // (Removed a duplicate findBookingByProviderPaymentId call here that
