@@ -5,6 +5,7 @@ import {
   markWebhookEventFailed,
   markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
+  wasProviderPaymentIssuedRecently,
 } from '@equestrian/db/queries';
 import { nGeniusAdapter } from '@/lib/payments/n-genius';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
@@ -183,6 +184,49 @@ async function handlePost(request: NextRequest) {
     return new Response('OK', { status: 200 });
   }
 
+  // Audit F-20 (2026-05-07 r5): defense-in-depth — N-Genius webhook
+  // auth is a shared-secret echo (no body-binding), so a leaked
+  // (header, body) pair lets an attacker craft fresh REFUNDED /
+  // PURCHASED events for arbitrary references. The 90 s freshness
+  // window in the adapter is the primary fix; this gate adds a
+  // "reference must correspond to a payment we issued in the last
+  // 24 h" check so an attacker needs both the secret AND a recently-
+  // issued reference to forge a useful event. NOT load-bearing —
+  // legitimate events for old references (a 25h-old PURCHASED that
+  // gets retried) would now be rejected, so we log loudly and accept
+  // the trade-off (operator can manually mark paid; the inbound
+  // reference is a finite alphanumeric space that's
+  // already-collision-resistant). Guarded by a try/catch so a DB
+  // hiccup doesn't sink the webhook flow.
+  if (event.providerPaymentId) {
+    try {
+      const recentlyIssued = await wasProviderPaymentIssuedRecently(
+        event.providerPaymentId,
+        'n_genius',
+        account.clubId,
+      );
+      if (!recentlyIssued) {
+        logger.warn('n_genius_webhook_reference_not_recently_issued', {
+          clubId: account.clubId,
+          eventType: event.eventType,
+          eventId: event.eventId,
+          providerPaymentId: event.providerPaymentId,
+        });
+        // 401 to align with the rest of the rejection paths in this
+        // route — the attacker shouldn't learn whether the reference
+        // is unknown vs. known-but-stale.
+        return new Response('Invalid webhook reference', { status: 401 });
+      }
+    } catch (err) {
+      logger.warn('n_genius_webhook_reference_freshness_check_failed', {
+        clubId: account.clubId,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
+      // Fail open on the defense-in-depth check; the freshness window
+      // and signature compare remain the primary auth.
+    }
+  }
+
   const claim = await claimWebhookEvent('n_genius', event.eventId);
 
   if (claim.status === 'already_processed') {
@@ -218,18 +262,34 @@ async function handlePost(request: NextRequest) {
       overrideClubId: account.clubId,
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
-    if (!bookingResult) {
-      await applyLiveryInvoiceWebhook({
+
+    // Audit F-19 (2026-05-07 r5): fall through to the invoice helper
+    // when the booking side missed (null OR no_target); escalate to
+    // permanently_failed when both miss so the alert fires.
+    let invoiceResult: Awaited<ReturnType<typeof applyLiveryInvoiceWebhook>> = null;
+    const bookingMissed = !bookingResult || bookingResult.kind === 'no_target';
+    if (bookingMissed) {
+      invoiceResult = await applyLiveryInvoiceWebhook({
         provider: 'n_genius',
         event,
         clubId: account.clubId,
       });
     }
-    if (bookingResult?.permanentFailureReason) {
+
+    if (bookingResult?.kind === 'matched' && bookingResult.permanentFailureReason) {
       await markWebhookEventPermanentlyFailed(
         'n_genius',
         event.eventId,
         bookingResult.permanentFailureReason,
+      );
+    } else if (
+      bookingMissed &&
+      (!invoiceResult || invoiceResult.kind === 'no_target')
+    ) {
+      await markWebhookEventPermanentlyFailed(
+        'n_genius',
+        event.eventId,
+        `No booking or livery invoice matched providerPaymentId=${event.providerPaymentId ?? 'unknown'}`,
       );
     } else {
       await markWebhookEventProcessed('n_genius', event.eventId);

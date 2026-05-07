@@ -192,17 +192,36 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
       isRefundEvent: REFUND_EVENTS.has(event.eventType),
     });
 
-    // Didn't match a booking? Try a livery invoice. A payment intent is for
-    // one OR the other, never both, so we only run the second lookup when
-    // the first comes up empty.
-    if (!bookingResult) {
-      await applyLiveryInvoiceWebhook({ provider: 'ziina', event, clubId });
+    // Audit F-19 (2026-05-07 r5): a payment intent is for a booking OR
+    // a livery invoice, never both. When the booking helper missed
+    // (`null` = couldn't even resolve the club, `no_target` = club
+    // resolved but no booking), fall through to the invoice helper.
+    // If THAT also misses, mark dedup permanently_failed so the alert
+    // fires.
+    let invoiceResult: Awaited<ReturnType<typeof applyLiveryInvoiceWebhook>> = null;
+    const bookingMissed = !bookingResult || bookingResult.kind === 'no_target';
+    if (bookingMissed) {
+      invoiceResult = await applyLiveryInvoiceWebhook({
+        provider: 'ziina',
+        event,
+        clubId,
+      });
     }
-    if (bookingResult?.permanentFailureReason) {
+
+    if (bookingResult?.kind === 'matched' && bookingResult.permanentFailureReason) {
       await markWebhookEventPermanentlyFailed(
         'ziina',
         event.eventId,
         bookingResult.permanentFailureReason,
+      );
+    } else if (
+      bookingMissed &&
+      (!invoiceResult || invoiceResult.kind === 'no_target')
+    ) {
+      await markWebhookEventPermanentlyFailed(
+        'ziina',
+        event.eventId,
+        `No booking or livery invoice matched providerPaymentId=${event.providerPaymentId ?? 'unknown'}`,
       );
     } else {
       await markWebhookEventProcessed('ziina', event.eventId);

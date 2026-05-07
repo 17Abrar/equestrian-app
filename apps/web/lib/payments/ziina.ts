@@ -323,6 +323,12 @@ export const ziinaAdapter: PaymentProviderAdapter = {
         // when the event is `refund.status.updated`. Pull it so the
         // webhook handler can find the booking by its provider id.
         payment_intent_id?: string;
+        // Audit F-22 / F-24 (2026-05-07 r5): Ziina echoes the `message`
+        // field set at intent creation back in the webhook body. The
+        // booking-payment route stamps `[booking:UUID]` into the
+        // description; this surfaces it for the
+        // findBookingByIdInDescription recovery path in webhook-helpers.
+        message?: string;
       };
     };
 
@@ -423,6 +429,10 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       currency,
       refundStatus,
       refundAmountMinor,
+      // Audit F-22 / F-24 (2026-05-07 r5): description for recovery
+      // when neither provider_payment_id nor metadata.bookingId resolves
+      // the booking (instant-succeed race window).
+      descriptionForRecovery: payload.data?.message ?? undefined,
       data: payload,
     };
   },
