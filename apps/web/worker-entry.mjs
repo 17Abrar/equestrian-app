@@ -32,6 +32,61 @@ export {
   BucketCachePurge,
 } from './.open-next/worker.js';
 
+// Audit F-43 (2026-05-07 r4): one-shot env-binding self-check. Per
+// isolate, fire a single GET to `/api/cron/_self-check` with the
+// expected `x-cron-secret` header. The route reads
+// `process.env.CRON_SECRET` (the Next.js runtime binding) and returns
+// 200 when the value matches, 503 when missing, 401 when mismatched.
+// A 503 means Cloudflare's `env.CRON_SECRET` is set but Next.js doesn't
+// see it — every subsequent cron tick will silently fail with the same
+// 503, and the operator's only signal pre-fix was grepping logs for
+// `_secret_not_configured`. This loud `cron_secret_binding_mismatch`
+// makes the misconfig trivially visible.
+let bindingCheckedThisIsolate = false;
+
+async function verifyCronSecretBinding(env, ctx) {
+  if (bindingCheckedThisIsolate) return;
+  bindingCheckedThisIsolate = true;
+
+  try {
+    const url = new URL('/api/cron/_self-check', 'https://internal.worker/');
+    const probe = new Request(url.toString(), {
+      method: 'GET',
+      headers: {
+        'x-cron-secret': env.CRON_SECRET,
+        'user-agent': 'cavaliq-cron-binding-check',
+      },
+    });
+    const res = await worker.fetch(probe, env, ctx);
+    await res.text().catch(() => '');
+    if (res.status === 503) {
+      console.error('cron_secret_binding_mismatch', {
+        message:
+          'env.CRON_SECRET is set on the worker, but Next.js sees process.env.CRON_SECRET as undefined — Cloudflare → Next.js binding propagation is broken. Every cron tick will 503 until fixed.',
+        status: res.status,
+      });
+    } else if (res.status === 401) {
+      console.error('cron_secret_binding_drift', {
+        message:
+          'env.CRON_SECRET and process.env.CRON_SECRET have different values — likely a partial secret rotation that updated only one side.',
+        status: res.status,
+      });
+    } else if (res.status !== 200) {
+      console.error('cron_secret_binding_unexpected', {
+        status: res.status,
+      });
+    }
+  } catch (err) {
+    // Probe failure is itself a signal — but a transient fetch error
+    // shouldn't gate the real cron run. Log and let the cron tasks
+    // proceed; if the binding truly is broken, the per-task 503 fallback
+    // log will fire below as a secondary signal.
+    console.error('cron_secret_binding_check_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export default {
   fetch: worker.fetch,
 
@@ -55,6 +110,12 @@ export default {
       });
       return;
     }
+
+    // Audit F-43 (2026-05-07 r4): one-shot binding self-check. Logs
+    // `cron_secret_binding_mismatch` if Next.js's runtime can't see
+    // `process.env.CRON_SECRET` even though Cloudflare's `env` does.
+    // No-op on subsequent invocations within the same isolate.
+    await verifyCronSecretBinding(env, ctx);
 
     // Audit PROC-1 (2026-05-05 pass 2) + Round 6.1 + Round 6.2:
     // dispatch by `event.cron` so each billing/reminder cron runs on

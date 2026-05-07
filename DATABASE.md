@@ -1013,6 +1013,38 @@ CREATE INDEX idx_audit_actor ON audit_log(actor_member_id, created_at DESC);
 CREATE INDEX idx_audit_resource ON audit_log(resource_type, resource_id);
 ```
 
+#### Audit log read permission — cross-permission identifier surfacing
+
+> **Audit F-47 (2026-05-07 r4):** the `changes` JSONB field promotes
+> internal member identifiers across permission boundaries. Two
+> currently-active write paths store member UUIDs in the diff:
+>
+> - `/api/v1/horses/[horseId]/owner` PATCH stores the from/to
+>   `ownerMemberId` (a `club_members.id` UUID).
+> - `/api/v1/competitions/[competitionId]/classes/[classId]/entries`
+>   PATCH stores the from/to `riderMemberId` UUID.
+>
+> Member UUIDs alone are not PII, but cross-referenced against
+> `club_members` they identify a person. Today this is contained:
+> the audit-log read endpoint already requires a club-scoped role and
+> any role with audit-log read access ALSO has direct member-roster
+> read access through the same permissions table. So the join the
+> audit row enables is a join the staff member could already perform.
+>
+> If a future role is introduced with `audit_log:read` but NOT
+> `members:read` (e.g. an external compliance auditor view), the
+> audit log becomes a sidechannel for joinable identifiers. Two
+> mitigations to apply at that point:
+>
+> 1. Redact member UUIDs in the audit-log GET response when the
+>    caller's role lacks `members:read`. Replace with display names
+>    fetched server-side via the same join.
+> 2. OR: split the `changes` field into `changes_safe` (display-only)
+>    and `changes_raw` (UUIDs, gated by an additional permission).
+>
+> No code change required at this round — the finding is documented
+> here so the next role-permission revision considers the constraint.
+
 ---
 
 ## ROW-LEVEL SECURITY POLICIES

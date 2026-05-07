@@ -3,7 +3,7 @@ import { updateStaffSchema } from '@equestrian/shared/schemas';
 import {
   countActiveAdmins,
   deactivateMember,
-  getMemberById,
+  getMemberByIdIncludingDeactivated,
   updateMember,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
@@ -62,7 +62,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { memberId } = await params;
       validateUuidParam('memberId', memberId);
-      const member = await getMemberById(ctx.clubId, memberId);
+      const member = await getMemberByIdIncludingDeactivated(ctx.clubId, memberId);
 
       if (!member) {
         return errorResponse('NOT_FOUND', 'Staff member not found', 404);
@@ -82,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const body = await request.json();
       const data = validateInput(updateStaffSchema, body);
 
-      const target = await getMemberById(ctx.clubId, memberId);
+      const target = await getMemberByIdIncludingDeactivated(ctx.clubId, memberId);
       if (!target) {
         return errorResponse('NOT_FOUND', 'Staff member not found', 404);
       }
@@ -126,7 +126,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       const { memberId } = await params;
       validateUuidParam('memberId', memberId);
 
-      const target = await getMemberById(ctx.clubId, memberId);
+      const target = await getMemberByIdIncludingDeactivated(ctx.clubId, memberId);
       if (!target) {
         return errorResponse('NOT_FOUND', 'Staff member not found', 404);
       }

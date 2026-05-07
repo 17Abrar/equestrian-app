@@ -148,7 +148,57 @@ export async function getOwnersByClub(clubId: string, filters: { search?: string
   return { data, total: countResult[0]?.count ?? 0 };
 }
 
+/**
+ * Lookup a member by id, scoped to the club AND active-only. The
+ * active-only filter is the security-relevant default — see audit F-30
+ * (2026-05-07 r4): a deactivated member should not be a valid target
+ * for booking POST, horse-owner reassignment, coach assignment, coupon
+ * validation, or any other "is X a member of this club right now?"
+ * gate. Sister helper `getMemberByIdIncludingDeactivated` exists for
+ * the legitimate historical-view cases (staff detail page,
+ * owners detail page, post-response transactional emails for prior
+ * bookings, cron coach-name resolution).
+ *
+ * If you find yourself reaching for IncludingDeactivated on a write
+ * path that takes a member id from request input, you almost certainly
+ * want this strict variant instead.
+ */
 export async function getMemberById(clubId: string, memberId: string) {
+  const result = await db
+    .select()
+    .from(clubMembers)
+    .where(
+      and(
+        eq(clubMembers.id, memberId),
+        eq(clubMembers.clubId, clubId),
+        eq(clubMembers.isActive, true),
+      ),
+    )
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+/**
+ * Audit F-30 (2026-05-07 r4): historical-view sibling. Returns members
+ * regardless of `is_active`. Use ONLY for routes that legitimately need
+ * to see deactivated rows:
+ *
+ * - `/api/v1/staff/[memberId]` (GET to show history, PATCH to
+ *   reactivate, DELETE on already-deactivated rows)
+ * - `/api/v1/owners/[memberId]` (sister to staff)
+ * - Post-response emails (`after()`) for bookings whose rider was
+ *   deactivated between booking creation and email dispatch
+ * - Cron coach-name resolution for reminders on prior-issued bookings
+ *
+ * Never use on write paths that accept a member id from request input
+ * (booking POST, horse-owner transfer, coach assignment, etc.) — those
+ * must use the strict `getMemberById`.
+ */
+export async function getMemberByIdIncludingDeactivated(
+  clubId: string,
+  memberId: string,
+) {
   const result = await db
     .select()
     .from(clubMembers)

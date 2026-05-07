@@ -10,6 +10,7 @@ import {
   validateCoupon,
   getBookingById,
   getMemberById,
+  getMemberByIdIncludingDeactivated,
   getClubById,
   getHorseById,
   isParentOf,
@@ -431,7 +432,11 @@ export async function POST(request: NextRequest) {
         try {
           const [fullBooking, riderMember, club] = await Promise.all([
             getBookingById(ctx.clubId, booking.id),
-            getMemberById(ctx.clubId, booking.riderMemberId),
+            // Audit F-30 (2026-05-07 r4): post-response email — the
+            // rider could be deactivated between booking creation and
+            // email dispatch, but the cancellation/confirmation email
+            // should still go out to the address on file.
+            getMemberByIdIncludingDeactivated(ctx.clubId, booking.riderMemberId),
             getClubById(ctx.clubId),
           ]);
           if (!fullBooking || !riderMember?.email) return;

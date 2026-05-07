@@ -4,7 +4,7 @@ import {
   markBookingReminderSent,
   unmarkBookingReminderSent,
   getClubById,
-  getMemberById,
+  getMemberByIdIncludingDeactivated,
 } from '@equestrian/db/queries';
 import { sendTriggeredEmail } from '@/lib/email';
 import { BookingReminder } from '@equestrian/email-templates/booking-reminder';
@@ -180,7 +180,14 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // slot has no coach assigned.
       let coachName: string | undefined;
       if (booking.coachMemberId) {
-        const coach = await getMemberById(booking.clubId, booking.coachMemberId);
+        // Audit F-30 (2026-05-07 r4): historical lookup — the coach
+        // may have been deactivated between booking creation and the
+        // reminder cron pass; the booking still occurs and the rider
+        // should still see the coach's name on the reminder.
+        const coach = await getMemberByIdIncludingDeactivated(
+          booking.clubId,
+          booking.coachMemberId,
+        );
         coachName = coach?.displayName ?? undefined;
       }
 

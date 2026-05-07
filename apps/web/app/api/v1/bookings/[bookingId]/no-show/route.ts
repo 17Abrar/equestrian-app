@@ -5,7 +5,7 @@ import {
   getBookingSlotById,
   getClubById,
   markBookingNoShow,
-  getMemberById,
+  getMemberByIdIncludingDeactivated,
 } from '@equestrian/db/queries';
 import { calculateNoShowFee, formatMoney } from '@equestrian/shared/utils';
 import { withAuth,
@@ -108,7 +108,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       // response flush on Cloudflare Workers.
       after(async () => {
         try {
-          const riderMember = await getMemberById(ctx.clubId, booking.riderMemberId);
+          // Audit F-30 (2026-05-07 r4): post-response no-show email —
+          // historical view; rider may have been deactivated since the
+          // booking was made.
+          const riderMember = await getMemberByIdIncludingDeactivated(
+            ctx.clubId,
+            booking.riderMemberId,
+          );
           if (!riderMember?.email) return;
 
           await sendTriggeredEmail({

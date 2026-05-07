@@ -262,6 +262,16 @@ export async function withAuth(
   // (audit AI-27). Default to 'unknown' so the catch path is robust to
   // a throw that lands before headers() resolves.
   let requestId = 'unknown';
+  // Audit F-5 (2026-05-07 r4): hoist clubId / userId so the
+  // `unhandled_api_error` catch arm can tag Sentry with tenant context.
+  // The Sentry forwarder in `lib/logger.ts` keys `club_id` + `setUser`
+  // off these fields — without them, every unhandled 500 lands in
+  // Sentry untagged and an operator triaging "which club is hitting
+  // the wall?" has no signal. The `TenantError` arm legitimately can't
+  // have these (the throw originates inside `getTenantContext` itself),
+  // but every other arm SHOULD.
+  let outerClubId: string | undefined;
+  let outerUserId: string | undefined;
   try {
     const headerStore = await headers();
     requestId = headerStore.get('x-request-id') ?? crypto.randomUUID();
@@ -272,6 +282,8 @@ export async function withAuth(
     const userAgent = headerStore.get('user-agent') ?? 'unknown';
 
     const tenantCtx = await getTenantContext();
+    outerClubId = tenantCtx.clubId;
+    outerUserId = tenantCtx.userId;
 
     // Rate limiting (per user, default 60 req/min). When the caller doesn't
     // pass a routeKey, fall back to the request pathname (set on the
@@ -385,8 +397,15 @@ export async function withAuth(
     // Reuse the requestId captured at the top of withAuth (audit AI-27).
     // The previous fallback re-read headers() inside the catch — both
     // unnecessary (the value is in scope) and fragile.
+    //
+    // Audit F-5 (2026-05-07 r4): include hoisted clubId / userId when
+    // they were resolved before the throw. Sentry's logger forwarder
+    // tags `club_id` + setUser from these keys, so without them every
+    // unhandled 500 lands untagged.
     logger.error('unhandled_api_error', {
       requestId,
+      clubId: outerClubId,
+      userId: outerUserId,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });

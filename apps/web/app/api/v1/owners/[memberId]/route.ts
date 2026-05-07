@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getMemberById, updateMember, deactivateMember } from '@equestrian/db/queries';
+import { getMemberByIdIncludingDeactivated, updateMember, deactivateMember } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
 import { updateOwnerSchema } from '@equestrian/shared/schemas';
 
@@ -16,7 +16,7 @@ interface RouteParams {
  * mis-filing the audit entry under `owner.*` rather than `staff.*`.
  */
 async function loadOwnerOrError(clubId: string, memberId: string) {
-  const member = await getMemberById(clubId, memberId);
+  const member = await getMemberByIdIncludingDeactivated(clubId, memberId);
   if (!member) {
     return { member: null, error: errorResponse('NOT_FOUND', 'Owner not found', 404) };
   }
