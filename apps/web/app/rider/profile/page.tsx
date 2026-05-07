@@ -38,14 +38,12 @@ import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { fetchJson } from '@/lib/fetch-json';
 
-// Audit F-57 (2026-05-07 r5 PR Sigma): tuple-derived union so the
-// `onValueChange` boundary can `.includes()` rather than `as`-cast.
-const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
-type SkillLevel = (typeof SKILL_LEVELS)[number];
-
-function isSkillLevel(v: string): v is SkillLevel {
-  return SKILL_LEVELS.includes(v as SkillLevel);
-}
+// Audit F-57 (2026-05-07 r5 PR Sigma): SkillLevel union mirrors the DB
+// enum; used by the RiderProfile + UpdateBody interfaces below. PR Rho
+// (audit F-30) replaced this page's free-text `onValueChange` with an
+// RHF Select bound via `field.onChange`, so the runtime `SKILL_LEVELS`
+// tuple + `isSkillLevel` guard Sigma added are no longer needed here.
+type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
 interface RiderProfile {
   id: string;
