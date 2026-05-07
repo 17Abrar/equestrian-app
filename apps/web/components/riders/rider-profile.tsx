@@ -12,6 +12,7 @@ import { useBookings, type Booking } from '@/hooks/use-bookings';
 import { formatMoney } from '@equestrian/shared/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -246,7 +247,7 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
                             <FormItem>
                               <FormLabel>Weight (kg)</FormLabel>
                               <FormControl>
-                                <Input type="number" step="0.1" placeholder="e.g. 65" {...field} value={(field.value as number | undefined) ?? ''} />
+                                <NumberInput step="0.1" placeholder="e.g. 65" {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -259,7 +260,7 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
                             <FormItem>
                               <FormLabel>Height (cm)</FormLabel>
                               <FormControl>
-                                <Input type="number" step="0.1" placeholder="e.g. 170" {...field} value={(field.value as number | undefined) ?? ''} />
+                                <NumberInput step="0.1" placeholder="e.g. 170" {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>

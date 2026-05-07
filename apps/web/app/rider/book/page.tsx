@@ -3,6 +3,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import {
   Calendar,
   Clock,
@@ -30,6 +33,14 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,14 +51,31 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { fetchJson } from '@/lib/fetch-json';
 
-// Audit F-57 (2026-05-07 r5 PR Sigma): tuple-derived union so the
-// `onValueChange` boundary can `.includes()` rather than `as`-cast.
-const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
-type SkillLevel = (typeof SKILL_LEVELS)[number];
-
-function isSkillLevel(v: string): v is SkillLevel {
-  return SKILL_LEVELS.includes(v as SkillLevel);
-}
+// Audit F-30 (2026-05-07 r5 PR Rho): RHF schema for the guest sub-form.
+// Replaces four `useState` hooks + a `toast.error` validation pattern.
+// Missing/invalid input surfaces inline below the field, not as a
+// transient toast on submit. The booking submit handler only calls
+// `guestForm.handleSubmit(...)` when `bookingForGuest` is true, so the
+// `.min(1)` rules don't block self-bookings.
+//
+// Audit F-57 (2026-05-07 r5 PR Sigma): the `SKILL_LEVELS` tuple-derived
+// union added in Sigma is unnecessary on this file because the RHF
+// schema below carries the same constraint via `z.enum(...)` —
+// `field.onChange` is already typed correctly. Sigma's SKILL_LEVELS
+// remains live in `competitions-list.tsx`, `settings-page.tsx`, and
+// `rider/profile/page.tsx`.
+const guestBookingSchema = z.object({
+  name: z.string().trim().min(1, 'Guest name is required').max(120),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Guest email is required')
+    .email('Enter a valid email address')
+    .max(255),
+  phone: z.string().trim().min(1, 'Guest phone is required').max(50),
+  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']),
+});
+type GuestBookingValues = z.infer<typeof guestBookingSchema>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -179,10 +207,16 @@ export default function RiderBookPage() {
   // A rider can book themselves once AND bring guests; each guest identified
   // uniquely by email per slot (DB partial unique index enforces it).
   const [bookingForGuest, setBookingForGuest] = useState(false);
-  const [guestName, setGuestName] = useState('');
-  const [guestEmail, setGuestEmail] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
-  const [guestSkillLevel, setGuestSkillLevel] = useState<SkillLevel>('beginner');
+  // RHF form for guest fields — see schema above (audit F-30).
+  const guestForm = useForm<GuestBookingValues>({
+    resolver: zodResolver(guestBookingSchema),
+    defaultValues: {
+      name: '',
+      email: '',
+      phone: '',
+      skillLevel: 'beginner',
+    },
+  });
 
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
@@ -242,38 +276,24 @@ export default function RiderBookPage() {
     setCouponDiscount(0);
     setCouponError('');
     setBookingForGuest(false);
-    setGuestName('');
-    setGuestEmail('');
-    setGuestPhone('');
-    setGuestSkillLevel('beginner');
+    guestForm.reset();
   }
 
-  function handleConfirmBooking() {
+  function submitBooking(guestValues: GuestBookingValues | null) {
     if (!selectedSlot || !memberId) return;
-
-    if (bookingForGuest) {
-      if (!guestName.trim() || !guestEmail.trim() || !guestPhone.trim()) {
-        toast.error('Please fill in the guest name, email, and phone.');
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
-        toast.error('Please enter a valid guest email address.');
-        return;
-      }
-    }
 
     const payload = {
       slotId: selectedSlot.id,
       riderMemberId: memberId,
       autoMatchHorse: !bookingForGuest, // Guest bookings skip auto-match
       ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
-      ...(bookingForGuest
+      ...(guestValues
         ? {
             guest: {
-              name: guestName.trim(),
-              email: guestEmail.trim(),
-              phone: guestPhone.trim(),
-              skillLevel: guestSkillLevel,
+              name: guestValues.name,
+              email: guestValues.email,
+              phone: guestValues.phone,
+              skillLevel: guestValues.skillLevel,
             },
           }
         : {}),
@@ -282,8 +302,8 @@ export default function RiderBookPage() {
     createBooking.mutate(payload, {
       onSuccess: () => {
         toast.success(
-          bookingForGuest
-            ? `Guest booked — ${guestName.trim()} will receive lesson details.`
+          guestValues
+            ? `Guest booked — ${guestValues.name} will receive lesson details.`
             : 'Booking confirmed! Check your email for details.',
         );
         resetBookingState();
@@ -293,6 +313,17 @@ export default function RiderBookPage() {
         toast.error(err.message || 'Failed to create booking. Please try again.');
       },
     });
+  }
+
+  function handleConfirmBooking() {
+    if (!selectedSlot || !memberId) return;
+    if (bookingForGuest) {
+      // Audit F-30: RHF surfaces inline errors below each field; the
+      // handler only fires when the schema accepts.
+      void guestForm.handleSubmit((values) => submitBooking(values))();
+      return;
+    }
+    submitBooking(null);
   }
 
   // ─── Confirm Step ──────────────────────────────────────────────────
@@ -406,68 +437,84 @@ export default function RiderBookPage() {
           </div>
 
           {bookingForGuest && (
-            <div className="space-y-3 border-t pt-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="guest-name" className="text-xs">
-                  Guest name *
-                </Label>
-                <Input
-                  id="guest-name"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="Full name"
+            <Form {...guestForm}>
+              <div className="space-y-3 border-t pt-3">
+                <FormField
+                  control={guestForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Guest name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Full name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="guest-email" className="text-xs">
-                    Guest email *
-                  </Label>
-                  <Input
-                    id="guest-email"
-                    type="email"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
-                    placeholder="guest@example.com"
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField
+                    control={guestForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Guest email *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="guest@example.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={guestForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Guest phone *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="tel"
+                            placeholder="+971 50 123 4567"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="guest-phone" className="text-xs">
-                    Guest phone *
-                  </Label>
-                  <Input
-                    id="guest-phone"
-                    type="tel"
-                    value={guestPhone}
-                    onChange={(e) => setGuestPhone(e.target.value)}
-                    placeholder="+971 50 123 4567"
-                  />
-                </div>
+                <FormField
+                  control={guestForm.control}
+                  name="skillLevel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Guest skill level *</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="beginner">Beginner</SelectItem>
+                          <SelectItem value="intermediate">Intermediate</SelectItem>
+                          <SelectItem value="advanced">Advanced</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <p className="text-xs text-muted-foreground">
+                  A horse will be assigned manually by the stable after booking.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="guest-skill" className="text-xs">
-                  Guest skill level *
-                </Label>
-                <Select
-                  value={guestSkillLevel}
-                  onValueChange={(v) => {
-                    if (isSkillLevel(v)) setGuestSkillLevel(v);
-                  }}
-                >
-                  <SelectTrigger id="guest-skill">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="beginner">Beginner</SelectItem>
-                    <SelectItem value="intermediate">Intermediate</SelectItem>
-                    <SelectItem value="advanced">Advanced</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                A horse will be assigned manually by the stable after booking.
-              </p>
-            </div>
+            </Form>
           )}
         </div>
 

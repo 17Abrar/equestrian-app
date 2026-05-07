@@ -9,15 +9,27 @@ import { createExerciseScheduleSchema, type CreateExerciseScheduleFormValues, ty
 import { useExerciseSchedules, useCreateExerciseSchedule, useDeleteExerciseSchedule } from '@/hooks/use-horse-health';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { ExerciseScheduleSkeleton } from './horse-tab-skeletons';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const INTENSITY_COLORS: Record<string, string> = {
@@ -34,7 +46,7 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
   const { data, isLoading, isError, error, refetch } = useExerciseSchedules(horseId);
   const deleteSchedule = useDeleteExerciseSchedule(horseId);
 
-  if (isLoading) return <Skeleton className="h-48" />;
+  if (isLoading) return <ExerciseScheduleSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load exercise schedules'} onRetry={() => refetch()} />;
 
   const schedules = data?.data ?? [];
@@ -88,9 +100,30 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
                               {s.intensity && <Badge className={`text-[10px] ${INTENSITY_COLORS[s.intensity] ?? ''}`}>{s.intensity}</Badge>}
                             </div>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(s.id)} aria-label="Remove">
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                          {/* Audit F-27 (2026-05-07 r5): wrap the delete in
+                              AlertDialog so a misclick can't silently
+                              rewrite the horse's training plan. Mirrors
+                              the feeding-tab / health-tab / documents-tab
+                              delete-confirmation pattern. */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove">
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remove {s.exerciseType}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will delete the exercise from {DAYS[s.dayOfWeek] ?? 'this day'}&apos;s schedule.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(s.id)}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       ))}
                     </div>
@@ -152,7 +185,7 @@ function AddExerciseDialog({ horseId }: { horseId: string }) {
             )} />
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="durationMinutes" render={({ field }) => (
-                <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><Input type="number" placeholder="e.g. 45" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><NumberInput placeholder="e.g. 45" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="intensity" render={({ field }) => (
                 <FormItem>

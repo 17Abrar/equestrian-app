@@ -33,6 +33,36 @@ interface MyLiveryInvoice {
   payLink: string | null;
 }
 
+// Audit F-5 (2026-05-07 r5): row-shaped skeleton mirroring InvoiceCard
+// (icon block + horse-name/club/period column + amount/due column on
+// the right). The previous bare h-24 rectangles caused a layout shift
+// when the real cards arrived.
+function InvoicesListSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Card key={i}>
+          <CardContent className="flex flex-wrap items-start gap-4 p-4">
+            <Skeleton className="h-11 w-11 rounded-md" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+              <Skeleton className="h-3 w-48" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+            <div className="flex flex-col items-end gap-1.5">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 // Audit E-7: shared fetchJson helper.
 function useMyLiveryInvoices() {
   return useQuery({
@@ -60,13 +90,7 @@ export default function RiderInvoicesPage() {
         <p className="text-muted-foreground">Your monthly livery invoices across your stables</p>
       </div>
 
-      {isLoading && (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full rounded-xl" />
-          ))}
-        </div>
-      )}
+      {isLoading && <InvoicesListSkeleton />}
 
       {isError && !isLoading && (
         <ErrorState
@@ -77,8 +101,13 @@ export default function RiderInvoicesPage() {
 
       {!isLoading && !isError && invoices.length === 0 && (
         <EmptyState
+          // Audit F-29 (2026-05-07 r5): rider invoices empty state now
+          // points to the discover flow so first-time riders that hit
+          // this page before they've registered a horse have an obvious
+          // next step.
           title="No invoices yet"
           description="Your stable bills livery monthly from your horse's billing anniversary. Nothing to show just yet."
+          action={{ label: 'Find a stable', href: '/discover' }}
         />
       )}
 
