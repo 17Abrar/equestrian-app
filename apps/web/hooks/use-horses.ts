@@ -6,6 +6,32 @@ import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/typ
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
+// Audit F-8 (2026-05-07 r4): list-card narrow shape. The route's
+// `getHorsesByClub` projection serializes only these fields; using `Horse`
+// (the wide single-horse shape) here would have lied about what's on the
+// wire and let consumers reach into fields that arrive as `undefined`.
+export interface HorseListItem {
+  id: string;
+  clubId: string;
+  name: string;
+  primaryPhotoUrl: string | null;
+  breed: string | null;
+  gender: string | null;
+  color: string | null;
+  heightHands: string | null;
+  weightKg: string | null;
+  status: 'available' | 'resting' | 'injured' | 'retired' | 'off_site' | 'sold';
+  skillLevel: 'beginner' | 'intermediate' | 'advanced';
+  weightLimitKg: string | null;
+  notes: string | null;
+  ownerMemberId: string | null;
+  ownershipStatus: 'pending' | 'active' | 'retired' | 'declined';
+  ownershipSubmittedAt: string | null;
+  ownerName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Horse {
   id: string;
   name: string;
@@ -83,7 +109,7 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
     // explicitly invalidate the prefix). Flatten variants into
     // primitive elements only if cache eviction noise grows.
     queryKey: ['horses', filters],
-    queryFn: () => fetchJson<PaginatedResponse<Horse>>(`/api/v1/horses?${params.toString()}`),
+    queryFn: () => fetchJson<PaginatedResponse<HorseListItem>>(`/api/v1/horses?${params.toString()}`),
     // STALE_TIME_FREQUENT (30s) dedupes back-to-back fetches (tab switches,
     // nav badges) while still feeling live. Mutations explicitly invalidate so
     // approvals reflect immediately without waiting on this window.
