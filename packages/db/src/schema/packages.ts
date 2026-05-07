@@ -9,7 +9,9 @@ import {
   unique,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   couponStatusEnum,
   couponDiscountTypeEnum,
@@ -136,6 +138,13 @@ export const coupons = pgTable(
       columns: [table.createdByMemberId, table.clubId],
       foreignColumns: [clubMembers.id, clubMembers.clubId],
     }),
+    // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 —
+    // schema drift fix. Percentage discounts must be 1-100; fixed
+    // discounts must be >= 1.
+    check(
+      'coupons_discount_value_bounds_check',
+      sql`(${table.discountType} = 'percentage' AND ${table.discountValue} BETWEEN 1 AND 100) OR (${table.discountType} = 'fixed' AND ${table.discountValue} >= 1)`,
+    ),
   ],
 );
 

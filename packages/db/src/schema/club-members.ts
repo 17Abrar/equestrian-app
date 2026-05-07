@@ -35,5 +35,11 @@ export const clubMembers = pgTable(
     // is the PK, but Postgres needs the explicit constraint to use the column
     // pair as an FK target. See migration 0019.
     unique('club_members_id_club_unique').on(table.id, table.clubId),
+    // Audit F-11 (2026-05-07 r4): the partial index
+    // `idx_club_members_admin_deactivated` (migration 0029) is
+    // `WHERE deactivated_by_admin_at IS NOT NULL`. Drizzle has no
+    // partial-index builder; the constraint lives at the SQL layer
+    // only and does NOT appear here. Used by `joinClubInstantly` to
+    // refuse a rejoin attempt by a previously-kicked member.
   ],
 );

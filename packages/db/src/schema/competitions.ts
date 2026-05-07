@@ -11,7 +11,9 @@ import {
   unique,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   paymentStatusEnum,
   paymentMethodEnum,
@@ -51,6 +53,16 @@ export const competitions = pgTable('competitions', {
 }, (table) => [
   index('idx_competitions_club').on(table.clubId),
   index('idx_competitions_date').on(table.clubId, table.startDate),
+  // Audit F-1 (2026-05-07 r4): FK target for composite
+  // (competition_id, club_id) → competitions(id, club_id) on
+  // competition_classes. Migration 0045. Was the only tenant-scoped
+  // parent missing this UNIQUE.
+  unique('competitions_id_club_unique').on(table.id, table.clubId),
+  // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 — schema
+  // drift fix. start_date must be <= end_date; was previously
+  // enforced SQL-only and would have been DROPped on next
+  // drizzle-kit generate.
+  check('competitions_date_range_check', sql`${table.startDate} <= ${table.endDate}`),
   foreignKey({
     name: 'competitions_arena_club_fk',
     columns: [table.arenaId, table.clubId],
@@ -63,9 +75,11 @@ export const competitionClasses = pgTable('competition_classes', {
   clubId: uuid('club_id')
     .notNull()
     .references(() => clubs.id, { onDelete: 'cascade' }),
-  competitionId: uuid('competition_id')
-    .notNull()
-    .references(() => competitions.id, { onDelete: 'cascade' }),
+  // Audit F-1 (2026-05-07 r4): inline single-column FK dropped in
+  // migration 0045; replaced with composite (competition_id, club_id)
+  // → competitions(id, club_id) ON DELETE CASCADE declared in
+  // table-extras below.
+  competitionId: uuid('competition_id').notNull(),
 
   name: varchar('name', { length: 255 }).notNull(),
   discipline: varchar('discipline', { length: 100 }),
@@ -82,6 +96,11 @@ export const competitionClasses = pgTable('competition_classes', {
   // FK target for composite (class_id, club_id) → competition_classes
   // (id, club_id) on competition_entries. Migration 0040.
   unique('competition_classes_id_club_unique').on(table.id, table.clubId),
+  foreignKey({
+    name: 'competition_classes_competition_club_fk',
+    columns: [table.competitionId, table.clubId],
+    foreignColumns: [competitions.id, competitions.clubId],
+  }).onDelete('cascade'),
 ]);
 
 export const competitionEntries = pgTable(
