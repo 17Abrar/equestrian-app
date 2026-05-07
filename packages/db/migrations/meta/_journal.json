@@ -330,6 +330,13 @@
       "when": 1777248000035,
       "tag": "0046_audit_r4_bookings_provider_payment_index",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1777248000036,
+      "tag": "0047_audit_r5_schema_drift",
+      "breakpoints": true
     }
   ]
 }

@@ -178,9 +178,18 @@ export const communityTopics = pgTable('community_topics', {
   isActive: boolean('is_active').notNull().default(true),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Audit F-40 (2026-05-07 r5): mutable columns (name/description/icon/
+  // isActive) need a last-touched timestamp. Migration 0047 backfilled
+  // existing rows to `created_at`.
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_topics_club').on(table.clubId),
   unique('community_topics_club_slug_unique').on(table.clubId, table.slug),
+  // Audit F-16 (2026-05-07 r5): SQL CHECK from migration 0028 enforcing
+  // the system-vs-club topic invariant (`is_default = (club_id IS NULL)`).
+  // Without it, a buggy seed could produce `(club_id != NULL, is_default
+  // = true)` rows that corrupt system-vs-club discrimination.
+  check('topics_default_xor_club', sql`${table.isDefault} = (${table.clubId} IS NULL)`),
 ]);
 
 export const communityPosts = pgTable('community_posts', {
@@ -386,9 +395,15 @@ export const auditLog = pgTable('audit_log', {
   // these nullable so a deleted club / departed member doesn't tear down
   // the audit trail; previously NO ACTION blocked club deletion entirely.
   clubId: uuid('club_id').references(() => clubs.id, { onDelete: 'set null' }),
-  actorMemberId: uuid('actor_member_id').references(() => clubMembers.id, {
-    onDelete: 'set null',
-  }),
+  // Audit F-15 / F-37 (2026-05-07 r5): the inline single-column FK
+  // (`actor_member_id → club_members.id`) was promoted to the composite
+  // `(actor_member_id, club_id) → club_members(id, club_id)` in
+  // migration 0047 so the audit trail can't attribute an action in club
+  // A to a member of club B. Composite FK declared in the table-extras
+  // below; the inline `references(...)` is gone. Postgres MATCH SIMPLE
+  // skips the composite check on rows where any column is NULL —
+  // system-level rows (NULL clubId / NULL actor) keep working.
+  actorMemberId: uuid('actor_member_id'),
 
   action: varchar('action', { length: 100 }).notNull(),
   resourceType: varchar('resource_type', { length: 100 }).notNull(),
@@ -413,4 +428,9 @@ export const auditLog = pgTable('audit_log', {
     table.action,
     sql`${table.createdAt} DESC`,
   ),
+  foreignKey({
+    name: 'audit_log_actor_member_club_fk',
+    columns: [table.actorMemberId, table.clubId],
+    foreignColumns: [clubMembers.id, clubMembers.clubId],
+  }).onDelete('set null'),
 ]);
