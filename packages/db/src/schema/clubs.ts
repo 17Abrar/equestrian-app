@@ -8,7 +8,9 @@ import {
   timestamp,
   numeric,
   jsonb,
+  index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   subscriptionStatusEnum,
   subscriptionTierEnum,
@@ -128,6 +130,15 @@ export const clubs = pgTable('clubs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  // Audit F-39 (2026-05-07 r5): partial index from migration 0008
+  // backing the public-listing rider funnel. The predicate filters out
+  // both un-listed and soft-deleted clubs, keeping the index sized to
+  // the live work-set. Without `.where(...)` here, `drizzle-kit
+  // generate` would emit a DROP+CREATE-as-full migration.
+  index('idx_clubs_public_listing')
+    .on(table.isPublicListing)
+    .where(sql`is_public_listing = true AND deleted_at IS NULL`),
+]);
 
 export type JoinPolicy = 'open' | 'approval' | 'invite_only';

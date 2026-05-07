@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, boolean, timestamp, unique, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { userRoleEnum } from './enums';
 import { clubs } from './clubs';
 
@@ -35,11 +36,13 @@ export const clubMembers = pgTable(
     // is the PK, but Postgres needs the explicit constraint to use the column
     // pair as an FK target. See migration 0019.
     unique('club_members_id_club_unique').on(table.id, table.clubId),
-    // Audit F-11 (2026-05-07 r4): the partial index
-    // `idx_club_members_admin_deactivated` (migration 0029) is
-    // `WHERE deactivated_by_admin_at IS NOT NULL`. Drizzle has no
-    // partial-index builder; the constraint lives at the SQL layer
-    // only and does NOT appear here. Used by `joinClubInstantly` to
-    // refuse a rejoin attempt by a previously-kicked member.
+    // Audit F-39 (2026-05-07 r5): partial index from migration 0029
+    // backing `joinClubInstantly`'s "refuse rejoin if previously kicked"
+    // path. Drizzle 0.45.2 supports `.where(...)` on indexes, so the
+    // partial predicate now lives in TS too — drift fix from the prior
+    // F-11 (round 4) comment-only treatment.
+    index('idx_club_members_admin_deactivated')
+      .on(table.clubId, table.clerkUserId)
+      .where(sql`deactivated_by_admin_at IS NOT NULL`),
   ],
 );
