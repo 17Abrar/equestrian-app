@@ -1,12 +1,14 @@
 import { type NextRequest } from 'next/server';
-import { createHealthRecordSchema, paginationSchema } from '@equestrian/shared/schemas';
+import { createHealthRecordSchema } from '@equestrian/shared/schemas';
 import { getClubById, getHealthRecords, createHealthRecord, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
 import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
+  parsePagination,
+  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -19,15 +21,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const { horseId } = await params;
       validateUuidParam('horseId', horseId);
       const recordType = request.nextUrl.searchParams.get('recordType') ?? undefined;
-      const { page, pageSize } = validateInput(paginationSchema, {
-        page: request.nextUrl.searchParams.get('page') ?? undefined,
-        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
-      });
+      const { page, pageSize } = parsePagination(request);
       const { items, total } = await getHealthRecords(ctx.clubId, horseId, recordType, {
         page,
         pageSize,
       });
-      return paginatedResponse(items, { page, pageSize, total });
+      return paginatedListResponse(items, page, pageSize, total);
     },
     { requiredPermission: 'horses:read' },
   );
@@ -36,6 +35,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
+      // Audit r5 F-12 (2026-05-07): the `veterinarian` role holds
+      // `horses:update_medical` (not `horses:update`); without the OR-gate
+      // a vet onboarded via `manageStaff` would 403 from creating health
+      // records — the role's core duty. The natural-but-wrong fix would
+      // be to lower this to `horses:update_care`, which silently grants
+      // grooms write access to medical history. Mirrors the equivalent
+      // gate in `health/[recordId]/route.ts` and `medications/route.ts`.
+      const allowed =
+        hasPermission(ctx.orgRole, 'horses:update') ||
+        hasPermission(ctx.orgRole, 'horses:update_medical');
+      if (!allowed) {
+        return errorResponse(
+          'FORBIDDEN',
+          'You do not have permission to create health records',
+          403,
+        );
+      }
+
       const { horseId } = await params;
       validateUuidParam('horseId', horseId);
 
@@ -87,6 +104,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       return successResponse(record, 201);
     },
-    { requiredPermission: 'horses:update' },
+    // Audit r5 F-12 (2026-05-07): permission gate is inline above —
+    // accepts horses:update OR horses:update_medical. Don't restore a
+    // wrapper-level `requiredPermission` here without re-merging.
   );
 }

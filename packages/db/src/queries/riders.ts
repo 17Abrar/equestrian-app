@@ -177,6 +177,14 @@ export async function getRiderByMemberId(clubId: string, memberId: string) {
       weightKg: riderProfiles.weightKg,
       heightCm: riderProfiles.heightCm,
       skillLevel: riderProfiles.skillLevel,
+      emergencyContactName: riderProfiles.emergencyContactName,
+      emergencyContactPhone: riderProfiles.emergencyContactPhone,
+      emergencyContactRelation: riderProfiles.emergencyContactRelation,
+      // Audit r5 F-36 (2026-05-07): rider self-service GET should
+      // expose plaintext medical notes to the rider themselves so
+      // writes (PATCH /me/profile) and reads stay symmetric. Admins
+      // already see this via /riders/[riderId]/route.ts.
+      medicalNotes: riderProfiles.medicalNotes,
       totalLessonsCompleted: riderProfiles.totalLessonsCompleted,
       parentMemberId: riderProfiles.parentMemberId,
       displayName: clubMembers.displayName,
@@ -189,7 +197,9 @@ export async function getRiderByMemberId(clubId: string, memberId: string) {
     .where(and(eq(riderProfiles.memberId, memberId), eq(riderProfiles.clubId, clubId)))
     .limit(1);
 
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
 }
 
 interface CreateRiderData {
@@ -264,7 +274,15 @@ export async function updateRiderProfile(clubId: string, riderId: string, data: 
     .where(and(eq(riderProfiles.id, riderId), eq(riderProfiles.clubId, clubId)))
     .returning();
 
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  // Audit r5 F-36 (2026-05-07): decrypt medicalNotes before returning so
+  // PATCH responses stay symmetric with GET — riders/admins receive
+  // plaintext on both reads and writes. Without this the route returned
+  // ciphertext on PATCH; if the client persisted it and PATCHed it back,
+  // the server re-encrypted the already-encrypted value → silent data
+  // corruption.
+  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
 }
 
 /**
@@ -339,7 +357,11 @@ export async function upsertRiderProfileByMember(
       set: updateValues,
     })
     .returning();
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  // Audit r5 F-36 (2026-05-07): decrypt before returning — see
+  // updateRiderProfile for the data-corruption hazard otherwise.
+  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
 }
 
 /**

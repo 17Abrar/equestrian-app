@@ -1,4 +1,5 @@
 import { eq, and, gte, desc, sql, type SQL, inArray } from 'drizzle-orm';
+import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { db } from '../index';
 import { audiences, type AudienceFilters } from '../schema/audiences';
 import { clubMembers } from '../schema/club-members';
@@ -80,16 +81,28 @@ export async function deleteAudience(clubId: string, audienceId: string) {
 }
 
 /**
+ * Audit r5 F-1 (2026-05-07): cap on the projection size returned to detail
+ * GET callers. Used as a defence against unbounded scans / unbounded JSON
+ * payloads. The total count is surfaced separately via `countAudienceMembers`
+ * so the UI can render `(showing X of N)`.
+ */
+export const MEMBERS_PREVIEW_CAP = 500;
+
+/**
  * Translates an AudienceFilters object into a set of SQL predicates evaluated
  * against `club_members`. Returns the matching rows (id, email, displayName).
  * Unknown filter fields are ignored — the jsonb column is intentionally loose.
  *
  * The filters are AND-combined. `activeWithinDays` cross-joins with bookings
  * to check recency; `minBookings` counts lifetime bookings per rider.
+ *
+ * Audit r5 F-1: results are capped at `MEMBERS_PREVIEW_CAP` to prevent
+ * unbounded payloads on full-membership audiences. Pass `limit` to override.
  */
 export async function resolveAudienceMembers(
   clubId: string,
   filters: AudienceFilters,
+  options?: { limit?: number },
 ) {
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
@@ -138,6 +151,7 @@ export async function resolveAudienceMembers(
     conditions.push(inArray(clubMembers.id, recentIds));
   }
 
+  const limit = options?.limit ?? MEMBERS_PREVIEW_CAP;
   return db
     .select({
       id: clubMembers.id,
@@ -145,18 +159,73 @@ export async function resolveAudienceMembers(
       displayName: clubMembers.displayName,
     })
     .from(clubMembers)
-    .where(and(...conditions));
+    .where(and(...conditions))
+    .limit(limit);
 }
 
 /**
  * Convenience wrapper that just returns the count. Used for UI previews.
+ *
+ * Audit r5 F-1 (2026-05-07): replaced naive `resolve.length` (which now caps
+ * at MEMBERS_PREVIEW_CAP) with a SQL-side `count(*)`, matching the predicates
+ * in `resolveAudienceMembers`. Mirrors the structure used by
+ * `countAudienceMembersBatch` so equivalence holds for the same filter set.
  */
 export async function countAudienceMembers(
   clubId: string,
   filters: AudienceFilters,
 ): Promise<number> {
-  const members = await resolveAudienceMembers(clubId, filters);
-  return members.length;
+  const conditions: SQL[] = [
+    eq(clubMembers.clubId, clubId),
+    eq(clubMembers.role, 'rider'),
+    eq(clubMembers.isActive, true),
+  ];
+
+  if (filters.skillLevel) {
+    const matchingMemberIds = db
+      .select({ memberId: riderProfiles.memberId })
+      .from(riderProfiles)
+      .where(
+        and(
+          eq(riderProfiles.clubId, clubId),
+          eq(riderProfiles.skillLevel, filters.skillLevel),
+        ),
+      );
+    conditions.push(inArray(clubMembers.id, matchingMemberIds));
+  }
+
+  if (typeof filters.minBookings === 'number' && filters.minBookings > 0) {
+    const bookingCounts = db
+      .select({
+        memberId: bookings.riderMemberId,
+        count: sql<number>`count(*)::int`.as('booking_count'),
+      })
+      .from(bookings)
+      .where(eq(bookings.clubId, clubId))
+      .groupBy(bookings.riderMemberId)
+      .having(sql`count(*)::int >= ${filters.minBookings}`)
+      .as('booking_counts');
+    const qualifyingIds = db
+      .select({ memberId: bookingCounts.memberId })
+      .from(bookingCounts);
+    conditions.push(inArray(clubMembers.id, qualifyingIds));
+  }
+
+  if (typeof filters.activeWithinDays === 'number' && filters.activeWithinDays > 0) {
+    const since = new Date();
+    since.setDate(since.getDate() - filters.activeWithinDays);
+    const recentIds = db
+      .selectDistinct({ memberId: bookings.riderMemberId })
+      .from(bookings)
+      .where(and(eq(bookings.clubId, clubId), gte(bookings.createdAt, since)));
+    conditions.push(inArray(clubMembers.id, recentIds));
+  }
+
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(clubMembers)
+    .where(and(...conditions));
+  return rows[0]?.count ?? 0;
 }
 
 /**
@@ -210,7 +279,6 @@ export async function countAudienceMembersBatch(
     );
 
   const now = Date.now();
-  const DAY_MS = 86_400_000;
 
   return filterSets.map((filters) => {
     let count = 0;
@@ -226,7 +294,9 @@ export async function countAudienceMembersBatch(
         filters.activeWithinDays > 0
       ) {
         if (!r.lastBookingAt) continue;
-        const daysSince = (now - new Date(r.lastBookingAt).getTime()) / DAY_MS;
+        // Audit r5 F-59 (2026-05-07): replace local DAY_MS with the
+        // shared `MS_PER_DAY` constant. Was a same-monorepo dupe.
+        const daysSince = (now - new Date(r.lastBookingAt).getTime()) / MS_PER_DAY;
         if (daysSince > filters.activeWithinDays) continue;
       }
       count += 1;

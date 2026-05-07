@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { rawDb } from '@equestrian/db';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getRedis } from '@/lib/redis';
+import { getClientIp } from '@/lib/request-ip';
 import { logger } from '@/lib/logger';
 
 /**
@@ -25,11 +26,8 @@ import { logger } from '@/lib/logger';
  * a minute.
  */
 export async function GET(request: NextRequest) {
-  const ip =
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  // Audit r5 F-46 (2026-05-07): IP resolver moved to `lib/request-ip.ts`.
+  const ip = getClientIp(request);
 
   const rl = await checkRateLimit(`health:${ip}`, {
     maxRequests: 120,

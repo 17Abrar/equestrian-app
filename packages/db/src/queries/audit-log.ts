@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { rawDb, writeTransaction } from '../index';
 import { auditLog } from '../schema/operations';
 
@@ -87,7 +88,8 @@ export async function createAuditEntry(
  * 100GB delete from killing the worker. Repeat runs catch up.
  */
 export async function pruneAuditLog(retentionDays = 90, limit = 5000) {
-  const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
+  // Audit r5 F-59 (2026-05-07): use the shared MS_PER_DAY constant.
+  const cutoff = new Date(Date.now() - retentionDays * MS_PER_DAY);
   // Audit LOW-5 (2026-05-05): bound the DELETE at the DB level. The cron's
   // 5min wallclock cap is the only brake today — a runaway prune (severe
   // bloat after ~2yr without a sweep, or a table-locked vacuum) could

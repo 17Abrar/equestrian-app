@@ -154,12 +154,22 @@ export function useDeleteCompetition() {
 
 // ─── Competition Classes ──────────────────────────────────────────────
 
+// Audit r5 F-58 (2026-05-07): the classes route now returns the standard
+// paginated envelope `{ data, pagination }`. The hook keeps its existing
+// shape (`data.data` is still an array of CompetitionClass) so the
+// consumer in `competition-detail.tsx` doesn't need to change. `pageSize`
+// caps at the server-side hard cap (200) so the existing UI which never
+// paginated continues to render the full list under realistic loads.
 export function useCompetitionClasses(competitionId: string) {
   return useQuery({
     queryKey: ['competitions', competitionId, 'classes'],
     queryFn: () =>
-      fetchJson<ApiSuccessResponse<CompetitionClass[]>>(
-        `/api/v1/competitions/${competitionId}/classes`,
+      fetchJson<{
+        success: true;
+        data: CompetitionClass[];
+        pagination: { page: number; pageSize: number; total: number; totalPages: number };
+      }>(
+        `/api/v1/competitions/${competitionId}/classes?pageSize=50`,
       ),
     enabled: !!competitionId,
   });

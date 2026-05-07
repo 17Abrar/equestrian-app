@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { createMedicationLogSchema, paginationSchema } from '@equestrian/shared/schemas';
+import { createMedicationLogSchema } from '@equestrian/shared/schemas';
 import {
   getMedicationLogs,
   createMedicationLog,
@@ -10,7 +10,8 @@ import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
-  paginatedResponse, validateUuidParam } from '@/lib/api-utils';
+  parsePagination,
+  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; medicationId: string }>;
@@ -22,15 +23,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const { horseId, medicationId } = await params;
       validateUuidParam('horseId', horseId);
       validateUuidParam('medicationId', medicationId);
-      const { page, pageSize } = validateInput(paginationSchema, {
-        page: request.nextUrl.searchParams.get('page') ?? undefined,
-        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
-      });
+      const { page, pageSize } = parsePagination(request);
       const { items, total } = await getMedicationLogs(ctx.clubId, horseId, medicationId, {
         page,
         pageSize,
       });
-      return paginatedResponse(items, { page, pageSize, total });
+      return paginatedListResponse(items, page, pageSize, total);
     },
     { requiredPermission: 'horses:read' },
   );

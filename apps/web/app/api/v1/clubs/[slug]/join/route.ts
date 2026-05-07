@@ -5,6 +5,7 @@ import {
   getPublicClubBySlug,
   isUserMember,
   joinClubInstantly,
+  createAuditEntry,
 } from '@equestrian/db/queries';
 import { successResponse, errorResponse } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
@@ -104,6 +105,19 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         slug: club.slug,
         userId,
       });
+      // Audit r5 F-8 (2026-05-07): record the refusal in the audit table
+      // so compliance/IR can correlate Clerk login activity with admin-
+      // deactivation events. Fire-and-forget; the response below proceeds
+      // regardless of audit-write success.
+      if (result.memberId) {
+        void createAuditEntry({
+          clubId: club.id,
+          actorMemberId: result.memberId,
+          action: 'club_member.join_refused_deactivated',
+          resourceType: 'club_member',
+          resourceId: result.memberId,
+        });
+      }
       return errorResponse(
         'JOIN_REFUSED',
         'Your membership at this stable was previously cancelled. Please contact the stable directly to be reinstated.',
@@ -117,6 +131,18 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       clubId: club.id,
       slug: club.slug,
       memberId: member.id,
+    });
+
+    // Audit r5 F-8 (2026-05-07): membership creation is a tenant-mutating
+    // action — grants Clerk identity access to bookings, horses, finances.
+    // The audit-log retention window (90 days) requires this row so an IR
+    // investigation weeks later can answer "when did they become a member."
+    void createAuditEntry({
+      clubId: club.id,
+      actorMemberId: member.id,
+      action: 'club_member.create.self_join',
+      resourceType: 'club_member',
+      resourceId: member.id,
     });
 
     // Welcome email — respects the club's notification_preferences.

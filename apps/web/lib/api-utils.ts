@@ -1,11 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { headers } from 'next/headers';
 import { z, ZodError, type ZodTypeAny } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
+import { paginationSchema } from '@equestrian/shared/schemas';
 import { getTenantContext, TenantError, type ActiveMembership } from './tenant';
 import { hasPermission, PermissionError } from './permissions';
 import { logger } from './logger';
 import { checkRateLimit, type RateLimitConfig } from './rate-limit';
+import { getClientIp } from './request-ip';
 import { createAuditEntry } from '@equestrian/db/queries';
 
 interface AuditParams {
@@ -78,6 +80,41 @@ export function paginatedResponse<T>(
 }
 
 /**
+ * Audit r5 F-60 (2026-05-07): the same pagination-parse block was
+ * duplicated verbatim across 9 list routes. Extracted here so a
+ * future schema tweak (e.g. tightening `pageSize` cap, accepting a
+ * `cursor`) lands once. Use as the first line of every paginated GET:
+ *
+ *   const { page, pageSize } = parsePagination(request);
+ */
+export function parsePagination(request: NextRequest): {
+  page: number;
+  pageSize: number;
+} {
+  return validateInput(paginationSchema, {
+    page: request.nextUrl.searchParams.get('page') ?? undefined,
+    pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
+  });
+}
+
+/**
+ * Audit r5 F-60 (2026-05-07): companion to `parsePagination`. Identical
+ * payload shape to the existing `paginatedResponse`-with-object call,
+ * just argument-flattened so the call site reads like a tuple
+ * (`paginatedListResponse(items, page, pageSize, total)`) instead of
+ * the wrap-in-object form. Existing call sites that want to keep the
+ * object form continue to use `paginatedResponse`.
+ */
+export function paginatedListResponse<T>(
+  items: T[],
+  page: number,
+  pageSize: number,
+  total: number,
+) {
+  return paginatedResponse(items, { page, pageSize, total });
+}
+
+/**
  * Validates input against a Zod schema. Returns the parsed output type,
  * which includes defaults applied by `.default()` modifiers.
  * Throws ValidationError with flattened details on failure.
@@ -124,24 +161,16 @@ export async function requireCronSecret(
   // fixed at deploy time, so leaking it via early return discloses
   // no useful attacker information. Identical-length compares stay
   // constant-time via timingSafeEqual.
-  function clientIp(): string {
-    return (
-      request.headers.get('cf-connecting-ip') ??
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
-      'unknown'
-    );
-  }
-
   function logBadSecret(): void {
     // Audit F-14 (2026-05-07 r4): no `providedLength` in the log line —
     // logging the attacker-supplied length on every wrong attempt is
     // information disclosure to operators-with-log-read-access (helps
     // calibrate forgery attempts). Match Ziina's webhook signature
     // mismatch logging pattern.
+    // Audit r5 F-46 (2026-05-07): IP resolver moved to `lib/request-ip.ts`.
     logger.warn(`${eventName}_bad_secret`, {
       headerPresent: headerSecret !== null,
-      ip: clientIp(),
+      ip: getClientIp(request),
     });
   }
 
