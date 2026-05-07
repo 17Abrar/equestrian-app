@@ -2,7 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type CreateStaffInput, type UpdateStaffInput } from '@equestrian/shared/schemas';
-import { type ApiSuccessResponse, type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 export interface ClubMember {
@@ -16,25 +17,43 @@ export interface ClubMember {
 }
 
 // ─── Member Dropdowns ─────────────────────────────────────────────────
+//
+// Audit F-6 / F-7 (2026-05-07 r4): the routes return `paginatedResponse(...)`,
+// not a flat array, and enforce the default 25-row page when no pageSize is
+// passed. The previous `ApiSuccessResponse<T[]>` annotation lied — `data` is
+// still the array (both envelopes use `data: T[]`), but the cap meant a club
+// with 26+ members in the role silently truncated the dropdown. Pickers now
+// pass `pageSize=MAX_PAGE_SIZE` (50) and declare the paginated envelope so
+// future contributors can read `pagination.total` if they need a "+ N more"
+// hint past 50.
 
 export function useOwnerMembers() {
   return useQuery({
     queryKey: ['members', 'horse_owner'],
-    queryFn: () => fetchJson<ApiSuccessResponse<ClubMember[]>>('/api/v1/members?role=horse_owner'),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<ClubMember>>(
+        `/api/v1/members?role=horse_owner&pageSize=${MAX_PAGE_SIZE}`,
+      ),
   });
 }
 
 export function useRiderMembers() {
   return useQuery({
     queryKey: ['members', 'rider'],
-    queryFn: () => fetchJson<ApiSuccessResponse<ClubMember[]>>('/api/v1/members?role=rider'),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<ClubMember>>(
+        `/api/v1/members?role=rider&pageSize=${MAX_PAGE_SIZE}`,
+      ),
   });
 }
 
 export function useCoachMembers() {
   return useQuery({
     queryKey: ['members', 'coach'],
-    queryFn: () => fetchJson<ApiSuccessResponse<ClubMember[]>>('/api/v1/members?role=coach'),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<ClubMember>>(
+        `/api/v1/members?role=coach&pageSize=${MAX_PAGE_SIZE}`,
+      ),
   });
 }
 

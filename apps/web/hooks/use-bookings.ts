@@ -10,6 +10,7 @@ import {
   type CreateLessonTypeInput,
 } from '@equestrian/shared/schemas';
 import { type ApiResponse, type ApiSuccessResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
@@ -106,10 +107,13 @@ export interface Booking {
 
 // ─── Arenas ───────────────────────────────────────────────────────────
 
+// Audit F-6 / F-7 (2026-05-07 r4): see use-staff.ts header — picker pulls
+// the full first page rather than the default-25 truncation.
 export function useArenas() {
   return useQuery({
     queryKey: ['arenas'],
-    queryFn: () => fetchJson<ApiSuccessResponse<Arena[]>>('/api/v1/arenas'),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<Arena>>(`/api/v1/arenas?pageSize=${MAX_PAGE_SIZE}`),
   });
 }
 
@@ -164,7 +168,10 @@ export function useDeleteArena() {
 export function useLessonTypes() {
   return useQuery({
     queryKey: ['lessonTypes'],
-    queryFn: () => fetchJson<ApiSuccessResponse<LessonType[]>>('/api/v1/lesson-types'),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<LessonType>>(
+        `/api/v1/lesson-types?pageSize=${MAX_PAGE_SIZE}`,
+      ),
   });
 }
 
@@ -216,12 +223,16 @@ export function useDeleteLessonType() {
 
 // ─── Booking Slots ────────────────────────────────────────────────────
 
-export function useBookingSlots(filters: { date?: string; dateFrom?: string; dateTo?: string; lessonTypeId?: string } = {}) {
+// Audit F-54 (2026-05-07 r4): the route schema accepts `coachMemberId`
+// but the hook's filter type omitted it, so the per-coach calendar view
+// can't filter slots. Expose it through.
+export function useBookingSlots(filters: { date?: string; dateFrom?: string; dateTo?: string; lessonTypeId?: string; coachMemberId?: string } = {}) {
   const params = new URLSearchParams();
   if (filters.date) params.set('date', filters.date);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
   if (filters.dateTo) params.set('dateTo', filters.dateTo);
   if (filters.lessonTypeId) params.set('lessonTypeId', filters.lessonTypeId);
+  if (filters.coachMemberId) params.set('coachMemberId', filters.coachMemberId);
 
   return useQuery({
     queryKey: ['bookingSlots', filters],
