@@ -33,7 +33,7 @@ export {
 } from './.open-next/worker.js';
 
 // Audit F-43 (2026-05-07 r4): one-shot env-binding self-check. Per
-// isolate, fire a single GET to `/api/cron/_self-check` with the
+// isolate, fire a single GET to `/api/cron/self-check` with the
 // expected `x-cron-secret` header. The route reads
 // `process.env.CRON_SECRET` (the Next.js runtime binding) and returns
 // 200 when the value matches, 503 when missing, 401 when mismatched.
@@ -49,7 +49,7 @@ async function verifyCronSecretBinding(env, ctx) {
   bindingCheckedThisIsolate = true;
 
   try {
-    const url = new URL('/api/cron/_self-check', 'https://internal.worker/');
+    const url = new URL('/api/cron/self-check', 'https://internal.worker/');
     const probe = new Request(url.toString(), {
       method: 'GET',
       headers: {
