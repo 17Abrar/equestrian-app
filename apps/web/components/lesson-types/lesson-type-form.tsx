@@ -12,6 +12,7 @@ import { formatMoney } from '@equestrian/shared/utils';
 import { useLessonTypes, useCreateLessonType, useUpdateLessonType, useDeleteLessonType, type LessonType } from '@/hooks/use-bookings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -117,10 +118,10 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <FormField control={form.control} name="durationMinutes" render={({ field }) => (
-                <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="price" render={({ field }) => (
-                <FormItem><FormLabel>Price</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Price</FormLabel><FormControl><NumberInput step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="color" render={({ field }) => (
                 <FormItem><FormLabel>Color</FormLabel><FormControl><Input type="color" className="h-10 w-full" {...field} value={field.value ?? '#3b82f6'} /></FormControl><FormMessage /></FormItem>
@@ -128,10 +129,10 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem><FormLabel>Max Riders</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Riders</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="minRiders" render={({ field }) => (
-                <FormItem><FormLabel>Min Riders</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Min Riders</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <Button type="submit" className="w-full" disabled={createLessonType.isPending}>
@@ -146,11 +147,47 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
 
 // ─── Lesson Types List (with edit/delete) ──────────────────────────────
 
+// Audit F-5 (2026-05-07 r5): row-shaped skeleton mirroring the actual
+// LessonTypesList content (color-dot + name/meta line + edit/delete
+// buttons). Replaces the previous bare h-32 rectangle.
+function LessonTypesListSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-9 w-32" />
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {Array.from({ length: rows }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-lg border p-3"
+            >
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-4 w-4 rounded" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <Skeleton className="h-8 w-8 rounded-md" />
+                <Skeleton className="h-8 w-8 rounded-md" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function LessonTypesList() {
   const { data, isLoading, isError, error, refetch } = useLessonTypes();
   const deleteLessonType = useDeleteLessonType();
 
-  if (isLoading) return <Skeleton className="h-32" />;
+  if (isLoading) return <LessonTypesListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load'} onRetry={() => refetch()} />;
 
   const lessonTypes = data?.data ?? [];
@@ -266,12 +303,7 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
                 <FormItem>
                   <FormLabel>Duration (min)</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      value={Number.isFinite(field.value) ? field.value : ''}
-                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-                    />
+                    <NumberInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -280,13 +312,7 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
                 <FormItem>
                   <FormLabel>Price</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...field}
-                      value={Number.isFinite(field.value) ? field.value : ''}
-                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-                    />
+                    <NumberInput step="0.01" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -300,12 +326,7 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
                 <FormItem>
                   <FormLabel>Max Riders</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      value={Number.isFinite(field.value) ? field.value : ''}
-                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-                    />
+                    <NumberInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -314,12 +335,7 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
                 <FormItem>
                   <FormLabel>Min Riders</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      value={Number.isFinite(field.value) ? field.value : ''}
-                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-                    />
+                    <NumberInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -15,7 +15,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,6 +22,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { safeHref } from '@/lib/safe-href';
+import { DocumentsListSkeleton } from './horse-tab-skeletons';
 
 const CATEGORY_LABELS: Record<string, string> = {
   medical_report: 'Medical Report',
@@ -45,7 +45,7 @@ export function DocumentsTab({ horseId }: DocumentsTabProps) {
   const { data, isLoading, isError, error, refetch } = useDocuments(horseId, categoryFilter);
   const deleteDoc = useDeleteDocument(horseId);
 
-  if (isLoading) return <Skeleton className="h-48" />;
+  if (isLoading) return <DocumentsListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load documents'} onRetry={() => refetch()} />;
 
   const documents = data?.data ?? [];
