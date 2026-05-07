@@ -12,6 +12,9 @@ import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
+// Audit F-36 (2026-05-07 r4): `.strict()` so future contributors who add
+// fields (`currency`, `idempotencyKey`, …) can't have unknown keys
+// silently dropped. Zod preserves strict mode through `.partial()`.
 const bodySchema = z
   .object({
     /**
@@ -21,6 +24,7 @@ const bodySchema = z
      */
     mode: z.enum(['default', 'hosted']).default('default'),
   })
+  .strict()
   .partial();
 
 interface RouteParams {

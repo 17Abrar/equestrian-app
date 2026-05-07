@@ -13,6 +13,7 @@ import {
   type PaymentAccountWithCredentials,
 } from '@equestrian/db/queries';
 import { getTodayDateString } from '@equestrian/shared/utils';
+import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { sendTriggeredEmail, sendTriggeredEmailAsync } from '@/lib/email';
@@ -521,5 +522,5 @@ function addMonths(dateIso: string, months: number): string {
 function daysBetween(fromIso: string, toIso: string): number {
   const from = Date.parse(fromIso + 'T00:00:00Z');
   const to = Date.parse(toIso + 'T00:00:00Z');
-  return Math.floor((to - from) / (24 * 60 * 60 * 1000));
+  return Math.floor((to - from) / MS_PER_DAY);
 }

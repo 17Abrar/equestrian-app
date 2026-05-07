@@ -17,6 +17,7 @@ import {
   getDependentMemberIds,
 } from '@equestrian/db/queries';
 import { matchHorsesToRider } from '@equestrian/shared/utils';
+import { MS_PER_YEAR_AVG } from '@equestrian/shared/constants';
 import {
   withAuth,
   successResponse,
@@ -251,7 +252,7 @@ export async function POST(request: NextRequest) {
           const age = rider.dateOfBirth
             ? Math.floor(
                 (Date.now() - new Date(rider.dateOfBirth).getTime()) /
-                  (365.25 * 24 * 60 * 60 * 1000),
+                  MS_PER_YEAR_AVG,
               )
             : 18;
 

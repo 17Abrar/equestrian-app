@@ -20,12 +20,18 @@ const audienceFiltersSchema = z
   })
   .strict();
 
+// Audit F-10 (2026-05-07 r4): same hazard as F-9 — `.strict()` BEFORE
+// `.refine()` so unknown keys 422. The sibling POST schema in
+// `audiences/route.ts` is already `.strict()`; this one drifted.
+// `audiences.created_by_member_id` is a real column an attacker could
+// otherwise try to overwrite.
 const updateAudienceSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().max(2000).optional(),
     filters: audienceFiltersSchema.optional(),
   })
+  .strict()
   .refine((d) => Object.keys(d).length > 0, {
     message: 'At least one field must be provided',
   });

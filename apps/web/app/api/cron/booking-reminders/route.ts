@@ -10,6 +10,7 @@ import { sendTriggeredEmail } from '@/lib/email';
 import { BookingReminder } from '@equestrian/email-templates/booking-reminder';
 import { errorResponse, successResponse, requireCronSecret } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
+import { MS_PER_HOUR } from '@equestrian/shared/constants';
 
 /**
  * Round 6.1 — hourly cron that sends a 24h-before-lesson reminder to
@@ -141,7 +142,11 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // on `reminder_sent_at` ensures only the first run that wins the
       // UPDATE actually sends.
       const hoursFromNow =
-        (slotInstant.getTime() - now.getTime()) / (60 * 60 * 1000);
+        (slotInstant.getTime() - now.getTime()) / MS_PER_HOUR;
+      // F-45 (2026-05-07 r4): widen [23..25] → [22..26] so DST spring-
+      // forward / fall-back boundaries don't slip a single hourly cron
+      // pass and miss the only reminder send for that booking. The CAS
+      // on `reminder_sent_at` still prevents duplicate sends.
       if (hoursFromNow < 22 || hoursFromNow > 26) {
         skipped += 1;
         continue;
