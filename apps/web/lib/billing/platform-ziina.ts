@@ -194,9 +194,28 @@ export function verifyPlatformWebhook(input: {
   // Tolerate the `sha256=` prefix some pipelines prepend, normalise case.
   const provided = providedRaw.replace(/^sha256=/i, '').toLowerCase();
 
-  const a = Buffer.from(expected, 'utf8');
-  const b = Buffer.from(provided, 'utf8');
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+  // Audit F-44 (2026-05-07 r4): length-pad before compare. The previous
+  // shape short-circuited on `a.length !== b.length`, leaking the
+  // expected length to a timing attacker probing different signature
+  // lengths until the response time stops being constant. Mirror the
+  // padding pattern from `n-genius.ts:506-517` so an attacker can't
+  // measure the expected hex-digest length even though the residual is
+  // small (`createHmac('sha256', ...).digest('hex')` is always 64 chars,
+  // so the leak only matters if the platform secret ever migrates to a
+  // different digest algorithm — defense-in-depth is cheap).
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const providedBuf = Buffer.from(provided, 'utf8');
+
+  const maxLen = Math.max(expectedBuf.length, providedBuf.length);
+  const expectedPadded = Buffer.alloc(maxLen);
+  expectedBuf.copy(expectedPadded);
+  const providedPadded = Buffer.alloc(maxLen);
+  providedBuf.copy(providedPadded);
+
+  const equal =
+    timingSafeEqual(expectedPadded, providedPadded) &&
+    expectedBuf.length === providedBuf.length;
+  if (!equal) {
     throw new PlatformWebhookError(
       'INVALID_SIGNATURE',
       'Platform Ziina webhook signature verification failed',

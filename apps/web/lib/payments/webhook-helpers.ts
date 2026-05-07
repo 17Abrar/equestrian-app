@@ -247,6 +247,13 @@ export async function applyPaymentWebhook({
   // single event can carry only one or the other and we prefer the
   // explicit delta when present.
   let derivedRefundDelta: number | undefined = event.refundAmountMinor;
+  // Audit F-13 (2026-05-07 r4): when CAS skip happens AND the delta
+  // was cumulative-derived, the snapshot ledger (loaded ~hundreds of
+  // ms earlier) may be stale relative to a concurrent admin refund.
+  // The CAS rejection is silent at info-level; track the source so
+  // we can escalate to warn and surface the silent-drop case to
+  // operators.
+  let derivedFromCumulative = false;
   if (
     isRefundEvent &&
     event.refundStatus === 'succeeded' &&
@@ -258,6 +265,7 @@ export async function applyPaymentWebhook({
     const delta = event.refundCumulativeMinor - ledger;
     if (delta > 0) {
       derivedRefundDelta = delta;
+      derivedFromCumulative = true;
       logger.info('webhook_refund_cumulative_to_delta', {
         clubId,
         bookingId: bookingRef.bookingId,
@@ -299,6 +307,24 @@ export async function applyPaymentWebhook({
         refundAmountMinor: derivedRefundDelta,
         newPaymentStatus: recorded.paymentStatus,
         newRefundedAmountMinor: recorded.refundedAmountMinor,
+      });
+    } else if (derivedFromCumulative) {
+      // Audit F-13 (2026-05-07 r4): CAS skip on a cumulative-derived
+      // delta means the snapshot ledger was stale — a concurrent
+      // admin refund advanced the ledger between our snapshot and
+      // the CAS. The cumulative target is still authoritative; the
+      // operator needs to reconcile (e.g., manually push the ledger
+      // to the cumulative). Escalate to warn so it surfaces in
+      // observability.
+      logger.warn('booking_refund_cumulative_cas_skip', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventType: event.eventType,
+        attemptedDelta: derivedRefundDelta,
+        cumulativeTarget: event.refundCumulativeMinor ?? null,
+        snapshotLedger: bookingRef.refundedAmountMinor,
+        currentPaymentStatus: bookingRef.currentPaymentStatus,
+        note: 'Snapshot ledger was stale; concurrent admin refund advanced it. Operator should reconcile against provider cumulative.',
       });
     } else {
       // CAS conflict OR ledger already at this total OR the refund would

@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import {
   findUpcomingBookingsForReminder,
   markBookingReminderSent,
+  unmarkBookingReminderSent,
   getClubById,
   getMemberById,
 } from '@equestrian/db/queries';
@@ -201,10 +202,25 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       });
       sent += 1;
     } catch (err) {
+      // Audit F-16 (2026-05-07 r4): reverse the CAS so the next cron
+      // pass within the 23-25h window re-attempts. The internal
+      // `sendWithRetry` already exhausts transient retries; if we
+      // got here, either the failure is permanent (bad email, DKIM,
+      // suspended account — operator handles via the error log) or
+      // transient at the infra layer (temporary Resend outage that
+      // outlasted the retry window). Reversing the CAS is correct
+      // for the latter and harmless for the former (next pass logs
+      // the same error). Without the reversal, a Resend blip during
+      // the cron's hourly fire silently swallows the reminder.
+      const unclaimed = await unmarkBookingReminderSent(
+        booking.clubId,
+        booking.bookingId,
+      ).catch(() => null);
       logger.error('booking_reminder_send_failed', {
         bookingId: booking.bookingId,
         clubId: booking.clubId,
         error: err instanceof Error ? err.message : 'unknown',
+        casReversed: unclaimed !== null,
       });
       skipped += 1;
     }

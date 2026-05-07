@@ -1093,3 +1093,33 @@ export async function markBookingReminderSent(
     .returning({ id: bookings.id });
   return result[0] ?? null;
 }
+
+/**
+ * Audit F-16 (2026-05-07 r4): reverse the CAS from
+ * `markBookingReminderSent` when the email send fails terminally
+ * (after `sendWithRetry`'s internal retries are exhausted). The
+ * next cron pass within the [now+23h, now+25h] window will see the
+ * booking again and re-attempt — gives a transient infra blip a
+ * second chance instead of silently burning the reminder slot.
+ *
+ * Returns the row when the reversal succeeded; null if another
+ * concurrent worker re-claimed it (rare — the cron is hourly, the
+ * window is 2h wide).
+ */
+export async function unmarkBookingReminderSent(
+  clubId: string,
+  bookingId: string,
+) {
+  const result = await db
+    .update(bookings)
+    .set({ reminderSentAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        sql`${bookings.reminderSentAt} IS NOT NULL`,
+      ),
+    )
+    .returning({ id: bookings.id });
+  return result[0] ?? null;
+}
