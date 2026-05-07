@@ -15,12 +15,12 @@ interface AgendaViewProps {
   competitions: CalendarCompetition[];
 }
 
-interface AgendaItem {
-  type: 'slot' | 'competition';
-  date: string;
-  sortKey: string;
-  data: BookingSlot | CalendarCompetition;
-}
+// Audit F-22 (2026-05-07 r4): tag the union on the variant itself so
+// `item.data` narrows automatically inside each branch — drops the four
+// `as BookingSlot` / `as CalendarCompetition` casts in the render below.
+type AgendaItem =
+  | { type: 'slot'; date: string; sortKey: string; data: BookingSlot }
+  | { type: 'competition'; date: string; sortKey: string; data: CalendarCompetition };
 
 function formatDateLabel(dateStr: string): string {
   const date = parseISO(dateStr);
@@ -69,9 +69,9 @@ export function AgendaView({ slots, competitions }: AgendaViewProps) {
           <div className="space-y-2">
             {dateItems.map((item) =>
               item.type === 'slot' ? (
-                <SlotAgendaItem key={`slot-${(item.data as BookingSlot).id}`} slot={item.data as BookingSlot} />
+                <SlotAgendaItem key={`slot-${item.data.id}`} slot={item.data} />
               ) : (
-                <CompetitionAgendaItem key={`comp-${(item.data as CalendarCompetition).id}`} competition={item.data as CalendarCompetition} />
+                <CompetitionAgendaItem key={`comp-${item.data.id}`} competition={item.data} />
               ),
             )}
           </div>

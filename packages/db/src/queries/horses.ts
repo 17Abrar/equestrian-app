@@ -84,10 +84,41 @@ export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
     ? desc(horses.ownershipSubmittedAt)
     : asc(horses.name);
 
+  // Audit F-8 (2026-05-07 r4): the previous `db.select().from(horses)` pulled
+  // every column on the wide horses table (~50 columns: insurance numbers,
+  // microchip ids, gear notes, markings, photo arrays, etc.) when the list
+  // UI consumes ~14. Project only what the active-list card and pending-
+  // approval card render — saves multi-KB per response and avoids future
+  // decryption cost when encrypted-at-rest medical text fields land. The
+  // single-horse detail (`getHorseById`) keeps the wide projection.
   const [data, countResult] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horses.id,
+        clubId: horses.clubId,
+        name: horses.name,
+        primaryPhotoUrl: horses.primaryPhotoUrl,
+        breed: horses.breed,
+        gender: horses.gender,
+        color: horses.color,
+        heightHands: horses.heightHands,
+        weightKg: horses.weightKg,
+        status: horses.status,
+        skillLevel: horses.skillLevel,
+        weightLimitKg: horses.weightLimitKg,
+        notes: horses.notes,
+        ownerMemberId: horses.ownerMemberId,
+        ownershipStatus: horses.ownershipStatus,
+        ownershipSubmittedAt: horses.ownershipSubmittedAt,
+        ownerName: clubMembers.displayName,
+        createdAt: horses.createdAt,
+        updatedAt: horses.updatedAt,
+      })
       .from(horses)
+      .leftJoin(
+        clubMembers,
+        and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
+      )
       .where(where)
       .orderBy(order)
       .limit(filters.pageSize)
