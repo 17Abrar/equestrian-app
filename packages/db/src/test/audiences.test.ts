@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
+import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { createTestDb, withTestDb } from './harness';
 import {
   countAudienceMembers,
@@ -140,7 +141,7 @@ async function seedClub(): Promise<SeedResult> {
   // at insert and is not in the `bookings.$inferInsert` shape that
   // Drizzle exposes.
   const m2SlotId = await createSlot('2026-05-01', '08:00:00');
-  const twoHundredDaysAgo = new Date(Date.now() - 200 * 86_400_000);
+  const twoHundredDaysAgo = new Date(Date.now() - 200 * MS_PER_DAY);
   const [m2Booking] = await testDb.db
     .insert(bookings)
     .values({

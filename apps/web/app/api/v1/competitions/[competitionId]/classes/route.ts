@@ -1,19 +1,31 @@
 import { type NextRequest } from 'next/server';
 import { createCompetitionClassSchema } from '@equestrian/shared/schemas';
 import { getCompetitionClasses, createCompetitionClass, getCompetitionById } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  validateInput,
+  validateUuidParam,
+  parsePagination,
+  paginatedListResponse,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { competitionId } = await params;
       validateUuidParam('competitionId', competitionId);
-      const classes = await getCompetitionClasses(ctx.clubId, competitionId);
-      return successResponse(classes);
+      const { page, pageSize } = parsePagination(request);
+      const { items, total } = await getCompetitionClasses(ctx.clubId, competitionId, {
+        page,
+        pageSize,
+      });
+      return paginatedListResponse(items, page, pageSize, total);
     },
     { requiredPermission: 'competitions:read' },
   );

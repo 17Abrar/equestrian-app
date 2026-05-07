@@ -1,4 +1,5 @@
 import { parseDateTimeLocal } from './timezone';
+import { MS_PER_HOUR } from '../constants';
 
 export interface CancellationFeeParams {
   /** Slot date in YYYY-MM-DD format */
@@ -65,10 +66,11 @@ export function calculateCancellationFee(params: CancellationFeeParams): Cancell
   const slotEpoch = slotUtc.getTime();
   const nowEpoch = Date.now();
 
-  const hoursUntilSlot = (slotEpoch - nowEpoch) / (1000 * 60 * 60);
+  // Audit r5 F-59 (2026-05-07): use the shared MS_PER_HOUR constant.
+  const hoursUntilSlot = (slotEpoch - nowEpoch) / MS_PER_HOUR;
 
   // Cutoff is cancellationNoticeHours before the slot start
-  const cutoffEpoch = slotEpoch - cancellationNoticeHours * 60 * 60 * 1000;
+  const cutoffEpoch = slotEpoch - cancellationNoticeHours * MS_PER_HOUR;
   const cutoffTime = new Date(cutoffEpoch).toISOString();
 
   const isLate = nowEpoch > cutoffEpoch;

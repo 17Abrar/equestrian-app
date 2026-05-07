@@ -1,12 +1,11 @@
 import { type NextRequest } from 'next/server';
-import { paginationSchema } from '@equestrian/shared/schemas';
 import { type UserRole } from '@equestrian/shared/types';
 import { getMembersByRole } from '@equestrian/db/queries';
 import {
   withAuth,
   errorResponse,
-  paginatedResponse,
-  validateInput,
+  parsePagination,
+  paginatedListResponse,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
@@ -49,17 +48,14 @@ export async function GET(request: NextRequest) {
         effectiveRoles = requestedRoles;
       }
 
-      const { page, pageSize } = validateInput(paginationSchema, {
-        page: request.nextUrl.searchParams.get('page') ?? undefined,
-        pageSize: request.nextUrl.searchParams.get('pageSize') ?? undefined,
-      });
+      const { page, pageSize } = parsePagination(request);
 
       const { items, total } = await getMembersByRole(ctx.clubId, effectiveRoles, {
         page,
         pageSize,
       });
 
-      return paginatedResponse(items, { page, pageSize, total });
+      return paginatedListResponse(items, page, pageSize, total);
     },
     { requiredPermission: 'riders:read' },
   );

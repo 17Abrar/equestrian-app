@@ -92,3 +92,65 @@ use this template at *Project → Alerts → Create Alert Rule → Issues*:
 - **Error rate overview** — Performance → Transactions → sort by error rate. Any new endpoint with > 5% error rate is noteworthy.
 - **Web vitals** — Performance → Web Vitals. LCP > 2.5s on `/(dashboard)/calendar` pages is the first signal that the calendar query needs pagination.
 - **Replay sampling** — enable session replays for errored sessions in production; they're the fastest way to diagnose a one-off user complaint.
+
+---
+
+## Cloudflare Logpush alert rules (worker-entry events)
+
+A handful of events fire **before** Next.js boots inside the Cloudflare
+Worker — at the `worker-entry.mjs` boundary. Those calls go through
+`console.error` / `console.log` rather than `lib/logger.ts`, so they
+do **NOT** reach Sentry today. Audit r5 F-26 / F-47: until
+`@sentry/cloudflare` is wired into `worker-entry.mjs`, alert on these
+event names directly from Cloudflare Logpush. Add them as Workers
+Logpush filters routed to PagerDuty (cron failures) or Slack (binding
+self-checks).
+
+| Event (Logpush filter on `event=`) | Severity | Why it matters |
+|---|---|---|
+| `cron_scheduled_failed` | Critical (page) | Fan-out task threw before reaching the Next.js cron route. The route's own `*_cron_failed` will not have fired. A sustained outage at this layer is invisible until the morning's billing tasks just didn't happen. |
+| `cron_scheduled_non_ok` | Critical (page) | Cron route returned non-2xx from inside Next.js but the worker entry caught it first. Same impact as above. |
+| `cron_scheduled_skipped_missing_secret` | Critical (page) | Worker started but `CRON_SECRET` binding is unset / empty. Every scheduled tick is silently dropped. |
+| `cron_scheduled_unknown_schedule` | Warning (Slack) | Cloudflare delivered a cron event whose `cron` expression doesn't match any of the four registered schedules. Almost certainly a wrangler.jsonc edit that didn't redeploy. |
+| `cron_secret_binding_mismatch` | Critical (page) | Cold-start binding self-check (`verifyCronSecretBinding`) detected that `env.CRON_SECRET` does not match what the route resolves at runtime. The first cold-start tick on a misconfigured isolate is the only signal — `bindingCheckedThisIsolate` suppresses re-emits. |
+| `cron_secret_binding_set_unset` | Critical (page) | One side has `CRON_SECRET` configured, the other does not. Same first-tick-only signal. |
+| `cron_secret_binding_probe_error` | Warning (Slack) | The probe call to the Next.js side errored. Could be a transient network blip on the loopback fetch; sustained rate means the binding check itself is broken. |
+
+**How to add the filter** — Cloudflare dashboard: *Workers & Pages →
+your worker → Logs → Logpush → Add destination → filter by
+`$.event == "cron_scheduled_failed"`*. Do this once per event name
+above. Route critical filters to a HTTP endpoint that fans out to
+PagerDuty.
+
+When `@sentry/cloudflare` lands in `worker-entry.mjs` (audit H-6 /
+F-35), these can be folded into the Sentry table above and the
+Logpush filters can be retired.
+
+---
+
+## Sentry rate-limit cap is per-isolate (not global)
+
+`lib/logger.ts` debounces forwards to Sentry to ~1 event/sec per
+`(level, event)` tuple — but the debounce map is module-scope, which
+in Cloudflare Workers means **per-isolate**. Under horizontal load,
+100 concurrent requests across 100 isolates can each fire their own
+1-event/sec quota, so a single root-cause failure may produce 50–100×
+the event count visible in Sentry.
+
+**What this means for alerting:**
+
+- Set thresholds against Sentry's **issues count**, not **events
+  count**, where the alert builder allows it. Sentry groups events
+  with the same fingerprint into a single issue regardless of how
+  many isolates emitted them, so issues count is the cleaner signal.
+- For event-count rules, expect 5-50× the per-host count under fan-out.
+  Use the alert's "frequency" suppression (default 30 min) so the same
+  underlying issue isn't paged once per spawning isolate.
+- If a true global ceiling becomes needed, route through a Durable
+  Object counter or use Sentry's server-side rate-limit config — the
+  worker-side cap is best-effort, not a quota guarantee.
+
+The alert frequency conditions in the tables above are sized assuming
+this multiplier. If a rule alerts more often than expected, check
+whether the underlying issue is many-isolate before tightening the
+threshold.

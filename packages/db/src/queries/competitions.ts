@@ -180,18 +180,49 @@ export async function deleteCompetition(clubId: string, competitionId: string) {
 // detail page into a DoS vector.
 const COMPETITION_CLASSES_HARD_CAP = 200;
 
-export async function getCompetitionClasses(clubId: string, competitionId: string) {
-  return db
-    .select()
-    .from(competitionClasses)
-    .where(
-      and(
-        eq(competitionClasses.clubId, clubId),
-        eq(competitionClasses.competitionId, competitionId),
-      ),
-    )
-    .orderBy(asc(competitionClasses.sortOrder), asc(competitionClasses.name))
-    .limit(COMPETITION_CLASSES_HARD_CAP);
+/**
+ * Audit r5 F-58 (2026-05-07): paginate + narrow projection. Before this
+ * change the route hauled every column on every refetch (30s staleTime)
+ * — the UI list view only renders id/name/discipline/level/maxEntries/
+ * entryFee/currency/sortOrder. The hard cap stays as belt-and-braces
+ * against bulk-import misconfigurations even with pagination in place.
+ */
+export async function getCompetitionClasses(
+  clubId: string,
+  competitionId: string,
+  { page, pageSize }: { page: number; pageSize: number },
+) {
+  const pageSizeCapped = Math.min(pageSize, COMPETITION_CLASSES_HARD_CAP);
+  const offset = (page - 1) * pageSizeCapped;
+  const where = and(
+    eq(competitionClasses.clubId, clubId),
+    eq(competitionClasses.competitionId, competitionId),
+  );
+  const [items, count] = await Promise.all([
+    db
+      .select({
+        id: competitionClasses.id,
+        clubId: competitionClasses.clubId,
+        competitionId: competitionClasses.competitionId,
+        name: competitionClasses.name,
+        discipline: competitionClasses.discipline,
+        level: competitionClasses.level,
+        maxEntries: competitionClasses.maxEntries,
+        entryFee: competitionClasses.entryFee,
+        currency: competitionClasses.currency,
+        sortOrder: competitionClasses.sortOrder,
+      })
+      .from(competitionClasses)
+      .where(where)
+      .orderBy(asc(competitionClasses.sortOrder), asc(competitionClasses.name))
+      .limit(pageSizeCapped)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(competitionClasses)
+      .where(where),
+  ]);
+  return { items, total: count[0]?.count ?? 0 };
 }
 
 export async function getCompetitionClassById(clubId: string, classId: string) {

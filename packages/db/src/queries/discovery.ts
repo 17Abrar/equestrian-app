@@ -145,7 +145,7 @@ export async function isUserMember(clubId: string, clerkUserId: string): Promise
  */
 export type JoinResult =
   | { status: 'joined'; member: typeof clubMembers.$inferSelect }
-  | { status: 'kicked' };
+  | { status: 'kicked'; memberId: string | null };
 
 /**
  * Open-policy path: rider is instantly added as a club_member with role=rider.
@@ -182,6 +182,7 @@ export async function joinClubInstantly(input: {
   // upsert itself only flips is_active when the column is null.
   const existing = await rawDb
     .select({
+      id: clubMembers.id,
       isActive: clubMembers.isActive,
       deactivatedByAdminAt: clubMembers.deactivatedByAdminAt,
     })
@@ -195,7 +196,10 @@ export async function joinClubInstantly(input: {
     .limit(1);
 
   if (existing[0]?.deactivatedByAdminAt) {
-    return { status: 'kicked' };
+    // Audit r5 F-8 (2026-05-07): surface the existing memberId so the
+    // join route can record `club_member.join_refused_deactivated` against
+    // the right resource id.
+    return { status: 'kicked', memberId: existing[0].id };
   }
 
   const rows = await rawDb
@@ -226,7 +230,7 @@ export async function joinClubInstantly(input: {
 
   const member = rows[0];
   if (!member || !member.isActive) {
-    return { status: 'kicked' };
+    return { status: 'kicked', memberId: member?.id ?? null };
   }
   return { status: 'joined', member };
 }

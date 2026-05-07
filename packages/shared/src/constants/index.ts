@@ -98,6 +98,28 @@ export const PLATFORM_BILLING_CURRENCY = 'AED';
 // (reminder cadence itself is the next round of work).
 export const PLATFORM_INVOICE_DUE_DAYS = 7;
 
+// Audit r5 F-9 (2026-05-07): canonical list of column / field names that
+// carry PHI (protected health information) anywhere in the codebase. Both
+// the schema-side notification builder (`NOTIFICATION_FORBIDDEN_FIELDS`)
+// and the structured logger's redaction denylist read from this list, so
+// the encrypted-at-rest invariant on health/medication tables is matched
+// 1:1 by the log redactor — a freshly-decrypted record spread into a
+// `logger.info(...)` payload is scrubbed before reaching stdout / Sentry.
+//
+// New PHI columns belong here. Mirror them into the `HEALTH_ENCRYPTED_FIELDS`
+// / `MEDICATION_ENCRYPTED_FIELDS` arrays in `packages/db/src/queries/horse-health.ts`
+// when the column is new.
+export const PHI_KEYS = [
+  'description',
+  'diagnosis',
+  'treatment',
+  'notes',
+  'medicalNotes',
+  'symptoms',
+  'medications',
+  'vetInstructions',
+] as const;
+
 // Rate-limit presets. Per-route configs reach for one of these instead of
 // open-coding `{ maxRequests, windowMs }` object literals — see audit F-15.
 // `failClosed: true` is route-specific (coupon validate, public join), so
