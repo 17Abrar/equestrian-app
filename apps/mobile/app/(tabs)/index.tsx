@@ -1,8 +1,9 @@
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
 import { useMyBookings, type Booking } from '@/hooks/use-bookings';
+import { BookingListSkeleton } from '@/components/skeletons';
 import { useMemo, useState, useCallback } from 'react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -97,14 +98,14 @@ export default function HomeScreen() {
 
   // The API client wraps every response into `{ success, data } | { success, error }`
   // so react-query never sees a rejection — we must split success/error ourselves.
-  const errorMessage =
-    data && 'success' in data && !data.success
-      ? data.error?.message ?? 'Unable to load your bookings'
-      : null;
+  const errorMessage = data && !data.success ? data.error.message : null;
 
+  // Audit F-7 (2026-05-07 r5 PR Sigma): with `useMyBookings` now returning
+  // `PaginatedApiResponse<Booking>`, narrowing on `data.success` already
+  // gives us `data.data: Booking[]`. No re-cast needed.
   const bookings = useMemo<Booking[]>(() => {
-    if (!data || !('success' in data) || !data.success) return [];
-    return ('data' in data ? (data.data as Booking[]) : []);
+    if (!data || !data.success) return [];
+    return data.data;
   }, [data]);
 
   const upcomingBookings = useMemo(() => {
@@ -157,10 +158,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Loading */}
+        {/* Loading — audit F-31: BookingCard-shaped skeletons */}
         {isLoading && (
-          <View className="items-center py-8">
-            <ActivityIndicator size="large" color="#374151" />
+          <View className="pt-2">
+            <BookingListSkeleton count={3} />
           </View>
         )}
 

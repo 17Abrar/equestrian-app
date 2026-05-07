@@ -46,30 +46,11 @@ export interface Booking {
   horseName: string | null;
 }
 
-type _BookingSlotsResponse = {
-  success: true;
-  data: BookingSlot[];
-};
-
-type _BookingsResponse = {
-  success: true;
-  data: Booking[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
-
-interface MeResponse {
-  success: true;
-  data: {
-    memberId: string | null;
-    role: string;
-    displayName: string | null;
-    email: string | null;
-  };
+interface MeData {
+  memberId: string | null;
+  role: string;
+  displayName: string | null;
+  email: string | null;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────
@@ -79,7 +60,7 @@ export function useMe() {
 
   return useQuery({
     queryKey: ['me'],
-    queryFn: () => api.get<MeResponse['data']>('/api/v1/me'),
+    queryFn: () => api.get<MeData>('/api/v1/me'),
   });
 }
 
@@ -89,6 +70,9 @@ export function useBookingSlots(filters: { dateFrom?: string; dateTo?: string } 
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
   if (filters.dateTo) params.set('dateTo', filters.dateTo);
 
+  // /api/v1/booking-slots returns `successResponse(slot[])` — non-paginated
+  // (the route enforces a 90-day window cap), so plain `get<BookingSlot[]>`
+  // is correct here.
   return useQuery({
     queryKey: ['bookingSlots', filters],
     queryFn: () =>
@@ -103,10 +87,13 @@ export function useMyBookings(filters: { status?: string; page?: number } = {}) 
   if (filters.page) params.set('page', String(filters.page));
   params.set('pageSize', '25');
 
+  // Audit F-6 (2026-05-07 r5 PR Sigma): /api/v1/bookings returns the
+  // paginated envelope, so use `getPaginated<Booking>` for the
+  // properly-typed discriminated union.
   return useQuery({
     queryKey: ['myBookings', filters],
     queryFn: () =>
-      api.get<Booking[]>(`/api/v1/bookings?${params.toString()}`),
+      api.getPaginated<Booking>(`/api/v1/bookings?${params.toString()}`),
   });
 }
 
@@ -114,6 +101,11 @@ export function useCreateBooking() {
   const api = useApiClient();
   const queryClient = useQueryClient();
 
+  // The booking route returns the booking row plus any auto-match metadata
+  // (`paymentStatus` lives on the row itself, populated server-side from the
+  // booking creation flow). Keep the post type to a single booking to avoid
+  // re-introducing the `as { id: string; paymentStatus: string }` cast at
+  // the consumer (audit F-7).
   return useMutation({
     mutationFn: (data: {
       slotId: string;

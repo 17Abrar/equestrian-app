@@ -298,6 +298,22 @@ function ClubProfileForm({ settings }: { settings: ClubSettings }) {
   );
 }
 
+// Audit F-57 (2026-05-07 r5 PR Sigma): the previous
+// `settings.defaultCalendarView as 'day' | 'week' | 'month' | 'agenda'` cast
+// trusted whatever value the API returned without runtime verification.
+// Declare the literal tuple, derive the type, and runtime-check the API
+// value at the boundary — mirrors `BOOKING_STATUS_FILTER_VALUES.includes(...)`
+// in bookings-list.tsx.
+const CALENDAR_VIEW_VALUES = ['day', 'week', 'month', 'agenda'] as const;
+type CalendarView = (typeof CALENDAR_VIEW_VALUES)[number];
+
+function isCalendarView(v: string | null | undefined): v is CalendarView {
+  return (
+    typeof v === 'string' &&
+    CALENDAR_VIEW_VALUES.includes(v as CalendarView)
+  );
+}
+
 function BookingRulesForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
 
@@ -311,7 +327,9 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
       defaultLessonDurationMinutes: settings.defaultLessonDurationMinutes ?? 60,
       allowOverbooking: settings.allowOverbooking ?? false,
       overbookingLimit: settings.overbookingLimit ?? 0,
-      defaultCalendarView: (settings.defaultCalendarView as 'day' | 'week' | 'month' | 'agenda') ?? 'week',
+      defaultCalendarView: isCalendarView(settings.defaultCalendarView)
+        ? settings.defaultCalendarView
+        : 'week',
       lateCancellationFeePercent: Number(settings.lateCancellationFeePercent ?? '0'),
       noShowFeePercent: Number(settings.noShowFeePercent ?? '0'),
     },
