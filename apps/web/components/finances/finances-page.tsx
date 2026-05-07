@@ -20,6 +20,7 @@ import {
 import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -436,12 +437,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...field}
-                      value={(field.value as number | undefined) ?? ''}
-                    />
+                    <NumberInput step="0.01" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -562,7 +558,7 @@ function AddExpenseDialog({
             )} />
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="amount" render={({ field }) => (
-                <FormItem><FormLabel>Amount *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Amount *</FormLabel><FormControl><NumberInput step="0.01" placeholder="e.g. 500" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="date" render={({ field }) => (
                 <FormItem><FormLabel>Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
@@ -772,15 +768,15 @@ function AddCouponDialog({
                 </FormItem>
               )} />
               <FormField control={form.control} name="discountValue" render={({ field }) => (
-                <FormItem><FormLabel>{form.watch('discountType') === 'percentage' ? 'Percentage *' : 'Amount *'}</FormLabel><FormControl><Input type="number" placeholder={form.watch('discountType') === 'percentage' ? 'e.g. 25' : 'e.g. 50'} {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>{form.watch('discountType') === 'percentage' ? 'Percentage *' : 'Amount *'}</FormLabel><FormControl><NumberInput placeholder={form.watch('discountType') === 'percentage' ? 'e.g. 25' : 'e.g. 50'} {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="maxUses" render={({ field }) => (
-                <FormItem><FormLabel>Max Total Uses</FormLabel><FormControl><Input type="number" placeholder="Unlimited" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Total Uses</FormLabel><FormControl><NumberInput placeholder="Unlimited" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="maxUsesPerRider" render={({ field }) => (
-                <FormItem><FormLabel>Max Per Rider</FormLabel><FormControl><Input type="number" placeholder="Unlimited" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Per Rider</FormLabel><FormControl><NumberInput placeholder="Unlimited" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <div className="grid grid-cols-2 gap-4">

@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 import { Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,6 +10,15 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { FileUpload } from '@/components/ui/file-upload';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
@@ -20,35 +31,59 @@ function normalizeHex(value: string): string | null {
   return HEX_RE.test(withHash) ? withHash.toLowerCase() : null;
 }
 
+// Audit F-30 (2026-05-07 r5): RHF schema replaces the previous `useState`
+// per field + `toast.error` on submit. Hex validation is enforced at
+// the schema level so the field surfaces "Enter a valid hex (e.g.
+// #6366f1)" inline as the user types instead of as a toast on save.
+const brandingFormSchema = z.object({
+  brandPrimaryColor: z
+    .string()
+    .min(1, 'Primary color is required')
+    .refine((v) => normalizeHex(v) !== null, {
+      message: 'Enter a valid hex color (e.g. #6366f1)',
+    }),
+  brandSecondaryColor: z
+    .string()
+    .min(1, 'Accent color is required')
+    .refine((v) => normalizeHex(v) !== null, {
+      message: 'Enter a valid hex color (e.g. #ec4899)',
+    }),
+  logoUrl: z.string(),
+  coverPhotoUrl: z.string(),
+  faviconUrl: z.string(),
+});
+type BrandingFormValues = z.infer<typeof brandingFormSchema>;
+
 export function BrandingForm({ settings }: { settings: ClubSettings }) {
   const updateSettings = useUpdateSettings();
 
-  const [primaryColor, setPrimaryColor] = useState(settings.brandPrimaryColor ?? '#6366f1');
-  const [secondaryColor, setSecondaryColor] = useState(
-    settings.brandSecondaryColor ?? '#ec4899',
-  );
-  const [logoUrl, setLogoUrl] = useState(settings.logoUrl ?? '');
-  const [coverPhotoUrl, setCoverPhotoUrl] = useState(settings.coverPhotoUrl ?? '');
-  const [faviconUrl, setFaviconUrl] = useState(settings.faviconUrl ?? '');
+  const form = useForm<BrandingFormValues>({
+    resolver: zodResolver(brandingFormSchema),
+    defaultValues: {
+      brandPrimaryColor: settings.brandPrimaryColor ?? '#6366f1',
+      brandSecondaryColor: settings.brandSecondaryColor ?? '#ec4899',
+      logoUrl: settings.logoUrl ?? '',
+      coverPhotoUrl: settings.coverPhotoUrl ?? '',
+      faviconUrl: settings.faviconUrl ?? '',
+    },
+  });
 
-  async function onSave() {
-    const primary = normalizeHex(primaryColor);
-    const secondary = normalizeHex(secondaryColor);
-    if (!primary) {
-      toast.error('Primary color must be a valid hex (e.g. #6366f1)');
-      return;
-    }
-    if (!secondary) {
-      toast.error('Secondary color must be a valid hex (e.g. #ec4899)');
-      return;
-    }
+  const primaryColor = form.watch('brandPrimaryColor') ?? '#6366f1';
+  const secondaryColor = form.watch('brandSecondaryColor') ?? '#ec4899';
+
+  async function onSave(values: BrandingFormValues) {
+    // The schema-level refine guarantees these are valid hexes — but
+    // normalize one more time so we send `#aabbcc` lowercase to the API
+    // even if the user typed `AABBCC`.
+    const primary = normalizeHex(values.brandPrimaryColor)!;
+    const secondary = normalizeHex(values.brandSecondaryColor)!;
     try {
       await updateSettings.mutateAsync({
         brandPrimaryColor: primary,
         brandSecondaryColor: secondary,
-        logoUrl: logoUrl || null,
-        coverPhotoUrl: coverPhotoUrl || null,
-        faviconUrl: faviconUrl || null,
+        logoUrl: values.logoUrl || null,
+        coverPhotoUrl: values.coverPhotoUrl || null,
+        faviconUrl: values.faviconUrl || null,
       });
       toast.success('Branding updated');
     } catch (err) {
@@ -58,154 +93,211 @@ export function BrandingForm({ settings }: { settings: ClubSettings }) {
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Palette className="h-5 w-5" />
-            Brand Colors
-          </CardTitle>
-          <CardDescription>
-            Used on rider-facing pages, confirmation emails, and shared invoice PDFs.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <ColorPicker
-            label="Primary color"
-            description="Main brand color — used for buttons, links, and headers."
-            value={primaryColor}
-            onChange={setPrimaryColor}
-          />
-          <ColorPicker
-            label="Accent color"
-            description="Secondary color used for highlights and success states."
-            value={secondaryColor}
-            onChange={setSecondaryColor}
-          />
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSave)} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Palette className="h-5 w-5" />
+              Brand Colors
+            </CardTitle>
+            <CardDescription>
+              Used on rider-facing pages, confirmation emails, and shared invoice PDFs.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <FormField
+              control={form.control}
+              name="brandPrimaryColor"
+              render={({ field }) => (
+                <ColorPickerField
+                  field={field}
+                  label="Primary color"
+                  description="Main brand color — used for buttons, links, and headers."
+                  placeholder="#6366f1"
+                />
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="brandSecondaryColor"
+              render={({ field }) => (
+                <ColorPickerField
+                  field={field}
+                  label="Accent color"
+                  description="Secondary color used for highlights and success states."
+                  placeholder="#ec4899"
+                />
+              )}
+            />
 
-          <div className="rounded-lg border p-4" style={{ borderColor: normalizeHex(primaryColor) ?? '#6366f1' }}>
-            <p className="text-xs text-muted-foreground">Preview</p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <span
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-white"
-                style={{ backgroundColor: normalizeHex(primaryColor) ?? '#6366f1' }}
-              >
-                Primary button
-              </span>
-              <span
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-white"
-                style={{ backgroundColor: normalizeHex(secondaryColor) ?? '#ec4899' }}
-              >
-                Accent badge
-              </span>
-              <a
-                href="#"
-                onClick={(e) => e.preventDefault()}
-                style={{ color: normalizeHex(primaryColor) ?? '#6366f1' }}
-                className="text-sm font-medium underline-offset-4 hover:underline"
-              >
-                Sample link
-              </a>
+            <div
+              className="rounded-lg border p-4"
+              style={{ borderColor: normalizeHex(primaryColor) ?? '#6366f1' }}
+            >
+              <p className="text-xs text-muted-foreground">Preview</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-white"
+                  style={{ backgroundColor: normalizeHex(primaryColor) ?? '#6366f1' }}
+                >
+                  Primary button
+                </span>
+                <span
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-white"
+                  style={{ backgroundColor: normalizeHex(secondaryColor) ?? '#ec4899' }}
+                >
+                  Accent badge
+                </span>
+                <a
+                  href="#"
+                  onClick={(e) => e.preventDefault()}
+                  style={{ color: normalizeHex(primaryColor) ?? '#6366f1' }}
+                  className="text-sm font-medium underline-offset-4 hover:underline"
+                >
+                  Sample link
+                </a>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Logos & Imagery</CardTitle>
-          <CardDescription>
-            High-resolution assets that show up across the app and on shared documents.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Club logo</Label>
-            <p className="text-xs text-muted-foreground">
-              Recommended: 512×512 PNG with a transparent background.
-            </p>
-            <FileUpload
-              value={logoUrl}
-              onChange={(v) => setLogoUrl(v ?? '')}
-              folder="club/logo"
-              accept="image/*"
-              preview
-              label="Drop a logo"
+        <Card>
+          <CardHeader>
+            <CardTitle>Logos &amp; Imagery</CardTitle>
+            <CardDescription>
+              High-resolution assets that show up across the app and on shared documents.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6 md:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="logoUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Club logo</FormLabel>
+                  <FormDescription>
+                    Recommended: 512×512 PNG with a transparent background.
+                  </FormDescription>
+                  <FormControl>
+                    <FileUpload
+                      value={field.value}
+                      onChange={(v) => field.onChange(v ?? '')}
+                      folder="club/logo"
+                      accept="image/*"
+                      preview
+                      label="Drop a logo"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-2">
-            <Label>Cover photo</Label>
-            <p className="text-xs text-muted-foreground">
-              Hero image shown on your public club profile. Landscape, ~1600×600.
-            </p>
-            <FileUpload
-              value={coverPhotoUrl}
-              onChange={(v) => setCoverPhotoUrl(v ?? '')}
-              folder="club/cover"
-              accept="image/*"
-              preview
-              label="Drop a cover photo"
+            <FormField
+              control={form.control}
+              name="coverPhotoUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cover photo</FormLabel>
+                  <FormDescription>
+                    Hero image shown on your public club profile. Landscape, ~1600×600.
+                  </FormDescription>
+                  <FormControl>
+                    <FileUpload
+                      value={field.value}
+                      onChange={(v) => field.onChange(v ?? '')}
+                      folder="club/cover"
+                      accept="image/*"
+                      preview
+                      label="Drop a cover photo"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-2 md:col-span-2">
-            <Label>Favicon</Label>
-            <p className="text-xs text-muted-foreground">
-              Square PNG or ICO, used in browser tabs. Keep it simple — 32×32 or 64×64.
-            </p>
-            <FileUpload
-              value={faviconUrl}
-              onChange={(v) => setFaviconUrl(v ?? '')}
-              folder="club/favicon"
-              accept="image/png,image/x-icon,image/vnd.microsoft.icon"
-              preview
-              label="Drop a favicon"
+            <FormField
+              control={form.control}
+              name="faviconUrl"
+              render={({ field }) => (
+                <FormItem className="md:col-span-2">
+                  <FormLabel>Favicon</FormLabel>
+                  <FormDescription>
+                    Square PNG or ICO, used in browser tabs. Keep it simple — 32×32 or 64×64.
+                  </FormDescription>
+                  <FormControl>
+                    <FileUpload
+                      value={field.value}
+                      onChange={(v) => field.onChange(v ?? '')}
+                      folder="club/favicon"
+                      accept="image/png,image/x-icon,image/vnd.microsoft.icon"
+                      preview
+                      label="Drop a favicon"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <div className="flex justify-end">
-        <Button onClick={onSave} disabled={updateSettings.isPending} size="lg">
-          {updateSettings.isPending ? 'Saving...' : 'Save branding'}
-        </Button>
-      </div>
-    </div>
+        <div className="flex justify-end">
+          <Button type="submit" disabled={updateSettings.isPending} size="lg">
+            {updateSettings.isPending ? 'Saving...' : 'Save branding'}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }
 
-interface ColorPickerProps {
+interface ColorPickerFieldProps {
+  field: {
+    value: string;
+    onChange: (value: string) => void;
+    onBlur: () => void;
+    name: string;
+  };
   label: string;
   description: string;
-  value: string;
-  onChange: (value: string) => void;
+  placeholder: string;
 }
 
-function ColorPicker({ label, description, value, onChange }: ColorPickerProps) {
-  const hex = normalizeHex(value) ?? '#000000';
+function ColorPickerField({
+  field,
+  label,
+  description,
+  placeholder,
+}: ColorPickerFieldProps) {
+  const hex = normalizeHex(field.value) ?? '#000000';
 
   return (
-    <div className="space-y-2">
+    <FormItem>
       <Label>{label}</Label>
-      <p className="text-xs text-muted-foreground">{description}</p>
+      <FormDescription>{description}</FormDescription>
       <div className="flex items-center gap-3">
         <Input
           type="color"
           value={hex}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => field.onChange(e.target.value)}
+          onBlur={field.onBlur}
           className="h-10 w-16 cursor-pointer p-1"
           aria-label={`${label} picker`}
         />
         <Input
           type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={field.value}
+          onChange={(e) => field.onChange(e.target.value)}
+          onBlur={field.onBlur}
           className="w-32 font-mono"
-          placeholder="#6366f1"
+          placeholder={placeholder}
           aria-label={`${label} hex`}
         />
       </div>
-    </div>
+      <FormMessage />
+    </FormItem>
   );
 }

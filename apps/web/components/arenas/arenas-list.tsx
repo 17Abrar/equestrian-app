@@ -13,6 +13,7 @@ import { useArenas, useCreateArena, useUpdateArena, useDeleteArena, type Arena }
 type ArenaFormValues = z.input<typeof createArenaSchema>;
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -143,7 +144,7 @@ export function ArenasList() {
                     <FormItem>
                       <FormLabel>Capacity</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="Max riders" {...field} value={(field.value as number | undefined) ?? ''} />
+                        <NumberInput placeholder="Max riders" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -211,6 +212,10 @@ export function ArenasList() {
         <EmptyState
           title="No arenas yet"
           description="Add your first arena to start scheduling lessons"
+          // Audit F-29 (2026-05-07 r5): drive the same Add-Arena dialog
+          // the header button uses. The dialog open state is already
+          // lifted to this component (`dialogOpen`).
+          action={{ label: 'Add Arena', onClick: () => setDialogOpen(true) }}
         />
       )}
 
@@ -351,7 +356,7 @@ function EditArenaDialog({ arena, open, onOpenChange }: { arena: Arena; open: bo
                 <FormItem>
                   <FormLabel>Capacity</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="Max riders" {...field} value={(field.value as number | undefined) ?? ''} />
+                    <NumberInput placeholder="Max riders" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -11,6 +11,7 @@ import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -25,8 +26,25 @@ import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 type SlotFormValues = z.input<typeof createBookingSlotSchema>;
 
-export function CreateSingleSlotDialog() {
-  const [open, setOpen] = useState(false);
+// Audit F-66 (2026-05-07 r5): optional controlled open/onOpenChange so
+// the calendar's empty-state CTA can drive the same dialog the header
+// trigger uses. Uncontrolled callers keep the original behaviour.
+interface CreateSingleSlotDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function CreateSingleSlotDialog({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: CreateSingleSlotDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    controlledOnOpenChange?.(next);
+  };
   const createSlot = useCreateBookingSlot();
   const lessonTypesQuery = useLessonTypes();
   const arenasQuery = useArenas();
@@ -92,7 +110,7 @@ export function CreateSingleSlotDialog() {
                 <FormItem><FormLabel>End *</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem><FormLabel>Max Riders *</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Riders *</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <div className="grid grid-cols-2 gap-3">

@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Form,
@@ -83,17 +84,103 @@ interface CompetitionDetailProps {
   competitionId: string;
 }
 
+// Audit F-5 (2026-05-07 r5): expanded the competition detail skeleton
+// to match the real layout — page title row + 4 info cards + tabs row +
+// 3 class-row placeholders inside the tab content. The previous
+// `h-8` / `h-24` / `h-64` rectangles read as "still fetching the page".
 function DetailSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-8 w-64" />
-      <div className="grid gap-4 md:grid-cols-3">
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-md" />
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+        </div>
+        <Skeleton className="h-9 w-20" />
       </div>
-      <Skeleton className="h-64" />
+      <div className="grid gap-4 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i}>
+            <CardContent className="flex items-center gap-3 p-4">
+              <Skeleton className="h-5 w-5 rounded" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Skeleton className="h-9 w-72" />
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 rounded-lg" />
+        ))}
+      </div>
     </div>
+  );
+}
+
+// Skeleton for the classes-tab inner list. Matches the same row shape
+// as ClassRow (name + discipline/level meta on left, fee on right).
+function ClassesListSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="rounded-lg border p-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <div className="flex gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Skeleton for the entries / results tabs — 5/6 col table.
+function CompetitionTableSkeleton({
+  rows = 4,
+  cols = 5,
+}: {
+  rows?: number;
+  cols?: number;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {Array.from({ length: cols }).map((_, i) => (
+            <TableHead key={i}>
+              <Skeleton className="h-3 w-16" />
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {Array.from({ length: rows }).map((_, i) => (
+          <TableRow key={i}>
+            {Array.from({ length: cols }).map((__, j) => (
+              <TableCell key={j}>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -104,6 +191,10 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
   const deleteCompetition = useDeleteCompetition();
 
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  // Audit F-29 (2026-05-07 r5): lift the AddClassForm dialog open state
+  // up so the EmptyState CTA can drive the same dialog the header
+  // button does.
+  const [addClassOpen, setAddClassOpen] = useState(false);
 
   if (isLoading) return <DetailSkeleton />;
   if (isError) {
@@ -237,16 +328,15 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
 
         <TabsContent value="classes" className="mt-4">
           <div className="mb-4 flex justify-end">
-            <AddClassForm competitionId={competitionId} currency={competition.currency} />
+            <AddClassForm
+              competitionId={competitionId}
+              currency={competition.currency}
+              open={addClassOpen}
+              onOpenChange={setAddClassOpen}
+            />
           </div>
 
-          {classesQuery.isLoading && (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16" />
-              ))}
-            </div>
-          )}
+          {classesQuery.isLoading && <ClassesListSkeleton />}
 
           {classesQuery.isError && (
             <ErrorState
@@ -259,6 +349,7 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
             <EmptyState
               title="No classes yet"
               description="Add competition classes (e.g., Novice Show Jumping 80cm)"
+              action={{ label: 'Add Class', onClick: () => setAddClassOpen(true) }}
             />
           )}
 
@@ -337,7 +428,7 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
   const [addOpen, setAddOpen] = useState(false);
   const { data, isLoading, isError, refetch } = useCompetitionEntries(competitionId, classId);
 
-  if (isLoading) return <Skeleton className="h-32" />;
+  if (isLoading) return <CompetitionTableSkeleton cols={5} />;
   if (isError) return <ErrorState message="Failed to load entries" onRetry={() => refetch()} />;
 
   const entries = data?.data ?? [];
@@ -401,7 +492,7 @@ function ResultsSection({ competitionId, classId }: { competitionId: string; cla
   const { data, isLoading, isError, refetch } = useCompetitionResults(competitionId, classId);
   const entriesQuery = useCompetitionEntries(competitionId, classId);
 
-  if (isLoading) return <Skeleton className="h-32" />;
+  if (isLoading) return <CompetitionTableSkeleton cols={6} />;
   if (isError) return <ErrorState message="Failed to load results" onRetry={() => refetch()} />;
 
   const results = data?.data ?? [];
@@ -470,8 +561,17 @@ function ResultsSection({ competitionId, classId }: { competitionId: string; cla
 
 type AddClassFormValues = z.input<typeof createCompetitionClassSchema>;
 
-function AddClassForm({ competitionId, currency }: { competitionId: string; currency: string }) {
-  const [open, setOpen] = useState(false);
+function AddClassForm({
+  competitionId,
+  currency,
+  open,
+  onOpenChange,
+}: {
+  competitionId: string;
+  currency: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createClass = useCreateCompetitionClass(competitionId);
   const form = useForm<AddClassFormValues, unknown, CreateCompetitionClassInput>({
     resolver: zodResolver(createCompetitionClassSchema),
@@ -488,7 +588,7 @@ function AddClassForm({ competitionId, currency }: { competitionId: string; curr
       await createClass.mutateAsync(apiData);
       toast.success('Class added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('competition.class.create', err, { competitionId });
       toast.error(err instanceof Error ? err.message : 'Failed to add class');
@@ -496,7 +596,7 @@ function AddClassForm({ competitionId, currency }: { competitionId: string; curr
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Class</Button>
       </DialogTrigger>
@@ -517,10 +617,10 @@ function AddClassForm({ competitionId, currency }: { competitionId: string; curr
             </div>
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="maxEntries" render={({ field }) => (
-                <FormItem><FormLabel>Max Entries</FormLabel><FormControl><Input type="number" placeholder="Unlimited" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Entries</FormLabel><FormControl><NumberInput placeholder="Unlimited" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="entryFee" render={({ field }) => (
-                <FormItem><FormLabel>Entry Fee</FormLabel><FormControl><Input type="number" placeholder="e.g. 150" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Entry Fee</FormLabel><FormControl><NumberInput placeholder="e.g. 150" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <Button type="submit" className="w-full" disabled={createClass.isPending}>
@@ -687,13 +787,13 @@ function AddResultForm({
             )} />
             <div className="grid grid-cols-3 gap-4">
               <FormField control={form.control} name="placing" render={({ field }) => (
-                <FormItem><FormLabel>Placing</FormLabel><FormControl><Input type="number" placeholder="#" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Placing</FormLabel><FormControl><NumberInput placeholder="#" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="timeSeconds" render={({ field }) => (
-                <FormItem><FormLabel>Time (sec)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 45.23" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Time (sec)</FormLabel><FormControl><NumberInput step="0.01" placeholder="e.g. 45.23" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="faults" render={({ field }) => (
-                <FormItem><FormLabel>Faults</FormLabel><FormControl><Input type="number" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Faults</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <FormField control={form.control} name="notes" render={({ field }) => (

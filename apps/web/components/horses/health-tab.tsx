@@ -25,10 +25,10 @@ import {
 } from '@/hooks/use-horse-health';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -38,6 +38,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { useClubSettings } from '@/hooks/use-settings';
+import {
+  HealthRecordsTableSkeleton,
+  MedicationListSkeleton,
+} from './horse-tab-skeletons';
 
 const RECORD_TYPE_COLORS: Record<string, string> = {
   vaccination: 'bg-blue-100 text-blue-800',
@@ -75,7 +79,7 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
   // of the dashboard.
   const currency = settings?.data.currency ?? 'AED';
 
-  if (isLoading) return <Skeleton className="h-64" />;
+  if (isLoading) return <HealthRecordsTableSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load records'} onRetry={() => refetch()} />;
 
   const records = data?.data ?? [];
@@ -245,7 +249,7 @@ function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currenc
                 <FormItem><FormLabel>Vet Name</FormLabel><FormControl><Input placeholder="Dr. Smith" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="cost" render={({ field }) => (
-                <FormItem><FormLabel>Cost</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g. 500" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Cost</FormLabel><FormControl><NumberInput step="0.01" placeholder="e.g. 500" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -283,7 +287,7 @@ function MedicationsSection({ horseId }: { horseId: string }) {
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isError, error, refetch } = useMedications(horseId, !showAll);
 
-  if (isLoading) return <Skeleton className="h-48" />;
+  if (isLoading) return <MedicationListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load medications'} onRetry={() => refetch()} />;
 
   const medications = data?.data ?? [];

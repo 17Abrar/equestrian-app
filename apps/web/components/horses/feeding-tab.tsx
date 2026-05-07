@@ -9,15 +9,16 @@ import { createFeedingPlanSchema, type CreateFeedingPlanFormValues, type CreateF
 import { useFeedingPlans, useCreateFeedingPlan, useDeleteFeedingPlan } from '@/hooks/use-horse-health';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+import { FeedingPlanListSkeleton } from './horse-tab-skeletons';
 
 interface FeedingTabProps {
   horseId: string;
@@ -27,7 +28,7 @@ export function FeedingTab({ horseId }: FeedingTabProps) {
   const { data, isLoading, isError, error, refetch } = useFeedingPlans(horseId);
   const deletePlan = useDeleteFeedingPlan(horseId);
 
-  if (isLoading) return <Skeleton className="h-48" />;
+  if (isLoading) return <FeedingPlanListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load feeding plans'} onRetry={() => refetch()} />;
 
   const plans = data?.data ?? [];
@@ -145,7 +146,7 @@ function AddFeedingPlanDialog({ horseId }: { horseId: string }) {
                 <FormItem><FormLabel>Feed Type</FormLabel><FormControl><Input placeholder="e.g. Hay, Grain mix" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="quantityKg" render={({ field }) => (
-                <FormItem><FormLabel>Quantity (kg)</FormLabel><FormControl><Input type="number" step="0.1" placeholder="e.g. 2.5" {...field} value={(field.value as number | undefined) ?? ''} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Quantity (kg)</FormLabel><FormControl><NumberInput step="0.1" placeholder="e.g. 2.5" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             <FormField control={form.control} name="notes" render={({ field }) => (
