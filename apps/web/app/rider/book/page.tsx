@@ -40,6 +40,15 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { fetchJson } from '@/lib/fetch-json';
 
+// Audit F-57 (2026-05-07 r5 PR Sigma): tuple-derived union so the
+// `onValueChange` boundary can `.includes()` rather than `as`-cast.
+const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
+type SkillLevel = (typeof SKILL_LEVELS)[number];
+
+function isSkillLevel(v: string): v is SkillLevel {
+  return SKILL_LEVELS.includes(v as SkillLevel);
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────
 
 function getWeekDates(weekOffset: number): { start: Date; end: Date; dates: Date[] } {
@@ -173,7 +182,7 @@ export default function RiderBookPage() {
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
-  const [guestSkillLevel, setGuestSkillLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
+  const [guestSkillLevel, setGuestSkillLevel] = useState<SkillLevel>('beginner');
 
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
@@ -441,9 +450,9 @@ export default function RiderBookPage() {
                 </Label>
                 <Select
                   value={guestSkillLevel}
-                  onValueChange={(v) =>
-                    setGuestSkillLevel(v as 'beginner' | 'intermediate' | 'advanced')
-                  }
+                  onValueChange={(v) => {
+                    if (isSkillLevel(v)) setGuestSkillLevel(v);
+                  }}
                 >
                   <SelectTrigger id="guest-skill">
                     <SelectValue />

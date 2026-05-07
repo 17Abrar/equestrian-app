@@ -9,7 +9,14 @@ import {
   type CreateArenaInput,
   type CreateLessonTypeInput,
 } from '@equestrian/shared/schemas';
-import { type ApiResponse, type ApiSuccessResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import {
+  type ApiResponse,
+  type ApiSuccessResponse,
+  type BookingStatus,
+  type PaginatedResponse,
+  type PaymentMethod,
+  type PaymentStatus,
+} from '@equestrian/shared/types';
 import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
@@ -86,9 +93,13 @@ export interface Booking {
   slotId: string;
   riderMemberId: string;
   horseId: string | null;
-  status: string;
-  paymentStatus: string;
-  paymentMethod: string | null;
+  // Audit F-56 (2026-05-07 r5 PR Sigma): use the project-defined enum unions
+  // from `@equestrian/shared/types` instead of bare `string` so a `status ===
+  // 'comfirmed'` typo at the consumer site is a TypeScript error, not silent
+  // dead code.
+  status: BookingStatus;
+  paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod | null;
   amount: number | null;
   currency: string;
   horseMatchScore: number | null;

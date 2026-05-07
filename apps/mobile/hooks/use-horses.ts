@@ -19,16 +19,6 @@ export interface Horse {
   createdAt: string;
 }
 
-interface HorsesResponse {
-  data: Horse[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
 export function useHorses(filters: { status?: string; page?: number } = {}) {
   const api = useApiClient();
   const params = new URLSearchParams();
@@ -36,11 +26,12 @@ export function useHorses(filters: { status?: string; page?: number } = {}) {
   if (filters.page) params.set('page', String(filters.page));
   params.set('pageSize', '50');
 
+  // Audit F-6 (2026-05-07 r5 PR Sigma): paginated route returns
+  // `{success, data: Horse[], pagination}`; using `getPaginated<Horse>`
+  // gives us the discriminated `PaginatedApiResponse<Horse>` directly,
+  // replacing the previous `as never as Promise<…>` double cast.
   return useQuery({
     queryKey: ['horses', filters],
-    queryFn: () => api.get<Horse[]>(`/api/v1/horses?${params.toString()}` as never) as Promise<
-      | { success: true; data: HorsesResponse['data']; pagination: HorsesResponse['pagination'] }
-      | { success: false; error: { code: string; message: string } }
-    >,
+    queryFn: () => api.getPaginated<Horse>(`/api/v1/horses?${params.toString()}`),
   });
 }
