@@ -115,31 +115,50 @@ export async function requireCronSecret(
     return errorResponse('NOT_CONFIGURED', 'CRON_SECRET not set', 503);
   }
 
-  const provided = Buffer.from(headerSecret ?? '', 'utf8');
-  const target = Buffer.from(expected, 'utf8');
-  const sameLength = provided.length === target.length;
-  // Pad the shorter buffer to the expected length so a wrong-length
-  // header still pays the full O(n) compare. Audit B-15.
-  // Note: when `sameLength` is false the padded buffer is `Buffer.alloc(target.length)`
-  // (zeros), so the timingSafeEqual result is irrelevant — the `sameLength &&`
-  // short-circuit gates the final result. Don't remove that guard.
-  const padded = sameLength ? provided : Buffer.alloc(target.length);
-  const compareResult = timingSafeEqual(padded, target);
-  const secretOk = sameLength && compareResult;
-  if (!secretOk) {
-    // Audit F-14 (2026-05-07 r4): drop `providedLength` from the bad-secret
-    // log line. Logging the attacker-supplied length on every wrong attempt
-    // is information disclosure to anyone with operator log read access
-    // (helps calibrate forgery attempts). Match the security-conscious
-    // pattern used by Ziina's webhook signature mismatch logging.
+  // Audit F-31 (2026-05-07 r4 Xi-bis): straightforward header → length
+  // gate → timingSafeEqual. The previous padded-buffer dance compared
+  // against zeros on length mismatch (the timingSafeEqual result was
+  // dead code), making the comment misleading and inviting a future
+  // contributor to "optimise away" the `sameLength &&` guard. The
+  // length-side-channel trade-off is accepted: the secret length is
+  // fixed at deploy time, so leaking it via early return discloses
+  // no useful attacker information. Identical-length compares stay
+  // constant-time via timingSafeEqual.
+  function clientIp(): string {
+    return (
+      request.headers.get('cf-connecting-ip') ??
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+    );
+  }
+
+  function logBadSecret(): void {
+    // Audit F-14 (2026-05-07 r4): no `providedLength` in the log line —
+    // logging the attacker-supplied length on every wrong attempt is
+    // information disclosure to operators-with-log-read-access (helps
+    // calibrate forgery attempts). Match Ziina's webhook signature
+    // mismatch logging pattern.
     logger.warn(`${eventName}_bad_secret`, {
       headerPresent: headerSecret !== null,
-      ip:
-        request.headers.get('cf-connecting-ip') ??
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-        request.headers.get('x-real-ip') ??
-        'unknown',
+      ip: clientIp(),
     });
+  }
+
+  if (headerSecret === null) {
+    logBadSecret();
+    return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
+  }
+
+  const provided = Buffer.from(headerSecret, 'utf8');
+  const target = Buffer.from(expected, 'utf8');
+  if (provided.length !== target.length) {
+    logBadSecret();
+    return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
+  }
+
+  if (!timingSafeEqual(provided, target)) {
+    logBadSecret();
     return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
   }
 

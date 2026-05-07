@@ -42,6 +42,15 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
     name: 'EMAIL_FROM',
     effect: 'transactional emails are no-ops; no booking confirmations, invoices, resets',
   },
+  // Audit F-60 (2026-05-07 r4 Xi-bis): without CRON_SECRET every cron
+  // endpoint 503s on `${eventName}_secret_not_configured`. Worker-entry's
+  // F-43 self-check probe surfaces this loudly per cold start, but the
+  // boot warn lands once at startup and gives the operator a single
+  // entry point to grep on regardless of cron schedule cadence.
+  {
+    name: 'CRON_SECRET',
+    effect: 'every cron endpoint 503s; livery / platform / booking / horse-care reminders all silently skip',
+  },
 ];
 
 export function assertProductionEnvConfigured(): void {

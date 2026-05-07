@@ -58,22 +58,47 @@ async function verifyCronSecretBinding(env, ctx) {
       },
     });
     const res = await worker.fetch(probe, env, ctx);
-    await res.text().catch(() => '');
+    // Audit F-73 (2026-05-07 r4 Xi-bis): pull the route's error envelope
+    // (code/message) into the binding-check log so operators see WHY,
+    // not just "503". The probe route uses `requireCronSecret` which
+    // returns the standard `{ success: false, error: { code, message } }`
+    // shape on failure. Best-effort parse — non-JSON bodies fall back
+    // to undefined and the log keeps the bare status.
+    const bodyText = await res.text().catch(() => '');
+    let errorCode;
+    let errorMessage;
+    if (bodyText) {
+      try {
+        const parsed = JSON.parse(bodyText);
+        if (parsed && typeof parsed === 'object' && parsed.error) {
+          errorCode = parsed.error.code;
+          errorMessage = parsed.error.message;
+        }
+      } catch {
+        /* not JSON — fine */
+      }
+    }
     if (res.status === 503) {
       console.error('cron_secret_binding_mismatch', {
         message:
           'env.CRON_SECRET is set on the worker, but Next.js sees process.env.CRON_SECRET as undefined — Cloudflare → Next.js binding propagation is broken. Every cron tick will 503 until fixed.',
         status: res.status,
+        routeErrorCode: errorCode,
+        routeErrorMessage: errorMessage,
       });
     } else if (res.status === 401) {
       console.error('cron_secret_binding_drift', {
         message:
           'env.CRON_SECRET and process.env.CRON_SECRET have different values — likely a partial secret rotation that updated only one side.',
         status: res.status,
+        routeErrorCode: errorCode,
+        routeErrorMessage: errorMessage,
       });
     } else if (res.status !== 200) {
       console.error('cron_secret_binding_unexpected', {
         status: res.status,
+        routeErrorCode: errorCode,
+        routeErrorMessage: errorMessage,
       });
     }
   } catch (err) {
@@ -206,9 +231,13 @@ export default {
         });
     });
 
-    // `Promise.all` not `Promise.allSettled` — each task already swallows
-    // its own errors, so this resolves cleanly. allSettled would be
-    // identical here, but `all` reads more naturally.
-    ctx.waitUntil(Promise.all(tasks));
+    // Audit F-72 (2026-05-07 r4 Xi-bis): switched from `Promise.all` to
+    // `Promise.allSettled`. Each task already swallows its own errors so
+    // either resolves cleanly today, but a future contributor adding an
+    // unhandled throw inside a `.then` (e.g., before the `.catch` gets
+    // attached) would short-circuit `Promise.all` and leave sibling
+    // crons unawaited via `ctx.waitUntil`. `allSettled` is the
+    // defence-in-depth primitive for fan-out + fire-and-forget.
+    ctx.waitUntil(Promise.allSettled(tasks));
   },
 };
