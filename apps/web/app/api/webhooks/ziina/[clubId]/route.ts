@@ -36,7 +36,29 @@ interface RouteParams {
   params: Promise<{ clubId: string }>;
 }
 
+/**
+ * Audit F-15 (2026-05-07 r4): top-level try/catch wrapper. Inner
+ * branches already catch the documented failure modes (signature
+ * verification / DB apply / mark helpers), but an unhandled throw
+ * from `await params`, `readWebhookBody`, `getWebhookConfigByClubProvider`,
+ * or `claimWebhookEvent` would otherwise propagate to the runtime and
+ * surface as an opaque 500 with whatever stack trace OpenNext serializes
+ * into the response. The wrapper sanitizes that to a static
+ * `Internal error` 500.
+ */
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    return await handlePost(request, { params });
+  } catch (err) {
+    logger.error('ziina_webhook_unhandled_error', {
+      error: err instanceof Error ? err.message : 'unknown',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    return new Response('Internal error', { status: 500 });
+  }
+}
+
+async function handlePost(request: NextRequest, { params }: RouteParams) {
   const { clubId: rawClubId } = await params;
 
   const parsedClubId = clubIdSchema.safeParse(rawClubId);

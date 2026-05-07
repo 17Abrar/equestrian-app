@@ -16,6 +16,7 @@ import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body'
 import { sendEmailAsync } from '@/lib/email';
 import { SubscriptionPaymentReceived } from '@equestrian/email-templates/subscription-payment-received';
 import { logger } from '@/lib/logger';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 /**
  * Webhook receiver for Cavaliq's PLATFORM Ziina account — distinct from
@@ -44,6 +45,26 @@ const PAID_EVENTS = new Set(['payment_intent.status.updated']);
 const HANDLED_EVENTS = new Set<string>([...PAID_EVENTS]);
 
 export async function POST(request: NextRequest) {
+  // Audit F-17 (2026-05-07 r4): IP-keyed rate limit + failClosed.
+  // Pre-fix the platform-Ziina webhook had no rate limit at all —
+  // the URL is publicly known (`cavaliq.com/api/webhooks/ziina-
+  // platform`) and any caller could spam it indefinitely; the only
+  // bound was the body cap, but the route still pays JSON.parse +
+  // HMAC compute on every request. Mirrors the n-genius pattern.
+  const ip =
+    request.headers.get('cf-connecting-ip') ??
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
+  const rl = await checkRateLimit(`webhook:ziina_platform:${ip}`, {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosed: true,
+  });
+  if (!rl.allowed) {
+    return new Response('Too many requests', { status: 429 });
+  }
+
   // Audit F-8 (2026-05-06 r3): hoist the signature-header check
   // BEFORE the body read so a forgery without the header pays
   // constant cost — matches the per-club Ziina route's ordering

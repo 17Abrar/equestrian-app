@@ -263,16 +263,35 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       .replace(/^sha256=/i, '')
       .toLowerCase();
 
-    const a = Buffer.from(expected, 'utf8');
-    const b = Buffer.from(provided, 'utf8');
+    // Audit F-44 (2026-05-07 r4): length-pad before compare. The previous
+    // shape short-circuited on `a.length !== b.length`, leaking the
+    // expected hex-digest length to a timing attacker probing different
+    // signature lengths until the response time stops being constant.
+    // Mirror the padding pattern from `n-genius.ts:506-517` so the
+    // length comparison occurs after the constant-time digest compare.
+    // The hex-digest is always 64 chars for sha256, so the residual is
+    // small — but defense-in-depth is cheap, and aligning all three
+    // adapters reduces the chance a future contributor copies the
+    // wrong pattern.
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const providedBuf = Buffer.from(provided, 'utf8');
 
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    const maxLen = Math.max(expectedBuf.length, providedBuf.length);
+    const expectedPadded = Buffer.alloc(maxLen);
+    expectedBuf.copy(expectedPadded);
+    const providedPadded = Buffer.alloc(maxLen);
+    providedBuf.copy(providedPadded);
+
+    const equal =
+      timingSafeEqual(expectedPadded, providedPadded) &&
+      expectedBuf.length === providedBuf.length;
+    if (!equal) {
       // Length info is useful for distinguishing a format mismatch
       // (recoverable by upgrading the adapter) from a real attacker —
       // never log the actual signature value.
       logger.warn('ziina_webhook_signature_mismatch', {
-        expectedLength: a.length,
-        providedLength: b.length,
+        expectedLength: expectedBuf.length,
+        providedLength: providedBuf.length,
         hasSha256Prefix: /^sha256=/i.test(providedRaw),
       });
       throw new PaymentProviderError(

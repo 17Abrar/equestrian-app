@@ -227,6 +227,15 @@ export const bookings = pgTable('bookings', {
   // Generic payment-provider reference. `paymentProvider` disambiguates which
   // adapter owns `providerPaymentId` (a Stripe PaymentIntent id, N-Genius
   // order reference, or Ziina payment-intent id).
+  //
+  // Audit F-3 (2026-05-07 r4): the partial index
+  // `idx_bookings_provider_payment` (migration 0046) is `WHERE
+  // provider_payment_id IS NOT NULL`. Drizzle has no partial-index
+  // builder; the index lives at the SQL layer only and does NOT
+  // appear in the table-extras below. Powers the webhook lookup
+  // `findBookingByProviderPaymentId` on the hot payment path —
+  // sister tables (payments, livery_invoices, platform_subscription
+  // _invoices) all carry the parallel index.
   paymentProvider: paymentProviderEnum('payment_provider'),
   providerPaymentId: varchar('provider_payment_id', { length: 255 }),
 
