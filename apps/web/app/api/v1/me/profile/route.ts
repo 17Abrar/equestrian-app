@@ -40,6 +40,12 @@ export async function GET() {
 // Fields a rider is allowed to edit on their own profile. Skill level is
 // present — admins will often override it from the staff side, but the
 // rider's self-reported level is a sensible default.
+// Audit F-9 (2026-05-07 r4): `.strict()` BEFORE `.refine()` so unknown
+// keys 422 instead of being silently stripped. `.refine()` returns
+// ZodEffects which doesn't expose `.strict()`, so the order matters.
+// Without this, a future contributor widening `upsertRiderProfileByMember`
+// to spread the parsed payload would let smuggled fields like
+// `totalLessonsCompleted` or `parentMemberId` reach the DB.
 const updateMyProfileSchema = z
   .object({
     dateOfBirth: z.string().optional().nullable(),
@@ -51,6 +57,7 @@ const updateMyProfileSchema = z
     emergencyContactRelation: z.string().max(100).optional().nullable(),
     medicalNotes: z.string().max(5000).optional().nullable(),
   })
+  .strict()
   .refine((d) => Object.keys(d).length > 0, {
     message: 'At least one field must be provided',
   });

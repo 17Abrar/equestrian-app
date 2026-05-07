@@ -505,6 +505,20 @@ export async function applyPaymentWebhook({
       });
       return { clubId, bookingId: bookingRef.bookingId };
     }
+    // Audit F-12 (2026-05-07 r4): warn-level overfund. We still mark the
+    // booking paid (the rider has paid; refusing the apply would leave them
+    // stuck), but surface the discrepancy so finance can issue the difference
+    // back. Symmetric with the underfund branch above.
+    if (event.amountReceivedMinorUnits > bookingRef.amount) {
+      logger.error('webhook_amount_overfunded', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventId: event.eventId,
+        received: event.amountReceivedMinorUnits,
+        expected: bookingRef.amount,
+        overfundMinor: event.amountReceivedMinorUnits - bookingRef.amount,
+      });
+    }
   }
 
   const updated = await setBookingPaymentRef(clubId, bookingRef.bookingId, {
@@ -624,6 +638,19 @@ export async function applyLiveryInvoiceWebhook({
       expected: invoice.amountMinorUnits,
     });
     return { invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+  // Audit F-12 (2026-05-07 r4): symmetric overfund branch — mirrors the
+  // booking flow. Don't block the apply (the club has paid); surface the
+  // discrepancy so finance can refund the difference.
+  if (event.amountReceivedMinorUnits > invoice.amountMinorUnits) {
+    logger.error('livery_webhook_amount_overfunded', {
+      clubId: invoice.clubId,
+      invoiceId: invoice.id,
+      eventId: event.eventId,
+      received: event.amountReceivedMinorUnits,
+      expected: invoice.amountMinorUnits,
+      overfundMinor: event.amountReceivedMinorUnits - invoice.amountMinorUnits,
+    });
   }
 
   const paidAt = new Date();

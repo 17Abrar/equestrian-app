@@ -957,6 +957,16 @@ export async function setBookingPaymentRef(
         sql`${bookings.paymentStatus} != 'paid'`,
       );
     }
+    // Audit F-29 (2026-05-07 r4): block `failed → pending` downgrade.
+    // Stripe / Ziina / N-Genius retry webhooks; a `payment_intent.created`
+    // arriving after `payment_intent.payment_failed` (because the second
+    // delivery attempt of the first one slipped through) would otherwise
+    // flip a `failed` booking back to `pending` and re-show the green
+    // "ready to pay" CTA — admin's failed-payment alert turns stale.
+    // Idempotent `failed → failed` and forward `failed → paid` still pass.
+    if (data.paymentStatus === 'pending') {
+      conditions.push(sql`${bookings.paymentStatus} != 'failed'`);
+    }
   }
 
   const result = await db

@@ -238,6 +238,21 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
     });
     return `Amount underfunded on platform invoice ${invoice.id}: received ${args.eventAmountReceived} < expected ${invoice.amountMinorUnits}`;
   }
+  // Audit F-12 (2026-05-07 r4): symmetric overfund branch. Mirror the
+  // booking-flow guard — don't block the apply (the club has paid), but
+  // surface the discrepancy so platform finance can refund the difference.
+  if (
+    args.eventAmountReceived !== undefined &&
+    args.eventAmountReceived > invoice.amountMinorUnits
+  ) {
+    logger.error('platform_webhook_amount_overfunded', {
+      invoiceId: invoice.id,
+      clubId: invoice.clubId,
+      received: args.eventAmountReceived,
+      expected: invoice.amountMinorUnits,
+      overfundMinor: args.eventAmountReceived - invoice.amountMinorUnits,
+    });
+  }
 
   const paidAt = new Date();
   const updated = await markPlatformInvoicePaid(invoice.clubId, invoice.id, {

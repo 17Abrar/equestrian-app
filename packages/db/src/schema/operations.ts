@@ -36,6 +36,34 @@ export interface PollOption {
  *  consumers narrow at read time using the `type` column. */
 export type NotificationData = Record<string, unknown>;
 
+/**
+ * Audit F-28 (2026-05-07 r4). PHI / PII keys that must NEVER land in
+ * `notifications.body` or `notifications.data` — those columns are
+ * plaintext, indefinite-retention, and have no encryption helper. The
+ * encrypted-at-rest invariant on `horse_health_records` / `rider_profiles`
+ * is enforced only by the read/write helpers; a future feature that
+ * builds a notification body from a freshly-decrypted record (e.g.,
+ * "Diagnosis updated for Bella") would copy the plaintext into a row
+ * that then sits unencrypted forever.
+ *
+ * The forthcoming `createNotification` helper will assert at runtime
+ * that none of these keys appear in the `data` payload (and that no
+ * value in `body` matches the encrypted-record id pattern). New
+ * notification call-sites that need to surface PHI to the recipient
+ * should reference the source row by id and have the UI re-fetch +
+ * decrypt at render time, not denormalise into `notifications`.
+ */
+export const NOTIFICATION_FORBIDDEN_FIELDS = [
+  'description',
+  'diagnosis',
+  'treatment',
+  'notes',
+  'medicalNotes',
+  'symptoms',
+  'medications',
+  'vetInstructions',
+] as const;
+
 /** Audit-log `changes` payload — produced by the `ctx.audit({ changes })`
  *  helper in api-utils. Each top-level key is a column name; each value
  *  carries the before/after state. `unknown` rather than a tighter union

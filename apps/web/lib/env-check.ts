@@ -35,6 +35,13 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
     alsoCheck: 'UPSTASH_REDIS_REST_TOKEN',
     effect: 'rate limiter falls back to per-isolate in-memory; failClosed gate is degraded',
   },
+  // Audit F-26 (2026-05-07 r4): without EMAIL_FROM the resolveFromAddress
+  // helper returns null and refuses to send. Without this boot warn the
+  // operator only sees the failure on first send (hours after a bad deploy).
+  {
+    name: 'EMAIL_FROM',
+    effect: 'transactional emails are no-ops; no booking confirmations, invoices, resets',
+  },
 ];
 
 export function assertProductionEnvConfigured(): void {
