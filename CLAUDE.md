@@ -136,7 +136,7 @@ Fix any errors before presenting your work. Do NOT tell me "there might be type 
 
 2. NEVER use `any` type in TypeScript. Every variable, parameter, return type, and prop MUST be explicitly typed. If you don't know the type, define an interface. Enable `strict: true` in tsconfig.json. If you catch yourself typing `any`, STOP and define the proper type. Use `unknown` + type guards if truly unknown.
 
-3. NEVER store secrets, API keys, tokens, or passwords in code. All secrets go in environment variables. Use Doppler or .env.local (gitignored). Never commit .env files.
+3. NEVER store secrets, API keys, tokens, or passwords in code. All secrets go in Cloudflare Workers Secrets (`wrangler secret put`) for production and `.env.local` (gitignored) for local development. Never commit `.env` files. See DEPLOY.md for the full secret list and `wrangler secret list cavaliq` to verify presence per release.
 
 4. NEVER handle raw credit card data. All payment processing uses Stripe Elements or Tap goSell.js hosted fields. Card data goes directly from browser to payment processor. Our servers only receive tokens.
 

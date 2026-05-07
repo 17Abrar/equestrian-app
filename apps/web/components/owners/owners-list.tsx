@@ -45,6 +45,8 @@ interface OwnersListProps {
 export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useOwners({
     search: search || undefined,
@@ -79,7 +81,7 @@ export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
           <h1 className="text-3xl font-bold tracking-tight">Private Owners</h1>
           <p className="mt-1 text-muted-foreground">Manage horse owners and their profiles</p>
         </div>
-        {canCreate && <AddOwnerDialog />}
+        {canCreate && <AddOwnerDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       <div className="relative max-w-sm">
@@ -88,7 +90,15 @@ export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
       </div>
 
       {owners.length === 0 && (
-        <EmptyState title="No horse owners yet" description="Add private horse owners to manage their horses and livery." />
+        <EmptyState
+          title="No horse owners yet"
+          description="Add private horse owners to manage their horses and livery."
+          action={
+            canCreate
+              ? { label: 'Add Owner', onClick: () => setAddOpen(true) }
+              : undefined
+          }
+        />
       )}
 
       {owners.length > 0 && (
@@ -144,8 +154,13 @@ export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
   );
 }
 
-function AddOwnerDialog() {
-  const [open, setOpen] = useState(false);
+function AddOwnerDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createOwner = useCreateOwner();
 
   const form = useForm<CreateOwnerInput>({
@@ -158,7 +173,7 @@ function AddOwnerDialog() {
       await createOwner.mutateAsync(data);
       toast.success('Owner added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('owner.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to add owner');
@@ -166,7 +181,7 @@ function AddOwnerDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button><Plus className="mr-2 h-4 w-4" />Add Owner</Button>
       </DialogTrigger>

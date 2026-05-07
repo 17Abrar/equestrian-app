@@ -711,13 +711,22 @@ export async function cancelBooking(
     const cancelled = result[0];
 
     if (cancelled) {
+      // Audit F-34 (2026-05-07 r4): explicit clubId predicate as
+      // defense-in-depth alongside the composite FK that already binds
+      // booking.slotId to the same club. Mirrors the predicate every other
+      // bookingSlots update in this file carries.
       await tx
         .update(bookingSlots)
         .set({
           currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
           updatedAt: new Date(),
         })
-        .where(eq(bookingSlots.id, cancelled.slotId));
+        .where(
+          and(
+            eq(bookingSlots.id, cancelled.slotId),
+            eq(bookingSlots.clubId, clubId),
+          ),
+        );
     }
 
     return cancelled ?? null;

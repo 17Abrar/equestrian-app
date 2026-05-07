@@ -42,7 +42,11 @@ function parseR2PublicUrl(raw: string | undefined): Array<{
 // X-Content-Type-Options) stay here — they don't need per-request
 // state and benefit from being baked into the build.
 
-const nextConfig: NextConfig = {
+// Audit F-55 (2026-05-07 r4): use `satisfies NextConfig` instead of
+// `: NextConfig` so the literal types of headers() return values aren't
+// widened — keeps the narrower types available for any downstream tooling
+// that introspects this object.
+const nextConfig = {
   transpilePackages: [
     '@equestrian/shared',
     '@equestrian/db',
@@ -117,7 +121,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-};
+} satisfies NextConfig;
 
 // Wrap the config with Sentry. Source-map upload is active only when
 // SENTRY_AUTH_TOKEN is set at build time; otherwise the wrapper is a

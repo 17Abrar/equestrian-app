@@ -13,11 +13,54 @@ Every table has Row-Level Security (RLS) enabled.
 3. Exception: The `users` table is managed by Clerk — we store minimal user data locally
 4. All IDs are UUIDs (never auto-increment integers)
 5. All timestamps are `timestamptz` (timestamp with timezone)
-6. Soft deletes use `deleted_at` (nullable timestamp) — never hard delete user-facing records
+6. Never hard delete user-facing records. We use three deletion patterns depending on the entity — see "Deletion patterns" below.
 7. All monetary amounts stored as integers in smallest currency unit (fils for AED, cents for USD)
 8. All foreign keys have explicit ON DELETE behavior
 9. Index all columns used in WHERE, JOIN, and ORDER BY clauses
 10. Use ENUMs for fixed sets of values (status, role, type)
+
+---
+
+## Deletion patterns
+
+Audit F-65 (2026-05-07 r4): the platform never hard-deletes user-facing rows, but it uses three different soft-delete idioms depending on the table's lifecycle. New tables MUST pick one of these three patterns; do not invent a fourth.
+
+| Pattern | Tables | Mechanism | Why this shape |
+|---|---|---|---|
+| `deleted_at` timestamp | `clubs`, `horses` | Set `deleted_at = now()` on delete; queries filter `WHERE deleted_at IS NULL`. Restorable. | Top-level entities with their own URL space and detail pages. Soft-delete preserves audit trail and supports GDPR right-to-erasure flows that need to scrub but keep referential integrity. |
+| Status enum | `bookings` (`status='cancelled'` + `cancelled_at`), `invoices` (`status='void'`), `livery_invoices` (`status='void'`), `platform_subscription_invoices` (`status='void'`), `coupons` (`status='expired'`/`'paused'`) | Mutate the row's status enum to a terminal "voided" value. Not restorable. | Financial / scheduled rows that need a non-null lifecycle state for downstream queries (revenue rollups, dunning, refund eligibility). A `deleted_at`-style filter would silently exclude voided rows from compliance / accounting reporting. |
+| Deactivation flag | `club_members` (`is_active=false` via `deactivateMember()`), `arenas` (`is_active=false`), `lesson_types` (`is_active=false`) | Flip `is_active` to false. Restorable. | Configuration entities — coaches/staff who leave, arenas taken out of rotation, lesson types renamed. Forward-creation paths (booking-slot create) check `is_active=true` to keep deactivated rows out of pickers without losing historical FKs from past bookings. |
+
+**Append-only tables** (`audit_log`, `webhook_events`, `competition_results`, `community_votes`, `horse_pairing_history`, `coupon_usages`, `rider_achievements`, `horse_medication_logs`, `horse_care_reminder_sends`, `waitlist`) have no delete pattern by design — they're write-once historical records and contain no user-deletable content.
+
+---
+
+## PII / PHI columns by table
+
+Audit F-76 (2026-05-07 r4): the rows below tell a compliance reviewer ("what data do you process about me?") which fields qualify. Encryption-at-rest applies to a narrow whitelist (`HEALTH_ENCRYPTED_FIELDS`, `MEDICATION_ENCRYPTED_FIELDS` in `packages/db/src/crypto.ts`); other PII fields are stored as plaintext by design because they're load-bearing for joins, indexes, search, and email composition.
+
+### Encrypted-at-rest fields
+
+| Table | Column | Reason |
+|---|---|---|
+| `horses` | `medical_notes` | Free-text vet notes; high-sensitivity PHI |
+| `horse_health_records` | `description`, `diagnosis`, `treatment`, `notes` | Diagnostic and treatment text |
+| `horse_medications` | `notes` | Vet-prescribed regimen detail |
+| `payment_accounts` | `encrypted_credentials` | Provider API keys (Stripe `sk_…`, N-Genius outlet creds, Ziina API key + webhook secret) |
+
+### Plaintext PII / PHI by design
+
+| Table | Column | Reason |
+|---|---|---|
+| `club_members` | `display_name`, `email`, `phone`, `clerk_id` | Contact info; `clerk_id` is the auth foreign key. Used in every email and in pickers — encryption would break joins and search |
+| `rider_profiles` | `date_of_birth`, `weight_kg`, `height_cm` | Used in horse-matching algorithm at booking time; encryption would force per-row decryption on every match |
+| `horses` | `name`, `breed`, `microchip_number`, `passport_number`, `insurance_policy_number`, `insurance_provider` | Identifiers used in lists, search, and pickers |
+| `horse_health_records` | `vet_name`, `title` | Used in care-reminder email subject + body (Round 6.2) |
+| `horse_medications` | `medication_name`, `dosage` | Used in medication-end reminder email body |
+| `bookings` / `livery_invoices` / `platform_subscription_invoices` | `notes` (where present), guest fields | Composing receipts and reminders |
+| `audit_log` | `actor_member_id`, `ip_address`, `user_agent`, `changes` (JSONB) | Operational audit trail. Member IDs are joinable to PII — see also F-47 |
+
+GDPR / right-to-erasure: a member-deletion sweep MUST scrub the encrypted-at-rest fields above (re-write the `v1:` envelope to `v1:[REDACTED]`), null the contact info on `club_members`, and stamp `deleted_at` on the row. The audit_log retention cron (`pruneAuditLog`) handles older rows automatically.
 
 ---
 

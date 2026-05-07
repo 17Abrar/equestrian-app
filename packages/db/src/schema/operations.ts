@@ -98,6 +98,14 @@ export const groomTasks = pgTable('groom_tasks', {
   }).onDelete('set null'),
 ]);
 
+// Audit F-70 (2026-05-07 r4): write-once-ish — the row is created when an
+// achievement unlocks. The `notified` boolean does mutate (a notifier
+// flip) but the rest of the row is immutable. We deliberately don't
+// carry an `updated_at` column because (a) it doesn't exist in SQL
+// (would be a forward migration to add) and (b) the `unlocked_at` +
+// `notified` pair carries the lifecycle data. A future contributor
+// adding a mutable field MUST also add `updated_at` here AND in SQL
+// to restore the standard invariant.
 export const riderAchievements = pgTable('rider_achievements', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')
@@ -247,6 +255,9 @@ export const communityComments = pgTable('community_comments', {
   }).onDelete('cascade'),
 ]);
 
+// Audit F-70 (2026-05-07 r4): write-once. A vote is cast once; "changing
+// your mind" is a DELETE + INSERT (separate row to capture history).
+// Therefore no `updated_at` — the `created_at` is enough.
 export const communityVotes = pgTable(
   'community_votes',
   {
@@ -337,6 +348,10 @@ export const notifications = pgTable('notifications', {
   }),
 ]);
 
+// Audit F-70 (2026-05-07 r4): immutable append-only by design — audit
+// rows must NEVER mutate, otherwise the trail is forge-able. Therefore
+// no `updated_at` column. The retention cron (`pruneAuditLog`) deletes
+// old rows wholesale; it never updates them.
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().defaultRandom(),
   // ON DELETE SET NULL on both club + actor (audit C-12). Schema declares

@@ -68,6 +68,8 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string | undefined>();
   const [page, setPage] = useState(1);
+  // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useStaff({
     search: search || undefined,
@@ -103,7 +105,7 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
           <h1 className="text-3xl font-bold tracking-tight">Staff & Coaches</h1>
           <p className="mt-1 text-muted-foreground">Manage your team members</p>
         </div>
-        {canCreate && <AddStaffDialog />}
+        {canCreate && <AddStaffDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -122,7 +124,15 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
       </div>
 
       {staff.length === 0 && (
-        <EmptyState title="No staff members yet" description="Add your first staff member to get started." />
+        <EmptyState
+          title="No staff members yet"
+          description="Add your first staff member to get started."
+          action={
+            canCreate
+              ? { label: 'Add Staff', onClick: () => setAddOpen(true) }
+              : undefined
+          }
+        />
       )}
 
       {staff.length > 0 && (
@@ -184,8 +194,13 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
   );
 }
 
-function AddStaffDialog() {
-  const [open, setOpen] = useState(false);
+function AddStaffDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createStaff = useCreateStaff();
 
   const form = useForm<CreateStaffInput>({
@@ -198,7 +213,7 @@ function AddStaffDialog() {
       await createStaff.mutateAsync(data);
       toast.success('Staff member added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('staff.create', err);
       toast.error(err instanceof Error ? err.message : 'Failed to add staff member');
@@ -206,7 +221,7 @@ function AddStaffDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button><Plus className="mr-2 h-4 w-4" />Add Staff</Button>
       </DialogTrigger>

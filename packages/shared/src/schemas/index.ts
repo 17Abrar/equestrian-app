@@ -40,12 +40,20 @@ const nullableOptionalUrl = z
 
 // ─── Common ────────────────────────────────────────────────────────────
 
-export const paginationSchema = z.object({
-  page: numericField(z.number().int().min(1)).default(1),
-  pageSize: numericField(
-    z.number().int().min(1).max(MAX_PAGE_SIZE),
-  ).default(DEFAULT_PAGE_SIZE),
-});
+// Audit F-69 (2026-05-07 r4): `.strict()` on the export so direct
+// consumers (`validateInput(paginationSchema, ...)`) reject unknown
+// keys instead of silently stripping. Spreading consumers (e.g.
+// `z.object({ ...paginationSchema.shape, search: z.string() }).strict()`)
+// keep working unchanged because they re-build the object before
+// applying `.strict()` to the merged shape.
+export const paginationSchema = z
+  .object({
+    page: numericField(z.number().int().min(1)).default(1),
+    pageSize: numericField(
+      z.number().int().min(1).max(MAX_PAGE_SIZE),
+    ).default(DEFAULT_PAGE_SIZE),
+  })
+  .strict();
 
 export type PaginationInput = z.infer<typeof paginationSchema>;
 

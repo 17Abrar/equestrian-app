@@ -17,6 +17,23 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 
+// Audit F-49 (2026-05-07 r4): content-shape skeleton matching the
+// label+metric row layout used by Lesson Popularity, Horse Utilization,
+// and Revenue by Day cards. Replaces the bare h-32 rectangles that
+// caused a visible layout shift when rows landed.
+function ReportRowListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center justify-between">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ReportsPage() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
@@ -92,7 +109,7 @@ export function ReportsPage() {
       <Card>
         <CardHeader><CardTitle>Lesson Popularity</CardTitle></CardHeader>
         <CardContent>
-          {lessons.isLoading && <Skeleton className="h-32" />}
+          {lessons.isLoading && <ReportRowListSkeleton />}
           {lessons.isError && <ErrorState message="Failed to load" onRetry={() => lessons.refetch()} />}
           {lessons.data?.data && (
             <div className="space-y-3">
@@ -118,7 +135,7 @@ export function ReportsPage() {
       <Card>
         <CardHeader><CardTitle>Horse Utilization</CardTitle></CardHeader>
         <CardContent>
-          {horses.isLoading && <Skeleton className="h-32" />}
+          {horses.isLoading && <ReportRowListSkeleton />}
           {horses.isError && <ErrorState message="Failed to load" onRetry={() => horses.refetch()} />}
           {horses.data?.data && (
             <div className="space-y-3">
@@ -145,7 +162,7 @@ export function ReportsPage() {
       <Card>
         <CardHeader><CardTitle>Revenue by Day</CardTitle></CardHeader>
         <CardContent>
-          {revenue.isLoading && <Skeleton className="h-32" />}
+          {revenue.isLoading && <ReportRowListSkeleton />}
           {revenue.isError && <ErrorState message="Failed to load" onRetry={() => revenue.refetch()} />}
           {revenue.data?.data && (
             <div className="space-y-2">

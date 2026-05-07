@@ -6,6 +6,8 @@ type NewLessonType = typeof lessonTypes.$inferInsert;
 type LessonTypeCreate = Omit<NewLessonType, 'id' | 'clubId' | 'createdAt' | 'updatedAt'>;
 type LessonTypeUpdate = Partial<LessonTypeCreate>;
 
+// Audit F-59 (2026-05-07 r4): explicit list-row projection. Same pattern
+// as F-8 / F-58. Detail GET (`getLessonTypeById`) keeps the wide select.
 export async function getLessonTypesByClub(
   clubId: string,
   { page, pageSize }: { page: number; pageSize: number },
@@ -14,7 +16,24 @@ export async function getLessonTypesByClub(
   const where = and(eq(lessonTypes.clubId, clubId), eq(lessonTypes.isActive, true));
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: lessonTypes.id,
+        clubId: lessonTypes.clubId,
+        name: lessonTypes.name,
+        type: lessonTypes.type,
+        description: lessonTypes.description,
+        durationMinutes: lessonTypes.durationMinutes,
+        price: lessonTypes.price,
+        currency: lessonTypes.currency,
+        maxRiders: lessonTypes.maxRiders,
+        minRiders: lessonTypes.minRiders,
+        maxSessionsPerDay: lessonTypes.maxSessionsPerDay,
+        arenaId: lessonTypes.arenaId,
+        isActive: lessonTypes.isActive,
+        color: lessonTypes.color,
+        createdAt: lessonTypes.createdAt,
+        updatedAt: lessonTypes.updatedAt,
+      })
       .from(lessonTypes)
       .where(where)
       .orderBy(asc(lessonTypes.name))
@@ -27,6 +46,9 @@ export async function getLessonTypesByClub(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+// Audit F-21 (2026-05-07 r4): row type derived from the projection.
+export type LessonTypeListItem = Awaited<ReturnType<typeof getLessonTypesByClub>>['items'][number];
 
 /**
  * Audit MED (2026-05-05 pass 2): forward-creation paths (booking-slots

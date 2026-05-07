@@ -286,13 +286,20 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           }
 
           // 6. Decrement the slot's rider count.
+          // Audit F-34 (2026-05-07 r4): explicit clubId predicate alongside
+          // the composite FK so this update can never escape the tenant.
           await tx
             .update(bookingSlots)
             .set({
               currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
               updatedAt: new Date(),
             })
-            .where(eq(bookingSlots.id, cancelledLocal.slotId));
+            .where(
+              and(
+                eq(bookingSlots.id, cancelledLocal.slotId),
+                eq(bookingSlots.clubId, ctx.clubId),
+              ),
+            );
 
           // 7. Update the refund ledger inside the same tx. Mirrors
           //    recordBookingRefund's optimistic CAS but the FOR UPDATE

@@ -107,6 +107,9 @@ export const horseMedications = pgTable('horse_medications', {
   ),
 ]);
 
+// Audit F-70 (2026-05-07 r4): write-once medication-administration ledger.
+// A miss/skip is a separate row (not an update of the previous row), so
+// the row is never mutated after insert. No `updated_at` by design.
 export const horseMedicationLogs = pgTable('horse_medication_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')
@@ -233,6 +236,11 @@ export const horseExerciseSchedules = pgTable('horse_exercise_schedules', {
  * Not declared as an enum because future reminder kinds will be added
  * incrementally without a migration; the cron is the source of truth
  * for which kinds it actually emits.
+ *
+ * Audit F-70 (2026-05-07 r4): write-once dedup ledger. `sentAt` is the
+ * lifecycle timestamp; the row is never updated after insert (a re-send
+ * would be a separate row, blocked by the unique constraint). No
+ * `updated_at` column by design.
  */
 export const horseCareReminderSends = pgTable(
   'horse_care_reminder_sends',

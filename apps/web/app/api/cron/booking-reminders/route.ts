@@ -113,6 +113,11 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // club's offset. For DST-observing zones a small drift is
       // possible at the spring-forward boundary; Asia/Dubai (our
       // primary tenant) doesn't observe DST so this is exact today.
+      // Audit F-45 (2026-05-07 r4): the matching window below was
+      // widened from 23-25h to 22-26h to absorb that 1h DST drift
+      // without missing reminders. Dedup is preserved via the CAS on
+      // `reminder_sent_at` (only the first run that lands in the
+      // widened window successfully claims the booking).
       const slotInstant = resolveSlotInstant(
         booking.slotDate,
         booking.slotStartTime,
@@ -130,13 +135,14 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
         continue;
       }
 
-      // Window: 23-25 hours from now. The hourly cron schedule means
-      // a single booking falls into exactly two consecutive runs'
-      // windows; the CAS on `reminder_sent_at` ensures only the first
-      // one to win the UPDATE actually sends.
+      // Window: 22-26 hours from now (widened per F-45 to absorb DST
+      // spring-forward drift). The hourly cron schedule means a single
+      // booking falls into multiple consecutive runs' windows; the CAS
+      // on `reminder_sent_at` ensures only the first run that wins the
+      // UPDATE actually sends.
       const hoursFromNow =
         (slotInstant.getTime() - now.getTime()) / (60 * 60 * 1000);
-      if (hoursFromNow < 23 || hoursFromNow > 25) {
+      if (hoursFromNow < 22 || hoursFromNow > 26) {
         skipped += 1;
         continue;
       }

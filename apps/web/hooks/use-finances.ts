@@ -182,13 +182,19 @@ export function useCreateCoupon() {
   });
 }
 
+// Audit F-52 (2026-05-07 r4): `status` was added to the PATCH route to
+// allow active ↔ paused / both → expired transitions from the UI.
+type UpdateCouponInput = Partial<CreateCouponInput> & {
+  status?: 'active' | 'paused' | 'expired';
+};
+
 export function useUpdateCoupon(couponId: string) {
   const queryClient = useQueryClient();
   // Audit AI-25 — `Partial<CreateCouponInput>` matches the PATCH route's
   // `couponBaseSchema.partial()` shape; replaces the previous
   // `Record<string, unknown>` that lost type safety on the payload.
   return useMutation({
-    mutationFn: (data: Partial<CreateCouponInput>) =>
+    mutationFn: (data: UpdateCouponInput) =>
       fetchJson<ApiResponse<Coupon>>(`/api/v1/finances/coupons/${couponId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

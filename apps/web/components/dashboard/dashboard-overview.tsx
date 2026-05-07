@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
+import { EmptyState } from '@/components/shared/empty-state';
 
 import { BOOKING_STATUS_COLORS } from '@/lib/ui-constants';
 
@@ -141,9 +142,11 @@ export function DashboardOverview() {
         </CardHeader>
         <CardContent>
           {stats.recentBookings.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">
-              No bookings yet. Create your first booking to get started.
-            </p>
+            <EmptyState
+              title="No bookings yet"
+              description="Schedule your first lesson to see it here."
+              action={{ label: 'Open calendar', href: '/calendar' }}
+            />
           ) : (
             <div className="space-y-3">
               {stats.recentBookings.map((booking) => (

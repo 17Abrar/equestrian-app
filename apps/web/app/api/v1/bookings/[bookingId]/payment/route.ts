@@ -184,6 +184,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // the club's balance. Cavaliq revenue comes from the subscription
       // tiers, not per-booking application fees.
       try {
+        // Audit F-42 (2026-05-07 r4): embed `bookingId` in the description
+        // as a defense-in-depth webhook-recovery hint. If the
+        // `setBookingPaymentRef` write below fails after the provider
+        // intent succeeds, Ziina/N-Genius webhooks (which don't echo
+        // metadata) can still resolve the booking by parsing the
+        // description suffix.
+        const baseDescription = booking.lessonTypeName
+          ? `${booking.lessonTypeName} — ${booking.slotDate}`
+          : `Lesson booking`;
         const paymentInput = {
           account,
           amountMinorUnits: booking.amount,
@@ -191,9 +200,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           bookingId: booking.id,
           riderId: booking.riderMemberId,
           clubId: ctx.clubId,
-          description: booking.lessonTypeName
-            ? `${booking.lessonTypeName} — ${booking.slotDate}`
-            : `Lesson booking ${booking.id}`,
+          description: `${baseDescription} [booking:${booking.id}]`,
           // Stable idempotency per booking so retries don't duplicate intents.
           idempotencyKey: `booking_${booking.id}`,
           returnUrl,

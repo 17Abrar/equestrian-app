@@ -77,6 +77,9 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
   const [search, setSearch] = useState('');
   const [skillLevel, setSkillLevel] = useState<SkillLevelFilter>();
   const [page, setPage] = useState(1);
+  // Audit F-20 (2026-05-07 r4): lift dialog open state so EmptyState CTA
+  // (added below) can trigger the same Add Rider flow as the header button.
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useRiders({
     search: search || undefined,
@@ -93,7 +96,7 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
           <h1 className="text-3xl font-bold tracking-tight">Riders</h1>
           <p className="mt-1 text-muted-foreground">Manage rider profiles and progress</p>
         </div>
-        {canCreate && <AddRiderDialog />}
+        {canCreate && <AddRiderDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       {/* Filters */}
@@ -151,6 +154,11 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
         <EmptyState
           title="No riders yet"
           description="Riders will appear here once they join your club"
+          action={
+            canCreate
+              ? { label: 'Add Rider', onClick: () => setAddOpen(true) }
+              : undefined
+          }
         />
       )}
 
@@ -230,8 +238,13 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
   );
 }
 
-function AddRiderDialog() {
-  const [open, setOpen] = useState(false);
+function AddRiderDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createRider = useCreateRider();
 
   const form = useForm<CreateRiderFormValues, unknown, CreateRiderInput>({
@@ -248,7 +261,7 @@ function AddRiderDialog() {
       await createRider.mutateAsync(data);
       toast.success('Rider added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (error) {
       reportMutationError('rider.create', error);
       toast.error(error instanceof Error ? error.message : 'Failed to add rider');
@@ -256,7 +269,7 @@ function AddRiderDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />

@@ -127,15 +127,16 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
     return new Response('Invalid signature', { status: 401 });
   }
 
-  // Audit HIGH-2 (2026-05-05): bind the event's `account` to the URL's
-  // clubId. Signature verification proves the body was signed with
-  // this club's `whsec_…`, but a `whsec_…` pasted into two clubs'
-  // connect flows (operator typo, sandbox copy-paste, deliberate misuse)
-  // would otherwise let Club A's event posted to /webhooks/stripe/<B>
-  // get applied to Club B. Mirrors Ziina's per-club receiver. When
-  // `event.account` is set (Connect platform events have it; direct-
-  // keys events created via the platform have it too), enforce the
-  // binding against the stored `externalAccountId`.
+  // Audit F-38 (2026-05-07 r4) updated: Cavaliq's direct-keys Stripe flow
+  // never populates `event.account` (that field is Connect-platform only).
+  // The check below therefore short-circuits in the direct-keys path and
+  // the URL-bound clubId is the ONLY binding signal in production today.
+  // The check is kept as a defense-in-depth guard for any future Connect
+  // path: if both `event.account` and `account.externalAccountId` are
+  // populated AND they disagree, reject. Operators MUST use distinct
+  // `whsec_…` per club (each Stripe webhook endpoint has its own secret);
+  // copy-pasting one secret across two clubs would defeat both the URL
+  // binding and Stripe's signature scope.
   if (
     event.providerAccountId &&
     account.externalAccountId &&
