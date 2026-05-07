@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, text, timestamp, index, unique, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { joinRequestStatusEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -31,7 +32,13 @@ export const clubJoinRequests = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique('club_join_requests_unique_pending').on(table.clubId, table.clerkUserId),
+    // Audit F-17 (2026-05-07 r5): partial unique on `pending` only.
+    // The global UNIQUE permanently locked declined / cancelled riders
+    // out of resubmitting. Migration 0047 swaps the constraint name to
+    // a partial INDEX matching this declaration.
+    uniqueIndex('club_join_requests_unique_pending')
+      .on(table.clubId, table.clerkUserId)
+      .where(sql`status = 'pending'`),
     index('idx_join_requests_club_status').on(table.clubId, table.status, table.createdAt),
     index('idx_join_requests_user').on(table.clerkUserId),
     foreignKey({

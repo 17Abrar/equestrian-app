@@ -10,7 +10,7 @@
     "./crypto": "./src/crypto.ts"
   },
   "scripts": {
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "node -e \"console.error('drizzle-kit generate is disabled. The migrations/meta/_journal.json snapshot files only cover 0000-0005; running generate against the current TS schema would emit a destructive diff that recreates everything since 0006. Hand-write SQL migrations in packages/db/migrations/ and mirror in packages/db/src/schema/. See packages/db/README.md.'); process.exit(1);\"",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
