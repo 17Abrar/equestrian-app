@@ -27,6 +27,17 @@ export interface PaginatedResponse<T> {
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
+/**
+ * Discriminated union for paginated endpoints consumed via the api-client
+ * (mobile + any future SDK consumer that must surface server errors as data
+ * rather than throwing). Mirrors `ApiResponse<T>`'s success/error split for
+ * the paginated envelope shape. Audit F-6 / F-7 (2026-05-07 r5 PR Sigma):
+ * replaces the `as never as Promise<…>` double cast in mobile hooks and the
+ * cascading `data.data as Booking[]` casts in screens — narrowing on
+ * `success` now yields the correctly-typed `data: T[]` and `pagination`.
+ */
+export type PaginatedApiResponse<T> = PaginatedResponse<T> | ApiErrorResponse;
+
 // Enums — mirroring database enums for type safety
 
 export const HORSE_STATUS = {

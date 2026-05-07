@@ -31,12 +31,32 @@ function CompetitionsListSkeleton() {
   );
 }
 
+// Audit F-57 (2026-05-07 r5 PR Sigma): Tabs `onValueChange` returns `string`,
+// so the previous `setStatusFilter as 'draft' | …` cast removed type safety
+// — a future TabsTrigger added without updating the union would compile.
+// Mirror `BOOKING_STATUS_FILTER_VALUES.includes(...)` from bookings-list.tsx:
+// declare the literal tuple, derive the type, and runtime-check at the
+// boundary. Note the `cancelled` value lives in the union even though no
+// TabsTrigger renders it today — the audit called this out specifically:
+// the previous cast included `cancelled`, so it was a phantom type. The
+// runtime-check approach makes the missing trigger a value-level concern,
+// not a type-level lie.
+const COMPETITION_STATUS_FILTER_VALUES = [
+  'draft',
+  'published',
+  'in_progress',
+  'completed',
+  'cancelled',
+] as const;
+
+type CompetitionStatusFilter = (typeof COMPETITION_STATUS_FILTER_VALUES)[number] | undefined;
+
 export function CompetitionsList() {
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<CompetitionStatusFilter>(undefined);
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, error, refetch } = useCompetitions({
-    status: statusFilter as 'draft' | 'published' | 'in_progress' | 'completed' | 'cancelled' | undefined,
+    status: statusFilter,
     page,
     pageSize: DEFAULT_PAGE_SIZE,
   });
@@ -71,7 +91,23 @@ export function CompetitionsList() {
       </div>
 
       {/* Status tabs */}
-      <Tabs value={statusFilter ?? 'all'} onValueChange={(v) => { setStatusFilter(v === 'all' ? undefined : v); setPage(1); }}>
+      <Tabs
+        value={statusFilter ?? 'all'}
+        onValueChange={(v) => {
+          if (v === 'all') {
+            setStatusFilter(undefined);
+          } else if (
+            COMPETITION_STATUS_FILTER_VALUES.includes(
+              v as (typeof COMPETITION_STATUS_FILTER_VALUES)[number],
+            )
+          ) {
+            setStatusFilter(v as (typeof COMPETITION_STATUS_FILTER_VALUES)[number]);
+          } else {
+            setStatusFilter(undefined);
+          }
+          setPage(1);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="draft">Draft</TabsTrigger>

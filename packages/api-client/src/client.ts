@@ -1,4 +1,4 @@
-import { type ApiResponse } from '@equestrian/shared/types';
+import { type ApiResponse, type PaginatedApiResponse } from '@equestrian/shared/types';
 
 interface FetchOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -31,12 +31,65 @@ interface ApiClientConfig {
  * misconfiguration (HTML error page, gateway timeout, non-JSON body) would
  * cast straight to `ApiResponse<T>` and the consumer would dereference
  * undefined fields. Mobile callers see a clean `NETWORK_ERROR` instead.
+ *
+ * Boundary contract (audit F-68, NIT, accepted): we shape-check that
+ * `success` is a boolean and that `error.code` / `error.message` are
+ * strings, but `obj.data` is cast to `T` without per-route Zod validation.
+ * The cast is the documented boundary — per-route response schemas would
+ * give us full runtime type checking, but wiring them across every endpoint
+ * is intentionally deferred to a future api-client refactor PR. Until then,
+ * the consumer is responsible for treating `data` as defensively as it
+ * treats any external input (e.g. don't deref nested fields without
+ * narrowing).
  */
 function parseEnvelope<T>(raw: unknown): ApiResponse<T> | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const obj = raw as Record<string, unknown>;
   if (obj.success === true) {
     return { success: true, data: obj.data as T };
+  }
+  if (obj.success === false) {
+    const err = obj.error;
+    if (typeof err === 'object' && err !== null) {
+      const e = err as Record<string, unknown>;
+      const code = typeof e.code === 'string' ? e.code : 'UNKNOWN_ERROR';
+      const message = typeof e.message === 'string' ? e.message : 'Request failed';
+      return { success: false, error: { code, message, details: e.details } };
+    }
+    return {
+      success: false,
+      error: { code: 'UNKNOWN_ERROR', message: 'Request failed' },
+    };
+  }
+  return null;
+}
+
+/**
+ * Sibling of `parseEnvelope` for the paginated envelope shape:
+ * `{ success: true, data: T[], pagination: { page, pageSize, total, totalPages } }`
+ * or the same error shape as the non-paginated envelope. Same per-route
+ * Zod-validation boundary caveat as `parseEnvelope` (audit F-68).
+ */
+function parsePaginatedEnvelope<T>(raw: unknown): PaginatedApiResponse<T> | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  if (obj.success === true) {
+    if (!Array.isArray(obj.data)) return null;
+    const pagination = obj.pagination;
+    if (typeof pagination !== 'object' || pagination === null) return null;
+    const p = pagination as Record<string, unknown>;
+    const page = typeof p.page === 'number' ? p.page : null;
+    const pageSize = typeof p.pageSize === 'number' ? p.pageSize : null;
+    const total = typeof p.total === 'number' ? p.total : null;
+    const totalPages = typeof p.totalPages === 'number' ? p.totalPages : null;
+    if (page === null || pageSize === null || total === null || totalPages === null) {
+      return null;
+    }
+    return {
+      success: true,
+      data: obj.data as T[],
+      pagination: { page, pageSize, total, totalPages },
+    };
   }
   if (obj.success === false) {
     const err = obj.error;
@@ -110,9 +163,77 @@ export function createApiClient(config: ApiClientConfig) {
     }
   }
 
+  /**
+   * Audit F-6 / F-7 (2026-05-07 r5 PR Sigma): paginated GET that returns the
+   * `PaginatedApiResponse<T>` discriminated union directly, replacing the
+   * `as never as Promise<…>` double cast that previously had to live at every
+   * mobile hook. Use this instead of `get<T>` whenever the route returns a
+   * `paginatedResponse(...)` envelope (page/pageSize/total/totalPages).
+   */
+  async function requestPaginated<T>(
+    path: string,
+    options: FetchOptions = {},
+  ): Promise<PaginatedApiResponse<T>> {
+    const { method = 'GET', body, headers = {}, signal } = options;
+
+    const token = await config.getToken();
+    const orgId = config.getOrganizationId();
+
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...headers,
+    };
+
+    if (token) {
+      requestHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (orgId) {
+      requestHeaders['X-Organization-Id'] = orgId;
+    }
+
+    try {
+      const response = await fetch(`${config.baseUrl}${path}`, {
+        method,
+        headers: requestHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+        signal,
+      });
+
+      const raw: unknown = await response.json();
+      const envelope = parsePaginatedEnvelope<T>(raw);
+      if (!envelope) {
+        config.onError?.(
+          new Error(`Invalid paginated response shape from ${path}`),
+          { code: 'INVALID_RESPONSE', path },
+        );
+        return {
+          success: false,
+          error: {
+            code: 'INVALID_RESPONSE',
+            message: 'Server returned an unexpected response shape',
+          },
+        };
+      }
+      return envelope;
+    } catch (error) {
+      config.onError?.(error, { code: 'NETWORK_ERROR', path });
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : 'An unexpected error occurred',
+        },
+      };
+    }
+  }
+
   return {
     get: <T>(path: string, options?: Omit<FetchOptions, 'method' | 'body'>) =>
       request<T>(path, { ...options, method: 'GET' }),
+
+    getPaginated: <T>(path: string, options?: Omit<FetchOptions, 'method' | 'body'>) =>
+      requestPaginated<T>(path, { ...options, method: 'GET' }),
 
     post: <T>(path: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) =>
       request<T>(path, { ...options, method: 'POST', body }),

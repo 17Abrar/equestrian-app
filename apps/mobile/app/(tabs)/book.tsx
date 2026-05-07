@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useBookingSlots, useCreateBooking, useMe, type BookingSlot } from '@/hooks/use-bookings';
 import { usePayBooking } from '@/hooks/use-booking-payment';
+import { SlotListSkeleton } from '@/components/skeletons';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -118,15 +119,19 @@ export default function BookScreen() {
   const dateTo = toDateString(week.dates[6]!);
 
   const { data: meData } = useMe();
-  const memberId = meData?.success ? (meData.data as { memberId: string | null })?.memberId : null;
+  // Audit F-7 (2026-05-07 r5 PR Sigma): `useMe` is now typed
+  // `ApiResponse<MeData>`, so `meData.data.memberId` is well-typed.
+  const memberId = meData?.success ? meData.data.memberId : null;
 
   const { data: slotsData, isLoading } = useBookingSlots({ dateFrom, dateTo });
   const createBooking = useCreateBooking();
   const { pay, isPaying } = usePayBooking();
 
+  // /api/v1/booking-slots is non-paginated; `slotsData.data` is already
+  // typed as `BookingSlot[]` after narrowing.
   const slots: BookingSlot[] = useMemo(() => {
     if (!slotsData?.success) return [];
-    return (slotsData.data as BookingSlot[]) ?? [];
+    return slotsData.data;
   }, [slotsData]);
 
   const slotsForDate = slots.filter((s) => s.date === selectedDate);
@@ -141,12 +146,14 @@ export default function BookScreen() {
     });
 
     if (!result.success) {
-      const errorData = result as { error?: { message?: string } };
-      Alert.alert('Booking Failed', errorData.error?.message ?? 'Please try again.');
+      // Audit F-7 (2026-05-07 r5 PR Sigma): `result` is the discriminated
+      // `ApiResponse<Booking>`; the error branch is fully typed so the
+      // previous `as { error?: { message?: string } }` cast is gone.
+      Alert.alert('Booking Failed', result.error.message);
       return;
     }
 
-    const booking = result.data as { id: string; paymentStatus: string };
+    const booking = result.data;
 
     // Offline payment methods (cash, package credit, etc.) don't need the
     // hosted-checkout roundtrip — server returns `paid` or leaves it as
@@ -344,11 +351,8 @@ export default function BookScreen() {
             })}
           </Text>
 
-          {isLoading && (
-            <View className="items-center py-8">
-              <ActivityIndicator size="large" color="#374151" />
-            </View>
-          )}
+          {/* Loading — audit F-31: SlotCard-shaped skeletons */}
+          {isLoading && <SlotListSkeleton count={4} />}
 
           {!isLoading && slotsForDate.length === 0 && (
             <View className="items-center py-8">

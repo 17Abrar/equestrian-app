@@ -2,7 +2,16 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type CreateExpenseInput, type UpdateExpenseInput, type CreateCouponInput } from '@equestrian/shared/schemas';
-import { type ApiSuccessResponse, type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type ApiResponse,
+  type CouponDiscountType,
+  type CouponStatus,
+  type InvoiceStatus,
+  type PaginatedResponse,
+  type PaymentMethod,
+  type PaymentStatus,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
 interface FinanceOverview {
@@ -27,8 +36,10 @@ export interface Payment {
   id: string;
   amount: number;
   currency: string;
-  paymentMethod: string;
-  status: string;
+  // Audit F-56 (2026-05-07 r5 PR Sigma): swap bare `string` for the project
+  // enum unions from `@equestrian/shared/types`.
+  paymentMethod: PaymentMethod;
+  status: PaymentStatus;
   description: string | null;
   paidAt: string | null;
   createdAt: string;
@@ -38,7 +49,8 @@ export interface Payment {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
-  status: string;
+  // Audit F-56: invoice lifecycle is the InvoiceStatus enum.
+  status: InvoiceStatus;
   amount: number;
   totalAmount: number;
   currency: string;
@@ -53,13 +65,14 @@ export interface Invoice {
 export interface Coupon {
   id: string;
   code: string;
-  discountType: string;
+  // Audit F-56: discount type / status are project-defined enums.
+  discountType: CouponDiscountType;
   discountValue: number;
   maxDiscount: number | null;
   maxUses: number | null;
   maxUsesPerRider: number | null;
   usageCount: number;
-  status: string;
+  status: CouponStatus;
   startsAt: string | null;
   expiresAt: string | null;
 }
