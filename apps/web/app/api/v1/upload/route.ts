@@ -10,7 +10,7 @@ import {
   UPLOAD_FOLDER_PERMISSIONS,
   maxUploadSizeFor,
 } from '@/lib/storage';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -59,8 +59,8 @@ const uploadRequestSchema = z
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(uploadRequestSchema, body);
+      // Audit F-63 (2026-05-07 r5).
+      const data = await parseRequiredBody(request, uploadRequestSchema);
 
       const root = getFolderRoot(data.folder);
       if (!root) {

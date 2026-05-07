@@ -15,9 +15,20 @@ export async function listAudiences(
 ) {
   const offset = (page - 1) * pageSize;
   const where = eq(audiences.clubId, clubId);
+  // Audit F-32: explicit projection mirroring the AudienceRow component.
+  // `createdByMemberId` is not surfaced in the list view; drop it from
+  // the wire to keep the per-row payload minimal.
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: audiences.id,
+        clubId: audiences.clubId,
+        name: audiences.name,
+        description: audiences.description,
+        filters: audiences.filters,
+        createdAt: audiences.createdAt,
+        updatedAt: audiences.updatedAt,
+      })
       .from(audiences)
       .where(where)
       .orderBy(desc(audiences.createdAt))
@@ -30,6 +41,9 @@ export async function listAudiences(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+/** List-row shape for `listAudiences` (audit F-32). */
+export type AudienceListItem = Awaited<ReturnType<typeof listAudiences>>['items'][number];
 
 export async function getAudienceById(clubId: string, audienceId: string) {
   const rows = await db

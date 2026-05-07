@@ -15,7 +15,8 @@ import { bookings as bookingsTable, bookingSlots } from '@equestrian/db/schema';
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput, validateUuidParam } from '@/lib/api-utils';
+  parseRequiredBody,
+  validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 import { sendTriggeredEmail } from '@/lib/email';
@@ -64,8 +65,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { bookingId } = await params;
       validateUuidParam('bookingId', bookingId);
-      const body = await request.json();
-      const data = validateInput(cancelBookingSchema, body);
+      // Audit F-63 (2026-05-07 r5): migrated from `request.json()` to
+      // `parseRequiredBody` for the post-text Content-Length recheck +
+      // INVALID_JSON 400 mapping.
+      const data = await parseRequiredBody(request, cancelBookingSchema);
 
       // Determine permission level
       const canCancelAny = hasPermission(ctx.orgRole, 'bookings:update');

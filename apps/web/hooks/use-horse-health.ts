@@ -14,18 +14,22 @@ import { fetchJson } from '@/lib/fetch-json';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
+// Audit F-32 (2026-05-07 r5): list-row shapes. The query layer
+// (`getHealthRecords`, `getMedications`) projects narrowly and OMITS
+// the encrypted PHI fields (`description`/`diagnosis`/`treatment` on
+// health records, `notes` on medications). Mirroring the API shape
+// here prevents consumers from reaching into those fields and getting
+// `undefined` at runtime. Detail GETs that re-include them would use
+// a wider type — none exists today (no `/health/[recordId]` route).
 export interface HealthRecord {
   id: string;
   horseId: string;
   recordType: string;
   title: string;
-  description: string | null;
   date: string;
   nextDueDate: string | null;
   vetName: string | null;
   vetClinic: string | null;
-  diagnosis: string | null;
-  treatment: string | null;
   cost: number | null;
   recoveryTimeDays: number | null;
   followUpNeeded: boolean;
@@ -47,7 +51,6 @@ export interface Medication {
   endDate: string | null;
   isActive: boolean;
   prescribedBy: string | null;
-  notes: string | null;
   createdAt: string;
 }
 

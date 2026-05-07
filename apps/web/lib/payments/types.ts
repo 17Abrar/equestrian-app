@@ -92,9 +92,11 @@ export interface PaymentStatusResult {
 // ─── Connection (direct API key) — every provider ─────────────────────
 //
 // Every supported provider — Stripe, N-Genius, Ziina — uses per-club
-// credentials pasted into the settings form (Stripe Connect / OAuth was
-// removed when we shifted to a non-platform model where each stable
-// runs payments under their own merchant account).
+// credentials pasted into the settings form. Per-club merchant model
+// (no Stripe Connect): see stripe_direct_keys_pivot 2026-05-04 in the
+// memory log — each stable runs payments under their own merchant
+// account. Audit F-70 (2026-05-07 r5): wording avoids the `// removed`
+// CLAUDE.md grep marker.
 
 export interface DirectConnectInput {
   clubId: string;

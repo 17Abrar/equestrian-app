@@ -254,6 +254,15 @@ export async function parseOptionalBody<S extends ZodTypeAny>(
  * schema (no empty-body fallback). Use for routes that mandate a body
  * payload. Throws PayloadTooLargeError when the request body exceeds
  * MAX_REQUEST_BODY_BYTES; withAuth catches it and returns 413.
+ *
+ * Audit F-63 (2026-05-07 r5): a `no-restricted-syntax` ESLint rule in
+ * `tooling/eslint/nextjs.js` blocks new `request.json()` calls inside
+ * `apps/web/app/api/v1/**` so future routes land in this helper. ~50
+ * legacy routes still call `request.json()` directly; the migration
+ * is mechanical (replace `const body = await request.json(); const
+ * data = validateInput(schema, body);` with `const data = await
+ * parseRequiredBody(request, schema);`) but high-blast-radius for one
+ * PR. Migrate as you touch each route.
  */
 export async function parseRequiredBody<S extends ZodTypeAny>(
   request: Request,

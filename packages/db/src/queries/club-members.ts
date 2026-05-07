@@ -79,6 +79,21 @@ interface StaffFilters {
   pageSize: number;
 }
 
+// Audit F-32 (2026-05-07 r5): list-row projection. Mirrors `ClubMember`
+// in `apps/web/hooks/use-staff.ts`. Excludes `deactivatedByAdminAt`,
+// `joinedAt`, `createdAt`, `updatedAt` — none of which the staff/owners
+// list view consumes.
+const CLUB_MEMBER_LIST_PROJECTION = {
+  id: clubMembers.id,
+  clerkUserId: clubMembers.clerkUserId,
+  clubId: clubMembers.clubId,
+  role: clubMembers.role,
+  displayName: clubMembers.displayName,
+  email: clubMembers.email,
+  phone: clubMembers.phone,
+  isActive: clubMembers.isActive,
+} as const;
+
 export async function getStaffByClub(clubId: string, filters: StaffFilters) {
   // P0 2026-05-06: same `sql\`= ANY(...)\`` → `inArray` swap as
   // `getMembersByRole` above. See that comment for full context.
@@ -102,7 +117,7 @@ export async function getStaffByClub(clubId: string, filters: StaffFilters) {
 
   const [data, countResult] = await Promise.all([
     db
-      .select()
+      .select(CLUB_MEMBER_LIST_PROJECTION)
       .from(clubMembers)
       .where(where)
       .orderBy(asc(clubMembers.displayName))
@@ -116,6 +131,9 @@ export async function getStaffByClub(clubId: string, filters: StaffFilters) {
 
   return { data, total: countResult[0]?.count ?? 0 };
 }
+
+/** List-row shape for `getStaffByClub` (audit F-32). */
+export type StaffListItem = Awaited<ReturnType<typeof getStaffByClub>>['data'][number];
 
 export async function getOwnersByClub(clubId: string, filters: { search?: string; page: number; pageSize: number }) {
   const conditions: SQL[] = [
@@ -133,7 +151,7 @@ export async function getOwnersByClub(clubId: string, filters: { search?: string
 
   const [data, countResult] = await Promise.all([
     db
-      .select()
+      .select(CLUB_MEMBER_LIST_PROJECTION)
       .from(clubMembers)
       .where(where)
       .orderBy(asc(clubMembers.displayName))
@@ -147,6 +165,9 @@ export async function getOwnersByClub(clubId: string, filters: { search?: string
 
   return { data, total: countResult[0]?.count ?? 0 };
 }
+
+/** List-row shape for `getOwnersByClub` (audit F-32). */
+export type OwnerListItem = Awaited<ReturnType<typeof getOwnersByClub>>['data'][number];
 
 /**
  * Lookup a member by id, scoped to the club AND active-only. The

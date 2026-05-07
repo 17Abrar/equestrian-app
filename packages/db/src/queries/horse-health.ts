@@ -13,6 +13,14 @@ import { horses } from '../schema/horses';
 import { clubs } from '../schema/clubs';
 import { decryptFields, encryptFields } from '../crypto';
 
+// Audit F-32 (2026-05-07 r5): list-row projections. Each list query
+// below selects only the columns the dashboard table consumes, mirroring
+// the F-8 (round 4) HorseListItem pattern. PHI fields encrypted at rest
+// (`description` / `diagnosis` / `treatment` on health records, `notes`
+// on medications) are intentionally OMITTED from list projections —
+// list views never need them, and decrypting per-row across a paginated
+// list wastes CPU. Detail GETs continue to read + decrypt the full row.
+
 /**
  * Soft-delete gate for every read/write in this file (audit AI-22 / KP-1).
  * After softDeleteHorse, the horse_health_records / medications / etc. rows
@@ -94,9 +102,32 @@ export async function getHealthRecords(
 
   const where = and(...conditions);
   const offset = (page - 1) * pageSize;
+  // Audit F-32: narrow projection. The list view (health-tab.tsx)
+  // renders date/type/title/vetName/cost/followUpNeeded/followUpDate.
+  // Encrypted PHI columns (`description`, `diagnosis`, `treatment`)
+  // are intentionally omitted — fetch via the detail GET when needed.
   const [rows, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horseHealthRecords.id,
+        clubId: horseHealthRecords.clubId,
+        horseId: horseHealthRecords.horseId,
+        recordType: horseHealthRecords.recordType,
+        title: horseHealthRecords.title,
+        date: horseHealthRecords.date,
+        nextDueDate: horseHealthRecords.nextDueDate,
+        vetName: horseHealthRecords.vetName,
+        vetClinic: horseHealthRecords.vetClinic,
+        cost: horseHealthRecords.cost,
+        recoveryTimeDays: horseHealthRecords.recoveryTimeDays,
+        followUpNeeded: horseHealthRecords.followUpNeeded,
+        followUpDate: horseHealthRecords.followUpDate,
+        batchNumber: horseHealthRecords.batchNumber,
+        productUsed: horseHealthRecords.productUsed,
+        documentUrls: horseHealthRecords.documentUrls,
+        createdAt: horseHealthRecords.createdAt,
+        updatedAt: horseHealthRecords.updatedAt,
+      })
       .from(horseHealthRecords)
       .where(where)
       .orderBy(desc(horseHealthRecords.date))
@@ -109,10 +140,17 @@ export async function getHealthRecords(
   ]);
 
   return {
-    items: rows.map((row) => decryptFields(row, HEALTH_ENCRYPTED_FIELDS)),
+    items: rows,
     total: count[0]?.count ?? 0,
   };
 }
+
+/**
+ * List-row shape for `getHealthRecords` (audit F-32). Encrypted PHI
+ * fields (`description`, `diagnosis`, `treatment`) are omitted from
+ * the list — consumers that need them must fetch the single record.
+ */
+export type HealthRecordListItem = Awaited<ReturnType<typeof getHealthRecords>>['items'][number];
 
 export async function createHealthRecord(clubId: string, horseId: string, data: HealthRecordCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
@@ -163,9 +201,30 @@ export async function getMedications(
 
   const where = and(...conditions);
   const offset = (page - 1) * pageSize;
+  // Audit F-32: narrow projection. The list view (health-tab.tsx
+  // MedicationsSection) renders medicationName/dosage/frequency/
+  // timeOfDay/prescribedBy/isActive. The encrypted PHI column `notes`
+  // is intentionally omitted from the list response — list rows never
+  // surface it, and decrypting per-row across a paginated list wastes
+  // CPU. Detail GETs (currently no caller, but the route exists for
+  // future use) would re-add it via a single-row query.
   const [rows, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horseMedications.id,
+        clubId: horseMedications.clubId,
+        horseId: horseMedications.horseId,
+        medicationName: horseMedications.medicationName,
+        dosage: horseMedications.dosage,
+        frequency: horseMedications.frequency,
+        timeOfDay: horseMedications.timeOfDay,
+        startDate: horseMedications.startDate,
+        endDate: horseMedications.endDate,
+        isActive: horseMedications.isActive,
+        prescribedBy: horseMedications.prescribedBy,
+        createdAt: horseMedications.createdAt,
+        updatedAt: horseMedications.updatedAt,
+      })
       .from(horseMedications)
       .where(where)
       .orderBy(desc(horseMedications.createdAt))
@@ -178,10 +237,16 @@ export async function getMedications(
   ]);
 
   return {
-    items: rows.map((row) => decryptFields(row, MEDICATION_ENCRYPTED_FIELDS)),
+    items: rows,
     total: count[0]?.count ?? 0,
   };
 }
+
+/**
+ * List-row shape for `getMedications` (audit F-32). Encrypted PHI
+ * field `notes` is omitted from the list.
+ */
+export type MedicationListItem = Awaited<ReturnType<typeof getMedications>>['items'][number];
 
 export async function createMedication(clubId: string, horseId: string, data: MedicationCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
@@ -294,9 +359,26 @@ export async function getFeedingPlans(
     eq(horseFeedingPlans.horseId, horseId),
   );
   const offset = (page - 1) * pageSize;
+  // Audit F-32: explicit projection mirroring feeding-tab.tsx
+  // consumption (mealName, feedType, quantityKg, supplements, notes,
+  // timeOfDay). No PHI fields here so the projection stays close to
+  // the full row, but we still avoid `db.select()` for change-safety
+  // and to match the F-8 pattern.
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horseFeedingPlans.id,
+        clubId: horseFeedingPlans.clubId,
+        horseId: horseFeedingPlans.horseId,
+        mealName: horseFeedingPlans.mealName,
+        feedType: horseFeedingPlans.feedType,
+        quantityKg: horseFeedingPlans.quantityKg,
+        supplements: horseFeedingPlans.supplements,
+        notes: horseFeedingPlans.notes,
+        timeOfDay: horseFeedingPlans.timeOfDay,
+        createdAt: horseFeedingPlans.createdAt,
+        updatedAt: horseFeedingPlans.updatedAt,
+      })
       .from(horseFeedingPlans)
       .where(where)
       .orderBy(asc(horseFeedingPlans.timeOfDay))
@@ -309,6 +391,9 @@ export async function getFeedingPlans(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+/** List-row shape for `getFeedingPlans` (audit F-32). */
+export type FeedingPlanListItem = Awaited<ReturnType<typeof getFeedingPlans>>['items'][number];
 
 export async function createFeedingPlan(clubId: string, horseId: string, data: FeedingPlanCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
@@ -376,9 +461,22 @@ export async function getExerciseSchedules(
     eq(horseExerciseSchedules.horseId, horseId),
   );
   const offset = (page - 1) * pageSize;
+  // Audit F-32: explicit projection mirroring exercise-tab.tsx
+  // consumption.
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horseExerciseSchedules.id,
+        clubId: horseExerciseSchedules.clubId,
+        horseId: horseExerciseSchedules.horseId,
+        dayOfWeek: horseExerciseSchedules.dayOfWeek,
+        exerciseType: horseExerciseSchedules.exerciseType,
+        durationMinutes: horseExerciseSchedules.durationMinutes,
+        intensity: horseExerciseSchedules.intensity,
+        notes: horseExerciseSchedules.notes,
+        createdAt: horseExerciseSchedules.createdAt,
+        updatedAt: horseExerciseSchedules.updatedAt,
+      })
       .from(horseExerciseSchedules)
       .where(where)
       .orderBy(asc(horseExerciseSchedules.dayOfWeek))
@@ -391,6 +489,9 @@ export async function getExerciseSchedules(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+/** List-row shape for `getExerciseSchedules` (audit F-32). */
+export type ExerciseScheduleListItem = Awaited<ReturnType<typeof getExerciseSchedules>>['items'][number];
 
 export async function createExerciseSchedule(clubId: string, horseId: string, data: ExerciseCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
@@ -458,9 +559,23 @@ export async function getDocuments(
 
   const where = and(...conditions);
   const offset = (page - 1) * pageSize;
+  // Audit F-32: explicit projection mirroring documents-tab.tsx
+  // (fileName, fileUrl, fileType, category, description).
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horseDocuments.id,
+        clubId: horseDocuments.clubId,
+        horseId: horseDocuments.horseId,
+        fileName: horseDocuments.fileName,
+        fileUrl: horseDocuments.fileUrl,
+        fileSizeBytes: horseDocuments.fileSizeBytes,
+        fileType: horseDocuments.fileType,
+        category: horseDocuments.category,
+        description: horseDocuments.description,
+        uploadedByMemberId: horseDocuments.uploadedByMemberId,
+        createdAt: horseDocuments.createdAt,
+      })
       .from(horseDocuments)
       .where(where)
       .orderBy(desc(horseDocuments.createdAt))
@@ -473,6 +588,9 @@ export async function getDocuments(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+/** List-row shape for `getDocuments` (audit F-32). */
+export type HorseDocumentListItem = Awaited<ReturnType<typeof getDocuments>>['items'][number];
 
 export async function createDocument(clubId: string, horseId: string, data: DocumentCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;

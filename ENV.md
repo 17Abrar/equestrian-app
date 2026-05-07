@@ -135,6 +135,24 @@ OAuth flow. Audit AI-* (2026-05-04 pivot from Connect).
   `X-Hmac-Signature` header. Configure the webhook in Ziina's business
   dashboard pointing at `https://cavaliq.com/api/webhooks/ziina-platform`.
 
+### `PLATFORM_ZIINA_TEST_MODE`
+- **Where:** Worker (`apps/web/lib/billing/platform-ziina.ts`)
+- **When:** optional, **staging / preview only** (set `true`); leave
+  unset or `false` in production. Audit F-10 (2026-05-07 r5).
+- **Why:** drives the Ziina sandbox `test` flag on every platform
+  payment-intent create. Without it, a staging worker provisioned with
+  a sandbox `PLATFORM_ZIINA_API_KEY` will issue *live* intents that
+  Ziina will either reject (best case) or mis-route (worst case). The
+  prod env-check (`assertProductionEnvConfigured`) emits a structured
+  warning if `PLATFORM_ZIINA_TEST_MODE === 'true' && NODE_ENV ===
+  'production'` so a staging template that leaks into prod fails loud.
+- **How to set on staging:**
+  ```bash
+  cd apps/web
+  npx wrangler secret put PLATFORM_ZIINA_TEST_MODE --env staging
+  # paste: true
+  ```
+
 ---
 
 ## CORS
@@ -220,7 +238,16 @@ OAuth flow. Audit AI-* (2026-05-04 pivot from Connect).
 ### `ENCRYPTION_KEY`
 - **Where:** Worker (`lib/crypto.ts`)
 - **When:** required in dev and prod (must be exactly 32 bytes,
-  base64-encoded)
+  base64-encoded). Audit F-62 (2026-05-07 r5): the
+  `assertEncryptionKeyConfigured` boot probe is enforced at request
+  time, NOT at instrumentation startup — leaving this unset locally
+  doesn't crash the dev server, but the first request that touches
+  encrypted-at-rest data (opening a horse health tab, creating a
+  medication, paying a booking, viewing rider medical notes) will
+  throw with a misleading "secret not configured" error. **Set this
+  for local dev whenever you're working on health, payments, or
+  rider-profile features**, even if you don't strictly need it for
+  the rest of the surface. Generate with `openssl rand -hex 32`.
 - **Why:** AES-256-GCM key for field-level encryption of payment
   credentials, rider medical notes, and other sensitive columns
   (`v1:` versioned ciphertext). Rotate via the runbook in

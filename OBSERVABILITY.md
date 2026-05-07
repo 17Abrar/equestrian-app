@@ -48,6 +48,10 @@ Route to on-call (PagerDuty → phone).
 | `booking_refund_ledger_conflict` | `> 0 events / hour` | Provider refunded the money but our ledger failed to record. Means two admins clicked refund at the same time — rare enough that any occurrence warrants a manual reconcile against the provider dashboard. |
 | `stripe_oauth_state_invalid` | `> 5 events / 5 min` | Could be users bouncing back from expired Stripe consent, or an attacker fuzzing the callback. Spike → investigate. |
 | `livery_cron_bad_secret` | `> 0 events / 5 min` | Someone is hitting the livery-billing cron with the wrong / missing `x-cron-secret`. Could be a stale Cloudflare scheduled trigger from a previous deploy, internet noise, or active fuzzing. Investigate the IP from the log payload before assuming it's benign. |
+| `platform_billing_cron_bad_secret` | `> 0 events / 5 min` | Sibling of `livery_cron_bad_secret` for the platform-subscription cron (`/api/cron/platform-billing`). Same triage. Audit F-54, 2026-05-07 r5. |
+| `booking_reminder_cron_bad_secret` | `> 0 events / 5 min` | Sibling of `livery_cron_bad_secret` for the hourly 24h-before-lesson cron (`/api/cron/booking-reminders`). Same triage. Audit F-54, 2026-05-07 r5. |
+| `horse_care_reminder_cron_bad_secret` | `> 0 events / 5 min` | Sibling of `livery_cron_bad_secret` for the daily 03:00 UTC vaccination/farrier/dental/insurance/medication-end cron (`/api/cron/horse-care-reminders`). Same triage. Audit F-54, 2026-05-07 r5. |
+| `cron_self_check_bad_secret` | `> 0 events / 5 min` | Sibling of `livery_cron_bad_secret` for the cron self-check probe (`/api/cron/_self-check`). Same triage. Audit F-54, 2026-05-07 r5. |
 
 ## Warning — investigate next business day
 

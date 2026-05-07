@@ -448,9 +448,30 @@ export async function getLiveryInvoicesByHorse(
     eq(liveryInvoices.horseId, horseId),
   ];
   const where = and(...conditions);
+  // Audit F-32: explicit projection mirroring livery-tab.tsx
+  // consumption. Drops `lastReminderAt`, `reminderCount`, and
+  // `updatedAt` — admin UI doesn't surface them on the per-horse list.
   const [items, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: liveryInvoices.id,
+        clubId: liveryInvoices.clubId,
+        horseId: liveryInvoices.horseId,
+        ownerMemberId: liveryInvoices.ownerMemberId,
+        invoiceNumber: liveryInvoices.invoiceNumber,
+        periodStart: liveryInvoices.periodStart,
+        periodEnd: liveryInvoices.periodEnd,
+        amountMinorUnits: liveryInvoices.amountMinorUnits,
+        currency: liveryInvoices.currency,
+        status: liveryInvoices.status,
+        dueDate: liveryInvoices.dueDate,
+        paidAt: liveryInvoices.paidAt,
+        cancelledAt: liveryInvoices.cancelledAt,
+        paymentProvider: liveryInvoices.paymentProvider,
+        providerPaymentId: liveryInvoices.providerPaymentId,
+        payLink: liveryInvoices.payLink,
+        createdAt: liveryInvoices.createdAt,
+      })
       .from(liveryInvoices)
       .where(where)
       .orderBy(desc(liveryInvoices.periodStart))
@@ -463,6 +484,11 @@ export async function getLiveryInvoicesByHorse(
   ]);
   return { items, total: count[0]?.count ?? 0 };
 }
+
+/** List-row shape for `getLiveryInvoicesByHorse` (audit F-32). */
+export type LiveryInvoiceByHorseListItem = Awaited<
+  ReturnType<typeof getLiveryInvoicesByHorse>
+>['items'][number];
 
 /** Owner-facing listing for the rider portal. */
 export async function getLiveryInvoicesOwnedByUser(

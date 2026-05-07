@@ -271,6 +271,18 @@ export const horseCareReminderSends = pgTable(
   ],
 );
 
+/**
+ * Audit F-64 (2026-05-07 r5): write-once horse-document table. A
+ * document upload is the file's permanent record — the row is never
+ * mutated after insert. To "rename" a file the consumer uploads a new
+ * row and deletes the old one (or revokes the old fileUrl in R2);
+ * to "edit" the description the consumer creates a new row and
+ * deletes the old one. There is intentionally no `updated_at` column —
+ * matches the same justification carried by `horse_medication_logs`
+ * and `horse_care_reminder_sends` above. The CLAUDE.md "every table
+ * carries created_at + updated_at" rule has an explicit carve-out for
+ * write-once tables; this is one of them.
+ */
 export const horseDocuments = pgTable('horse_documents', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')

@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateHorseSchema } from '@equestrian/shared/schemas';
 import { getHorseById, updateHorse, softDeleteHorse } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -43,8 +43,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return withAuth(async (ctx) => {
     const { horseId } = await params;
     validateUuidParam('horseId', horseId);
-    const body = await request.json();
-    const data = validateInput(updateHorseSchema, body);
+    // Audit F-63 (2026-05-07 r5).
+    const data = await parseRequiredBody(request, updateHorseSchema);
 
     const canEditAny = hasPermission(ctx.orgRole, 'horses:update');
     const canEditOwn = hasPermission(ctx.orgRole, 'horses:update_own');
