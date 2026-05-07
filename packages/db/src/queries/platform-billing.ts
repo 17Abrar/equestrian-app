@@ -338,9 +338,17 @@ export async function getPlatformInvoiceForEmail(clubId: string, invoiceId: stri
   return rows[0] ?? null;
 }
 
-/** Set-or-update the provider reference on an existing platform invoice
- *  row — used when the cron creates an invoice without a pay link first
- *  (Ziina was unreachable) and a follow-up pass attaches one later. */
+/**
+ * Set-or-update the provider reference on an existing platform invoice
+ * row — used when the cron creates an invoice without a pay link first
+ * (Ziina was unreachable) and a follow-up pass attaches one later.
+ *
+ * Audit F-2 (2026-05-07 r5): CAS guard mirrors `setBookingPaymentRef`
+ * and the livery counterpart. The WHERE refuses to overwrite an
+ * existing `provider_payment_id` with a different value, so a
+ * reminder-regeneration race that fires AFTER the owner paid the prior
+ * intent doesn't orphan that intent's webhook resolution.
+ */
 export async function setPlatformInvoiceProviderRef(
   clubId: string,
   invoiceId: string,
@@ -360,6 +368,8 @@ export async function setPlatformInvoiceProviderRef(
       and(
         eq(platformSubscriptionInvoices.id, invoiceId),
         eq(platformSubscriptionInvoices.clubId, clubId),
+        // Don't overwrite a different intent — reminder regeneration race.
+        sql`(${platformSubscriptionInvoices.providerPaymentId} IS NULL OR ${platformSubscriptionInvoices.providerPaymentId} = ${providerPaymentId})`,
         // Don't overwrite a terminal-state row's provider ref.
         inArray(platformSubscriptionInvoices.status, ['pending', 'overdue']),
       ),

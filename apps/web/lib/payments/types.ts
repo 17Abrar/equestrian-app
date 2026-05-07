@@ -169,6 +169,21 @@ export interface WebhookEvent {
    * total. When `refundAmountMinor` is also set on the same event,
    * the helper prefers the delta and ignores this field. */
   refundCumulativeMinor?: number;
+  /**
+   * Audit F-22 / F-24 (2026-05-07 r5): description / message text the
+   * provider echoes in the webhook body. The booking-payment route
+   * stamps `[booking:UUID]` into the description at create-time
+   * (`apps/web/app/api/v1/bookings/[bookingId]/payment/route.ts:207`)
+   * as defense-in-depth for the instant-succeed race window where the
+   * webhook arrives before `setBookingPaymentRef` writes the
+   * `provider_payment_id` to the booking row. When neither the
+   * `provider_payment_id` lookup NOR the `metadata.bookingId` fallback
+   * resolve a booking, the webhook helper parses this string for the
+   * `[booking:UUID]` marker as a last-ditch recovery — N-Genius and
+   * Ziina don't carry metadata, so this is the only signal that ties
+   * a fast-succeed event back to its booking. Stripe's metadata path
+   * remains the primary; this is belt-and-braces. */
+  descriptionForRecovery?: string;
   data: unknown;
 }
 
