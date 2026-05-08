@@ -2,7 +2,12 @@ import { type NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { updateCompetitionSchema } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
-import { getCompetitionById, updateCompetition, deleteCompetition } from '@equestrian/db/queries';
+import {
+  getCompetitionById,
+  updateCompetition,
+  deleteCompetition,
+  getArenaById,
+} from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
@@ -34,6 +39,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { competitionId } = await params;
       validateUuidParam('competitionId', competitionId);
       const data = await parseRequiredBody(request, updateCompetitionSchema);
+
+      // Audit follow-up (2026-05-08): refuse soft-deleted arenas — same
+      // rationale as the POST sibling. Composite FK only catches
+      // cross-tenant; an in-club deactivated arena still satisfies it.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId, {
+          activeOnly: true,
+        });
+        if (!arena) {
+          return errorResponse(
+            'INVALID_ARENA',
+            'Arena not found, or has been deactivated.',
+            400,
+          );
+        }
+      }
 
       // Convert registrationDeadline from datetime-local to UTC using club
       // timezone. Detect by exact datetime-local regex (YYYY-MM-DDTHH:MM

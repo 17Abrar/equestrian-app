@@ -29,6 +29,13 @@ import {
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 import { sendTriggeredEmail } from '@/lib/email';
+import {
+  fingerprintBody,
+  getIdempotencyKey,
+  readIdempotency,
+  writeIdempotency,
+} from '@/lib/idempotency';
+import { NextResponse } from 'next/server';
 import { BookingConfirmation } from '@equestrian/email-templates/booking-confirmation';
 
 export async function GET(request: NextRequest) {
@@ -130,6 +137,36 @@ export async function POST(request: NextRequest) {
 
       const data = await parseRequiredBody(request, createBookingSchema);
 
+      // Audit follow-up (2026-05-08, R-5): Idempotency-Key dedup. The
+      // unique-rider-slot DB index already prevents duplicate bookings
+      // from a network-retry, but the retry surfaces ALREADY_BOOKED
+      // (409) without the original booking id — clients can't reconcile.
+      // With Idempotency-Key, the retry returns the original 201 +
+      // booking. Mismatch on the same key (different body) → 422 so
+      // accidental key reuse doesn't return someone else's response.
+      const idempotencyKey = getIdempotencyKey(request);
+      const bodyFingerprint = idempotencyKey ? fingerprintBody(data) : null;
+
+      if (idempotencyKey && bodyFingerprint) {
+        const lookup = await readIdempotency(
+          'bookings:create',
+          ctx.clubId,
+          ctx.memberId ?? null,
+          idempotencyKey,
+          bodyFingerprint,
+        );
+        if (lookup.kind === 'hit') {
+          return NextResponse.json(lookup.body, { status: lookup.status });
+        }
+        if (lookup.kind === 'mismatch') {
+          return errorResponse(
+            'IDEMPOTENCY_KEY_MISMATCH',
+            'Idempotency-Key was previously used with a different request body. Use a fresh key.',
+            422,
+          );
+        }
+      }
+
       // Audit CRIT-3 (2026-05-05): the booking row's `payment_method` enum
       // declares `'package_credit'`, but no code anywhere decrements
       // `rider_packages.remaining_credits`. Until the consumption path
@@ -180,22 +217,13 @@ export async function POST(request: NextRequest) {
         // Verify the named rider is a member of *this* club. The
         // bookings.rider_member_id FK only points at club_members.id (no
         // compound (id, club_id) constraint), so a forged UUID from Club B
-        // would otherwise insert cleanly.
+        // would otherwise insert cleanly. `getMemberById` filters
+        // `is_active = true`, so a deactivated rider falls into the same
+        // RIDER_NOT_FOUND branch — by design (audit F-30): we don't leak
+        // active/inactive status to a booker who forged a riderMemberId.
         const targetRider = await getMemberById(ctx.clubId, data.riderMemberId);
         if (!targetRider) {
           return errorResponse('RIDER_NOT_FOUND', 'Rider is not a member of this club', 404);
-        }
-        // Audit MED (2026-05-05 pass 2): `getMemberById` returns rows
-        // regardless of `isActive`. Booking lessons for a deactivated
-        // rider produced a confirmed booking the rider couldn't see and
-        // bypassed the deactivate-flow's intent. Sibling check in the
-        // medication-logs route already filters this; mirror it here.
-        if (!targetRider.isActive) {
-          return errorResponse(
-            'RIDER_INACTIVE',
-            'This rider is deactivated and cannot be booked. Reactivate the rider first.',
-            422,
-          );
         }
 
         if (!canBookForAnyone) {
@@ -490,6 +518,25 @@ export async function POST(request: NextRequest) {
           });
         }
       });
+
+      // Cache the success response so a network-retry with the same
+      // Idempotency-Key returns the original 201 + booking id, instead
+      // of the unique-index's 409 ALREADY_BOOKED (which has no booking
+      // id for the client to reconcile against). Errors are
+      // intentionally NOT cached — the underlying state may have
+      // changed (e.g. another rider freed a slot) and the retry should
+      // observe the new reality.
+      if (idempotencyKey && bodyFingerprint) {
+        await writeIdempotency(
+          'bookings:create',
+          ctx.clubId,
+          ctx.memberId ?? null,
+          idempotencyKey,
+          bodyFingerprint,
+          201,
+          { success: true, data: booking },
+        );
+      }
 
       return successResponse(booking, 201);
     },

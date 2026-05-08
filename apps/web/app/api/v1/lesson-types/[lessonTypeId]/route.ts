@@ -1,6 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { updateLessonTypeSchema } from '@equestrian/shared/schemas';
-import { getLessonTypeById, updateLessonType, deleteLessonType } from '@equestrian/db/queries';
+import {
+  getLessonTypeById,
+  updateLessonType,
+  deleteLessonType,
+  getArenaById,
+} from '@equestrian/db/queries';
 import { withAuth,
   successResponse,
   errorResponse,
@@ -47,6 +52,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { lessonTypeId } = await params;
       validateUuidParam('lessonTypeId', lessonTypeId);
       const data = await parseRequiredBody(request, updateLessonTypeSchema);
+
+      // Audit follow-up (2026-05-08): see lesson-types/route.ts POST.
+      // Soft-deleted arenas in the same club still satisfy the composite
+      // FK — refuse the update at the API boundary.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId, {
+          activeOnly: true,
+        });
+        if (!arena) {
+          return errorResponse(
+            'INVALID_ARENA',
+            'Arena not found, or has been deactivated.',
+            400,
+          );
+        }
+      }
 
       const lessonType = await updateLessonType(ctx.clubId, lessonTypeId, data);
 
