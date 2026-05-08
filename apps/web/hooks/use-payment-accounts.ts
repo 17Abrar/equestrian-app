@@ -1,26 +1,18 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type PaymentAccount,
+  type PaymentAccountStatus,
+  type PaymentProviderName,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-export type PaymentProviderName = 'stripe' | 'n_genius' | 'ziina';
-export type PaymentAccountStatus = 'pending' | 'connected' | 'disabled' | 'error';
-
-export interface PaymentAccount {
-  id: string;
-  clubId: string;
-  provider: PaymentProviderName;
-  status: PaymentAccountStatus;
-  isActive: boolean;
-  externalAccountId: string | null;
-  metadata: unknown;
-  lastError: string | null;
-  connectedAt: string | null;
-  disconnectedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): `PaymentAccount`,
+// `PaymentProviderName`, `PaymentAccountStatus`, and `BookingPaymentResult`
+// are now in `packages/shared/src/types/responses/payment-accounts.ts`.
+export type { PaymentAccount, PaymentAccountStatus, PaymentProviderName };
 
 export function usePaymentAccounts() {
   return useQuery({

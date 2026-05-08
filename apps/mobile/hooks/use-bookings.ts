@@ -1,50 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { type Booking, type BookingSlot } from '@equestrian/shared/types';
 import { useApiClient } from '@/lib/api';
 
-// ─── Types ────────────────────────────────────────────────────────────
-
-export interface BookingSlot {
-  id: string;
-  clubId: string;
-  lessonTypeId: string;
-  arenaId: string | null;
-  coachMemberId: string | null;
-  date: string;
-  startTime: string;
-  endTime: string;
-  maxRiders: number;
-  currentRiders: number;
-  isCancelled: boolean;
-  createdAt: string;
-  lessonTypeName: string;
-  lessonTypeType: string;
-  lessonTypeColor: string | null;
-  lessonTypePrice: number;
-  lessonTypeCurrency: string;
-  arenaName: string | null;
-  coachName: string | null;
-}
-
-export interface Booking {
-  id: string;
-  clubId: string;
-  slotId: string;
-  riderMemberId: string;
-  horseId: string | null;
-  status: string;
-  paymentStatus: string;
-  amount: number | null;
-  currency: string;
-  createdAt: string;
-  slotDate: string;
-  slotStartTime: string;
-  slotEndTime: string;
-  lessonTypeName: string;
-  lessonTypeType: string;
-  arenaName: string | null;
-  riderName: string | null;
-  horseName: string | null;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): mobile previously declared trimmed
+// `Booking` and `BookingSlot` shapes locally with `status: string` etc.
+// Both apps now narrow against the consolidated DTOs from
+// `packages/shared/src/types/responses/bookings.ts`.
+export type { Booking, BookingSlot };
 
 interface MeData {
   memberId: string | null;

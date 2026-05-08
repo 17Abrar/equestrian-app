@@ -1,39 +1,16 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import type { PaymentProviderName } from './use-payment-accounts';
+import {
+  type ApiSuccessResponse,
+  type BookingPaymentResult,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-/**
- * Payload returned from POST /api/v1/bookings/[id]/payment. The `flow`
- * discriminates the union: Stripe carries a `clientSecret` + the club's
- * `publishableKey` for inline Elements; N-Genius and Ziina carry a
- * `paymentUrl` for redirect.
- *
- * `publishableKey` is on the inline variant because each club runs Stripe
- * under their own merchant account (no platform Connect), so the dialog
- * must call `loadStripe(publishableKey)` with the per-club key returned
- * here — there is no `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` to fall back to.
- */
-export type BookingPaymentResult =
-  | {
-      bookingId: string;
-      provider: PaymentProviderName;
-      providerPaymentId: string;
-      flow: 'inline';
-      clientSecret: string;
-      publishableKey: string;
-      status: 'pending' | 'requires_action' | 'succeeded' | 'failed' | 'cancelled';
-    }
-  | {
-      bookingId: string;
-      provider: PaymentProviderName;
-      providerPaymentId: string;
-      flow: 'redirect';
-      paymentUrl: string;
-      status: 'pending' | 'requires_action' | 'succeeded' | 'failed' | 'cancelled';
-    };
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): `BookingPaymentResult` is now in
+// `packages/shared/src/types/responses/payment-accounts.ts`. Re-exported here
+// so existing component imports keep working.
+export type { BookingPaymentResult };
 
 export function usePaymentForBooking() {
   const queryClient = useQueryClient();
