@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { useBookingSlots, useCreateBooking, useMe, type BookingSlot } from '@/hooks/use-bookings';
 import { usePayBooking } from '@/hooks/use-booking-payment';
 import { SlotListSkeleton } from '@/components/skeletons';
@@ -155,13 +156,22 @@ export default function BookScreen() {
 
     const booking = result.data;
 
+    // Audit F-55 (2026-05-08 Sigma-bis): success and warning paths use
+    // non-blocking toasts. Terminal failures stay as `Alert.alert` so
+    // the user has to dismiss them. The router.push runs immediately —
+    // the toast surfaces on the destination screen rather than gating
+    // navigation behind a tap.
+
     // Offline payment methods (cash, package credit, etc.) don't need the
     // hosted-checkout roundtrip — server returns `paid` or leaves it as
     // `pending` with a non-online method, either way we're done here.
     if (booking.paymentStatus === 'paid') {
-      Alert.alert('Booking Confirmed', 'Your lesson has been booked!', [
-        { text: 'OK', onPress: () => router.push('/(tabs)') },
-      ]);
+      Toast.show({
+        type: 'success',
+        text1: 'Booking confirmed',
+        text2: 'Your lesson has been booked.',
+      });
+      router.push('/(tabs)');
       return;
     }
 
@@ -171,21 +181,24 @@ export default function BookScreen() {
     const payResult = await pay(booking.id);
 
     if (payResult.ok) {
-      Alert.alert(
-        'Booking Confirmed',
-        'Thanks! We&apos;ll confirm the payment in a moment.',
-        [{ text: 'OK', onPress: () => router.push('/(tabs)') }],
-      );
+      Toast.show({
+        type: 'success',
+        text1: 'Booking confirmed',
+        text2: "Thanks! We'll confirm the payment in a moment.",
+      });
+      router.push('/(tabs)');
     } else if (payResult.dismissed) {
-      Alert.alert(
-        'Payment Incomplete',
-        'Your booking is reserved but not paid. You can finish payment from the Home tab.',
-        [{ text: 'OK', onPress: () => router.push('/(tabs)') }],
-      );
+      Toast.show({
+        type: 'info',
+        text1: 'Payment incomplete',
+        text2: 'Your booking is reserved. Finish payment from the Home tab.',
+        visibilityTime: 6000,
+      });
+      router.push('/(tabs)');
     } else {
       Alert.alert(
         'Payment Failed',
-        payResult.errorMessage ?? 'We couldn&apos;t start the payment flow. Try again from Home.',
+        payResult.errorMessage ?? "We couldn't start the payment flow. Try again from Home.",
       );
     }
   }, [selectedSlot, memberId, createBooking, pay, router]);
