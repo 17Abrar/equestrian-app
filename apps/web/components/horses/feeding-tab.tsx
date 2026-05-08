@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { FeedingPlanListSkeleton } from './horse-tab-skeletons';
 
@@ -27,6 +28,11 @@ interface FeedingTabProps {
 export function FeedingTab({ horseId }: FeedingTabProps) {
   const { data, isLoading, isError, error, refetch } = useFeedingPlans(horseId);
   const deletePlan = useDeleteFeedingPlan(horseId);
+  // Audit F-50 (2026-05-08 r6): lift Add-dialog state to section root so
+  // the EmptyState's CTA can drive the same dialog the header button
+  // mounts. Mirrors the F-20 lift pattern used elsewhere in the
+  // dashboard.
+  const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <FeedingPlanListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load feeding plans'} onRetry={() => refetch()} />;
@@ -50,11 +56,15 @@ export function FeedingTab({ horseId }: FeedingTabProps) {
           <UtensilsCrossed className="h-5 w-5 text-muted-foreground" />
           <CardTitle>Feeding Schedule</CardTitle>
         </div>
-        <AddFeedingPlanDialog horseId={horseId} />
+        <AddFeedingPlanDialog horseId={horseId} open={addOpen} onOpenChange={setAddOpen} />
       </CardHeader>
       <CardContent>
         {plans.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No feeding plans yet. Add a meal plan above.</p>
+          <EmptyState
+            title="No feeding plans yet"
+            description="Track meals, supplements, and quantities so the groom on duty knows exactly what each horse eats."
+            action={{ label: 'Add Meal Plan', onClick: () => setAddOpen(true) }}
+          />
         ) : (
           <div className="space-y-3">
             {plans.map((plan) => (
@@ -103,8 +113,15 @@ export function FeedingTab({ horseId }: FeedingTabProps) {
   );
 }
 
-function AddFeedingPlanDialog({ horseId }: { horseId: string }) {
-  const [open, setOpen] = useState(false);
+function AddFeedingPlanDialog({
+  horseId,
+  open,
+  onOpenChange,
+}: {
+  horseId: string;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
   const createPlan = useCreateFeedingPlan(horseId);
 
   const form = useForm<CreateFeedingPlanFormValues, unknown, CreateFeedingPlanInput>({
@@ -117,7 +134,7 @@ function AddFeedingPlanDialog({ horseId }: { horseId: string }) {
       await createPlan.mutateAsync(data);
       toast.success('Feeding plan added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('feeding.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add feeding plan');
@@ -125,7 +142,7 @@ function AddFeedingPlanDialog({ horseId }: { horseId: string }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Meal</Button>
       </DialogTrigger>
