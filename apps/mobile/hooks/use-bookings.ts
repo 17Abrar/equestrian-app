@@ -1,38 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  bookingListItemSchema,
-  type BookingListItemFromSchema,
-} from '@equestrian/shared/schemas/responses';
+import { type Booking, type BookingSlot } from '@equestrian/shared/types';
+import { bookingListItemSchema } from '@equestrian/shared/schemas/responses';
 import { useApiClient } from '@/lib/api';
 
-// ─── Types ────────────────────────────────────────────────────────────
-
-export interface BookingSlot {
-  id: string;
-  clubId: string;
-  lessonTypeId: string;
-  arenaId: string | null;
-  coachMemberId: string | null;
-  date: string;
-  startTime: string;
-  endTime: string;
-  maxRiders: number;
-  currentRiders: number;
-  isCancelled: boolean;
-  createdAt: string;
-  lessonTypeName: string;
-  lessonTypeType: string;
-  lessonTypeColor: string | null;
-  lessonTypePrice: number;
-  lessonTypeCurrency: string;
-  arenaName: string | null;
-  coachName: string | null;
-}
-
-// Audit F-69 companion (2026-05-08 r6): `Booking` derives from the
-// runtime schema in @equestrian/shared so the type and the validator
-// can never drift.
-export type Booking = BookingListItemFromSchema;
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): mobile previously declared trimmed
+// `Booking` and `BookingSlot` shapes locally with `status: string` etc.
+// Both apps now narrow against the consolidated DTOs from
+// `packages/shared/src/types/responses/bookings.ts`.
+export type { Booking, BookingSlot };
 
 interface MeData {
   memberId: string | null;
@@ -87,7 +62,7 @@ export function useMyBookings(filters: { status?: string; page?: number } = {}) 
     queryKey: ['myBookings', filters],
     queryFn: () =>
       api.getPaginated<Booking>(`/api/v1/bookings?${params.toString()}`, {
-        validate: bookingListItemSchema,
+        schema: bookingListItemSchema,
       }),
   });
 }

@@ -11,6 +11,8 @@ import { ziinaAdapter } from '@/lib/payments/ziina';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/request-ip';
 import { logger } from '@/lib/logger';
 
 /**
@@ -59,6 +61,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 async function handlePost(request: NextRequest, { params }: RouteParams) {
+  // Audit F-12 (2026-05-08 r6): IP-keyed `failClosed` rate limit on
+  // the per-club Ziina webhook. Mirrors the n-genius / platform-Ziina
+  // pattern. A leaked clubId UUID + missing rate limit lets an
+  // attacker drive arbitrary load through the body-cap → DB-lookup
+  // → AES-GCM-decrypt → HMAC-compute pipeline.
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`webhook:ziina:${ip}`, {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosed: true,
+  });
+  if (!rl.allowed) {
+    return new Response('Too many requests', { status: 429 });
+  }
+
   const { clubId: rawClubId } = await params;
 
   const parsedClubId = clubIdSchema.safeParse(rawClubId);
@@ -213,6 +230,16 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
         'ziina',
         event.eventId,
         bookingResult.permanentFailureReason,
+      );
+    } else if (
+      // Audit F-13 (2026-05-08 r6): livery flow now signals
+      // permanentFailureReason (e.g. paid for a cancelled invoice).
+      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+    ) {
+      await markWebhookEventPermanentlyFailed(
+        'ziina',
+        event.eventId,
+        invoiceResult.permanentFailureReason,
       );
     } else if (
       bookingMissed &&

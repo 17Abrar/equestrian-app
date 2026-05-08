@@ -1,5 +1,4 @@
 import { eq, and, gte, desc, sql, type SQL, inArray } from 'drizzle-orm';
-import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { db } from '../index';
 import { audiences, type AudienceFilters } from '../schema/audiences';
 import { clubMembers } from '../schema/club-members';
@@ -178,17 +177,20 @@ export async function resolveAudienceMembers(
 }
 
 /**
- * Convenience wrapper that just returns the count. Used for UI previews.
+ * Build the SQL predicate list for an audience filter set. Used by both
+ * `countAudienceMembers` and `countAudienceMembersBatch` so the two paths
+ * stay byte-equivalent — see the M-1 regression test in
+ * `audiences.test.ts` for the equivalence contract.
  *
- * Audit r5 F-1 (2026-05-07): replaced naive `resolve.length` (which now caps
- * at MEMBERS_PREVIEW_CAP) with a SQL-side `count(*)`, matching the predicates
- * in `resolveAudienceMembers`. Mirrors the structure used by
- * `countAudienceMembersBatch` so equivalence holds for the same filter set.
+ * Predicates AND together over `clubMembers`:
+ *   - skillLevel       → `inArray(memberId, rider_profiles WHERE …)`
+ *   - minBookings      → `inArray(memberId, bookings GROUP BY HAVING count >= N)`
+ *   - activeWithinDays → `inArray(memberId, distinct bookings WHERE created_at >= since)`
  */
-export async function countAudienceMembers(
+function buildAudiencePredicates(
   clubId: string,
   filters: AudienceFilters,
-): Promise<number> {
+): SQL[] {
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
     eq(clubMembers.role, 'rider'),
@@ -235,6 +237,22 @@ export async function countAudienceMembers(
     conditions.push(inArray(clubMembers.id, recentIds));
   }
 
+  return conditions;
+}
+
+/**
+ * Convenience wrapper that just returns the count. Used for UI previews.
+ *
+ * Audit r5 F-1 (2026-05-07): replaced naive `resolve.length` (which now caps
+ * at MEMBERS_PREVIEW_CAP) with a SQL-side `count(*)`, matching the predicates
+ * in `resolveAudienceMembers`. Mirrors the structure used by
+ * `countAudienceMembersBatch` so equivalence holds for the same filter set.
+ */
+export async function countAudienceMembers(
+  clubId: string,
+  filters: AudienceFilters,
+): Promise<number> {
+  const conditions = buildAudiencePredicates(clubId, filters);
   const rows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(clubMembers)
@@ -243,78 +261,29 @@ export async function countAudienceMembers(
 }
 
 /**
- * Batched counts for many filter sets in one round-trip. The list-audiences
- * UI was previously firing one `countAudienceMembers` per audience —
- * Promise.all-wrapped, but still N round-trips. Here we pull every eligible
- * rider plus the attributes the filters reference once, then evaluate each
- * filter in memory. Equivalence with `resolveAudienceMembers` is mechanical:
- * skillLevel comes from the same LEFT JOIN, minBookings from the booking
- * count aggregate, activeWithinDays from the latest booking timestamp.
+ * Batched counts for many filter sets. Pre-fix this loaded every active
+ * rider in the tenant into memory and evaluated each filter set against the
+ * in-memory rowset — fine at JSR's seed scale, but unbounded against
+ * `clubMembers + riderProfiles + bookings` aggregate. A 5,000-rider club
+ * loaded 5,000 rows on every audiences-list GET (audit r6 F-5, HIGH).
+ *
+ * Now: emit one `count(*)` per filter set against the same predicate logic
+ * as `countAudienceMembers`, fanned out via `Promise.all`. The audiences
+ * list view paginates at 25, so this is ≤25 sub-second `count(*)` queries —
+ * Postgres's count plan over the indexed `(club_id, role, is_active)` tuple
+ * resolves in tens of milliseconds per query. The planner short-circuits
+ * the empty-filter case to a plain count on `clubMembers` with no JOINs.
+ *
+ * Equivalence with the per-call `countAudienceMembers` is now mechanical
+ * (same predicate builder); the M-1 regression test in `audiences.test.ts`
+ * still locks down per-filter-set equivalence with `resolveAudienceMembers`.
  */
 export async function countAudienceMembersBatch(
   clubId: string,
   filterSets: AudienceFilters[],
 ): Promise<number[]> {
   if (filterSets.length === 0) return [];
-
-  const bookingAgg = db
-    .select({
-      memberId: bookings.riderMemberId,
-      totalBookings: sql<number>`count(*)::int`.as('total_bookings'),
-      lastBookingAt: sql<Date | null>`max(${bookings.createdAt})`.as('last_booking_at'),
-    })
-    .from(bookings)
-    .where(eq(bookings.clubId, clubId))
-    .groupBy(bookings.riderMemberId)
-    .as('booking_agg');
-
-  const rows = await db
-    .select({
-      memberId: clubMembers.id,
-      skillLevel: riderProfiles.skillLevel,
-      totalBookings: sql<number>`coalesce(${bookingAgg.totalBookings}, 0)`,
-      lastBookingAt: bookingAgg.lastBookingAt,
-    })
-    .from(clubMembers)
-    .leftJoin(
-      riderProfiles,
-      and(
-        eq(riderProfiles.memberId, clubMembers.id),
-        eq(riderProfiles.clubId, clubId),
-      ),
-    )
-    .leftJoin(bookingAgg, eq(bookingAgg.memberId, clubMembers.id))
-    .where(
-      and(
-        eq(clubMembers.clubId, clubId),
-        eq(clubMembers.role, 'rider'),
-        eq(clubMembers.isActive, true),
-      ),
-    );
-
-  const now = Date.now();
-
-  return filterSets.map((filters) => {
-    let count = 0;
-    for (const r of rows) {
-      if (filters.skillLevel && r.skillLevel !== filters.skillLevel) continue;
-      if (
-        typeof filters.minBookings === 'number' &&
-        filters.minBookings > 0 &&
-        r.totalBookings < filters.minBookings
-      ) continue;
-      if (
-        typeof filters.activeWithinDays === 'number' &&
-        filters.activeWithinDays > 0
-      ) {
-        if (!r.lastBookingAt) continue;
-        // Audit r5 F-59 (2026-05-07): replace local DAY_MS with the
-        // shared `MS_PER_DAY` constant. Was a same-monorepo dupe.
-        const daysSince = (now - new Date(r.lastBookingAt).getTime()) / MS_PER_DAY;
-        if (daysSince > filters.activeWithinDays) continue;
-      }
-      count += 1;
-    }
-    return count;
-  });
+  return Promise.all(
+    filterSets.map((filters) => countAudienceMembers(clubId, filters)),
+  );
 }

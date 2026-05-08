@@ -1,5 +1,19 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
+
+// Audit F-37 + F-68 (2026-05-08 r6): narrowing schema for the
+// `account.metadata` JSON column. Provider adapters write their own
+// shape (Stripe puts `defaultCurrency`/`livemode`/`country` here;
+// N-Genius/Ziina put a smaller subset). All we read at this callsite
+// is `defaultCurrency` for the booking-currency mismatch guard, so
+// the schema is intentionally tolerant: extra keys pass through
+// (no `.strict()`), and a missing/non-string `defaultCurrency`
+// surfaces as `undefined` and skips the guard (current behavior).
+const paymentAccountMetadataSchema = z
+  .object({
+    defaultCurrency: z.string().optional(),
+  })
+  .passthrough();
 import {
   getActivePaymentAccount,
   getBookingById,
@@ -141,10 +155,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // metadata; N-Genius/Ziina don't always — so we only enforce
       // when the data is present. Soft-fail otherwise (the provider
       // call will surface a clearer error).
-      const meta = (account.metadata ?? null) as Record<string, unknown> | null;
-      const rawDefaultCurrency = meta?.defaultCurrency;
-      const accountCurrency =
-        typeof rawDefaultCurrency === 'string' ? rawDefaultCurrency.toUpperCase() : null;
+      //
+      // Audit F-37 + F-68 (2026-05-08 r6): drop the
+      // `as Record<string, unknown>` cast in favor of a Zod
+      // narrowing schema. The cast was the lone shipped
+      // `as Record<string, unknown>` outside audit-log/logger/api-
+      // client boundaries; without narrowing, a future schema
+      // change that stores `defaultCurrency` as object/null silently
+      // skips the currency-mismatch guard. The `.optional()` keeps
+      // the soft-fail posture.
+      const accountCurrency = paymentAccountMetadataSchema.safeParse(
+        account.metadata ?? null,
+      ).data?.defaultCurrency?.toUpperCase() ?? null;
       if (accountCurrency && booking.currency.toUpperCase() !== accountCurrency) {
         logger.warn('booking_payment_currency_mismatch', {
           bookingId,

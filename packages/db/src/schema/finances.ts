@@ -72,6 +72,18 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   // don't need stored credentials (Stripe Standard Connect).
   encryptedCredentials: text('encrypted_credentials'),
 
+  // Audit F-33 (2026-05-08 r6): SHA-256 hex digest of the webhook
+  // signing secret pasted by the operator at connect time. Cleartext
+  // is fine — a hash can't be reversed to the secret. The partial
+  // UNIQUE index `club_payment_accounts_webhook_secret_hash_unique`
+  // (migration 0048) enforces "no two clubs use the same webhook
+  // secret" so a copy-paste mistake (one operator configuring two
+  // clubs in one Stripe dashboard with the same `whsec_…`) is
+  // rejected at connect time instead of failing-closed silently in
+  // every downstream webhook delivery. NULL when the operator opted
+  // out of webhook delivery.
+  webhookSecretHash: varchar('webhook_secret_hash', { length: 64 }),
+
   // Provider-specific metadata: display name, currency support, capabilities,
   // charges_enabled flag, webhook endpoint URL, etc. Never store secrets here.
   // Intentionally untyped — each provider records different keys; consumers
@@ -95,6 +107,16 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   // time". Drizzle has no partial-unique builder; the constraint
   // lives at the SQL layer only and does NOT appear here. Keep this
   // comment so a future schema reviewer doesn't add the global form.
+  //
+  // Audit F-6 (2026-05-08 r6): partial UNIQUE
+  // `idx_payment_accounts_n_genius_outlet_unique` (migration 0050)
+  // on `(provider, external_account_id)` WHERE
+  // `provider = 'n_genius' AND status <> 'disabled'`. Closes the
+  // cross-tenant routing surface where two clubs sharing an outletId
+  // would silently bind webhooks to the first row Drizzle returns.
+  // Stripe + Ziina avoid this by URL-binding the clubId; N-Genius
+  // alone trusts the body. Drizzle has no partial-unique builder,
+  // so this lives at the SQL layer.
 ]);
 
 export const liveryContracts = pgTable('livery_contracts', {

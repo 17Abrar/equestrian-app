@@ -5,6 +5,7 @@
   "license": "MIT",
   "exports": {
     "./types": "./src/types/index.ts",
+    "./types/responses": "./src/types/responses/index.ts",
     "./schemas": "./src/schemas/index.ts",
     "./schemas/responses": "./src/schemas/responses/index.ts",
     "./constants": "./src/constants/index.ts",

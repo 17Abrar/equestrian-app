@@ -65,7 +65,12 @@ export default function SelectOrgPage() {
                 </p>
               </div>
               <Button className="w-full" variant="outline" asChild>
-                <Link href="/onboarding">Start a club</Link>
+                {/* /onboarding's layout requires an existing club. The
+                    bridge page at /start-club creates the Clerk
+                    organization first, waits for the
+                    organization.created webhook to populate our
+                    `clubs` row, then forwards to /onboarding. */}
+                <Link href="/start-club">Start a club</Link>
               </Button>
             </CardContent>
           </Card>

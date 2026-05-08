@@ -1,50 +1,36 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type SubscriptionTier,
+  type SubscriptionPlatformStatus,
+  type SubscriptionInvoiceStatus,
+  type SubscriptionInvoice,
+  type OutstandingInvoice,
+  type SubscriptionSummary,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-export type SubscriptionTier = 'trial' | 'starter' | 'growing' | 'professional';
-export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled';
-export type InvoiceStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
-
-export interface SubscriptionInvoice {
-  id: string;
-  invoiceNumber: string;
-  tier: SubscriptionTier;
-  amountMinorUnits: number;
-  currency: string;
-  periodStart: string;
-  periodEnd: string;
-  status: InvoiceStatus;
-  dueDate: string;
-  paidAt: string | null;
-  payLink: string | null;
-  createdAt: string;
-}
-
-export interface OutstandingInvoice {
-  id: string;
-  invoiceNumber: string;
-  amountMinorUnits: number;
-  currency: string;
-  dueDate: string;
-  status: InvoiceStatus;
-  payLink: string | null;
-  tier: SubscriptionTier;
-  periodStart: string;
-  periodEnd: string;
-}
-
-export interface SubscriptionSummary {
-  tier: SubscriptionTier;
-  status: SubscriptionStatus;
-  trialEndsAt: string | null;
-  currentTierPriceMinor: number;
-  currency: string;
-  outstanding: OutstandingInvoice[];
-  history: SubscriptionInvoice[];
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): subscription DTOs consolidated under
+// `packages/shared/src/types/responses/subscription.ts`. Re-exported below.
+//
+// Names diverged because the local `SubscriptionStatus`/`InvoiceStatus`
+// type aliases collided with the project-wide enums from
+// `@equestrian/shared/types` — the platform-billing subscription status
+// is `SubscriptionPlatformStatus` (per-club Cavaliq billing lifecycle)
+// and the subscription-invoice status is `SubscriptionInvoiceStatus`
+// (distinct from the per-rider booking InvoiceStatus). Re-exported under
+// the original local names so consumers in `subscription-panel.tsx` etc.
+// don't need to change.
+export type {
+  SubscriptionTier,
+  SubscriptionInvoice,
+  OutstandingInvoice,
+  SubscriptionSummary,
+};
+export type SubscriptionStatus = SubscriptionPlatformStatus;
+export type InvoiceStatus = SubscriptionInvoiceStatus;
 
 export function useSubscription() {
   return useQuery({

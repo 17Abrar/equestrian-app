@@ -160,6 +160,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               // this is defense-in-depth that makes the lock self-
               // contained.
               providerPaymentId: bookingsTable.providerPaymentId,
+              // Audit F-36 (2026-05-08 r6): pull cancellationFee inside
+              // the lock so the refund-cap math uses the live value.
+              // `markBookingNoShow` / `cancelBooking` set it once and
+              // there's no DB-level immutability constraint; a future
+              // writer that mutates it between the pre-lock read at
+              // line 107 and the locked CAS would silently produce a
+              // wrong refund amount. Self-containment of the locked
+              // transaction.
+              cancellationFee: bookingsTable.cancellationFee,
             })
             .from(bookingsTable)
             .where(
@@ -185,10 +194,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // lock read and now would lower refundedSoFar — that's fine,
           // the rider just has more refundable headroom. A second-admin
           // refund that landed first would raise it; recompute remaining.
-          // cancellationFee is immutable once set by markBookingNoShow/
-          // cancelBooking, so the pre-lock read remains authoritative —
-          // audit AI-24.
-          const liveRemaining = (booking.amount ?? 0) - liveSoFar - cancellationFee;
+          // Audit F-36 (2026-05-08 r6): use the post-lock cancellationFee
+          // (was the pre-lock snapshot at `cancellationFee` outer var).
+          const liveCancellationFee = locked.cancellationFee ?? 0;
+          const liveRemaining = (booking.amount ?? 0) - liveSoFar - liveCancellationFee;
           if (liveRemaining <= 0) {
             return { kind: 'nothing-to-refund' as const };
           }
@@ -211,22 +220,46 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return { kind: 'not-refundable' as const, status: locked.paymentStatus };
           }
 
-          // Audit F-44 (2026-05-07 r5): append a monotonic
-          // `Date.now()` suffix so a refund-amount sequence that
-          // happens to repeat a (booking, refundedSoFar, amount)
-          // tuple within Stripe's 24h idempotency-TTL window mints a
-          // FRESH refund instead of returning the original. Concrete
-          // bug: admin refunds $50 (key=refund_X_0_5000), the refund
-          // is reversed via `charge.refund.updated failed`, then
-          // admin refunds $50 AGAIN within 24h — pre-fix Stripe
-          // returned the first refund's response without issuing a
-          // new refund and `recordBookingRefund` bumped the ledger
-          // even though no money moved.
-          // Server-stamped (not client-controlled) so this is safe
-          // against client-side replay; the FOR UPDATE lock above
-          // already serializes admin-side double-clicks. The within-
-          // millisecond resolution is fine for this purpose since
-          // the refund route is rate-limited to 10/min.
+          // Audit F-44 (2026-05-07 r5) + F-11 (2026-05-08 r6) — refund
+          // idempotency-key analysis. Two concerns pull in opposite
+          // directions:
+          //
+          //  (a) F-44: reverse-then-redo within 24h. Admin refunds $50
+          //      (key=`refund_X_0_5000`), Stripe issues refund_X. The
+          //      refund is reversed via `charge.refund.updated failed`;
+          //      ledger goes 50→0. Admin refunds $50 AGAIN within 24h
+          //      using the same key. Stripe's idempotency replay
+          //      returns refund_X with its CURRENT status (`failed`).
+          //      `recordBookingRefund` runs unconditionally below
+          //      (no `refund.status` check), so the ledger advances
+          //      0→50 even though no new money moved. Adding
+          //      `Date.now()` to the key forces a FRESH refund on
+          //      every retry, side-stepping the replay.
+          //
+          //  (b) F-11: crash mid-refund. Worker calls Stripe with
+          //      key=A, Stripe issues refund_X, worker crashes BEFORE
+          //      `recordBookingRefund` commits. Admin retries; new
+          //      `Date.now()` mints key=B; Stripe issues refund_Y.
+          //      Rider gets DOUBLE-refunded. F-11 recommends dropping
+          //      `Date.now()` so the retry hits Stripe's replay and
+          //      no second refund issues.
+          //
+          // The two fixes conflict. (a) needs Date.now() to issue a
+          // fresh refund post-reversal; (b) needs a stable key to
+          // benefit from Stripe replay. The correct simultaneous fix
+          // is to drop Date.now() AND inspect `refund.status` before
+          // calling `recordBookingRefund` — only advance the ledger
+          // on `status === 'succeeded'`. Until that status check
+          // lands, Date.now() stays. The audit-r6 ledger-test suite
+          // (`packages/db/src/test/refund-ledger.test.ts:F-11
+          // describe block`) validates the ledger half of the
+          // analysis: post-reversal advance works correctly.
+          //
+          // Server-stamped (not client-controlled), so safe against
+          // client-side replay. The FOR UPDATE lock above already
+          // serializes admin-side double-clicks. Within-millisecond
+          // resolution is fine — the refund route is rate-limited
+          // to 10/min.
           const refund = await withProviderRetry(
             () =>
               adapter.refund({

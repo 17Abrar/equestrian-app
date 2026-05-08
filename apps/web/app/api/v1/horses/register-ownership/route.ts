@@ -19,6 +19,19 @@ import { HorseRegistrationSubmitted } from '@equestrian/email-templates/horse-re
  * tenant) — riders can be members of multiple stables. The permission check
  * in `withAuth` gates entry using the user's role at their active tenant;
  * the query then re-validates membership in the target club.
+ *
+ * **Audit F-21 (2026-05-08 r6) — TARGET-CLUB pattern.** This is one of
+ * the very small set of routes that legitimately accepts `clubId` from
+ * the request body (instead of always sourcing it from `ctx.clubId`).
+ * The body-clubId rule is broken HERE because a rider/owner may belong
+ * to multiple stables and choose where the horse is stabled. The
+ * invariant that keeps this safe is the re-check inside
+ * `registerHorseOwnership` (`packages/db/src/queries/horses.ts:452-510`)
+ * which throws `OWNERSHIP_ROLE_NOT_ALLOWED` unless the caller is an
+ * active `club_members` row at `data.clubId` AND has a horse-owning
+ * role (`rider` / `horse_owner`) at that club. **Do NOT** remove or
+ * weaken that re-check — without it, a coach at club A could register
+ * a horse at club B without being a member of B at all.
  */
 export async function POST(request: NextRequest) {
   return withAuth(

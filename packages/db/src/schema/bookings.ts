@@ -111,6 +111,14 @@ export const lessonTypes = pgTable('lesson_types', {
     columns: [table.arenaId, table.clubId],
     foreignColumns: [arenas.id, arenas.clubId],
   }),
+  // Audit F-28 (2026-05-08 r6): a misclick (`min=4, max=2`) silently
+  // produces a lesson type that never matches any slot. Cheap DB-level
+  // guard mirrors the Zod refine on `createLessonTypeSchema`.
+  // Migration 0049.
+  check(
+    'lesson_types_riders_minmax_check',
+    sql`${table.minRiders} <= ${table.maxRiders}`,
+  ),
 ]);
 
 export const bookingSlots = pgTable('booking_slots', {
@@ -272,7 +280,8 @@ export const bookings = pgTable('bookings', {
   // DB-side. A rider may book themselves AND multiple guests for the same
   // slot, but each guest (by email) can only be booked once per slot — see
   // the partial unique indexes `idx_bookings_unique_rider_slot` and
-  // `idx_bookings_unique_guest_slot` in migration 0009.
+  // `idx_bookings_unique_guest_slot` (audit F-58: fixed reference) in
+  // migration 0015 (`packages/db/migrations/0015_booking_guest_fields.sql:44-53`).
   isGuestBooking: boolean('is_guest_booking').notNull().default(false),
   guestName: varchar('guest_name', { length: 255 }),
   guestEmail: varchar('guest_email', { length: 255 }),
@@ -304,12 +313,30 @@ export const bookings = pgTable('bookings', {
     sql`${table.refundedAmountMinor} >= 0 AND ${table.refundedAmountMinor} <= COALESCE(${table.amount}, 0)`,
   ),
   check('bookings_amount_nonneg', sql`${table.amount} IS NULL OR ${table.amount} >= 0`),
+  // Audit F-30 (2026-05-08 r6): defense-in-depth — a NULL `amount` on a
+  // confirmed/completed booking is functionally a bug (refund cap
+  // silently allows refundedAmountMinor=0; no-show fee becomes NaN).
+  // The three statuses below are the legitimate null-amount carve-outs:
+  // `pending` (mid-creation, before price snapshot lands), `cancelled`
+  // (no-charge cancel), `no_show` (rider failed to attend; cancellation-
+  // fee path can carry the charge separately). Migration 0049 adds the
+  // SQL constraint and verifies historical data first.
+  check(
+    'bookings_amount_required_when_confirmed_check',
+    sql`${table.amount} IS NOT NULL OR ${table.status} IN ('cancelled','pending','no_show')`,
+  ),
   check('bookings_discount_nonneg', sql`${table.discountAmount} >= 0`),
   check(
     'bookings_cancellation_fee_nonneg',
     sql`${table.cancellationFee} IS NULL OR ${table.cancellationFee} >= 0`,
   ),
   check('bookings_refunded_minor_nonneg', sql`${table.refundedAmountMinor} >= 0`),
+  // Audit F-9 (2026-05-08 r6): mirror migration 0015's CHECK so Drizzle
+  // schema is the source of truth. Was previously SQL-only.
+  check(
+    'bookings_guest_contact_required_check',
+    sql`${table.isGuestBooking} = false OR (${table.guestName} IS NOT NULL AND ${table.guestEmail} IS NOT NULL AND ${table.guestPhone} IS NOT NULL)`,
+  ),
   // Round 6.1 — supports the booking-reminder cron's "find upcoming
   // confirmed bookings that haven't been reminded yet" query. Composite
   // (slot_id, reminder_sent_at) lets a single index scan answer the
@@ -374,6 +401,27 @@ export const bookings = pgTable('bookings', {
   // constraint to use the column pair as an FK target. Matches the
   // `bookings_id_club_id_unique` constraint added in migration 0033.
   unique('bookings_id_club_id_unique').on(table.id, table.clubId),
+  // Audit F-9 (2026-05-08 r6): SQL-only artifacts of migration 0015.
+  // Drizzle has no partial-unique-index builder; the indexes below
+  // exist at the SQL layer only and are NOT mirrored here as Drizzle
+  // declarations. Documented at table-extras level so a future
+  // contributor regenerating this schema for a new table sees the
+  // invariant and doesn't unknowingly drop dedup defenses.
+  //
+  //   idx_bookings_unique_rider_slot
+  //     UNIQUE (rider_member_id, slot_id)
+  //     WHERE is_guest_booking = false AND status <> 'cancelled'
+  //
+  //   idx_bookings_unique_guest_slot
+  //     UNIQUE (lower(guest_email), slot_id)
+  //     WHERE is_guest_booking = true
+  //       AND status <> 'cancelled'
+  //       AND guest_email IS NOT NULL
+  //
+  // Mirrors the parallel comment for `idx_bookings_provider_payment`
+  // above. `createBooking` (`packages/db/src/queries/bookings.ts`)
+  // relies on these as the primary defense against double-booking
+  // races; the atomic `currentRiders + 1` UPDATE is the secondary.
 ]);
 
 export const horsePairingHistory = pgTable('horse_pairing_history', {
