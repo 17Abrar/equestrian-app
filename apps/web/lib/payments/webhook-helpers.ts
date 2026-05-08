@@ -317,7 +317,17 @@ export async function applyPaymentWebhook({
     try {
       after(attachTask);
     } catch (err) {
-      logger.warn('attach_webhook_after_unavailable_falling_back_to_void', {
+      // Audit F-32 (2026-05-08 r6): the void-fallback fires when
+      // `after()` is unavailable (cron path doesn't establish a
+      // request lifecycle). The bare promise runs but if the isolate
+      // is evicted before resolution the UPDATE silently drops —
+      // per-club observability indexes (`idx_webhook_events_club_status`)
+      // are then best-effort during cron. We escalate to `error` so
+      // the cron_post_processing_after_unavailable count becomes
+      // visible in Sentry; payment correctness is unaffected (the
+      // dedup row is `processed` by the time after() fires) but the
+      // observability gap is operator-actionable.
+      logger.error('cron_post_processing_after_unavailable', {
         provider,
         eventId: event.eventId,
         error: err instanceof Error ? err.message : String(err),
@@ -861,7 +871,20 @@ export async function applyPaymentWebhook({
  *  - `null`: no `providerPaymentId` on the event — nothing to look up.
  */
 export type ApplyLiveryInvoiceWebhookResult =
-  | { kind: 'matched'; invoiceId: string; clubId: string }
+  | {
+      kind: 'matched';
+      invoiceId: string;
+      clubId: string;
+      /**
+       * Audit F-13 (2026-05-08 r6): when set, the receiver MUST mark
+       * dedup `permanently_failed` rather than `processed` —
+       * mirrors the booking-flow signal. Today only fired by the
+       * paid-event-for-cancelled-invoice case (rider paid AFTER
+       * admin cancelled; payment landed at merchant balance with no
+       * automatic settlement; manual reconciliation required).
+       */
+      permanentFailureReason?: string;
+    }
   | { kind: 'no_target' };
 
 /**
@@ -911,8 +934,38 @@ export async function applyLiveryInvoiceWebhook({
     return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
 
-  if (invoice.status === 'paid' || invoice.status === 'cancelled') {
-    // Already terminal — webhook replay, idempotent no-op.
+  if (invoice.status === 'paid') {
+    // Already paid — webhook replay, idempotent no-op.
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+
+  // Audit F-13 (2026-05-08 r6): paid event arriving for a cancelled
+  // invoice means the rider's payment landed at the merchant balance
+  // with no automatic settlement path — admin cancelled the invoice
+  // before the webhook arrived. Rider has paid; invoice is voided;
+  // someone has to manually refund or reconcile. Surface this as
+  // `permanently_failed` (mirror booking-flow audit AI-24) so
+  // operators see it in the alert pipeline. The receiver routes
+  // (`stripe`, `ziina`, `n-genius`) check the
+  // `permanentFailureReason` field and mark the dedup row
+  // permanently_failed accordingly.
+  if (invoice.status === 'cancelled') {
+    if (event.amountReceivedMinorUnits != null && event.amountReceivedMinorUnits > 0) {
+      logger.error('livery_webhook_paid_for_cancelled_invoice', {
+        clubId: invoice.clubId,
+        invoiceId: invoice.id,
+        eventId: event.eventId,
+        amountReceivedMinorUnits: event.amountReceivedMinorUnits,
+      });
+      return {
+        kind: 'matched',
+        invoiceId: invoice.id,
+        clubId: invoice.clubId,
+        permanentFailureReason:
+          'Payment received for a cancelled livery invoice — manual reconciliation required',
+      };
+    }
+    // Cancelled + non-paid event = idempotent no-op.
     return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
 

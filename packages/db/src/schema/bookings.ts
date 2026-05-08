@@ -272,7 +272,8 @@ export const bookings = pgTable('bookings', {
   // DB-side. A rider may book themselves AND multiple guests for the same
   // slot, but each guest (by email) can only be booked once per slot — see
   // the partial unique indexes `idx_bookings_unique_rider_slot` and
-  // `idx_bookings_unique_guest_slot` in migration 0009.
+  // `idx_bookings_unique_guest_slot` (audit F-58: fixed reference) in
+  // migration 0015 (`packages/db/migrations/0015_booking_guest_fields.sql:44-53`).
   isGuestBooking: boolean('is_guest_booking').notNull().default(false),
   guestName: varchar('guest_name', { length: 255 }),
   guestEmail: varchar('guest_email', { length: 255 }),
