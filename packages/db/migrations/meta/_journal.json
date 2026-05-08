@@ -337,6 +337,20 @@
       "when": 1777248000036,
       "tag": "0047_audit_r5_schema_drift",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1777248000037,
+      "tag": "0048_audit_r6_horse_care_phi_encryption",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1777248000038,
+      "tag": "0049_audit_r6_schema_drift",
+      "breakpoints": true
     }
   ]
 }
