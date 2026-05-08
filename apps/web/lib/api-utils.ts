@@ -181,13 +181,20 @@ export async function requireCronSecret(
 
   const provided = Buffer.from(headerSecret, 'utf8');
   const target = Buffer.from(expected, 'utf8');
-  if (provided.length !== target.length) {
-    logBadSecret();
-    return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
-  }
 
-  if (!timingSafeEqual(provided, target)) {
-    logBadSecret();
+  // Audit F-38 (2026-05-08 r6): when a header IS present but doesn't
+  // match, escalate to error level so secret-rotation drift becomes
+  // visible. Distinguishes the "operator forgot to set secret" case
+  // (already error-logged at line 151 above) from "wrangler updated
+  // CRON_SECRET but the running isolate still binds the old value"
+  // — operators-on-call need both signals. The header-missing case
+  // stays at warn (most likely just a bad probe / misconfigured
+  // monitor, not secret drift).
+  if (provided.length !== target.length || !timingSafeEqual(provided, target)) {
+    logger.error(`${eventName}_secret_mismatch`, {
+      headerPresent: true,
+      ip: getClientIp(request),
+    });
     return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
   }
 

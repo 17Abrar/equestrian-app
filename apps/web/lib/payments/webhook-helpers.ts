@@ -26,6 +26,17 @@ import type { ProviderName } from './types';
  * delta computation under FOR UPDATE before escalating to permanent
  * failure. Bounded so a sustained writer (concurrent admin refund loop)
  * can't pin the webhook handler.
+ *
+ * Audit F-66 (2026-05-08 r6) — no exponential backoff between attempts.
+ * With FOR UPDATE in place, contended rows queue at the lock anyway, so
+ * each attempt naturally waits on the prior writer; an explicit sleep
+ * loop adds latency without reducing contention. Trade-off: under a
+ * sustained admin-refund loop the retry budget exhausts in <100ms and
+ * the event escalates to `permanently_failed`. Operator recovery path
+ * is straightforward — inspect the live ledger via the ledger detail
+ * page, decide whether to manually re-apply the refund, then mark the
+ * webhook event handled. Bumping to 5 attempts is a one-liner if real-
+ * world incidents show the 3-attempt budget is too tight.
  */
 const CUMULATIVE_REFUND_RETRY_ATTEMPTS = 3;
 

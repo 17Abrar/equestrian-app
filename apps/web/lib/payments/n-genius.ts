@@ -566,9 +566,13 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
 
     if (!refundRes.ok) {
       const text = await refundRes.text().catch(() => '');
+      // Audit F-10 (2026-05-08 r6): mark 5xx / 429 retryable so the
+      // route's `withProviderRetry` wrapper actually re-attempts.
+      // Mirrors `createPayment` posture at line 368.
       throw new PaymentProviderError(
         'REFUND_FAILED',
         `N-Genius refund failed (${refundRes.status}): ${safeProviderPreview(text)}`,
+        { retryable: refundRes.status >= 500 || refundRes.status === 429 },
       );
     }
 
