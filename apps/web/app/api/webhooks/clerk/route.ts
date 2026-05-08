@@ -112,7 +112,13 @@ export async function POST(request: Request) {
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('clerk_webhook_no_secret', { requestId, svixId });
-    return new Response('Webhook secret not configured', { status: 503 });
+    // Audit F-31 (2026-05-08 r6): 401 (not 503) so svix doesn't enter
+    // its 5xx retry band (~24h, 5 attempts). The operator already gets
+    // paged via the `clerk_webhook_no_secret` error log; the route is
+    // operator-actionable, not transient — retrying without the secret
+    // configured just amplifies the alert noise. Mirrors the AI-15
+    // unified-rejection pattern.
+    return new Response('Webhook secret not configured', { status: 401 });
   }
 
   let event: OrganizationEvent | MembershipEvent;

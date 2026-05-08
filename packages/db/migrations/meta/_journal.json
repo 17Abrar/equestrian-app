@@ -351,6 +351,13 @@
       "when": 1777248000038,
       "tag": "0049_audit_r6_schema_drift",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1777248000050,
+      "tag": "0050_audit_r6_n_genius_outlet_unique",
+      "breakpoints": true
     }
   ]
 }
