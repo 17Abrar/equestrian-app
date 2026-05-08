@@ -1,3 +1,4 @@
+import { type z } from 'zod';
 import { type ApiResponse, type PaginatedApiResponse } from '@equestrian/shared/types';
 
 interface FetchOptions {
@@ -6,6 +7,24 @@ interface FetchOptions {
   headers?: Record<string, string>;
   signal?: AbortSignal;
 }
+
+/**
+ * Audit F-69 companion (2026-05-08 r6): per-route response validation.
+ * Pass `validate: <ZodSchema>` (the schema for the resolved `data`
+ * field, NOT the envelope) and the client runs `.safeParse(data)` after
+ * the envelope check passes. A schema mismatch surfaces the same
+ * `INVALID_RESPONSE` code the existing envelope-shape check uses, so
+ * existing consumers handle it transparently — but `onError` now
+ * carries the parse-issue list so Sentry/console capture exactly which
+ * field drifted.
+ *
+ * Migration note: the field is optional on every method. Adding a
+ * schema to one hook never forces a flag day across the rest. Start
+ * with the highest-traffic shapes (horse list, booking list) and
+ * extend incrementally — that's how Alpha-2's type consolidation
+ * landed and the same pacing applies here.
+ */
+type ResponseSchema<T> = z.ZodType<T>;
 
 interface ApiClientConfig {
   baseUrl: string;
@@ -108,8 +127,11 @@ function parsePaginatedEnvelope<T>(raw: unknown): PaginatedApiResponse<T> | null
 }
 
 export function createApiClient(config: ApiClientConfig) {
-  async function request<T>(path: string, options: FetchOptions = {}): Promise<ApiResponse<T>> {
-    const { method = 'GET', body, headers = {}, signal } = options;
+  async function request<T>(
+    path: string,
+    options: FetchOptions & { validate?: ResponseSchema<T> } = {},
+  ): Promise<ApiResponse<T>> {
+    const { method = 'GET', body, headers = {}, signal, validate } = options;
 
     const token = await config.getToken();
     const orgId = config.getOrganizationId();
@@ -150,6 +172,27 @@ export function createApiClient(config: ApiClientConfig) {
           },
         };
       }
+      // Audit F-69 companion: when the caller passed a per-route
+      // schema, validate the resolved `data` against it. The envelope
+      // already passed shape-check so we only run on the success
+      // branch. Parse failures collapse to the same INVALID_RESPONSE
+      // code the envelope mismatch uses — consumers don't need a new
+      // error path — but `onError` carries the issue list so Sentry /
+      // console capture pinpoints which field drifted.
+      if (envelope.success && validate) {
+        const parsed = validate.safeParse(envelope.data);
+        if (!parsed.success) {
+          config.onError?.(parsed.error, { code: 'INVALID_RESPONSE', path });
+          return {
+            success: false,
+            error: {
+              code: 'INVALID_RESPONSE',
+              message: 'Server returned data that did not match the expected schema',
+            },
+          };
+        }
+        return { success: true, data: parsed.data };
+      }
       return envelope;
     } catch (error) {
       config.onError?.(error, { code: 'NETWORK_ERROR', path });
@@ -172,9 +215,9 @@ export function createApiClient(config: ApiClientConfig) {
    */
   async function requestPaginated<T>(
     path: string,
-    options: FetchOptions = {},
+    options: FetchOptions & { validate?: ResponseSchema<T> } = {},
   ): Promise<PaginatedApiResponse<T>> {
-    const { method = 'GET', body, headers = {}, signal } = options;
+    const { method = 'GET', body, headers = {}, signal, validate } = options;
 
     const token = await config.getToken();
     const orgId = config.getOrganizationId();
@@ -215,6 +258,27 @@ export function createApiClient(config: ApiClientConfig) {
           },
         };
       }
+      // Audit F-69 companion: validate every item in `data` against
+      // the per-route schema when supplied. Same INVALID_RESPONSE
+      // collapse + onError telemetry as the non-paginated path.
+      if (envelope.success && validate) {
+        const validatedItems: T[] = [];
+        for (const item of envelope.data) {
+          const parsed = validate.safeParse(item);
+          if (!parsed.success) {
+            config.onError?.(parsed.error, { code: 'INVALID_RESPONSE', path });
+            return {
+              success: false,
+              error: {
+                code: 'INVALID_RESPONSE',
+                message: 'Server returned data that did not match the expected schema',
+              },
+            };
+          }
+          validatedItems.push(parsed.data);
+        }
+        return { success: true, data: validatedItems, pagination: envelope.pagination };
+      }
       return envelope;
     } catch (error) {
       config.onError?.(error, { code: 'NETWORK_ERROR', path });
@@ -229,23 +293,38 @@ export function createApiClient(config: ApiClientConfig) {
   }
 
   return {
-    get: <T>(path: string, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      request<T>(path, { ...options, method: 'GET' }),
+    get: <T>(
+      path: string,
+      options?: Omit<FetchOptions, 'method' | 'body'> & { validate?: ResponseSchema<T> },
+    ) => request<T>(path, { ...options, method: 'GET' }),
 
-    getPaginated: <T>(path: string, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      requestPaginated<T>(path, { ...options, method: 'GET' }),
+    getPaginated: <T>(
+      path: string,
+      options?: Omit<FetchOptions, 'method' | 'body'> & { validate?: ResponseSchema<T> },
+    ) => requestPaginated<T>(path, { ...options, method: 'GET' }),
 
-    post: <T>(path: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      request<T>(path, { ...options, method: 'POST', body }),
+    post: <T>(
+      path: string,
+      body?: unknown,
+      options?: Omit<FetchOptions, 'method' | 'body'> & { validate?: ResponseSchema<T> },
+    ) => request<T>(path, { ...options, method: 'POST', body }),
 
-    put: <T>(path: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      request<T>(path, { ...options, method: 'PUT', body }),
+    put: <T>(
+      path: string,
+      body?: unknown,
+      options?: Omit<FetchOptions, 'method' | 'body'> & { validate?: ResponseSchema<T> },
+    ) => request<T>(path, { ...options, method: 'PUT', body }),
 
-    patch: <T>(path: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      request<T>(path, { ...options, method: 'PATCH', body }),
+    patch: <T>(
+      path: string,
+      body?: unknown,
+      options?: Omit<FetchOptions, 'method' | 'body'> & { validate?: ResponseSchema<T> },
+    ) => request<T>(path, { ...options, method: 'PATCH', body }),
 
-    delete: <T>(path: string, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      request<T>(path, { ...options, method: 'DELETE' }),
+    delete: <T>(
+      path: string,
+      options?: Omit<FetchOptions, 'method' | 'body'> & { validate?: ResponseSchema<T> },
+    ) => request<T>(path, { ...options, method: 'DELETE' }),
   };
 }
 

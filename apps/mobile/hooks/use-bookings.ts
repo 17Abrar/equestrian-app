@@ -1,4 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  bookingListItemSchema,
+  type BookingListItemFromSchema,
+} from '@equestrian/shared/schemas/responses';
 import { useApiClient } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -25,26 +29,10 @@ export interface BookingSlot {
   coachName: string | null;
 }
 
-export interface Booking {
-  id: string;
-  clubId: string;
-  slotId: string;
-  riderMemberId: string;
-  horseId: string | null;
-  status: string;
-  paymentStatus: string;
-  amount: number | null;
-  currency: string;
-  createdAt: string;
-  slotDate: string;
-  slotStartTime: string;
-  slotEndTime: string;
-  lessonTypeName: string;
-  lessonTypeType: string;
-  arenaName: string | null;
-  riderName: string | null;
-  horseName: string | null;
-}
+// Audit F-69 companion (2026-05-08 r6): `Booking` derives from the
+// runtime schema in @equestrian/shared so the type and the validator
+// can never drift.
+export type Booking = BookingListItemFromSchema;
 
 interface MeData {
   memberId: string | null;
@@ -90,10 +78,17 @@ export function useMyBookings(filters: { status?: string; page?: number } = {}) 
   // Audit F-6 (2026-05-07 r5 PR Sigma): /api/v1/bookings returns the
   // paginated envelope, so use `getPaginated<Booking>` for the
   // properly-typed discriminated union.
+  // Audit F-69 companion (2026-05-08 r6): `validate:` runs each item
+  // through `bookingListItemSchema` so a server-side projection drift
+  // surfaces an INVALID_RESPONSE with the offending field captured by
+  // Sentry, rather than a silent `undefined` deref on the My Bookings
+  // screen.
   return useQuery({
     queryKey: ['myBookings', filters],
     queryFn: () =>
-      api.getPaginated<Booking>(`/api/v1/bookings?${params.toString()}`),
+      api.getPaginated<Booking>(`/api/v1/bookings?${params.toString()}`, {
+        validate: bookingListItemSchema,
+      }),
   });
 }
 
