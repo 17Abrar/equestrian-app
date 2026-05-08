@@ -46,6 +46,10 @@ export const UPLOAD_FOLDER_PERMISSIONS: Record<string, string> = {
   competitions: 'competitions:*',
   emails: 'emails:*',
   invoices: 'finances:*',
+  // `club/logo`, `club/cover`, `club/favicon` — branding assets uploaded
+  // from the Settings → Branding form. Same gate as the rest of the
+  // settings page (`settings:update`).
+  club: 'settings:update',
 };
 
 export function getFolderRoot(folder: string): string | null {
