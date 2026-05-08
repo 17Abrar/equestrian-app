@@ -4,7 +4,7 @@ import { getFeedingPlans, createFeedingPlan, getHorseById } from '@equestrian/db
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 
@@ -38,8 +38,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Horse not found', 404);
       }
 
-      const body = await request.json();
-      const data = validateInput(createFeedingPlanSchema, body);
+      const data = await parseRequiredBody(request, createFeedingPlanSchema);
       const plan = await createFeedingPlan(ctx.clubId, horseId, data);
 
       if (plan) {

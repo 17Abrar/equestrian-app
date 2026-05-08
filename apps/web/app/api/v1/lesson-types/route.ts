@@ -6,6 +6,7 @@ import {
   successResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
   paginatedResponse,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
@@ -50,8 +51,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createLessonTypeSchema, body);
+      const data = await parseRequiredBody(request, createLessonTypeSchema);
 
       const lessonType = await createLessonType(ctx.clubId, data);
 

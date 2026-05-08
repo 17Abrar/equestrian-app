@@ -13,7 +13,7 @@ import {
   type CreateHealthRecordInput,
   type CreateMedicationInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney, toMinorUnits } from '@equestrian/shared/utils';
+import { formatMoney, toMinorUnits, getTodayLocalDateString } from '@equestrian/shared/utils';
 import {
   useHealthRecords,
   useCreateHealthRecord,
@@ -208,7 +208,8 @@ function AddHealthRecordDialog({
 
   const form = useForm<CreateHealthRecordFormValues, unknown, CreateHealthRecordInput>({
     resolver: zodResolver(createHealthRecordSchema),
-    defaultValues: { recordType: 'vet_visit', title: '', date: new Date().toISOString().split('T')[0], followUpNeeded: false },
+    // Local-timezone today: see getTodayLocalDateString comment.
+    defaultValues: { recordType: 'vet_visit', title: '', date: getTodayLocalDateString(), followUpNeeded: false },
   });
 
   async function onSubmit(data: CreateHealthRecordInput) {
@@ -431,7 +432,7 @@ function AddMedicationDialog({
   type MedFormValues = z.input<typeof createMedicationSchema>;
   const form = useForm<MedFormValues, unknown, CreateMedicationInput>({
     resolver: zodResolver(createMedicationSchema),
-    defaultValues: { medicationName: '', dosage: '', frequency: '', startDate: new Date().toISOString().split('T')[0], isActive: true },
+    defaultValues: { medicationName: '', dosage: '', frequency: '', startDate: getTodayLocalDateString(), isActive: true },
   });
 
   async function onSubmit(data: CreateMedicationInput) {

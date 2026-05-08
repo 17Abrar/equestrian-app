@@ -100,7 +100,14 @@ function getWeekDates(weekOffset: number): { start: Date; end: Date; dates: Date
 }
 
 function toDateString(d: Date): string {
-  return d.toISOString().split('T')[0]!;
+  // Local-timezone date — `d.toISOString()` returns UTC, so a 02:00
+  // local-time render in Dubai (UTC+4) sees yesterday's date as
+  // "today", greying out the legitimate day. Build the YYYY-MM-DD from
+  // local fields so the visual calendar agrees with the device clock.
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 // `formatPrice` from the shared utils returns `'—'` for null amounts; this

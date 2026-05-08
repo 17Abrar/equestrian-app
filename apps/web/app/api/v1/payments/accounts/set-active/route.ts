@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { setActiveProvider } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 const setActiveSchema = z
@@ -13,8 +13,7 @@ const setActiveSchema = z
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const { provider } = validateInput(setActiveSchema, body);
+      const { provider } = await parseRequiredBody(request, setActiveSchema);
 
       // Audit MED-7 (2026-05-05): the query now throws
       // `PROVIDER_NOT_ACTIVATABLE` when the target doesn't exist or

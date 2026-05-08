@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { countAudienceMembers } from '@equestrian/db/queries';
-import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, parseRequiredBody } from '@/lib/api-utils';
 
 // audit M-1 (2026-05-05) — preview must match POST/PATCH so the count
 // the user sees while building a filter is the same count the resolver
@@ -29,8 +29,7 @@ const previewSchema = z
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const { filters } = validateInput(previewSchema, body);
+      const { filters } = await parseRequiredBody(request, previewSchema);
       const count = await countAudienceMembers(ctx.clubId, filters);
       return successResponse({ count });
     },

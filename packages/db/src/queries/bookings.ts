@@ -942,6 +942,21 @@ export async function setBookingPaymentRef(
     conditions.push(
       sql`(${bookings.providerPaymentId} IS NULL OR ${bookings.providerPaymentId} = ${data.providerPaymentId})`,
     );
+    // Lifecycle guard (defense-in-depth for the payment-init route's
+    // TOCTOU window): refuse to attach a payment ref to a booking that
+    // is already terminal at the lifecycle level. webhook-helpers has
+    // its own `webhook_payment_for_inactive_booking` branch that fires
+    // before reaching this query, but the payment-init route reads the
+    // booking, calls the provider (real PI is minted), then writes —
+    // and a concurrent admin DELETE can flip the booking to `cancelled`
+    // in between. Without this predicate the new PI gets attached to a
+    // cancelled booking, the rider's card is charged, and reconciliation
+    // is manual. Caller's null-return path (`webhook_*_payment_for_
+    // inactive_booking` / `payment_init_booking_no_longer_active`) maps
+    // it to a clean operator alert instead of silent data corruption.
+    conditions.push(
+      sql`${bookings.status} NOT IN ('cancelled', 'no_show')`,
+    );
   }
   // Terminal-state guard for paymentStatus (audit E-11 + HIGH-13).
   // Once a booking is in `refunded` / `partial`, subsequent

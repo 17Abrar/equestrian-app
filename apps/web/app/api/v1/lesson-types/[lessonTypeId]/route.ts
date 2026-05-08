@@ -4,7 +4,7 @@ import { getLessonTypeById, updateLessonType, deleteLessonType } from '@equestri
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput, validateUuidParam } from '@/lib/api-utils';
+  parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -46,8 +46,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { lessonTypeId } = await params;
       validateUuidParam('lessonTypeId', lessonTypeId);
-      const body = await request.json();
-      const data = validateInput(updateLessonTypeSchema, body);
+      const data = await parseRequiredBody(request, updateLessonTypeSchema);
 
       const lessonType = await updateLessonType(ctx.clubId, lessonTypeId, data);
 

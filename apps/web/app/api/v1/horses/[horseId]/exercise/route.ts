@@ -4,7 +4,7 @@ import { getExerciseSchedules, createExerciseSchedule, getHorseById } from '@equ
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 
@@ -38,8 +38,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Horse not found', 404);
       }
 
-      const body = await request.json();
-      const data = validateInput(createExerciseScheduleSchema, body);
+      const data = await parseRequiredBody(request, createExerciseScheduleSchema);
       const schedule = await createExerciseSchedule(ctx.clubId, horseId, data);
 
       if (schedule) {

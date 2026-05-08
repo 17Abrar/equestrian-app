@@ -5,7 +5,7 @@ import {
   getHorseById,
   getClubById,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { HorseRegistrationDeclined } from '@equestrian/email-templates/horse-registration-declined';
 
@@ -23,8 +23,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { horseId } = await params;
       validateUuidParam('horseId', horseId);
-      const body = await request.json();
-      const data = validateInput(declineHorseOwnershipSchema, body);
+      const data = await parseRequiredBody(request, declineHorseOwnershipSchema);
 
       const horse = await declineHorseOwnership(ctx.clubId, horseId, data.reason);
 

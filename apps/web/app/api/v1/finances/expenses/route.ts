@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { createExpenseSchema, expenseFiltersSchema } from '@equestrian/shared/schemas';
 import { getExpensesByClub, createExpense, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   return withAuth(
@@ -19,8 +19,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createExpenseSchema, body);
+      const data = await parseRequiredBody(request, createExpenseSchema);
 
       // Audit LOW (2026-05-05 pass 2): cross-tenant verify the optional
       // horseId. The `expenses.horse_id` column has no composite FK

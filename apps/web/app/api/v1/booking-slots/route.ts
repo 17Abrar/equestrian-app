@@ -18,6 +18,7 @@ import {
   successResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
@@ -76,8 +77,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createBookingSlotSchema, body);
+      const data = await parseRequiredBody(request, createBookingSlotSchema);
 
       // Resolve the club's timezone for accurate date comparison
       const clubRow = await db

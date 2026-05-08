@@ -9,7 +9,7 @@ import {
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
@@ -87,8 +87,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const body = await request.json();
-      const data = validateInput(createCompetitionEntrySchema, body);
+      const data = await parseRequiredBody(request, createCompetitionEntrySchema);
 
       if (!ctx.memberId) {
         return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);

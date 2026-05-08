@@ -5,7 +5,7 @@ import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { getCompetitionById, updateCompetition, deleteCompetition } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string }>;
@@ -33,8 +33,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { competitionId } = await params;
       validateUuidParam('competitionId', competitionId);
-      const body = await request.json();
-      const data = validateInput(updateCompetitionSchema, body);
+      const data = await parseRequiredBody(request, updateCompetitionSchema);
 
       // Convert registrationDeadline from datetime-local to UTC using club
       // timezone. Detect by exact datetime-local regex (YYYY-MM-DDTHH:MM

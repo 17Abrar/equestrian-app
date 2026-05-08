@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Plus, Search } from 'lucide-react';
 import { useHorses } from '@/hooks/use-horses';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -80,6 +81,9 @@ type SkillLevelFilter = (typeof SKILL_LEVEL_FILTER_VALUES)[number] | undefined;
 export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
   const [tab, setTab] = useState<Tab>('active');
   const [search, setSearch] = useState('');
+  // Debounce so each keystroke doesn't fire a fresh /horses query.
+  // 250ms matches the discover page's existing pattern.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [status, setStatus] = useState<HorseStatusFilter>();
   const [skillLevel, setSkillLevel] = useState<SkillLevelFilter>();
   const [page, setPage] = useState(1);
@@ -88,7 +92,7 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
   const pendingCount = pendingBadge.data?.pagination.total ?? 0;
 
   const { data, isLoading, isError, error, refetch } = useHorses({
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     status,
     skillLevel,
     ownershipStatus: tab === 'pending' ? 'pending' : 'active',

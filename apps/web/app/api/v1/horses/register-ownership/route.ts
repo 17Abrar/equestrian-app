@@ -6,7 +6,7 @@ import {
   createAuditEntry,
   getClubById,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { logger } from '@/lib/logger';
 import { HorseRegistrationSubmitted } from '@equestrian/email-templates/horse-registration-submitted';
@@ -36,8 +36,7 @@ import { HorseRegistrationSubmitted } from '@equestrian/email-templates/horse-re
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(registerHorseOwnershipSchema, body);
+      const data = await parseRequiredBody(request, registerHorseOwnershipSchema);
 
       let horse;
       try {

@@ -10,7 +10,7 @@ import {
   getArenaById,
 } from '@equestrian/db/queries';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { sendTriggeredEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
@@ -77,8 +77,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { slotId } = await params;
       validateUuidParam('slotId', slotId);
-      const body = await request.json();
-      const data = validateInput(updateSlotSchema, body);
+      const data = await parseRequiredBody(request, updateSlotSchema);
 
       // Same cross-club guard as the POST routes — neither column has a
       // compound (id, club_id) FK, so a forged UUID would otherwise
@@ -140,8 +139,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // or missing JSON is a 400 — propagate any error to the withAuth
       // handler so the caller sees the right code instead of silent
       // success with no reason recorded.
-      const body = await request.json();
-      const data = validateInput(cancelSlotSchema, body);
+      const data = await parseRequiredBody(request, cancelSlotSchema);
       const reason = data.reason;
 
       // Load the slot's display fields BEFORE cancellation so the email

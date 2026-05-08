@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Plus, Search, Trash2, UserCog, Users2, Wrench } from 'lucide-react';
 import { createStaffSchema, type CreateStaffInput } from '@equestrian/shared/schemas';
 import { useStaff, useCreateStaff, useDeactivateStaff } from '@/hooks/use-staff';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -66,13 +67,15 @@ interface StaffListProps {
 
 export function StaffList({ canCreate = true }: StaffListProps = {}) {
   const [search, setSearch] = useState('');
+  // Debounce so each keystroke doesn't fire a fresh /staff query.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [roleFilter, setRoleFilter] = useState<string | undefined>();
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
   const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useStaff({
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     role: roleFilter,
     page,
     pageSize: DEFAULT_PAGE_SIZE,

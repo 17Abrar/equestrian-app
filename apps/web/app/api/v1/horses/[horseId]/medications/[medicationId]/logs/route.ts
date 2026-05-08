@@ -9,7 +9,7 @@ import {
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 
@@ -50,8 +50,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Medication not found for this horse', 404);
       }
 
-      const body = await request.json();
-      const data = validateInput(createMedicationLogSchema, body);
+      const data = await parseRequiredBody(request, createMedicationLogSchema);
 
       // Mass-assignment guard (audit AI-19). The body's optional
       // administeredByMemberId is a UUID — without verification a caller

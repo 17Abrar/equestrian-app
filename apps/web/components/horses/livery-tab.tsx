@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/fetch-json';
+import { getTodayLocalDateString } from '@equestrian/shared/utils';
 import {
   Archive,
   User,
@@ -116,9 +117,9 @@ function useCancelInvoice(horseId: string) {
 
 export function LiveryTab({ horse }: LiveryTabProps) {
   const [retireOpen, setRetireOpen] = useState(false);
-  const [endDate, setEndDate] = useState(
-    () => new Date().toISOString().slice(0, 10),
-  );
+  // Use local-timezone today: `toISOString()` returns UTC, drifting by a
+  // day in any non-UTC zone (Dubai picks "yesterday" in early hours).
+  const [endDate, setEndDate] = useState(getTodayLocalDateString);
   const retire = useRetireHorseOwnership(horse.id);
 
   const invoicesQuery = useHorseLiveryInvoices(

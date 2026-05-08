@@ -501,7 +501,20 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
       // status flip (no counter bump) so a future email patch resumes
       // the 7/14/30-day cadence from scratch — see audit G-2.
       if (inv.ownerEmail) {
-        await markInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
+        // CAS on `reminder_count`: if a concurrent isolate already
+        // bumped the counter for this row, skip the email — they sent
+        // it. Without this, two concurrent runs each fire the day-7
+        // nudge and advance the counter from 0 to 2 in one pass,
+        // silently skipping day-14 forever.
+        const claimed = await markInvoiceOverdueAndLogReminder(
+          inv.clubId,
+          inv.invoiceId,
+          inv.reminderCount,
+        );
+        if (!claimed) {
+          skipped += 1;
+          continue;
+        }
         await sendTriggeredEmail({
           clubId: inv.clubId,
           trigger: 'livery_invoice_overdue',

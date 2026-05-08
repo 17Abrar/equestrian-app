@@ -11,6 +11,7 @@ import {
   paginatedResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
 } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
@@ -35,8 +36,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createCompetitionSchema, body);
+      const data = await parseRequiredBody(request, createCompetitionSchema);
 
       // Convert registrationDeadline from datetime-local (no TZ) to UTC using club timezone
       let registrationDeadline = data.registrationDeadline;

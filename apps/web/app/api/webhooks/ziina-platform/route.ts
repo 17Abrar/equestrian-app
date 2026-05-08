@@ -252,6 +252,36 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
     });
   }
 
+  // Paid event arriving for an already-cancelled platform invoice has no
+  // automatic settlement path — admin cancelled the invoice before the
+  // webhook arrived, but the club's card has been charged. Surface this
+  // as `permanently_failed` so it lands in the alert pipeline (mirror
+  // livery's F-13 fix and bookings' AI-24 — the third instance of the
+  // same shape that the prior audit pass missed). Without this signal
+  // the dedup row flips to `processed`, the money sits unreconciled in
+  // Cavaliq's Ziina balance, and the operator sees nothing.
+  if (invoice.status === 'cancelled') {
+    if (
+      args.eventAmountReceived !== undefined &&
+      args.eventAmountReceived > 0
+    ) {
+      logger.error('platform_webhook_paid_for_cancelled_invoice', {
+        invoiceId: invoice.id,
+        clubId: invoice.clubId,
+        providerPaymentId: args.providerPaymentId,
+        amountReceived: args.eventAmountReceived,
+      });
+      return `Payment received for a cancelled platform invoice ${invoice.id} — manual reconciliation required`;
+    }
+    // Cancelled + non-paid event: idempotent no-op.
+    logger.info('platform_webhook_invoice_already_terminal', {
+      invoiceId: invoice.id,
+      clubId: invoice.clubId,
+      currentStatus: invoice.status,
+    });
+    return null;
+  }
+
   const paidAt = new Date();
   const updated = await markPlatformInvoicePaid(invoice.clubId, invoice.id, {
     paidAt,
@@ -260,8 +290,9 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   });
 
   if (!updated) {
-    // Already terminal (paid / cancelled). Idempotent replay or admin
-    // marked it manually paid first — log and move on.
+    // Already terminal (paid). Idempotent replay or admin marked it
+    // manually paid first — log and move on. The cancelled branch is
+    // handled above with a permanent-failure signal.
     logger.info('platform_webhook_invoice_already_terminal', {
       invoiceId: invoice.id,
       clubId: invoice.clubId,
