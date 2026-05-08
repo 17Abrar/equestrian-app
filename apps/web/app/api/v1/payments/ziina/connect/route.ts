@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { upsertPaymentAccount } from '@equestrian/db/queries';
+import { upsertPaymentAccount, WebhookSecretReusedError } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { ziinaAdapter } from '@/lib/payments/ziina';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -35,6 +36,12 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Audit F-33 (2026-05-08 r6): hash the webhook secret so
+        // upsert can reject any other club already using the same one.
+        const webhookSecretHash = data.webhookSigningSecret
+          ? createHash('sha256').update(data.webhookSigningSecret).digest('hex')
+          : null;
+
         const account = await upsertPaymentAccount(ctx.clubId, {
           provider: 'ziina',
           status: 'connected',
@@ -42,6 +49,7 @@ export async function POST(request: NextRequest) {
           credentials: result.credentials,
           metadata: result.metadata,
           makeActive: data.makeActive,
+          webhookSecretHash,
         });
 
         logger.info('ziina_connected', {
@@ -57,6 +65,9 @@ export async function POST(request: NextRequest) {
 
         return successResponse(account, 201);
       } catch (err) {
+        if (err instanceof WebhookSecretReusedError) {
+          return errorResponse('WEBHOOK_SECRET_REUSED', err.message, 409);
+        }
         if (err instanceof PaymentProviderError) {
           if (err.code === 'AUTH_FAILED' || err.code === 'INVALID_CREDENTIALS') {
             return errorResponse(err.code, err.message, 422);

@@ -72,6 +72,18 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   // don't need stored credentials (Stripe Standard Connect).
   encryptedCredentials: text('encrypted_credentials'),
 
+  // Audit F-33 (2026-05-08 r6): SHA-256 hex digest of the webhook
+  // signing secret pasted by the operator at connect time. Cleartext
+  // is fine — a hash can't be reversed to the secret. The partial
+  // UNIQUE index `club_payment_accounts_webhook_secret_hash_unique`
+  // (migration 0048) enforces "no two clubs use the same webhook
+  // secret" so a copy-paste mistake (one operator configuring two
+  // clubs in one Stripe dashboard with the same `whsec_…`) is
+  // rejected at connect time instead of failing-closed silently in
+  // every downstream webhook delivery. NULL when the operator opted
+  // out of webhook delivery.
+  webhookSecretHash: varchar('webhook_secret_hash', { length: 64 }),
+
   // Provider-specific metadata: display name, currency support, capabilities,
   // charges_enabled flag, webhook endpoint URL, etc. Never store secrets here.
   // Intentionally untyped — each provider records different keys; consumers
