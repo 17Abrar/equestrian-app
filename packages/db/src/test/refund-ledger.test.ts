@@ -240,3 +240,78 @@ describe('reverseBookingRefund', () => {
     });
   });
 });
+
+// Audit F-11 (2026-05-08 r6) — refund idempotency analysis.
+//
+// Validates the LEDGER-LEVEL behavior the audit's reasoning depended
+// on: after a reverse-then-redo cycle, can the ledger correctly
+// advance back to the target amount? Yes — the CAS in
+// `recordBookingRefund` reads the live ledger (post-reversal: 0)
+// and advances by the requested delta. This is the ledger half of
+// the analysis.
+//
+// What the test does NOT cover (and why F-11 stays deferred):
+// `recordBookingRefund` is called by the route AFTER a successful
+// `adapter.refund(...)`. If Stripe replays a same-key idempotent
+// request and returns the ORIGINAL refund object (now in `failed`
+// status post-reversal), the route currently doesn't inspect
+// `refund.status` before calling `recordBookingRefund`. The ledger
+// would advance even though no new money moved.
+//
+// The fix per F-11 (drop `Date.now()` from the idempotency key) is
+// CORRECT for the crash-mid-refund concern but introduces this
+// reverse-then-redo silent-advance bug unless paired with a
+// `refund.status`-aware recorder at the route layer. Until the
+// follow-up PR adds that status check, `Date.now()` stays.
+describe('recordBookingRefund — F-11 reverse-then-redo cycle', () => {
+  it('post-reversal ledger advance restores the target amount', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      // Step 1: admin issues $50 refund.
+      const first = await recordBookingRefund(clubId, bookingId, 5_000);
+      expect(first?.refundedAmountMinor).toBe(5_000);
+      expect(first?.paymentStatus).toBe('partial');
+
+      // Step 2: that refund is reversed via the failed-refund webhook.
+      const reversed = await reverseBookingRefund(clubId, bookingId, 5_000);
+      expect(reversed?.refundedAmountMinor).toBe(0);
+      expect(reversed?.paymentStatus).toBe('paid');
+
+      // Step 3: admin re-issues the same $50 refund. The ledger
+      // accepts it because the live running total is back to 0 —
+      // the CAS in recordBookingRefund operates on the post-
+      // reversal ledger value, not on a snapshot from before the
+      // reversal. This is the load-bearing behavior F-11's
+      // analysis depended on.
+      const redo = await recordBookingRefund(clubId, bookingId, 5_000);
+      expect(redo?.refundedAmountMinor).toBe(5_000);
+      expect(redo?.paymentStatus).toBe('partial');
+    });
+  });
+
+  it('post-full-reversal can re-issue a different amount', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      await recordBookingRefund(clubId, bookingId, 5_000);
+      await reverseBookingRefund(clubId, bookingId, 5_000);
+      // Admin changes their mind: refund $30 instead of $50 this time.
+      const redo = await recordBookingRefund(clubId, bookingId, 3_000);
+      expect(redo?.refundedAmountMinor).toBe(3_000);
+      expect(redo?.paymentStatus).toBe('partial');
+    });
+  });
+
+  it('refund-then-reverse-then-full-refund covers the booking', async () => {
+    // Realistic sequence: rider asks for refund, admin clicks $50,
+    // admin or Stripe reverses it, then admin re-refunds the FULL
+    // booking amount. Ledger should correctly hit 'refunded' status.
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      await recordBookingRefund(clubId, bookingId, 5_000);
+      await reverseBookingRefund(clubId, bookingId, 5_000);
+      const final = await recordBookingRefund(clubId, bookingId, 10_000);
+      expect(final?.refundedAmountMinor).toBe(10_000);
+      expect(final?.paymentStatus).toBe('refunded');
+    });
+  });
+});
