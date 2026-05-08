@@ -1,9 +1,25 @@
-import { eq, and, asc, gte, sql } from 'drizzle-orm';
+import { eq, and, asc, gte, ne, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { clubPaymentAccounts } from '../schema/finances';
 import { bookings } from '../schema/bookings';
 import { liveryInvoices } from '../schema/livery-invoices';
 import { encryptField, decryptField } from '../crypto';
+
+/**
+ * Audit F-33 (2026-05-08 r6): thrown by `upsertPaymentAccount` when a
+ * webhook-secret hash is already bound to a different club. The connect
+ * routes catch this and return a 409 with a clear actionable message
+ * (e.g. "this webhook secret is already configured for another club —
+ * generate a fresh `whsec_…` in Stripe and paste that one"). Without
+ * this signal the operator only sees their webhooks fail-closed in
+ * production, which is the wrong place to discover a copy-paste error.
+ */
+export class WebhookSecretReusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WebhookSecretReusedError';
+  }
+}
 
 type NewPaymentAccount = typeof clubPaymentAccounts.$inferInsert;
 type PaymentAccountRow = typeof clubPaymentAccounts.$inferSelect;
@@ -41,7 +57,14 @@ export interface PaymentAccountWithCredentials extends PaymentAccountSummary {
 }
 
 function toSummary(row: PaymentAccountRow): PaymentAccountSummary {
-  const { encryptedCredentials: _secret, ...rest } = row;
+  // `webhookSecretHash` is a non-secret SHA-256 digest used only for
+  // cross-club uniqueness enforcement (audit F-33). It's stripped here
+  // alongside `encryptedCredentials` so the summary shape never leaks
+  // it to UI/API responses — consumers should look at the
+  // `metadata.hasWebhookSecret` boolean stamped by the adapter when
+  // they need a "configured?" signal.
+  const { encryptedCredentials: _secret, webhookSecretHash: _hash, ...rest } =
+    row;
   return rest;
 }
 
@@ -188,6 +211,15 @@ interface UpsertInput {
   credentials?: DecryptedCredentials | null;
   metadata?: unknown;
   makeActive?: boolean;
+  /**
+   * Audit F-33 (2026-05-08 r6): SHA-256 hex digest of the webhook
+   * signing secret pasted by the operator at connect time. The connect
+   * route computes this — it has the cleartext secret and the helper
+   * here would otherwise have to peek inside the credentials blob
+   * shape per provider. Pass `null` (or omit) when the operator opted
+   * out of webhook delivery; uniqueness only applies to non-null.
+   */
+  webhookSecretHash?: string | null;
 }
 
 /**
@@ -208,6 +240,36 @@ export async function upsertPaymentAccount(
         .where(eq(clubPaymentAccounts.clubId, clubId));
     }
 
+    // Audit F-33 (2026-05-08 r6): pre-check that no OTHER club has
+    // already bound this webhook-secret hash. The partial UNIQUE in
+    // migration 0048 enforces it at the DB layer too, but pre-checking
+    // converts the unique-violation 23505 into a clean
+    // `WebhookSecretReusedError` the route layer can render as a 409
+    // with an actionable message. The two layers together cover the
+    // race window between read and write — a concurrent insert from
+    // the other club would lose to the partial unique index even if
+    // it slipped past this check.
+    if (input.webhookSecretHash) {
+      const [collision] = await tx
+        .select({ otherClubId: clubPaymentAccounts.clubId })
+        .from(clubPaymentAccounts)
+        .where(
+          and(
+            eq(clubPaymentAccounts.webhookSecretHash, input.webhookSecretHash),
+            ne(clubPaymentAccounts.clubId, clubId),
+          ),
+        )
+        .limit(1);
+      if (collision) {
+        throw new WebhookSecretReusedError(
+          'This webhook secret is already configured for another club. ' +
+            'Generate a fresh signing secret in your provider dashboard ' +
+            'and paste that one — every club must use a distinct secret ' +
+            'so per-club webhook delivery binds correctly.',
+        );
+      }
+    }
+
     const encryptedCredentials = input.credentials
       ? encryptField(JSON.stringify(input.credentials))
       : null;
@@ -218,6 +280,7 @@ export async function upsertPaymentAccount(
       status: input.status,
       externalAccountId: input.externalAccountId ?? null,
       encryptedCredentials,
+      webhookSecretHash: input.webhookSecretHash ?? null,
       metadata: input.metadata ?? null,
       isActive: input.makeActive ?? false,
       connectedAt: input.status === 'connected' ? new Date() : null,
@@ -233,6 +296,7 @@ export async function upsertPaymentAccount(
           status: values.status,
           externalAccountId: values.externalAccountId,
           encryptedCredentials: values.encryptedCredentials,
+          webhookSecretHash: values.webhookSecretHash,
           metadata: values.metadata,
           isActive: values.isActive,
           connectedAt: values.connectedAt,

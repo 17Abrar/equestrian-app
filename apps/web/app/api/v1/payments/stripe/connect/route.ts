@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { upsertPaymentAccount } from '@equestrian/db/queries';
+import { upsertPaymentAccount, WebhookSecretReusedError } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { stripeAdapter } from '@/lib/payments/stripe';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -59,6 +60,15 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Audit F-33 (2026-05-08 r6): SHA-256 the webhook signing
+        // secret so the upsert can enforce "no two clubs use the same
+        // `whsec_…`". Hashing the cleartext (not what the adapter
+        // returned) keeps the digest stable across the encrypt/decrypt
+        // round-trip the credentials blob takes.
+        const webhookSecretHash = data.webhookSigningSecret
+          ? createHash('sha256').update(data.webhookSigningSecret).digest('hex')
+          : null;
+
         const account = await upsertPaymentAccount(ctx.clubId, {
           provider: 'stripe',
           status: 'connected',
@@ -66,6 +76,7 @@ export async function POST(request: NextRequest) {
           credentials: result.credentials,
           metadata: result.metadata,
           makeActive: data.makeActive,
+          webhookSecretHash,
         });
 
         logger.info('stripe_connected', {
@@ -83,6 +94,9 @@ export async function POST(request: NextRequest) {
 
         return successResponse(account, 201);
       } catch (err) {
+        if (err instanceof WebhookSecretReusedError) {
+          return errorResponse('WEBHOOK_SECRET_REUSED', err.message, 409);
+        }
         if (err instanceof PaymentProviderError) {
           if (
             err.code === 'AUTH_FAILED' ||
