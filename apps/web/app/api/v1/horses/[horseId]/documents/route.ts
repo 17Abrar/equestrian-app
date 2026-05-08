@@ -8,6 +8,10 @@ import { withAuth,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
+import {
+  extractR2KeyFromUrl,
+  requireVerifiedR2Object,
+} from '@/lib/upload-verify-cache';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -63,6 +67,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json();
     const data = validateInput(createDocumentSchema, body);
+
+    // Audit F-8 (2026-05-08 r6): server-side verification gate. The
+    // route comment used to claim "the R2 file URL was already verified
+    // against ctx.clubId by /api/v1/upload/verify", but enforcement
+    // sat in the web client only. A direct API caller skipping the
+    // verify route would land the row without a magic-byte check.
+    // `requireVerifiedR2Object` short-circuits on cached verification
+    // (Redis hit) and falls through to inline verify on miss — the
+    // typical happy path is no second R2 round-trip.
+    if (data.fileType) {
+      const r2Key = extractR2KeyFromUrl(data.fileUrl);
+      if (!r2Key) {
+        return errorResponse(
+          'INVALID_FILE_URL',
+          'fileUrl must be an R2 object URL produced by /api/v1/upload',
+          400,
+        );
+      }
+      const verified = await requireVerifiedR2Object(r2Key, data.fileType);
+      if (!verified.ok) {
+        return errorResponse(verified.code, verified.message, verified.status);
+      }
+    }
 
     const document = await createDocument(ctx.clubId, horseId, {
       ...data,
