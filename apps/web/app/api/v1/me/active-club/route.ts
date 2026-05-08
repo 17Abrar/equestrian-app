@@ -131,7 +131,19 @@ export async function POST(request: NextRequest) {
 }
 
 /** Clear the cookie — useful for debugging / sign-out. */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  // Audit F-20 (2026-05-08 r6): same-origin guard mirrors POST. A
+  // cross-origin attacker tricking a signed-in rider into hitting
+  // this endpoint would clear the cookie and silently switch the
+  // rider's active stable on next `getTenantContext` call. POST
+  // already guards; DELETE was the asymmetric hole.
+  if (!isSameOriginRequest(request)) {
+    logger.warn('active_club_cross_origin_blocked', {
+      origin: request.headers.get('origin'),
+      method: 'DELETE',
+    });
+    return errorResponse('FORBIDDEN', 'Cross-origin request blocked', 403);
+  }
   const { userId } = await auth();
   if (!userId) {
     return errorResponse('UNAUTHORIZED', 'Authentication required', 401);
