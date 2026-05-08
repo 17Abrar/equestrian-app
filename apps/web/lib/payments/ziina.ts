@@ -199,9 +199,12 @@ export const ziinaAdapter: PaymentProviderAdapter = {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      // Audit F-10 (2026-05-08 r6): mark 5xx / 429 retryable so the
+      // route's `withProviderRetry` wrapper actually re-attempts.
       throw new PaymentProviderError(
         'REFUND_FAILED',
         `Ziina refund failed (${res.status}): ${safeProviderPreview(text)}`,
+        { retryable: res.status >= 500 || res.status === 429 },
       );
     }
 

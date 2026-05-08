@@ -128,12 +128,16 @@ export const groomTasks = pgTable('groom_tasks', {
 
 // Audit F-70 (2026-05-07 r4): write-once-ish — the row is created when an
 // achievement unlocks. The `notified` boolean does mutate (a notifier
-// flip) but the rest of the row is immutable. We deliberately don't
-// carry an `updated_at` column because (a) it doesn't exist in SQL
-// (would be a forward migration to add) and (b) the `unlocked_at` +
-// `notified` pair carries the lifecycle data. A future contributor
-// adding a mutable field MUST also add `updated_at` here AND in SQL
-// to restore the standard invariant.
+// flip), so per the CLAUDE.md "every table carries created_at + updated_at"
+// invariant the row needs an `updated_at` column.
+//
+// Audit F-60 (2026-05-08 r6): added `updated_at NOT NULL DEFAULT now()`.
+// Migration 0049 ALTERs the SQL column with `DEFAULT now()` and
+// backfills existing rows from `unlocked_at`. The notifier flow is not
+// wired yet (no `markAchievementNotified` writer at time of writing) —
+// when it lands, the writer MUST stamp `updatedAt: new Date()` on every
+// `notified` flip, mirroring the round-5 F-40 pattern for
+// `notifications` (migration 0044).
 export const riderAchievements = pgTable('rider_achievements', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')
@@ -150,6 +154,7 @@ export const riderAchievements = pgTable('rider_achievements', {
   notified: boolean('notified').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_achievements_rider').on(table.riderMemberId),
   foreignKey({
@@ -318,6 +323,15 @@ export const communityVotes = pgTable(
     unique('community_votes_member_post_unique').on(table.memberId, table.postId),
     unique('community_votes_member_comment_unique').on(table.memberId, table.commentId),
     check('vote_type_check', sql`${table.voteType} IN (1, -1)`),
+    // Audit F-26 (2026-05-08 r6): XOR — exactly one of (postId, commentId)
+    // must be set. Postgres UNIQUE treats NULL as "not equal to NULL",
+    // so without this CHECK a row with both NULL passes both unique
+    // constraints (silently double-counts), and a row with both set
+    // skews counts on both the post and the comment. Migration 0049.
+    check(
+      'community_votes_target_xor_check',
+      sql`(${table.postId} IS NOT NULL)::int + (${table.commentId} IS NOT NULL)::int = 1`,
+    ),
     index('idx_community_votes_club').on(table.clubId),
     foreignKey({
       name: 'community_votes_member_club_fk',
@@ -403,6 +417,15 @@ export const auditLog = pgTable('audit_log', {
   // below; the inline `references(...)` is gone. Postgres MATCH SIMPLE
   // skips the composite check on rows where any column is NULL —
   // system-level rows (NULL clubId / NULL actor) keep working.
+  //
+  // Audit F-29 (2026-05-08 r6): re-verified — migration 0047 emits
+  //   `FOREIGN KEY ("actor_member_id", "club_id")
+  //      REFERENCES "club_members"(id, club_id)`
+  // i.e. bare syntax with no MATCH clause, which defaults to MATCH
+  // SIMPLE per the SQL standard / Postgres docs. A MATCH FULL composite
+  // would error on every system-level audit insert (clubId IS NULL).
+  // If a future migration ever reasserts this FK, leave the MATCH
+  // clause off — the system-row carve-out depends on it.
   actorMemberId: uuid('actor_member_id'),
 
   action: varchar('action', { length: 100 }).notNull(),

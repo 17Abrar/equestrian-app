@@ -1088,6 +1088,42 @@ CREATE INDEX idx_audit_resource ON audit_log(resource_type, resource_id);
 > No code change required at this round — the finding is documented
 > here so the next role-permission revision considers the constraint.
 
+#### Audit log retention — 90 days
+
+> **Audit F-42 (2026-05-08 r6):** `pruneAuditLog` (cron-bound,
+> `packages/db/src/queries/audit-log.ts:90`) drops audit rows older
+> than 90 days. The retention window is a deliberate trade-off
+> between operational utility (typical support-investigation horizon)
+> and table growth (~10MB/club/year at moderate usage).
+>
+> **Implication for legal-hold scenarios:** a refund-dispute claim,
+> chargeback, or right-to-erasure request filed on day 91+ has no
+> audit row in the database. The Resend dashboard preserves email
+> sends for ~7 days; Stripe Dashboard preserves payment audit data
+> indefinitely; Cloudflare Logpush preserves redacted Sentry events
+> per the configured retention. None of those is a substitute for
+> the structured audit trail.
+>
+> **If retention needs to extend beyond 90 days:** archive pruned
+> rows to R2 cold storage (JSON.gz, partitioned by year-month)
+> before the DELETE in `pruneAuditLog`. Defer until the first legal-
+> hold incident — until then, 90 days is correct for the support-
+> investigation horizon and the prune cadence is required for the
+> table-growth bound.
+
+#### Audit log PHI scrub — F-19
+
+> **Audit F-19 (2026-05-08 r6):** `createAuditEntry` runs
+> `scrubPhiFromChanges` over the `changes` JSONB before insert.
+> Keys matching the `PHI_KEYS` denylist
+> (`packages/shared/src/constants/index.ts`) are replaced with
+> `{ from: '[REDACTED]', to: '[REDACTED]' }`. The `auditLog.changes`
+> column is plaintext / indefinite-retention; without this scrub, a
+> caller that spread a freshly-decrypted health record into the
+> audit row would write PHI to a non-encrypted column and bypass
+> the encryption-at-rest invariant. The runtime guard mirrors the
+> logger's PHI-key denylist (`apps/web/lib/logger.ts:SENSITIVE_KEYS`).
+
 ---
 
 ## ROW-LEVEL SECURITY POLICIES

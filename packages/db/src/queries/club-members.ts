@@ -184,6 +184,41 @@ export type OwnerListItem = Awaited<ReturnType<typeof getOwnersByClub>>['data'][
  * path that takes a member id from request input, you almost certainly
  * want this strict variant instead.
  */
+/**
+ * Audit F-57 (2026-05-08 r6): resolve the Clerk-authenticated user's
+ * `clubMembers.id` in a SPECIFIC club. Cross-club routes (e.g.
+ * `/api/v1/me/horses/[horseId]/retire`) need to write an audit row
+ * with `(actor_member_id, club_id)` matching the target horse's
+ * club, NOT the active tenant. Using the active-tenant memberId
+ * violates the composite FK `audit_logs(actor_member_id, club_id)
+ * → club_members(id, club_id)` and the insert silently fails when
+ * the user belongs to multiple stables.
+ *
+ * Active-only by design — same security rationale as `getMemberById`.
+ * Returns null when the user has no active membership in the target
+ * club.
+ */
+export async function getMemberByClerkUserAndClub(clerkUserId: string, clubId: string) {
+  const result = await db
+    .select({
+      id: clubMembers.id,
+      clubId: clubMembers.clubId,
+      role: clubMembers.role,
+      isActive: clubMembers.isActive,
+    })
+    .from(clubMembers)
+    .where(
+      and(
+        eq(clubMembers.clerkUserId, clerkUserId),
+        eq(clubMembers.clubId, clubId),
+        eq(clubMembers.isActive, true),
+      ),
+    )
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
 export async function getMemberById(clubId: string, memberId: string) {
   const result = await db
     .select()

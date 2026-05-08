@@ -2,7 +2,7 @@ import React from 'react';
 import { type NextRequest, after } from 'next/server';
 import { eq, and, sql } from 'drizzle-orm';
 import { cancelBookingSchema } from '@equestrian/shared/schemas';
-import { calculateCancellationFee, formatMoney } from '@equestrian/shared/utils';
+import { calculateCancellationFee, coerceFeePercent, formatMoney } from '@equestrian/shared/utils';
 import {
   adminGetPaymentAccountByProvider,
   getBookingById,
@@ -130,12 +130,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // coupon-using riders. The clamp to `existing.amount` is preserved
       // so a malformed lessonPrice can never cause an overcharge.
       const feeBase = existing.amount ?? slot.lessonTypePrice;
+      // Audit F-59 (2026-05-08 r6): see no-show route for rationale.
       const feeResult = calculateCancellationFee({
         slotDate: slot.date,
         slotStartTime: slot.startTime,
         timezone: club.timezone,
         cancellationNoticeHours: club.cancellationNoticeHours,
-        lateCancellationFeePercent: Number(club.lateCancellationFeePercent),
+        lateCancellationFeePercent: coerceFeePercent(
+          club.lateCancellationFeePercent ?? '0',
+          'lateCancellationFeePercent',
+        ),
         lessonPrice: feeBase,
       });
       const fee =
