@@ -19,6 +19,15 @@ import { requireCronSecret } from '@/lib/api-utils';
  *
  * No side effects — the route does nothing beyond echoing the
  * `requireCronSecret` outcome. Safe to call on every cold start.
+ *
+ * Audit F-65 (2026-05-08 r6): GET is intentional here even though the
+ * other cron routes dropped GET in favor of POST + header to keep the
+ * secret out of access logs. The self-check is invoked by
+ * `worker-entry.mjs:53` via GET because the Cloudflare cold-start
+ * dispatch only knows how to issue a GET against an HTTP route. The
+ * secret rides in the `x-cron-secret` HEADER (not the URL), so
+ * Cloudflare access logs never capture it. Do NOT migrate this route
+ * to POST without first changing the worker-entry dispatch shape.
  */
 export async function GET(request: NextRequest) {
   const unauthorized = await requireCronSecret(request, 'cron_self_check');
