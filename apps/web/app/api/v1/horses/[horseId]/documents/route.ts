@@ -1,6 +1,8 @@
 import { type NextRequest } from 'next/server';
+import { z } from 'zod';
 import { createDocumentSchema } from '@equestrian/shared/schemas';
 import { getDocuments, createDocument, getHorseById } from '@equestrian/db/queries';
+import { fileCategoryEnum } from '@equestrian/db/schema';
 import { withAuth,
   successResponse,
   errorResponse,
@@ -13,14 +15,29 @@ interface RouteParams {
   params: Promise<{ horseId: string }>;
 }
 
+// Audit F-7 (2026-05-08 r6): bind the `?category=` filter to the
+// `file_category` pgEnum's literal tuple so an unknown value surfaces
+// as a 400 (Zod) instead of bubbling to Postgres as
+// `invalid input value for enum file_category` (500). Single-source-
+// of-truth: any future enum addition picks up automatically.
+const documentsFiltersSchema = z
+  .object({
+    category: z.enum(fileCategoryEnum.enumValues).optional(),
+  })
+  .strict();
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
       const { horseId } = await params;
       validateUuidParam('horseId', horseId);
-      const category = request.nextUrl.searchParams.get('category') ?? undefined;
+      const rawCategory = request.nextUrl.searchParams.get('category');
+      const filters = validateInput(
+        documentsFiltersSchema,
+        rawCategory == null ? {} : { category: rawCategory },
+      );
       const { page, pageSize } = parsePagination(request);
-      const { items, total } = await getDocuments(ctx.clubId, horseId, category, {
+      const { items, total } = await getDocuments(ctx.clubId, horseId, filters.category, {
         page,
         pageSize,
       });
