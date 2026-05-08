@@ -54,6 +54,25 @@ const HEALTH_ENCRYPTED_FIELDS = ['description', 'diagnosis', 'treatment'] as con
 // Free-form clinical notes on medications are also PHI-sensitive.
 const MEDICATION_ENCRYPTED_FIELDS = ['notes'] as const;
 
+// Audit F-2 (2026-05-08 r6 PR Psi): medication-administration logs are the
+// audit trail of what was given, when, and why a dose was skipped.
+// `skipReason` ("rider rejected — abscess flared") and `notes` are
+// clinical PHI that must not sit plaintext on disk. Migration 0048 ships
+// a verifier that aborts forward apply if any post-cutoff row lacks the
+// `v1:` prefix; backfill via `scripts/backfill-horse-care-phi.mjs`.
+const MEDICATION_LOG_ENCRYPTED_FIELDS = ['notes', 'skipReason'] as const;
+
+// Audit F-3 (2026-05-08 r6 PR Psi): feeding-plan `notes` carry vet/groom-
+// prescribed prescriptive content (e.g. "low-protein due to laminitis
+// recovery"). A horse's chronic condition is reconstructible from the
+// plan even when the corresponding `horse_health_records.diagnosis` is
+// encrypted — defense-in-depth gap.
+const FEEDING_PLAN_ENCRYPTED_FIELDS = ['notes'] as const;
+
+// Audit F-3 (2026-05-08 r6 PR Psi): exercise-schedule `notes` carry the
+// same prescriptive shape as feeding plans (e.g. recovery / rehab notes).
+const EXERCISE_SCHEDULE_ENCRYPTED_FIELDS = ['notes'] as const;
+
 // ─── Types ────────────────────────────────────────────────────────────
 
 type NewHealthRecord = typeof horseHealthRecords.$inferInsert;
@@ -321,9 +340,26 @@ export async function getMedicationLogs(
     eq(horseMedicationLogs.medicationId, medicationId),
   );
   const offset = (page - 1) * pageSize;
-  const [items, count] = await Promise.all([
+  // Audit F-44 (2026-05-08 r6 PR Psi): explicit projection. Was the
+  // lone `db.select()` holdout in this file. Keeps the PHI columns
+  // (`notes`, `skipReason`) so the consumer sees decrypted values —
+  // log entries are the audit trail and the detail view always wants
+  // the full row. Decryption happens client-side of the query layer
+  // via decryptFields, mirroring the pattern in getMedications.
+  const [rows, count] = await Promise.all([
     db
-      .select()
+      .select({
+        id: horseMedicationLogs.id,
+        clubId: horseMedicationLogs.clubId,
+        horseId: horseMedicationLogs.horseId,
+        medicationId: horseMedicationLogs.medicationId,
+        administeredAt: horseMedicationLogs.administeredAt,
+        administeredByMemberId: horseMedicationLogs.administeredByMemberId,
+        wasAdministered: horseMedicationLogs.wasAdministered,
+        skipReason: horseMedicationLogs.skipReason,
+        notes: horseMedicationLogs.notes,
+        createdAt: horseMedicationLogs.createdAt,
+      })
       .from(horseMedicationLogs)
       .where(where)
       .orderBy(desc(horseMedicationLogs.administeredAt))
@@ -334,16 +370,22 @@ export async function getMedicationLogs(
       .from(horseMedicationLogs)
       .where(where),
   ]);
+  const items = rows.map((row) => decryptFields(row, MEDICATION_LOG_ENCRYPTED_FIELDS));
   return { items, total: count[0]?.count ?? 0 };
 }
 
+/** List-row shape for `getMedicationLogs` (audit F-44). */
+export type MedicationLogListItem = Awaited<ReturnType<typeof getMedicationLogs>>['items'][number];
+
 export async function createMedicationLog(clubId: string, horseId: string, data: MedicationLogCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  const encrypted = encryptFields(data, MEDICATION_LOG_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseMedicationLogs)
-    .values({ ...data, clubId, horseId })
+    .values({ ...encrypted, clubId, horseId })
     .returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, MEDICATION_LOG_ENCRYPTED_FIELDS) : row;
 }
 
 // ─── Feeding Plans ────────────────────────────────────────────────────
@@ -389,7 +431,10 @@ export async function getFeedingPlans(
       .from(horseFeedingPlans)
       .where(where),
   ]);
-  return { items, total: count[0]?.count ?? 0 };
+  // Audit F-3 (2026-05-08 r6 PR Psi): decrypt prescriptive notes on
+  // read. Backed by migration 0048 verifier + backfill script.
+  const decrypted = items.map((row) => decryptFields(row, FEEDING_PLAN_ENCRYPTED_FIELDS));
+  return { items: decrypted, total: count[0]?.count ?? 0 };
 }
 
 /** List-row shape for `getFeedingPlans` (audit F-32). */
@@ -397,14 +442,24 @@ export type FeedingPlanListItem = Awaited<ReturnType<typeof getFeedingPlans>>['i
 
 export async function createFeedingPlan(clubId: string, horseId: string, data: FeedingPlanCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit F-3 (2026-05-08 r6 PR Psi): encrypt vet/groom-prescribed
+  // notes before insert. The double `unknown` cast threads through
+  // `encryptFields<T extends Record<string, unknown>>` — interface
+  // types like `FeedingPlanCreate` don't carry an index signature,
+  // but the helper only touches the named string fields.
+  const encrypted = encryptFields(
+    data as unknown as Record<string, unknown>,
+    FEEDING_PLAN_ENCRYPTED_FIELDS as readonly string[],
+  ) as unknown as FeedingPlanCreate;
   const values = {
-    ...data,
-    quantityKg: data.quantityKg != null ? String(data.quantityKg) : null,
+    ...encrypted,
+    quantityKg: encrypted.quantityKg != null ? String(encrypted.quantityKg) : null,
     clubId,
     horseId,
   } as NewFeedingPlan;
   const result = await db.insert(horseFeedingPlans).values(values).returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, FEEDING_PLAN_ENCRYPTED_FIELDS) : row;
 }
 
 export async function updateFeedingPlan(
@@ -414,9 +469,17 @@ export async function updateFeedingPlan(
   data: Partial<FeedingPlanCreate>,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit F-3 (2026-05-08 r6 PR Psi): partial-update encryption —
+  // `encryptFields` skips `undefined` so untouched fields are not
+  // overwritten. An explicit `null` clears the column (handled by the
+  // helper as null pass-through).
+  const encrypted = encryptFields(
+    data as unknown as Record<string, unknown>,
+    FEEDING_PLAN_ENCRYPTED_FIELDS as readonly string[],
+  ) as unknown as Partial<FeedingPlanCreate>;
   const values = {
-    ...data,
-    ...(data.quantityKg != null ? { quantityKg: String(data.quantityKg) } : {}),
+    ...encrypted,
+    ...(encrypted.quantityKg != null ? { quantityKg: String(encrypted.quantityKg) } : {}),
     updatedAt: new Date(),
   } as Partial<NewFeedingPlan>;
   const result = await db
@@ -430,7 +493,8 @@ export async function updateFeedingPlan(
       ),
     )
     .returning();
-  return result[0] ?? null;
+  const row = result[0];
+  return row ? decryptFields(row, FEEDING_PLAN_ENCRYPTED_FIELDS) : null;
 }
 
 export async function deleteFeedingPlan(clubId: string, horseId: string, planId: string) {
@@ -487,7 +551,10 @@ export async function getExerciseSchedules(
       .from(horseExerciseSchedules)
       .where(where),
   ]);
-  return { items, total: count[0]?.count ?? 0 };
+  // Audit F-3 (2026-05-08 r6 PR Psi): decrypt rehab/recovery notes
+  // on read. Backed by migration 0048 verifier + backfill script.
+  const decrypted = items.map((row) => decryptFields(row, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS));
+  return { items: decrypted, total: count[0]?.count ?? 0 };
 }
 
 /** List-row shape for `getExerciseSchedules` (audit F-32). */
@@ -495,11 +562,13 @@ export type ExerciseScheduleListItem = Awaited<ReturnType<typeof getExerciseSche
 
 export async function createExerciseSchedule(clubId: string, horseId: string, data: ExerciseCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  const encrypted = encryptFields(data, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseExerciseSchedules)
-    .values({ ...data, clubId, horseId })
+    .values({ ...encrypted, clubId, horseId })
     .returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS) : row;
 }
 
 export async function updateExerciseSchedule(
@@ -509,9 +578,10 @@ export async function updateExerciseSchedule(
   data: Partial<ExerciseCreate>,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  const encrypted = encryptFields(data, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS);
   const result = await db
     .update(horseExerciseSchedules)
-    .set({ ...data, updatedAt: new Date() })
+    .set({ ...encrypted, updatedAt: new Date() })
     .where(
       and(
         eq(horseExerciseSchedules.id, scheduleId),
@@ -520,7 +590,8 @@ export async function updateExerciseSchedule(
       ),
     )
     .returning();
-  return result[0] ?? null;
+  const row = result[0];
+  return row ? decryptFields(row, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS) : null;
 }
 
 export async function deleteExerciseSchedule(clubId: string, horseId: string, scheduleId: string) {

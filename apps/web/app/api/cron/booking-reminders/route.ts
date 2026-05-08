@@ -83,6 +83,19 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
   // Cache club lookups across the loop — multiple bookings often share
   // a club, and getClubById is a tenant-scoped network round-trip.
   const clubCache = new Map<string, Awaited<ReturnType<typeof getClubById>>>();
+  // Audit r6 F-15 (2026-05-08): coach lookups follow the same pattern.
+  // Pre-fix this fired one round-trip per candidate booking even when
+  // the small enumerated set of coaches per club (typically <10) meant
+  // most calls hit the same row. At 500 candidates × ~30ms/round-trip,
+  // ~15s of cron wallclock per pass — material against the 5min budget.
+  // The cache is bounded by the candidate set (already capped at 500)
+  // so memory pressure is irrelevant. We cache `null` too: a deleted
+  // coach should resolve to `coachName=undefined` consistently across
+  // the pass without re-querying.
+  const coachCache = new Map<
+    string,
+    Awaited<ReturnType<typeof getMemberByIdIncludingDeactivated>>
+  >();
 
   for (const booking of candidates) {
     try {
@@ -195,10 +208,17 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
         // may have been deactivated between booking creation and the
         // reminder cron pass; the booking still occurs and the rider
         // should still see the coach's name on the reminder.
-        const coach = await getMemberByIdIncludingDeactivated(
-          booking.clubId,
-          booking.coachMemberId,
-        );
+        // Audit r6 F-15 (2026-05-08): hit the per-pass cache first so
+        // a club with the same coach across many bookings doesn't fan
+        // out N round-trips for the same row.
+        let coach = coachCache.get(booking.coachMemberId);
+        if (coach === undefined) {
+          coach = await getMemberByIdIncludingDeactivated(
+            booking.clubId,
+            booking.coachMemberId,
+          );
+          coachCache.set(booking.coachMemberId, coach);
+        }
         coachName = coach?.displayName ?? undefined;
       }
 

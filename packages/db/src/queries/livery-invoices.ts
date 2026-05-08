@@ -37,6 +37,27 @@ export interface BillableHorse {
   lastInvoicePeriodStart: string | null;
 }
 
+/**
+ * Audit r6 F-14 (2026-05-08): cap on the cron's per-pass scan size. The
+ * cron is daily and partial passes are inherently safe — the next day's
+ * run picks up whatever this pass didn't reach. The limit binds well
+ * before the worker's 5min wallclock budget would (each row drives a
+ * sequential `findHorseBillingAnchor` round-trip, plus an INSERT per
+ * billable period). Tunable via `LIVERY_BILLING_CRON_LIMIT` for
+ * operators who need to widen it in the rare case a cron run is skipped
+ * for multiple days. Mirrors the bounding pattern in `pruneAuditLog`.
+ *
+ * The query orders by `liveryStartDate DESC` so that when the limit
+ * binds, newer horses (likelier to be in their first or second billing
+ * period and therefore have a tighter SLA on their first invoice) win
+ * over older ones whose existing periods are already covered.
+ */
+const LIVERY_BILLING_CRON_LIMIT = (() => {
+  const raw = Number(process.env.LIVERY_BILLING_CRON_LIMIT);
+  if (Number.isFinite(raw) && raw >= 100 && raw <= 100_000) return raw;
+  return 1000;
+})();
+
 export async function findHorsesDueForBilling(today: string): Promise<BillableHorse[]> {
   // Anchor: last invoice per horse (max period_start). We left-join so horses
   // that have never been billed still appear. `rawDb` because this is called
@@ -91,7 +112,10 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
         // stop billing — see audit B-29 / F-1.
         isNull(clubs.deletedAt),
       ),
-    );
+    )
+    // Audit r6 F-14: see comment on LIVERY_BILLING_CRON_LIMIT above.
+    .orderBy(desc(horses.liveryStartDate))
+    .limit(LIVERY_BILLING_CRON_LIMIT);
 
   return rows
     .filter((r): r is typeof r & {
