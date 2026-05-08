@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { type TokenCache } from '@clerk/clerk-expo';
+import { captureMobileException } from './sentry';
 
 /**
  * Clerk token cache backed by Expo SecureStore. The earlier implementation
@@ -25,8 +26,10 @@ export const tokenCache: TokenCache = {
     try {
       return await SecureStore.getItemAsync(key);
     } catch (err) {
-      // eslint-disable-next-line no-console -- diagnostic before
-      // @sentry/react-native lands; keychain failures need to surface.
+      // Audit F-49 (2026-05-08 r6): forward to Sentry. The console.error
+      // stays as a backstop for the no-DSN dev path.
+      captureMobileException(err, 'clerk_token_cache_get_failed', { key });
+      // eslint-disable-next-line no-console
       console.error('[clerk-token-cache] getToken failed', {
         key,
         message: err instanceof Error ? err.message : String(err),
@@ -41,8 +44,9 @@ export const tokenCache: TokenCache = {
     try {
       await SecureStore.setItemAsync(key, value);
     } catch (err) {
-      // eslint-disable-next-line no-console -- diagnostic before
-      // @sentry/react-native lands; persist failures need to surface.
+      // Audit F-49 (2026-05-08 r6): forward to Sentry.
+      captureMobileException(err, 'clerk_token_cache_save_failed', { key });
+      // eslint-disable-next-line no-console
       console.error('[clerk-token-cache] saveToken failed', {
         key,
         message: err instanceof Error ? err.message : String(err),
