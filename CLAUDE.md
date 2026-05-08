@@ -146,6 +146,8 @@ Fix any errors before presenting your work. Do NOT tell me "there might be type 
 
 7. NEVER write console.log for production code. Use the structured logger (see ARCHITECTURE.md). console.log is only acceptable in development-only code paths.
 
+   **Carve-out — `packages/db` and `packages/shared`:** these workspaces by design cannot import the app-side logger (`apps/web/lib/logger.ts`) because that would create a circular dep. The handful of `console.warn` / `console.error` calls in `packages/db/src/queries/payment-accounts.ts`, `packages/db/src/queries/audit-log.ts`, and similar package-side files are intentional and emit structured JSON matching the logger's output shape. The audit-log fallback is specifically the "audit trail of last resort" — when the audit-log INSERT itself fails, there's no other writable surface. Audit F-73 (2026-05-08 r6) — preserve these calls; if you add new ones, document the rationale inline as those files do.
+
 8. NEVER commit code without proper input validation. Every API endpoint validates its input using Zod schemas before processing. No exceptions.
 
 9. NEVER return raw database errors to the client. Catch database errors and return sanitized, user-friendly error messages. Log the full error server-side.
