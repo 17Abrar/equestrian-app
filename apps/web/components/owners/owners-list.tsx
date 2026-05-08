@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Plus, Search, Trash2, Crown } from 'lucide-react';
 import { createOwnerSchema, type CreateOwnerInput } from '@equestrian/shared/schemas';
 import { useOwners, useCreateOwner, useDeactivateOwner } from '@/hooks/use-staff';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,12 +45,14 @@ interface OwnersListProps {
 
 export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
   const [search, setSearch] = useState('');
+  // Debounce so each keystroke doesn't fire a fresh /owners query.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
   const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useOwners({
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     page,
     pageSize: DEFAULT_PAGE_SIZE,
   });

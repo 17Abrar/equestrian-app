@@ -5,7 +5,7 @@ import {
   withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   validateUuidParam,
   parsePagination,
   paginatedListResponse,
@@ -36,8 +36,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { competitionId } = await params;
       validateUuidParam('competitionId', competitionId);
-      const body = await request.json();
-      const data = validateInput(createCompetitionClassSchema, body);
+      const data = await parseRequiredBody(request, createCompetitionClassSchema);
 
       // Verify competition exists and belongs to this club
       const competition = await getCompetitionById(ctx.clubId, competitionId);

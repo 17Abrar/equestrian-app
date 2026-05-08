@@ -10,14 +10,13 @@ import {
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createRecurringSlotsSchema, body);
+      const data = await parseRequiredBody(request, createRecurringSlotsSchema);
 
       // Get club timezone
       const clubRow = await db

@@ -5,7 +5,7 @@ import { clubMembers } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { deleteR2Object, verifyObjectMagicBytes } from '@/lib/storage';
 import { markR2KeyVerified } from '@/lib/upload-verify-cache';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 const verifyRequestSchema = z
@@ -44,8 +44,7 @@ const KEY_PATTERN = /^[0-9a-f-]{36}\/[a-z][a-z0-9_/-]*\/\d+-[a-z0-9._-]+$/;
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(verifyRequestSchema, body);
+      const data = await parseRequiredBody(request, verifyRequestSchema);
 
       // Keys look like "<clubId>/<folder>/<ts>-<name>". Validate shape
       // before we go near the S3 API so a malformed key can't be weaponised

@@ -367,7 +367,18 @@ export async function findOverdueInvoicesForReminders(today: string) {
 // that derives `invoiceId` from a less-trusted source (e.g. a rider portal
 // route exposing owner-side invoice ops) would otherwise have no DB-level
 // guard against acting on a foreign-club row.
-export async function markInvoiceOverdueAndLogReminder(clubId: string, invoiceId: string) {
+//
+// CAS on `reminder_count`: two cron isolates that read the same row in the
+// same threshold window (Cloudflare can replay scheduled() across regions
+// or operator-triggered, plus the worker-entry retries on 5xx) would each
+// bump the counter and each fire the email. The CAS makes the bump atomic:
+// the loser sees `null` and the caller skips the send. Symmetric to
+// `markBookingReminderSent`'s CAS pattern.
+export async function markInvoiceOverdueAndLogReminder(
+  clubId: string,
+  invoiceId: string,
+  expectedReminderCount: number,
+) {
   const result = await rawDb
     .update(liveryInvoices)
     .set({
@@ -376,7 +387,13 @@ export async function markInvoiceOverdueAndLogReminder(clubId: string, invoiceId
       reminderCount: sql`${liveryInvoices.reminderCount} + 1`,
       updatedAt: new Date(),
     })
-    .where(and(eq(liveryInvoices.id, invoiceId), eq(liveryInvoices.clubId, clubId)))
+    .where(
+      and(
+        eq(liveryInvoices.id, invoiceId),
+        eq(liveryInvoices.clubId, clubId),
+        eq(liveryInvoices.reminderCount, expectedReminderCount),
+      ),
+    )
     .returning();
   return result[0] ?? null;
 }

@@ -8,7 +8,7 @@ import {
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { competitionEntries } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string; classId: string }>;
@@ -37,8 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { classId } = await params;
       validateUuidParam('classId', classId);
-      const body = await request.json();
-      const data = validateInput(createCompetitionResultSchema, body);
+      const data = await parseRequiredBody(request, createCompetitionResultSchema);
 
       // Verify the entry belongs to the class in the URL
       const entry = await db

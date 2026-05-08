@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { Plus, Trash2, Users, Pencil } from 'lucide-react';
 import { STALE_TIME_BURST } from '@equestrian/shared/constants';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -478,15 +479,27 @@ function FiltersEditor({ filters, onChange }: FiltersEditorProps) {
 // ─── Live preview count ───────────────────────────────────────────────
 
 function LivePreview({ filters }: { filters: AudienceFilters }) {
-  // Debounce by key so rapid typing doesn't spam the preview endpoint.
-  const key = useMemo(() => JSON.stringify(filters), [filters]);
+  // Debounce so rapid typing in `Active within (days)` / `Minimum
+  // bookings` doesn't fire a preview POST per keystroke. The previous
+  // `useMemo` over JSON.stringify only memoized the React Query KEY —
+  // it did not delay the fetch (every render with new filters minted a
+  // new key, which immediately fired the queryFn). The audiences-list
+  // backend is heavy (audit F-5) so the keystroke amplification
+  // matters even with `staleTime`. `useDebouncedValue` over the
+  // stringified filters delays both the key and the fetch by 250ms.
+  const stringifiedFilters = useMemo(() => JSON.stringify(filters), [filters]);
+  const debouncedKey = useDebouncedValue(stringifiedFilters, 250);
+  const debouncedFilters = useMemo(
+    () => JSON.parse(debouncedKey) as AudienceFilters,
+    [debouncedKey],
+  );
   const { data, isFetching } = useQuery({
-    queryKey: ['audiences', 'preview', key],
+    queryKey: ['audiences', 'preview', debouncedKey],
     queryFn: () =>
       fetchJson<ApiEnvelope<{ count: number }>>('/api/v1/emails/audiences/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filters }),
+        body: JSON.stringify({ filters: debouncedFilters }),
       }),
     staleTime: STALE_TIME_BURST,
   });

@@ -7,7 +7,7 @@ import {
   deleteExpense,
   getHorseById,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ expenseId: string }>;
@@ -18,8 +18,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { expenseId } = await params;
       validateUuidParam('expenseId', expenseId);
-      const body = await request.json();
-      const data = validateInput(updateExpenseSchema, body);
+      const data = await parseRequiredBody(request, updateExpenseSchema);
 
       const { amount, ...rest } = data;
 

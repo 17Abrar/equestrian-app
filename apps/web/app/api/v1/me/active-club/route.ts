@@ -7,7 +7,8 @@ import { and, eq } from 'drizzle-orm';
 import {
   errorResponse,
   successResponse,
-  validateInput,
+  parseRequiredBody,
+  PayloadTooLargeError,
   ValidationError,
 } from '@/lib/api-utils';
 import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
@@ -77,8 +78,7 @@ export async function POST(request: NextRequest) {
     // No catch — clubId is required, so an empty/malformed body should
     // surface as 400 INVALID_JSON (via the SyntaxError branch below)
     // rather than as a confusing missing-field validation error.
-    const body = await request.json();
-    const data = validateInput(setActiveClubSchema, body);
+    const data = await parseRequiredBody(request, setActiveClubSchema);
 
     const membership = await db
       .select({ id: clubMembers.id })
@@ -118,6 +118,9 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof SyntaxError) {
       return errorResponse('INVALID_JSON', 'Invalid JSON body', 400);
+    }
+    if (error instanceof PayloadTooLargeError) {
+      return errorResponse('PAYLOAD_TOO_LARGE', error.message, 413);
     }
     // This route bypasses withAuth (it CHANGES the active tenant), so it
     // also misses withAuth's unhandled-error logger. A DB outage or Clerk

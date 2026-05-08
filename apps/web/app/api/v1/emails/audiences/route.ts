@@ -11,6 +11,7 @@ import {
   successResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
   paginatedResponse,
 } from '@/lib/api-utils';
 
@@ -63,8 +64,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createAudienceSchema, body);
+      const data = await parseRequiredBody(request, createAudienceSchema);
 
       const audience = await createAudience(
         ctx.clubId,

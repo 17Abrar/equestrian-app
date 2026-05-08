@@ -11,6 +11,23 @@ export function getTodayDateString(timezone: string): string {
 }
 
 /**
+ * Returns "today" as a YYYY-MM-DD string in the BROWSER / device local
+ * timezone. Use for default values on date-input controls where the user
+ * naturally expects "today by my watch", not "today in UTC".
+ *
+ * `new Date().toISOString().slice(0, 10)` returns the UTC date and is
+ * subtly wrong in any non-UTC timezone — in Dubai (UTC+4) at 02:00 local,
+ * it returns yesterday-UTC, so a "today" default lands on yesterday.
+ */
+export function getTodayLocalDateString(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
  * Returns UTC start/end boundaries for "today" in the given timezone.
  * Use for range queries on `timestamptz` columns.
  */

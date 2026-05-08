@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateExerciseScheduleSchema } from '@equestrian/shared/schemas';
 import { updateExerciseSchedule, deleteExerciseSchedule } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; scheduleId: string }>;
@@ -13,8 +13,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { horseId, scheduleId } = await params;
       validateUuidParam('horseId', horseId);
       validateUuidParam('scheduleId', scheduleId);
-      const body = await request.json();
-      const data = validateInput(updateExerciseScheduleSchema, body);
+      const data = await parseRequiredBody(request, updateExerciseScheduleSchema);
       const schedule = await updateExerciseSchedule(ctx.clubId, horseId, scheduleId, data);
 
       if (!schedule) {

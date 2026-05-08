@@ -6,7 +6,7 @@ import {
   deleteCompetitionClass,
   CompetitionClassHasEntriesError,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string; classId: string }>;
@@ -18,8 +18,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { competitionId, classId } = await params;
       validateUuidParam('competitionId', competitionId);
       validateUuidParam('classId', classId);
-      const body = await request.json();
-      const data = validateInput(updateCompetitionClassSchema, body);
+      const data = await parseRequiredBody(request, updateCompetitionClassSchema);
 
       // Bind the class to its competition. Without this an admin can mutate
       // any class in their club via any competitionId in the URL — fine for

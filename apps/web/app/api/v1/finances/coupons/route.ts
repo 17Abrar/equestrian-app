@@ -6,7 +6,7 @@ import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { getCouponsByClub, createCoupon } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs, couponStatusEnum } from '@equestrian/db/schema';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
 
 // Audit G-26: a datetime-local string from the admin form (no Z, no
 // offset) is meant to mean "this hour, in the club's local timezone".
@@ -68,8 +68,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(createCouponSchema, body);
+      const data = await parseRequiredBody(request, createCouponSchema);
 
       const [startsAt, expiresAt] = await Promise.all([
         resolveCouponDate(ctx.clubId, data.startsAt),

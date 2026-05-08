@@ -6,7 +6,7 @@ import {
   isParentOf,
   withdrawCompetitionEntry,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -38,8 +38,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!cls || cls.competitionId !== competitionId) {
       return errorResponse('NOT_FOUND', 'Class does not belong to this competition', 404);
     }
-    const body = await request.json();
-    const data = validateInput(withdrawSchema, body);
+    const data = await parseRequiredBody(request, withdrawSchema);
 
     // Three valid withdraw paths, symmetric with the POST endpoint:
     //   - Staff with `competitions:update` (admin/manager via wildcard)

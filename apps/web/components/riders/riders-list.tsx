@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { createRiderSchema, type CreateRiderFormValues, type CreateRiderInput } from '@equestrian/shared/schemas';
 import { useRiders, useCreateRider } from '@/hooks/use-riders';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -76,6 +77,8 @@ type SkillLevelFilter = (typeof SKILL_LEVELS_FILTER)[number] | undefined;
 
 export function RidersList({ canCreate = true }: RidersListProps = {}) {
   const [search, setSearch] = useState('');
+  // Debounce so each keystroke doesn't fire a fresh /riders query.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [skillLevel, setSkillLevel] = useState<SkillLevelFilter>();
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state so EmptyState CTA
@@ -83,7 +86,7 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
   const [addOpen, setAddOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useRiders({
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     skillLevel,
     page,
     pageSize: DEFAULT_PAGE_SIZE,

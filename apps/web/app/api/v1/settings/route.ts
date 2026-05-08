@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import { z } from 'zod';
 import {
   updateClubProfileSchema,
   updateBookingRulesSchema,
@@ -12,7 +13,13 @@ import {
   type UpdateDiscoveryInput,
 } from '@equestrian/shared/schemas';
 import { getClubById, updateClubSettings } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
+
+// Settings PATCH composes 5 sub-schemas, each `safeParse`d against the
+// raw body. parseRequiredBody only enforces the body cap + JSON shape;
+// the per-section parses below do the real validation. Passthrough so
+// keys belonging to one schema reach the safeParse calls for the others.
+const passthroughObjectSchema = z.object({}).passthrough();
 
 // Union of every settings sub-schema's *input* shape. Typing the merged
 // PATCH payload as this — instead of `Record<string, unknown>` — means a
@@ -45,7 +52,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
+      const body = await parseRequiredBody(request, passthroughObjectSchema);
 
       // Accept any combination of profile, booking rules, branding, or
       // notification updates in a single PATCH. Unknown keys are ignored

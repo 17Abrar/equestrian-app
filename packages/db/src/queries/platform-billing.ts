@@ -436,10 +436,17 @@ export async function findOverduePlatformInvoicesForReminders(today: string) {
  * Used by the cron when a reminder email actually went out (i.e. the
  * club has an email on file). Mirrors livery's
  * `markInvoiceOverdueAndLogReminder`.
+ *
+ * CAS on `reminder_count`: prevents two concurrent cron isolates from
+ * both bumping the counter and both firing the same threshold's email.
+ * Caller passes the value it observed in `findOverdueInvoicesForReminders`;
+ * a `null` return means another isolate beat us and the caller must
+ * skip the send.
  */
 export async function markPlatformInvoiceOverdueAndLogReminder(
   clubId: string,
   invoiceId: string,
+  expectedReminderCount: number,
 ) {
   const result = await rawDb
     .update(platformSubscriptionInvoices)
@@ -453,6 +460,7 @@ export async function markPlatformInvoiceOverdueAndLogReminder(
       and(
         eq(platformSubscriptionInvoices.id, invoiceId),
         eq(platformSubscriptionInvoices.clubId, clubId),
+        eq(platformSubscriptionInvoices.reminderCount, expectedReminderCount),
       ),
     )
     .returning();

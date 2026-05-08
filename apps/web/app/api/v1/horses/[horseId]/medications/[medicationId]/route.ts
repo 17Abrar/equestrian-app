@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateMedicationSchema } from '@equestrian/shared/schemas';
 import { updateMedication } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -28,8 +28,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { horseId, medicationId } = await params;
     validateUuidParam('horseId', horseId);
     validateUuidParam('medicationId', medicationId);
-    const body = await request.json();
-    const data = validateInput(updateMedicationSchema, body);
+    const data = await parseRequiredBody(request, updateMedicationSchema);
     const medication = await updateMedication(ctx.clubId, horseId, medicationId, data);
 
     if (!medication) {

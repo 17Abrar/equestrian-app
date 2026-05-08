@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { getMemberByIdIncludingDeactivated, updateMember, deactivateMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 import { updateOwnerSchema } from '@equestrian/shared/schemas';
 
 interface RouteParams {
@@ -54,8 +54,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { error } = await loadOwnerOrError(ctx.clubId, memberId);
       if (error) return error;
 
-      const body = await request.json();
-      const data = validateInput(updateOwnerSchema, body);
+      const data = await parseRequiredBody(request, updateOwnerSchema);
 
       const member = await updateMember(ctx.clubId, memberId, data);
 

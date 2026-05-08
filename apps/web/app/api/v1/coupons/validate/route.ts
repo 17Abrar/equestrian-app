@@ -5,7 +5,7 @@ import {
   getMemberById,
   validateCoupon,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 // `slotId` is the canonical pricing source — we read amount + currency from
@@ -39,8 +39,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const body = await request.json();
-      const data = validateInput(validateCouponRequestSchema, body);
+      const data = await parseRequiredBody(request, validateCouponRequestSchema);
 
       // Riders/parents may only validate for themselves or the child they
       // booked for. `bookings:read` already covers staff via the wildcard

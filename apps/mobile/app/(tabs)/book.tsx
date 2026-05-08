@@ -33,7 +33,13 @@ function getWeekDates(weekOffset: number): { dates: Date[] } {
 }
 
 function toDateString(d: Date): string {
-  return d.toISOString().split('T')[0]!;
+  // Local-timezone date — `d.toISOString()` returns UTC, so an early-
+  // morning render in Dubai / Riyadh / KL sees yesterday's date as
+  // "today" and greys out the legitimate day on the picker.
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function formatTime(timeStr: string): string {

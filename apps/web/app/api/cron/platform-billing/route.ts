@@ -407,7 +407,18 @@ async function sendPlatformReminders(
       // Clubs with no email get a one-shot `pending → overdue` status
       // flip with no counter bump.
       if (inv.clubEmail) {
-        await markPlatformInvoiceOverdueAndLogReminder(inv.clubId, inv.invoiceId);
+        // CAS on `reminder_count`: see livery-billing/route.ts. A
+        // null return means another isolate already bumped the counter
+        // and sent (or is sending) the email; skip this pass.
+        const claimed = await markPlatformInvoiceOverdueAndLogReminder(
+          inv.clubId,
+          inv.invoiceId,
+          inv.reminderCount,
+        );
+        if (!claimed) {
+          skipped += 1;
+          continue;
+        }
         const result = await sendEmail({
           to: inv.clubEmail,
           subject:

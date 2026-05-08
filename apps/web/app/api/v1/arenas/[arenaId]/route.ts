@@ -4,7 +4,8 @@ import { getArenaById, updateArena, deleteArena } from '@equestrian/db/queries';
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput, validateUuidParam } from '@/lib/api-utils';
+  parseRequiredBody,
+  validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ arenaId: string }>;
@@ -32,8 +33,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     async (ctx) => {
       const { arenaId } = await params;
       validateUuidParam('arenaId', arenaId);
-      const body = await request.json();
-      const data = validateInput(updateArenaSchema, body);
+      const data = await parseRequiredBody(request, updateArenaSchema);
 
       const arena = await updateArena(ctx.clubId, arenaId, data);
 

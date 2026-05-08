@@ -4,7 +4,7 @@ import { getMedications, createMedication, getHorseById } from '@equestrian/db/q
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
@@ -58,8 +58,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse('NOT_FOUND', 'Horse not found', 404);
     }
 
-    const body = await request.json();
-    const data = validateInput(createMedicationSchema, body);
+    const data = await parseRequiredBody(request, createMedicationSchema);
     const medication = await createMedication(ctx.clubId, horseId, data);
 
     if (medication) {

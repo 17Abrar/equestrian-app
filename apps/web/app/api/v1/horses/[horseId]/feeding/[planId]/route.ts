@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateFeedingPlanSchema } from '@equestrian/shared/schemas';
 import { updateFeedingPlan, deleteFeedingPlan } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; planId: string }>;
@@ -13,8 +13,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const { horseId, planId } = await params;
       validateUuidParam('horseId', horseId);
       validateUuidParam('planId', planId);
-      const body = await request.json();
-      const data = validateInput(updateFeedingPlanSchema, body);
+      const data = await parseRequiredBody(request, updateFeedingPlanSchema);
       const plan = await updateFeedingPlan(ctx.clubId, horseId, planId, data);
 
       if (!plan) {

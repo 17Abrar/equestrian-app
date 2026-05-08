@@ -251,6 +251,9 @@ export function RiderHome() {
   const {
     data: past,
     isLoading: pastLoading,
+    isError: pastError,
+    error: pastErr,
+    refetch: refetchPast,
   } = useBookings({ status: 'completed', pageSize: 3 });
 
   // Filter upcoming to only pending/confirmed
@@ -302,14 +305,18 @@ export function RiderHome() {
       </section>
 
       {/* Recent past bookings */}
-      {!pastLoading && pastBookings.length > 0 && (
+      {!pastLoading && (pastBookings.length > 0 || pastError) && (
         <section>
           <h2 className="mb-4 text-lg font-semibold">Recent Lessons</h2>
-          <div className="space-y-3">
-            {pastBookings.map((booking) => (
-              <BookingCard key={booking.id} booking={booking} />
-            ))}
-          </div>
+          {pastError ? (
+            <ErrorState message={pastErr?.message} onRetry={refetchPast} />
+          ) : (
+            <div className="space-y-3">
+              {pastBookings.map((booking) => (
+                <BookingCard key={booking.id} booking={booking} />
+              ))}
+            </div>
+          )}
         </section>
       )}
 

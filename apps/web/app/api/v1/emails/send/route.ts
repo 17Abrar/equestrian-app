@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
@@ -25,8 +25,7 @@ const sendEmailSchema = z
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const reqBody = await request.json();
-      const data = validateInput(sendEmailSchema, reqBody);
+      const data = await parseRequiredBody(request, sendEmailSchema);
 
       // Recipient must be an active member of THIS club. Without this check
       // the endpoint is a spam relay backed by the club's Resend quota —

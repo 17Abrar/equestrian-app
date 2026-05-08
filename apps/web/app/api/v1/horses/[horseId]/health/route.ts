@@ -5,7 +5,7 @@ import { toMinorUnits } from '@equestrian/shared/utils';
 import { withAuth,
   successResponse,
   errorResponse,
-  validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
@@ -63,8 +63,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Horse not found', 404);
       }
 
-      const body = await request.json();
-      const data = validateInput(createHealthRecordSchema, body);
+      const data = await parseRequiredBody(request, createHealthRecordSchema);
 
       // Health records have no currency field — they ride the club's currency.
       // Scale by it so KWD/BHD clubs (3-decimal) don't get silently 10×ed.

@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { upsertPaymentAccount, WebhookSecretReusedError } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { stripeAdapter } from '@/lib/payments/stripe';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
@@ -45,8 +45,7 @@ const connectSchema = z.object({
 export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const body = await request.json();
-      const data = validateInput(connectSchema, body);
+      const data = await parseRequiredBody(request, connectSchema);
 
       try {
         const result = await stripeAdapter.connectWithCredentials({

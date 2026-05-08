@@ -7,6 +7,7 @@ import { withAuth,
   successResponse,
   errorResponse,
   validateInput,
+  parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
@@ -82,8 +83,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse('NOT_FOUND', 'Horse not found', 404);
     }
 
-    const body = await request.json();
-    const data = validateInput(createDocumentSchema, body);
+    const data = await parseRequiredBody(request, createDocumentSchema);
 
     // Audit F-8 (2026-05-08 r6): server-side verification gate. The
     // route comment used to claim "the R2 file URL was already verified
