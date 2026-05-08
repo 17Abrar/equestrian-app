@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -124,7 +125,17 @@ export default function BookScreen() {
   // `ApiResponse<MeData>`, so `meData.data.memberId` is well-typed.
   const memberId = meData?.success ? meData.data.memberId : null;
 
-  const { data: slotsData, isLoading } = useBookingSlots({ dateFrom, dateTo });
+  // Audit F-16 (2026-05-08 r6): destructure error/refetch so the booking
+  // tab matches the home/horses screens — a network failure on this
+  // critical-flow tab now surfaces as an explicit error + retry button
+  // instead of "No slots available / Try a different date" prose.
+  const {
+    data: slotsData,
+    isLoading,
+    refetch: refetchSlots,
+  } = useBookingSlots({ dateFrom, dateTo });
+  const slotsErrorMessage =
+    slotsData && !slotsData.success ? slotsData.error.message : null;
   const createBooking = useCreateBooking();
   const { pay, isPaying } = usePayBooking();
 
@@ -367,7 +378,29 @@ export default function BookScreen() {
           {/* Loading — audit F-31: SlotCard-shaped skeletons */}
           {isLoading && <SlotListSkeleton count={4} />}
 
-          {!isLoading && slotsForDate.length === 0 && (
+          {/* Audit F-16 (2026-05-08 r6): explicit error state with retry,
+              mirrors the home/horses tabs. Cellular connectivity on
+              mobile is flakier than web — converts "the app's broken"
+              support tickets into self-service recoveries. */}
+          {!isLoading && slotsErrorMessage && (
+            <View className="items-center gap-3 py-8">
+              <Text className="text-base text-rose-500">Couldn't load slots</Text>
+              <Text className="text-center text-sm text-gray-400">
+                {slotsErrorMessage}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  void refetchSlots();
+                }}
+                className="rounded-lg bg-gray-900 px-4 py-2"
+              >
+                <Text className="text-sm font-semibold text-white">Try again</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {!isLoading && !slotsErrorMessage && slotsForDate.length === 0 && (
             <View className="items-center py-8">
               <Text className="text-base text-gray-400">No slots available</Text>
               <Text className="mt-1 text-sm text-gray-300">Try a different date</Text>

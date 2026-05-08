@@ -5,77 +5,18 @@ import { type CreateExpenseInput, type UpdateExpenseInput, type CreateCouponInpu
 import {
   type ApiSuccessResponse,
   type ApiResponse,
-  type CouponDiscountType,
-  type CouponStatus,
-  type InvoiceStatus,
   type PaginatedResponse,
-  type PaymentMethod,
-  type PaymentStatus,
+  type FinanceOverview,
+  type Expense,
+  type Payment,
+  type Invoice,
+  type Coupon,
 } from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-interface FinanceOverview {
-  totalRevenue: number;
-  totalExpenses: number;
-  outstandingBalance: number;
-  paymentMethodBreakdown: Array<{ method: string | null; total: number; count: number }>;
-}
-
-export interface Expense {
-  id: string;
-  category: string;
-  description: string;
-  amount: number;
-  currency: string;
-  date: string;
-  horseId: string | null;
-  vendorName: string | null;
-}
-
-export interface Payment {
-  id: string;
-  amount: number;
-  currency: string;
-  // Audit F-56 (2026-05-07 r5 PR Sigma): swap bare `string` for the project
-  // enum unions from `@equestrian/shared/types`.
-  paymentMethod: PaymentMethod;
-  status: PaymentStatus;
-  description: string | null;
-  paidAt: string | null;
-  createdAt: string;
-  memberName: string | null;
-}
-
-export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  // Audit F-56: invoice lifecycle is the InvoiceStatus enum.
-  status: InvoiceStatus;
-  amount: number;
-  totalAmount: number;
-  currency: string;
-  description: string | null;
-  dueDate: string | null;
-  paidAt: string | null;
-  sentAt: string | null;
-  createdAt: string;
-  memberName: string | null;
-}
-
-export interface Coupon {
-  id: string;
-  code: string;
-  // Audit F-56: discount type / status are project-defined enums.
-  discountType: CouponDiscountType;
-  discountValue: number;
-  maxDiscount: number | null;
-  maxUses: number | null;
-  maxUsesPerRider: number | null;
-  usageCount: number;
-  status: CouponStatus;
-  startsAt: string | null;
-  expiresAt: string | null;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): finance DTOs consolidated into
+// `packages/shared/src/types/responses/finances.ts`. Re-exported below.
+export type { FinanceOverview, Expense, Payment, Invoice, Coupon };
 
 export function useFinanceOverview() {
   return useQuery({

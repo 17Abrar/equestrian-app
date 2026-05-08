@@ -3,6 +3,7 @@ import { retireHorseOwnershipSchema } from '@equestrian/shared/schemas';
 import {
   retireHorseOwnership,
   getHorseOwnershipByUser,
+  getMemberByClerkUserAndClub,
   createAuditEntry,
   cancelPendingInvoicesForHorse,
 } from '@equestrian/db/queries';
@@ -61,9 +62,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_ACTIVE', 'Unable to retire horse', 409);
       }
 
+      // Audit F-57 (2026-05-08 r6): resolve actor memberId in the
+      // TARGET club (the horse's club), not the active tenant. The
+      // active-tenant `ctx.memberId` may belong to a different stable
+      // when the owner is multi-club, and the audit_log composite FK
+      // `(actor_member_id, club_id) → club_members(id, club_id)` would
+      // reject the insert. Falls back to NULL on missing membership —
+      // system-row carve-out per migration 0047 (MATCH SIMPLE).
+      const actor =
+        ctx.clubId === ownership.clubId
+          ? { id: ctx.memberId }
+          : await getMemberByClerkUserAndClub(ctx.userId, ownership.clubId);
+
       void createAuditEntry({
         clubId: ownership.clubId,
-        actorMemberId: ctx.memberId,
+        actorMemberId: actor?.id ?? null,
         action: 'horse.retire_ownership_self',
         resourceType: 'horse',
         resourceId: horseId,
