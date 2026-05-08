@@ -1,33 +1,16 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type DashboardStats,
+} from '@equestrian/shared/types';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
-export interface DashboardStats {
-  horses: {
-    total: number;
-    available: number;
-  };
-  riders: {
-    total: number;
-  };
-  todayBookings: {
-    total: number;
-    confirmed: number;
-    pending: number;
-  };
-  todaySlots: number;
-  recentBookings: Array<{
-    id: string;
-    status: string;
-    createdAt: string;
-    slotDate: string;
-    slotStartTime: string;
-    riderName: string | null;
-  }>;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): `DashboardStats` is now in
+// `packages/shared/src/types/responses/dashboard.ts`.
+export type { DashboardStats };
 
 export function useDashboardStats() {
   return useQuery({

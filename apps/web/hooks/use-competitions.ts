@@ -9,74 +9,27 @@ import {
   type CreateCompetitionResultInput,
   type CompetitionFiltersInput,
 } from '@equestrian/shared/schemas';
-import { type ApiSuccessResponse, type ApiResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type ApiResponse,
+  type Competition,
+  type CompetitionClass,
+  type CompetitionEntry,
+  type CompetitionResult,
+  type CalendarCompetition,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-// ─── Types ────────────────────────────────────────────────────────────
-
-export interface Competition {
-  id: string;
-  clubId: string;
-  name: string;
-  description: string | null;
-  startDate: string;
-  endDate: string;
-  location: string | null;
-  disciplines: string[] | null;
-  entryFee: number | null;
-  currency: string;
-  registrationDeadline: string | null;
-  maxParticipants: number | null;
-  status: string;
-  createdAt: string;
-}
-
-export interface CompetitionClass {
-  id: string;
-  clubId: string;
-  competitionId: string;
-  name: string;
-  discipline: string | null;
-  level: string | null;
-  maxEntries: number | null;
-  entryFee: number | null;
-  currency: string;
-  sortOrder: number;
-}
-
-export interface CompetitionEntry {
-  id: string;
-  classId: string;
-  riderMemberId: string;
-  horseId: string | null;
-  status: string;
-  paymentStatus: string;
-  amount: number | null;
-  currency: string;
-  registeredAt: string;
-  riderName: string | null;
-  horseName: string | null;
-}
-
-export interface CompetitionResult {
-  id: string;
-  entryId: string;
-  placing: number | null;
-  timeSeconds: string | null;
-  faults: number;
-  notes: string | null;
-  riderName: string | null;
-  horseName: string | null;
-}
-
-export interface CalendarCompetition {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  location: string | null;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): competition DTOs consolidated under
+// `packages/shared/src/types/responses/competitions.ts` — `status` /
+// `paymentStatus` etc. are now the project-wide enums rather than `string`.
+export type {
+  Competition,
+  CompetitionClass,
+  CompetitionEntry,
+  CompetitionResult,
+  CalendarCompetition,
+};
 
 // ─── Competitions ─────────────────────────────────────────────────────
 

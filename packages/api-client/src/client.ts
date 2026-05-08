@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import { type ApiResponse, type PaginatedApiResponse } from '@equestrian/shared/types';
 
 interface FetchOptions {
@@ -5,6 +6,17 @@ interface FetchOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Audit F-69 (2026-05-08 r6 PR Alpha-2): optional Zod schema run against
+   * `envelope.data` after the shape-check in `parseEnvelope`. When supplied,
+   * a parse failure is reported through `onError` and surfaced as a normal
+   * `INVALID_RESPONSE` error envelope so callers don't need to introduce a
+   * second error path. Schema is optional because we're rolling per-route
+   * schemas out incrementally — until every route in `apps/web/app/api/v1`
+   * has one declared in `packages/shared/src/schemas/responses/`, callers
+   * that don't pass a schema fall back to the existing typed-cast contract.
+   */
+  schema?: z.ZodTypeAny;
 }
 
 interface ApiClientConfig {
@@ -32,14 +44,16 @@ interface ApiClientConfig {
  * cast straight to `ApiResponse<T>` and the consumer would dereference
  * undefined fields. Mobile callers see a clean `NETWORK_ERROR` instead.
  *
- * Boundary contract (audit F-68, NIT, accepted): we shape-check that
- * `success` is a boolean and that `error.code` / `error.message` are
- * strings, but `obj.data` is cast to `T` without per-route Zod validation.
- * The cast is the documented boundary — per-route response schemas would
- * give us full runtime type checking, but wiring them across every endpoint
- * is intentionally deferred to a future api-client refactor PR. Until then,
- * the consumer is responsible for treating `data` as defensively as it
- * treats any external input (e.g. don't deref nested fields without
+ * Boundary contract (audit F-68, NIT, accepted; F-69, NIT, partial 2026-05-08
+ * r6): we shape-check that `success` is a boolean and that `error.code` /
+ * `error.message` are strings, but `obj.data` is cast to `T` without per-route
+ * Zod validation. F-69 introduced the `schema?: z.ZodTypeAny` option on
+ * `get`/`getPaginated`/`post`/`patch`/`put`/`delete` — when supplied, the
+ * caller's per-route schema runs against `envelope.data`. Until every route
+ * has a corresponding schema declared in
+ * `packages/shared/src/schemas/responses/`, callers that don't pass a schema
+ * fall back to this typed-cast boundary; consumers should treat `data` as
+ * defensively as any other external input (don't deref nested fields without
  * narrowing).
  */
 function parseEnvelope<T>(raw: unknown): ApiResponse<T> | null {
@@ -109,7 +123,7 @@ function parsePaginatedEnvelope<T>(raw: unknown): PaginatedApiResponse<T> | null
 
 export function createApiClient(config: ApiClientConfig) {
   async function request<T>(path: string, options: FetchOptions = {}): Promise<ApiResponse<T>> {
-    const { method = 'GET', body, headers = {}, signal } = options;
+    const { method = 'GET', body, headers = {}, signal, schema } = options;
 
     const token = await config.getToken();
     const orgId = config.getOrganizationId();
@@ -150,6 +164,23 @@ export function createApiClient(config: ApiClientConfig) {
           },
         };
       }
+      // Audit F-69: per-route schema validation. Only runs on success
+      // envelopes — error envelopes are already shape-checked above.
+      if (envelope.success && schema) {
+        const parsed = schema.safeParse(envelope.data);
+        if (!parsed.success) {
+          config.onError?.(parsed.error, { code: 'INVALID_RESPONSE', path });
+          return {
+            success: false,
+            error: {
+              code: 'INVALID_RESPONSE',
+              message: 'Server response failed validation',
+              details: parsed.error.flatten(),
+            },
+          };
+        }
+        return { success: true, data: parsed.data as T };
+      }
       return envelope;
     } catch (error) {
       config.onError?.(error, { code: 'NETWORK_ERROR', path });
@@ -174,7 +205,7 @@ export function createApiClient(config: ApiClientConfig) {
     path: string,
     options: FetchOptions = {},
   ): Promise<PaginatedApiResponse<T>> {
-    const { method = 'GET', body, headers = {}, signal } = options;
+    const { method = 'GET', body, headers = {}, signal, schema } = options;
 
     const token = await config.getToken();
     const orgId = config.getOrganizationId();
@@ -213,6 +244,28 @@ export function createApiClient(config: ApiClientConfig) {
             code: 'INVALID_RESPONSE',
             message: 'Server returned an unexpected response shape',
           },
+        };
+      }
+      // Audit F-69: per-route schema validation. The schema validates a
+      // single row (not the array), matching how the audit calls for
+      // `apiClient.get<T>(path, schema)` to validate the inner shape.
+      if (envelope.success && schema) {
+        const parsed = schema.array().safeParse(envelope.data);
+        if (!parsed.success) {
+          config.onError?.(parsed.error, { code: 'INVALID_RESPONSE', path });
+          return {
+            success: false,
+            error: {
+              code: 'INVALID_RESPONSE',
+              message: 'Server response failed validation',
+              details: parsed.error.flatten(),
+            },
+          };
+        }
+        return {
+          success: true,
+          data: parsed.data as T[],
+          pagination: envelope.pagination,
         };
       }
       return envelope;

@@ -9,95 +9,31 @@ import {
   type CreateExerciseScheduleInput,
   type CreateDocumentInput,
 } from '@equestrian/shared/schemas';
-import { type ApiSuccessResponse, type ApiResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type ApiResponse,
+  type HealthRecord,
+  type Medication,
+  type MedicationLog,
+  type FeedingPlan,
+  type ExerciseSchedule,
+  type HorseDocument,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-// ─── Types ────────────────────────────────────────────────────────────
-
-// Audit F-32 (2026-05-07 r5): list-row shapes. The query layer
-// (`getHealthRecords`, `getMedications`) projects narrowly and OMITS
-// the encrypted PHI fields (`description`/`diagnosis`/`treatment` on
-// health records, `notes` on medications). Mirroring the API shape
-// here prevents consumers from reaching into those fields and getting
-// `undefined` at runtime. Detail GETs that re-include them would use
-// a wider type — none exists today (no `/health/[recordId]` route).
-export interface HealthRecord {
-  id: string;
-  horseId: string;
-  recordType: string;
-  title: string;
-  date: string;
-  nextDueDate: string | null;
-  vetName: string | null;
-  vetClinic: string | null;
-  cost: number | null;
-  recoveryTimeDays: number | null;
-  followUpNeeded: boolean;
-  followUpDate: string | null;
-  batchNumber: string | null;
-  productUsed: string | null;
-  documentUrls: string[] | null;
-  createdAt: string;
-}
-
-export interface Medication {
-  id: string;
-  horseId: string;
-  medicationName: string;
-  dosage: string;
-  frequency: string;
-  timeOfDay: string[] | null;
-  startDate: string;
-  endDate: string | null;
-  isActive: boolean;
-  prescribedBy: string | null;
-  createdAt: string;
-}
-
-export interface MedicationLog {
-  id: string;
-  medicationId: string;
-  administeredAt: string;
-  wasAdministered: boolean;
-  skipReason: string | null;
-  notes: string | null;
-  createdAt: string;
-}
-
-export interface FeedingPlan {
-  id: string;
-  horseId: string;
-  mealName: string;
-  feedType: string | null;
-  quantityKg: string | null;
-  supplements: string[] | null;
-  notes: string | null;
-  timeOfDay: string | null;
-  createdAt: string;
-}
-
-export interface ExerciseSchedule {
-  id: string;
-  horseId: string;
-  dayOfWeek: number;
-  exerciseType: string;
-  durationMinutes: number | null;
-  intensity: string | null;
-  notes: string | null;
-  createdAt: string;
-}
-
-export interface HorseDocument {
-  id: string;
-  horseId: string;
-  fileName: string;
-  fileUrl: string;
-  fileSizeBytes: number | null;
-  fileType: string | null;
-  category: string;
-  description: string | null;
-  createdAt: string;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): horse-health list DTOs are
+// consolidated under `packages/shared/src/types/responses/horse-health.ts`.
+// They're list-row shapes — the query layer narrows out encrypted PHI
+// (`description`/`diagnosis`/`treatment`/`notes`) before serializing.
+// Re-exported below so existing consumers keep working.
+export type {
+  HealthRecord,
+  Medication,
+  MedicationLog,
+  FeedingPlan,
+  ExerciseSchedule,
+  HorseDocument,
+};
 
 // ─── Health Records ───────────────────────────────────────────────────
 
