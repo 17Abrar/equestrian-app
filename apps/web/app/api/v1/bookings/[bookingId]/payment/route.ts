@@ -268,6 +268,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           providerPaymentId: result.providerPaymentId,
         });
 
+        // Audit follow-up (2026-05-08): `setBookingPaymentRef` now runs
+        // inside `writeTransaction(... FOR UPDATE)` and returns `null`
+        // when the CAS refuses (booking flipped to cancelled/no_show
+        // mid-flight, or a stale providerPaymentId would be
+        // overwritten). The provider intent has already been minted at
+        // this point — it's an orphan. Log loudly so ops can reconcile,
+        // and surface a clean error to the rider rather than a stale
+        // `booking: null` payload.
+        if (!updated) {
+          logger.error('booking_payment_intent_orphaned', {
+            requestId: ctx.requestId,
+            bookingId,
+            clubId: ctx.clubId,
+            provider: account.provider,
+            providerPaymentId: result.providerPaymentId,
+            // Stripe PIs auto-expire after ~24h; Ziina/N-Genius hosted
+            // sessions also expire. Manual cleanup via the provider
+            // dashboard if the orphan needs to be voided sooner.
+          });
+          return errorResponse(
+            'BOOKING_NOT_PAYABLE',
+            'This booking changed state while the payment was being set up. Please refresh and try again.',
+            422,
+          );
+        }
+
         logger.info('booking_payment_initialized', {
           requestId: ctx.requestId,
           bookingId,

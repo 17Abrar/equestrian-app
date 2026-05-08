@@ -1,6 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { createLessonTypeSchema, paginationSchema } from '@equestrian/shared/schemas';
-import { getLessonTypesByClub, createLessonType } from '@equestrian/db/queries';
+import {
+  getLessonTypesByClub,
+  createLessonType,
+  getArenaById,
+} from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
@@ -52,6 +56,24 @@ export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const data = await parseRequiredBody(request, createLessonTypeSchema);
+
+      // Audit follow-up (2026-05-08): the DB composite FK on
+      // `(arena_id, club_id) → arenas(id, club_id)` blocks cross-tenant
+      // attachment, but a soft-deleted (is_active=false) arena in the
+      // SAME club still satisfies the FK. Mirror booking-slots' check —
+      // forward-creation paths must reject deactivated arenas.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId, {
+          activeOnly: true,
+        });
+        if (!arena) {
+          return errorResponse(
+            'INVALID_ARENA',
+            'Arena not found, or has been deactivated.',
+            400,
+          );
+        }
+      }
 
       const lessonType = await createLessonType(ctx.clubId, data);
 

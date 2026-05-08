@@ -2,7 +2,11 @@ import { type NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { createCompetitionSchema, competitionFiltersSchema } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
-import { getCompetitionsByClub, createCompetition } from '@equestrian/db/queries';
+import {
+  getCompetitionsByClub,
+  createCompetition,
+  getArenaById,
+} from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { clubs } from '@equestrian/db/schema';
 import {
@@ -38,9 +42,32 @@ export async function POST(request: NextRequest) {
     async (ctx) => {
       const data = await parseRequiredBody(request, createCompetitionSchema);
 
-      // Convert registrationDeadline from datetime-local (no TZ) to UTC using club timezone
+      // Audit follow-up (2026-05-08): refuse soft-deleted arenas — the
+      // DB composite FK only blocks cross-tenant attachment, not in-club
+      // deactivated rows. Mirrors booking-slots / lesson-types.
+      if (data.arenaId) {
+        const arena = await getArenaById(ctx.clubId, data.arenaId, {
+          activeOnly: true,
+        });
+        if (!arena) {
+          return errorResponse(
+            'INVALID_ARENA',
+            'Arena not found, or has been deactivated.',
+            400,
+          );
+        }
+      }
+
+      // Convert registrationDeadline from datetime-local (no TZ) to UTC
+      // using club timezone. Detect by exact datetime-local regex
+      // (YYYY-MM-DDTHH:MM optionally with seconds) — the previous
+      // heuristic checked for absence of `Z`/`+` and tripped over
+      // legitimate ISO strings with a negative offset like
+      // `2026-05-15T10:00:00-04:00`. Mirrors the sibling PATCH route's
+      // fix (audit G-15).
+      const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
       let registrationDeadline = data.registrationDeadline;
-      if (registrationDeadline && !registrationDeadline.includes('Z') && !registrationDeadline.includes('+')) {
+      if (registrationDeadline && DATETIME_LOCAL_RE.test(registrationDeadline)) {
         const clubRow = await db
           .select({ timezone: clubs.timezone })
           .from(clubs)

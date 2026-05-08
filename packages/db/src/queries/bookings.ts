@@ -937,75 +937,99 @@ export async function setBookingPaymentRef(
     paymentStatus?: 'pending' | 'paid' | 'partial' | 'refunded' | 'failed';
   },
 ) {
-  const conditions = [eq(bookings.id, bookingId), eq(bookings.clubId, clubId)];
-  if (data.providerPaymentId) {
-    conditions.push(
-      sql`(${bookings.providerPaymentId} IS NULL OR ${bookings.providerPaymentId} = ${data.providerPaymentId})`,
-    );
-    // Lifecycle guard (defense-in-depth for the payment-init route's
-    // TOCTOU window): refuse to attach a payment ref to a booking that
-    // is already terminal at the lifecycle level. webhook-helpers has
-    // its own `webhook_payment_for_inactive_booking` branch that fires
-    // before reaching this query, but the payment-init route reads the
-    // booking, calls the provider (real PI is minted), then writes —
-    // and a concurrent admin DELETE can flip the booking to `cancelled`
-    // in between. Without this predicate the new PI gets attached to a
-    // cancelled booking, the rider's card is charged, and reconciliation
-    // is manual. Caller's null-return path (`webhook_*_payment_for_
-    // inactive_booking` / `payment_init_booking_no_longer_active`) maps
-    // it to a clean operator alert instead of silent data corruption.
-    conditions.push(
-      sql`${bookings.status} NOT IN ('cancelled', 'no_show')`,
-    );
-  }
-  // Terminal-state guard for paymentStatus (audit E-11 + HIGH-13).
-  // Once a booking is in `refunded` / `partial`, subsequent
-  // setBookingPaymentRef calls must NOT downgrade to other states —
-  // webhooks arriving out of order would otherwise rewrite the
-  // rider's settled state. Audit HIGH-13 (2026-05-05) extends this:
-  // once `paid`, an out-of-order `payment_intent.processing` event
-  // (which maps to `pending`) must NOT downgrade the booking back to
-  // `pending`/`failed`. Only forward transitions (paid → refunded,
-  // paid → partial) are allowed, and idempotent re-writes (paid →
-  // paid) pass through harmlessly.
-  if (data.paymentStatus) {
-    if (data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
-      conditions.push(
-        sql`${bookings.paymentStatus} NOT IN ('refunded', 'partial')`,
-      );
-    }
-    // Block paid → {pending, failed, requires_action} downgrades.
-    // Only `paid → paid` (idempotent) and forward transitions to
-    // refunded/partial pass.
-    if (data.paymentStatus !== 'paid' && data.paymentStatus !== 'refunded' && data.paymentStatus !== 'partial') {
-      conditions.push(
-        sql`${bookings.paymentStatus} != 'paid'`,
-      );
-    }
-    // Audit F-29 (2026-05-07 r4): block `failed → pending` downgrade.
-    // Stripe / Ziina / N-Genius retry webhooks; a `payment_intent.created`
-    // arriving after `payment_intent.payment_failed` (because the second
-    // delivery attempt of the first one slipped through) would otherwise
-    // flip a `failed` booking back to `pending` and re-show the green
-    // "ready to pay" CTA — admin's failed-payment alert turns stale.
-    // Idempotent `failed → failed` and forward `failed → paid` still pass.
-    if (data.paymentStatus === 'pending') {
-      conditions.push(sql`${bookings.paymentStatus} != 'failed'`);
-    }
-  }
+  // Audit follow-up (2026-05-08): wrap the read+CAS pair in a
+  // writeTransaction with `SELECT … FOR UPDATE`. Mirrors `recordBookingRefund`
+  // and `reverseBookingRefund`. The previous implementation relied on
+  // SQL CAS predicates in the WHERE clause, which was correct under
+  // serializable isolation but left a small race window where two
+  // concurrent webhooks could both observe the same baseline state
+  // and only one's CAS would survive — unpredictable. The row lock
+  // serialises every writer instead. The CAS predicates collapse into
+  // JS conditionals against the locked row, which makes the rules
+  // easier to audit and avoids divergence between the SQL guard and
+  // the docs above.
+  return writeTransaction(async (tx) => {
+    const existing = await tx
+      .select({
+        status: bookings.status,
+        paymentStatus: bookings.paymentStatus,
+        providerPaymentId: bookings.providerPaymentId,
+      })
+      .from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .for('update')
+      .limit(1);
 
-  const result = await db
-    .update(bookings)
-    .set({
-      ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
-      ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
-      ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(...conditions))
-    .returning();
+    const current = existing[0];
+    if (!current) return null;
 
-  return result[0] ?? null;
+    if (data.providerPaymentId) {
+      // Idempotent re-write of the same id is allowed; otherwise refuse
+      // to overwrite a non-null providerPaymentId — a stale webhook for
+      // a previously-abandoned PaymentIntent could otherwise overwrite
+      // the live PI's id, and subsequent webhooks for the live PI would
+      // miss the booking and the rider's payment status would never
+      // settle (audit B-19).
+      if (
+        current.providerPaymentId !== null &&
+        current.providerPaymentId !== data.providerPaymentId
+      ) {
+        return null;
+      }
+      // Lifecycle guard for the payment-init route's TOCTOU window:
+      // a concurrent admin DELETE between the route's read and write
+      // can flip the booking to `cancelled`. Refuse to attach the new
+      // PI here; the route logs the orphaned intent so ops can clean
+      // it up.
+      if (current.status === 'cancelled' || current.status === 'no_show') {
+        return null;
+      }
+    }
+
+    if (data.paymentStatus) {
+      // Once `refunded` or `partial`, no other paymentStatus update is
+      // accepted — webhooks arriving out of order would otherwise
+      // rewrite the rider's settled state (audit E-11 + HIGH-13).
+      if (
+        data.paymentStatus !== 'refunded' &&
+        data.paymentStatus !== 'partial' &&
+        (current.paymentStatus === 'refunded' ||
+          current.paymentStatus === 'partial')
+      ) {
+        return null;
+      }
+      // Once `paid`, only forward transitions (paid → refunded, paid →
+      // partial) and the idempotent `paid → paid` pass.
+      if (
+        data.paymentStatus !== 'paid' &&
+        data.paymentStatus !== 'refunded' &&
+        data.paymentStatus !== 'partial' &&
+        current.paymentStatus === 'paid'
+      ) {
+        return null;
+      }
+      // Audit F-29 (2026-05-07 r4): block `failed → pending` downgrade.
+      // A retry of `payment_intent.created` arriving after
+      // `payment_intent.payment_failed` would otherwise re-show the
+      // "ready to pay" CTA on an already-failed booking.
+      if (data.paymentStatus === 'pending' && current.paymentStatus === 'failed') {
+        return null;
+      }
+    }
+
+    const result = await tx
+      .update(bookings)
+      .set({
+        ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
+        ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
+        ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .returning();
+
+    return result[0] ?? null;
+  });
 }
 
 /**
