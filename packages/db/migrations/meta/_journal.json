@@ -342,7 +342,21 @@
       "idx": 48,
       "version": "7",
       "when": 1777248000037,
-      "tag": "0048_audit_r6_webhook_secret_hash_uniqueness",
+      "tag": "0048_audit_r6_horse_care_phi_encryption",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1777248000038,
+      "tag": "0049_audit_r6_schema_drift",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1777248000050,
+      "tag": "0050_audit_r6_n_genius_outlet_unique",
       "breakpoints": true
     }
   ]

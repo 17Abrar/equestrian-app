@@ -707,7 +707,14 @@ export async function wasProviderPaymentIssuedRecently(
  * doesn't belong to this club returns null (so a description spoofed
  * by a colliding event from another tenant can't bridge tenants).
  */
-const BOOKING_DESCRIPTION_MARKER_REGEX = /\[booking:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]/;
+// Audit F-35 (2026-05-08 r6): anchored to end-of-description with a
+// case-insensitive flag. Closes the within-tenant smuggle surface
+// where a club admin who can edit lesson type names AND is a rider
+// could embed `[booking:<other-uuid>]` in a lesson type to redirect
+// a webhook to a different booking. The marker is appended at
+// create-time by `descriptionForRecovery` (`apps/web/lib/payments/
+// types.ts`); end-anchoring matches that exact placement.
+const BOOKING_DESCRIPTION_MARKER_REGEX = /\[booking:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\s*$/i;
 
 export async function findBookingByIdInDescription(
   description: string | undefined,

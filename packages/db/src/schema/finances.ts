@@ -107,6 +107,16 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   // time". Drizzle has no partial-unique builder; the constraint
   // lives at the SQL layer only and does NOT appear here. Keep this
   // comment so a future schema reviewer doesn't add the global form.
+  //
+  // Audit F-6 (2026-05-08 r6): partial UNIQUE
+  // `idx_payment_accounts_n_genius_outlet_unique` (migration 0050)
+  // on `(provider, external_account_id)` WHERE
+  // `provider = 'n_genius' AND status <> 'disabled'`. Closes the
+  // cross-tenant routing surface where two clubs sharing an outletId
+  // would silently bind webhooks to the first row Drizzle returns.
+  // Stripe + Ziina avoid this by URL-binding the clubId; N-Genius
+  // alone trusts the body. Drizzle has no partial-unique builder,
+  // so this lives at the SQL layer.
 ]);
 
 export const liveryContracts = pgTable('livery_contracts', {

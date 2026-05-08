@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { useClubSettings } from '@/hooks/use-settings';
 import {
@@ -73,11 +74,16 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const { data, isLoading, isError, error, refetch } = useHealthRecords(horseId, typeFilter);
   const deleteRecord = useDeleteHealthRecord(horseId);
-  const { data: settings } = useClubSettings();
+  const settingsQuery = useClubSettings();
   // Health records have no currency column; display costs in the club's
   // configured currency so vet invoices render consistently with the rest
   // of the dashboard.
-  const currency = settings?.data.currency ?? 'AED';
+  // Audit F-53 (2026-05-08 r6): only fall back to AED when settings
+  // are still loading. On error we surface the gate at the parent
+  // render so SAR/KWD/QAR clubs aren't quietly mislabeled in dirhams.
+  const currency = settingsQuery.data?.data.currency ?? 'AED';
+  // Audit F-50 (2026-05-08 r6): lift Add-dialog state to section root.
+  const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <HealthRecordsTableSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load records'} onRetry={() => refetch()} />;
@@ -118,12 +124,16 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
-          <AddHealthRecordDialog horseId={horseId} currency={currency} />
+          <AddHealthRecordDialog horseId={horseId} currency={currency} open={addOpen} onOpenChange={setAddOpen} />
         </div>
       </CardHeader>
       <CardContent>
         {records.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No health records yet. Add the first record above.</p>
+          <EmptyState
+            title="No health records yet"
+            description="Log vaccinations, vet visits, farrier appointments, and recoveries here so the next person to handle this horse has the full picture."
+            action={{ label: 'Add Record', onClick: () => setAddOpen(true) }}
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -183,8 +193,17 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
   );
 }
 
-function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currency: string }) {
-  const [open, setOpen] = useState(false);
+function AddHealthRecordDialog({
+  horseId,
+  currency,
+  open,
+  onOpenChange,
+}: {
+  horseId: string;
+  currency: string;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
   const createRecord = useCreateHealthRecord(horseId);
 
   const form = useForm<CreateHealthRecordFormValues, unknown, CreateHealthRecordInput>({
@@ -198,7 +217,7 @@ function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currenc
       await createRecord.mutateAsync(apiData);
       toast.success('Health record added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('health.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add record');
@@ -206,7 +225,7 @@ function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currenc
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Record</Button>
       </DialogTrigger>
@@ -286,6 +305,8 @@ function AddHealthRecordDialog({ horseId, currency }: { horseId: string; currenc
 function MedicationsSection({ horseId }: { horseId: string }) {
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isError, error, refetch } = useMedications(horseId, !showAll);
+  // Audit F-50 (2026-05-08 r6): lift Add-dialog state to section root.
+  const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <MedicationListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load medications'} onRetry={() => refetch()} />;
@@ -303,14 +324,18 @@ function MedicationsSection({ horseId }: { horseId: string }) {
           <Button variant="outline" size="sm" onClick={() => setShowAll(!showAll)}>
             {showAll ? 'Active Only' : 'Show All'}
           </Button>
-          <AddMedicationDialog horseId={horseId} />
+          <AddMedicationDialog horseId={horseId} open={addOpen} onOpenChange={setAddOpen} />
         </div>
       </CardHeader>
       <CardContent>
         {medications.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No {showAll ? '' : 'active '}medications. Add one above.
-          </p>
+          <EmptyState
+            title={showAll ? 'No medications' : 'No active medications'}
+            description={showAll
+              ? 'Once you log a course of medication, it shows here whether active or completed.'
+              : "Switch to 'Show All' to see past courses, or add a new prescription below."}
+            action={{ label: 'Add Medication', onClick: () => setAddOpen(true) }}
+          />
         ) : (
           <div className="space-y-3">
             {medications.map((med) => (
@@ -392,8 +417,15 @@ function MedicationCard({ horseId, medication }: { horseId: string; medication: 
   );
 }
 
-function AddMedicationDialog({ horseId }: { horseId: string }) {
-  const [open, setOpen] = useState(false);
+function AddMedicationDialog({
+  horseId,
+  open,
+  onOpenChange,
+}: {
+  horseId: string;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
   const createMedication = useCreateMedication(horseId);
 
   type MedFormValues = z.input<typeof createMedicationSchema>;
@@ -407,7 +439,7 @@ function AddMedicationDialog({ horseId }: { horseId: string }) {
       await createMedication.mutateAsync(data);
       toast.success('Medication added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('medication.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add medication');
@@ -415,7 +447,7 @@ function AddMedicationDialog({ horseId }: { horseId: string }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Medication</Button>
       </DialogTrigger>

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { MS_PER_DAY } from '@equestrian/shared/constants';
+import { MS_PER_DAY, PHI_KEYS } from '@equestrian/shared/constants';
 import { rawDb, writeTransaction } from '../index';
 import { auditLog } from '../schema/operations';
 
@@ -12,6 +12,35 @@ export interface CreateAuditEntryParams {
   changes?: Record<string, { from: unknown; to: unknown }>;
   ipAddress?: string;
   userAgent?: string;
+}
+
+// Audit F-19 (2026-05-08 r6): scrub PHI keys from `changes` before
+// insert. `auditLog.changes` is plaintext JSONB and indefinite-
+// retention; the encrypted-at-rest invariant on
+// `horse_health_records` / `rider_profiles` would be undone if a
+// caller wrote `{ diagnosis: { from: 'old', to: 'new' } }`. The
+// logger's PHI-key denylist runs at log time but does NOT cover the
+// audit-log writer (separate path). This is the runtime guard that
+// matches the audit-spec invariant: "Encrypted fields not logged,
+// not in audit trails, not in notification data payloads."
+//
+// Lower-cased on lookup so callers don't have to think about casing.
+// Mirrors `apps/web/lib/logger.ts:SENSITIVE_KEYS` PHI subset.
+const PHI_KEYS_LOWER = new Set(PHI_KEYS.map((k) => k.toLowerCase()));
+
+function scrubPhiFromChanges(
+  changes: Record<string, { from: unknown; to: unknown }> | undefined,
+): Record<string, { from: unknown; to: unknown }> | undefined {
+  if (!changes) return changes;
+  const result: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [key, value] of Object.entries(changes)) {
+    if (PHI_KEYS_LOWER.has(key.toLowerCase())) {
+      result[key] = { from: '[REDACTED]', to: '[REDACTED]' };
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 const IP_PATTERN = /^[\da-f.:]+$/i;
@@ -47,7 +76,7 @@ export async function createAuditEntry(
         action: params.action,
         resourceType: params.resourceType,
         resourceId: params.resourceId,
-        changes: params.changes,
+        changes: scrubPhiFromChanges(params.changes),
         ipAddress: sanitizeIp(params.ipAddress),
         userAgent: params.userAgent?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
       })

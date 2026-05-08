@@ -20,6 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { safeHref } from '@/lib/safe-href';
 import { DocumentsListSkeleton } from './horse-tab-skeletons';
@@ -44,6 +45,8 @@ export function DocumentsTab({ horseId }: DocumentsTabProps) {
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const { data, isLoading, isError, error, refetch } = useDocuments(horseId, categoryFilter);
   const deleteDoc = useDeleteDocument(horseId);
+  // Audit F-50 (2026-05-08 r6): lift Add-dialog state to section root.
+  const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <DocumentsListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load documents'} onRetry={() => refetch()} />;
@@ -79,12 +82,16 @@ export function DocumentsTab({ horseId }: DocumentsTabProps) {
               ))}
             </SelectContent>
           </Select>
-          <AddDocumentDialog horseId={horseId} />
+          <AddDocumentDialog horseId={horseId} open={addOpen} onOpenChange={setAddOpen} />
         </div>
       </CardHeader>
       <CardContent>
         {documents.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No documents yet. Add one above.</p>
+          <EmptyState
+            title="No documents yet"
+            description="Upload medical reports, X-rays, registrations, and insurance certs in one searchable place."
+            action={{ label: 'Upload Document', onClick: () => setAddOpen(true) }}
+          />
         ) : (
           <div className="space-y-2">
             {documents.map((doc) => (
@@ -129,8 +136,15 @@ export function DocumentsTab({ horseId }: DocumentsTabProps) {
   );
 }
 
-function AddDocumentDialog({ horseId }: { horseId: string }) {
-  const [open, setOpen] = useState(false);
+function AddDocumentDialog({
+  horseId,
+  open,
+  onOpenChange,
+}: {
+  horseId: string;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
   const createDocument = useCreateDocument(horseId);
 
   const form = useForm<DocumentFormValues, unknown, CreateDocumentInput>({
@@ -143,7 +157,7 @@ function AddDocumentDialog({ horseId }: { horseId: string }) {
       await createDocument.mutateAsync(data);
       toast.success('Document added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('document.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add document');
@@ -151,7 +165,7 @@ function AddDocumentDialog({ horseId }: { horseId: string }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Document</Button>
       </DialogTrigger>

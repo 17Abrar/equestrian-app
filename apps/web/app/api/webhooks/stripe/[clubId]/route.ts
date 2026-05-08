@@ -11,6 +11,8 @@ import { stripeAdapter } from '@/lib/payments/stripe';
 import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/request-ip';
 import { logger } from '@/lib/logger';
 
 /**
@@ -72,6 +74,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 async function handlePost(request: NextRequest, { params }: RouteParams) {
+  // Audit F-12 (2026-05-08 r6): IP-keyed `failClosed` rate limit on
+  // the per-club Stripe webhook. Mirrors the n-genius / platform-Ziina
+  // pattern. Stripe's documented retry cadence (5 attempts over ~3
+  // days) sits comfortably under 60/min. Without this, anyone with a
+  // leaked clubId UUID can drive arbitrary load through the body-cap
+  // → DB-lookup → AES-GCM-decrypt → HMAC-compute pipeline (~100µs
+  // HMAC + a credential decrypt per request, with nothing capping it).
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`webhook:stripe:${ip}`, {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosed: true,
+  });
+  if (!rl.allowed) {
+    return new Response('Too many requests', { status: 429 });
+  }
+
   const { clubId: rawClubId } = await params;
 
   const parsedClubId = clubIdSchema.safeParse(rawClubId);
@@ -225,6 +244,17 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
         'stripe',
         event.eventId,
         bookingResult.permanentFailureReason,
+      );
+    } else if (
+      // Audit F-13 (2026-05-08 r6): livery flow now signals
+      // permanentFailureReason (e.g. paid for a cancelled invoice).
+      // Same handling as the booking branch.
+      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+    ) {
+      await markWebhookEventPermanentlyFailed(
+        'stripe',
+        event.eventId,
+        invoiceResult.permanentFailureReason,
       );
     } else if (
       bookingMissed &&

@@ -1,23 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
+import { type HorseListItem } from '@equestrian/shared/types';
 import { useApiClient } from '@/lib/api';
 
-export interface Horse {
-  id: string;
-  clubId: string;
-  name: string;
-  barnName: string | null;
-  breed: string | null;
-  gender: string | null;
-  color: string | null;
-  status: string;
-  skillLevel: string;
-  temperament: string[] | null;
-  weightLimitKg: string | null;
-  minRiderAge: number | null;
-  primaryPhotoUrl: string | null;
-  photoUrls: string[] | null;
-  createdAt: string;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): mobile previously declared a looser
+// `Horse` shape with `status: string` / `skillLevel: string` here, drifting
+// from web's precise enum unions. Both apps now narrow against
+// `HorseListItem` from `packages/shared/src/types/responses/horses.ts`.
+//
+// The previous local export was named `Horse`; alias for backwards-compat
+// with mobile screens importing `type Horse from '@/hooks/use-horses'`.
+export type Horse = HorseListItem;
 
 export function useHorses(filters: { status?: string; page?: number } = {}) {
   const api = useApiClient();
@@ -27,11 +19,11 @@ export function useHorses(filters: { status?: string; page?: number } = {}) {
   params.set('pageSize', '50');
 
   // Audit F-6 (2026-05-07 r5 PR Sigma): paginated route returns
-  // `{success, data: Horse[], pagination}`; using `getPaginated<Horse>`
-  // gives us the discriminated `PaginatedApiResponse<Horse>` directly,
-  // replacing the previous `as never as Promise<…>` double cast.
+  // `{success, data: HorseListItem[], pagination}`; using
+  // `getPaginated<HorseListItem>` gives the discriminated
+  // `PaginatedApiResponse<HorseListItem>` directly.
   return useQuery({
     queryKey: ['horses', filters],
-    queryFn: () => api.getPaginated<Horse>(`/api/v1/horses?${params.toString()}`),
+    queryFn: () => api.getPaginated<HorseListItem>(`/api/v1/horses?${params.toString()}`),
   });
 }

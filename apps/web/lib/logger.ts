@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 import { PHI_KEYS } from '@equestrian/shared/constants';
+import { sanitize as sharedSanitize, type RedactorConfig } from '@equestrian/shared/utils';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -133,41 +134,20 @@ const FREE_TEXT_KEYS = new Set([
   'text',
 ]);
 
-function scrubPiiInString(value: string, parentKey?: string): string {
-  let out = value;
-  for (const { regex, replacement } of PII_PATTERNS) {
-    out = out.replace(regex, replacement);
-  }
-  if (parentKey && FREE_TEXT_KEYS.has(parentKey.toLowerCase())) {
-    out = out.replace(BARE_GCC_PHONE_PATTERN, '[REDACTED-PHONE]');
-  }
-  return out;
-}
+// Audit F-43 (2026-05-08 r6): redactor logic extracted to
+// `@equestrian/shared/utils:sanitize` so it can be unit-tested.
+// Apps/web isn't on vitest; the shared package is. The config below
+// captures every key/pattern this app cares about; the test suite
+// in packages/shared exercises the same shape.
+const REDACTOR_CONFIG: RedactorConfig = {
+  sensitiveKeys: SENSITIVE_KEYS,
+  piiPatterns: PII_PATTERNS,
+  bareGccPhonePattern: BARE_GCC_PHONE_PATTERN,
+  freeTextKeys: FREE_TEXT_KEYS,
+};
 
-function sanitize(data: unknown, depth = 0, parentKey?: string): unknown {
-  if (depth > 5) return '[nested]';
-
-  if (typeof data === 'string') {
-    return scrubPiiInString(data, parentKey);
-  }
-
-  if (Array.isArray(data)) {
-    return data.map((item) => sanitize(item, depth + 1, parentKey));
-  }
-
-  if (data !== null && typeof data === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (SENSITIVE_KEYS.has(key.toLowerCase())) {
-        result[key] = '[REDACTED]';
-      } else {
-        result[key] = sanitize(value, depth + 1, key);
-      }
-    }
-    return result;
-  }
-
-  return data;
+function sanitize(data: unknown): unknown {
+  return sharedSanitize(data, REDACTOR_CONFIG);
 }
 
 function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
