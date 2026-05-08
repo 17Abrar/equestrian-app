@@ -354,10 +354,23 @@ export const stripeAdapter: PaymentProviderAdapter = {
         status: mapRefundStatus(refund.status),
       };
     } catch (err) {
+      // Audit F-10 (2026-05-08 r6): mark transient errors retryable so
+      // `withProviderRetry` actually re-attempts. The booking-refund
+      // route wraps adapter calls in `withProviderRetry`, but the
+      // helper only retries when `err.retryable === true`. Pre-fix,
+      // every Stripe refund 5xx surfaced as 502 to the operator on
+      // attempt 1 with no retry. Mirror the `createPayment` posture
+      // (line 330) — connection errors and 5xx API errors are
+      // retryable.
+      const isStripeRetryable =
+        err instanceof Stripe.errors.StripeConnectionError ||
+        (err instanceof Stripe.errors.StripeAPIError &&
+          typeof err.statusCode === 'number' &&
+          (err.statusCode >= 500 || err.statusCode === 429));
       throw new PaymentProviderError(
         'REFUND_FAILED',
         err instanceof Error ? scrubStripeErrorMessage(err.message) : 'Stripe refund failed',
-        { cause: err },
+        { cause: err, retryable: isStripeRetryable },
       );
     }
   },
