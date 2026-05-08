@@ -304,7 +304,19 @@ export type CreateRiderFormValues = z.input<typeof createRiderSchema>;
 
 // ─── Lesson Types ──────────────────────────────────────────────────────
 
-export const createLessonTypeSchema = z
+// Audit F-62 (2026-05-08 r6): hex color regex shared between branding
+// + lesson types. Defined here (before its first use) instead of
+// further down with `updateBrandingSchema` to avoid the TDZ trap.
+export const hexColor = z
+  .string()
+  .regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/, 'Must be a hex color like #6366f1')
+  .transform((v) => v.toLowerCase());
+
+// Inner object so `updateLessonTypeSchema = .partial()` keeps working —
+// Zod's `.partial()` is only defined on ZodObject, not the ZodEffects
+// produced by `.refine(...)`. Both the create and update schemas wrap
+// this base + share the F-28 minRiders<=maxRiders refinement.
+const lessonTypeFields = z
   .object({
     name: z.string().min(1, 'Name is required').max(255),
     type: z.string().min(1, 'Type is required').max(100),
@@ -316,15 +328,43 @@ export const createLessonTypeSchema = z
     minRiders: numericField(z.number().int().min(1)).default(1),
     maxSessionsPerDay: optionalNumeric(z.number().int().positive()),
     arenaId: z.string().uuid().optional(),
-    color: z.string().max(7).optional(),
+    // Audit F-62 (2026-05-08 r6): use the shared hex regex —
+    // previously `z.string().max(7)` silently accepted `'red'`.
+    color: hexColor.optional(),
   })
   .strict();
+
+export const createLessonTypeSchema = lessonTypeFields
+  // Audit F-28 (2026-05-08 r6): client-side mirror of the new
+  // `lesson_types_riders_minmax_check` DB constraint (migration 0049).
+  // A misclick (`min=4, max=2`) silently produces a lesson type that
+  // never matches any slot — refuse it at the API boundary too.
+  .refine(
+    (val) => val.minRiders <= val.maxRiders,
+    {
+      message: 'minRiders cannot exceed maxRiders',
+      path: ['minRiders'],
+    },
+  );
 
 export type CreateLessonTypeFormValues = z.input<typeof createLessonTypeSchema>;
 export type CreateLessonTypeInput = z.output<typeof createLessonTypeSchema>;
 
-// `.strict()` — see audit G-5.
-export const updateLessonTypeSchema = createLessonTypeSchema.partial().strict();
+// `.strict()` — see audit G-5. Audit F-28: PATCH only validates the
+// invariant when both fields are sent in the same payload (Zod skips
+// the refine when either is undefined).
+export const updateLessonTypeSchema = lessonTypeFields
+  .partial()
+  .strict()
+  .refine(
+    (val) =>
+      val.minRiders === undefined || val.maxRiders === undefined ||
+      val.minRiders <= val.maxRiders,
+    {
+      message: 'minRiders cannot exceed maxRiders',
+      path: ['minRiders'],
+    },
+  );
 
 // ─── Arenas ────────────────────────────────────────────────────────────
 
@@ -559,11 +599,7 @@ export const updateClubProfileSchema = z
 
 export type UpdateClubProfileInput = z.output<typeof updateClubProfileSchema>;
 
-const hexColor = z
-  .string()
-  .regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/, 'Must be a hex color like #6366f1')
-  .transform((v) => v.toLowerCase());
-
+// `hexColor` defined above (audit F-62, before `createLessonTypeSchema`).
 export const updateBrandingSchema = z
   .object({
     brandPrimaryColor: hexColor.optional(),
