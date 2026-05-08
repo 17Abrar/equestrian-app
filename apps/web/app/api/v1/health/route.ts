@@ -29,10 +29,27 @@ export async function GET(request: NextRequest) {
   // Audit r5 F-46 (2026-05-07): IP resolver moved to `lib/request-ip.ts`.
   const ip = getClientIp(request);
 
-  const rl = await checkRateLimit(`health:${ip}`, {
-    maxRequests: 120,
-    windowMs: 60_000,
-  });
+  const deep = request.nextUrl.searchParams.get('deep') === '1';
+
+  // Audit F-23 (2026-05-08 r6): split limiter buckets — cheap liveness
+  // stays at 120/min, deep probe drops to 30/min and goes failClosed
+  // so an Upstash outage can't lift the cap on the Postgres-touching
+  // path. The deep probe shares the Neon connection pool with every
+  // authenticated route; without failClosed, a 1000 RPS attack from
+  // one IP under an Upstash outage would burn the pool and degrade
+  // all tenant traffic. Liveness stays open-fail because the
+  // alternative (Upstash outage = liveness 503) would falsely page
+  // every external monitor.
+  const rl = deep
+    ? await checkRateLimit(`health:deep:${ip}`, {
+        maxRequests: 30,
+        windowMs: 60_000,
+        failClosed: true,
+      })
+    : await checkRateLimit(`health:${ip}`, {
+        maxRequests: 120,
+        windowMs: 60_000,
+      });
   if (!rl.allowed) {
     const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
     return NextResponse.json(
@@ -41,7 +58,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const deep = request.nextUrl.searchParams.get('deep') === '1';
   if (!deep) {
     return NextResponse.json({
       success: true,

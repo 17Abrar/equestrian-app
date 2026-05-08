@@ -28,7 +28,16 @@
 -- 5. LOW-6: composite index on audit_log (club_id, action, created_at)
 --    so filter-by-action queries don't table-scan once the table grows.
 --
--- All steps idempotent.
+-- All steps idempotent EXCEPT the CRIT-4 webhook_events.status TYPE swap
+-- (lines 106-113 below). Audit F-27 (2026-05-08 r6): the
+-- `ALTER TABLE … ALTER COLUMN status TYPE …` block runs unconditionally
+-- and the post-rename `DROP TYPE IF EXISTS "webhook_event_status";` /
+-- `ALTER TYPE … RENAME TO …` pair is idempotent only if the v2 enum
+-- already exists. The migrations runner tracks per-tag application so a
+-- forward apply never re-runs the file; if you ever rerun this file by
+-- hand against an already-migrated database, the ALTERs will fail
+-- (column already on the renamed enum, source enum already gone). Don't
+-- — re-run the migration runner instead, which skips applied tags.
 
 -- ─── 1. CRIT-1: bookings.horse_id composite FK ────────────────────────
 DO $$

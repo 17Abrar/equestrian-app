@@ -5,7 +5,7 @@ import { createCouponSchema, paginationSchema } from '@equestrian/shared/schemas
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { getCouponsByClub, createCoupon } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
-import { clubs } from '@equestrian/db/schema';
+import { clubs, couponStatusEnum } from '@equestrian/db/schema';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput } from '@/lib/api-utils';
 
 // Audit G-26: a datetime-local string from the admin form (no Z, no
@@ -34,9 +34,16 @@ async function resolveCouponDate(
   return new Date(value);
 }
 
+// Audit F-1 (2026-05-08 r6): the prior literal tuple
+// `['active', 'inactive', 'expired']` drifted from the DB pgEnum. `paused`
+// was rejected at validation (functional bug — paused coupons unfilterable);
+// `inactive` passed validation then fell through to a Postgres
+// "invalid input value for enum coupon_status" 500. Bind the filter
+// directly to the pgEnum's canonical tuple so the contract is single-
+// source-of-truth and any future enum change surfaces here as a TS error.
 const couponFiltersSchema = paginationSchema
   .extend({
-    status: z.enum(['active', 'inactive', 'expired']).optional(),
+    status: z.enum(couponStatusEnum.enumValues).optional(),
   })
   .strict();
 
