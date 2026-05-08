@@ -626,7 +626,7 @@ function HorseList() {
 - See DATABASE.md for the full schema
 - All tables MUST have: `id` (uuid), `club_id` (uuid, foreign key), `created_at` (timestamp), `updated_at` (timestamp)
 - Use UUIDs for all primary keys (never auto-increment integers — they leak information)
-- Use soft deletes where specified (set `deleted_at` timestamp, don't actually delete rows)
+- Use soft deletes per `DATABASE.md` (Deletion patterns table). Audit F-41 (2026-05-08 r6) — there are THREE distinct idioms (`deleted_at` timestamp on `clubs`/`horses`; status-enum transition on `bookings`/`invoices`/`livery_invoices`/`platform_subscription_invoices`/`coupons`; deactivation flag `is_active` on `club_members`/`arenas`/`lesson_types`). New tables MUST pick one of these three; do not invent a fourth. Append-only tables (`audit_log`, `webhook_events`, `competition_results`, `community_votes`, `horse_pairing_history`, `coupon_usages`, `rider_achievements`, `horse_medication_logs`, `horse_care_reminder_sends`, `waitlist`) have NO delete pattern by design.
 - All foreign keys must have ON DELETE behavior explicitly defined
 - Index all columns used in WHERE clauses and JOIN conditions
 - Use database-level constraints (NOT NULL, CHECK, UNIQUE) in addition to application-level validation
