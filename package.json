@@ -14,13 +14,23 @@
       "resolves (web doesn't depend on pglite). packageExtensions below",
       "strips the pglite peer hint, forcing a single drizzle-orm resolution.",
       "",
-      "overrides: pin @xmldom/xmldom to a patched version. Reaches us via",
-      "expo > @expo/cli > @expo/plist; Expo's own bump lags the upstream",
-      "advisory window. Used only at build time (Expo CLI runs locally /",
-      "in CI to bundle the mobile app, never ships in the runtime worker)",
-      "but `pnpm audit --prod` flags it as a prod dep because Expo lists",
-      "the CLI as a runtime dep. Override is safe because @xmldom/xmldom",
-      "exposes a stable surface and 0.8.13+ is API-compatible with 0.8.x."
+      "overrides:",
+      "- @xmldom/xmldom: pin to a patched version. Reaches us via",
+      "  expo > @expo/cli > @expo/plist; Expo's own bump lags the upstream",
+      "  advisory window. Used only at build time (Expo CLI runs locally /",
+      "  in CI to bundle the mobile app, never ships in the runtime worker)",
+      "  but `pnpm audit --prod` flags it as a prod dep because Expo lists",
+      "  the CLI as a runtime dep. Override is safe because @xmldom/xmldom",
+      "  exposes a stable surface and 0.8.13+ is API-compatible with 0.8.x.",
+      "- fast-xml-builder: GHSA-5wm8-gmm8-39j9 (high). Reaches us via",
+      "  @aws-sdk/client-s3 > @aws-sdk/core > @aws-sdk/xml-builder >",
+      "  fast-xml-parser > fast-xml-builder. Patched in >=1.1.7; AWS SDK",
+      "  pins an older version transitively. Pin direct. Surface stable",
+      "  across 1.1.x.",
+      "- fast-uri: GHSA-q3j6-qgpj-74h6 (high path-traversal). Reaches us",
+      "  via @sentry/nextjs > @sentry/webpack-plugin > webpack > schema-",
+      "  utils > ajv > fast-uri. Patched in >=3.1.1; ajv 8.x bundles an",
+      "  older fast-uri. Pin direct."
     ],
     "packageExtensions": {
       "drizzle-orm": {
@@ -31,7 +41,9 @@
     },
     "overrides": {
       "@xmldom/xmldom": ">=0.8.13",
-      "@stripe/stripe-js": "^9.2.0"
+      "@stripe/stripe-js": "^9.2.0",
+      "fast-xml-builder": ">=1.1.7",
+      "fast-uri": ">=3.1.1"
     }
   },
   "scripts": {
