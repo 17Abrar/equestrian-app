@@ -135,6 +135,23 @@ export async function POST(request: NextRequest) {
           resendId: result?.id,
         });
 
+        // Audit F-18 (2026-05-08 r6): persist a structured audit row so
+        // an "I never asked for that email" support ticket is reconstructible
+        // from the database. The recipient's `clubMembers.id` was already
+        // resolved at line 35; we capture it as the resource and stamp
+        // the sender via `actor_member_id` (set automatically by the
+        // ctx.audit helper). `subject` is staff-authored so it's safe
+        // verbatim; the email body is intentionally NOT recorded
+        // (could be PHI; the resend dashboard has it for a few days).
+        void ctx.audit({
+          action: 'email.send',
+          resourceType: 'club_member',
+          resourceId: recipient[0].id,
+          changes: {
+            subject: { from: null, to: data.subject },
+          },
+        });
+
         return successResponse({ id: result?.id, message: 'Email sent' }, 201);
       } catch (err) {
         logger.error('email_send_error', {

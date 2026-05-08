@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { getBookingById, getBookingSlotById, getClubById } from '@equestrian/db/queries';
-import { calculateCancellationFee } from '@equestrian/shared/utils';
+import { calculateCancellationFee, coerceFeePercent } from '@equestrian/shared/utils';
 import { withAuth,
   successResponse,
   errorResponse, validateUuidParam } from '@/lib/api-utils';
@@ -71,12 +71,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       // ../route.ts so a misconfigured fee percent can never exceed
       // what the rider actually paid.
       const feeBase = booking.amount ?? slot.lessonTypePrice;
+      // Audit F-59 (2026-05-08 r6): see no-show route for rationale.
       const feeResult = calculateCancellationFee({
         slotDate: slot.date,
         slotStartTime: slot.startTime,
         timezone: club.timezone,
         cancellationNoticeHours: club.cancellationNoticeHours,
-        lateCancellationFeePercent: Number(club.lateCancellationFeePercent),
+        lateCancellationFeePercent: coerceFeePercent(
+          club.lateCancellationFeePercent ?? '0',
+          'lateCancellationFeePercent',
+        ),
         lessonPrice: feeBase,
       });
       const fee =

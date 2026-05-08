@@ -65,7 +65,19 @@ export async function GET(request: NextRequest) {
               canReadChild &&
               (await isParentOf(ctx.clubId, ctx.memberId, filters.riderMemberId));
             if (!isDependent) {
-              return errorResponse('FORBIDDEN', 'You can only view your own bookings', 403);
+              // Audit F-22 (2026-05-08 r6): return 200 + empty list
+              // instead of 403. The previous 403-vs-200 split let a
+              // tenant member iterate `?riderMemberId=<arbitrary>` and
+              // distinguish "exists but not yours" from "no bookings"
+              // — a within-tenant info-disclosure surface. Empty list
+              // collapses both cases. Rider members are still
+              // rate-limited at 60/min, so this isn't a probing tool;
+              // dropping the discriminator just removes free signal.
+              return paginatedResponse([], {
+                page: filters.page,
+                pageSize: filters.pageSize,
+                total: 0,
+              });
             }
           }
           // riderMemberIdFilter passes through unchanged.

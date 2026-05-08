@@ -530,7 +530,14 @@ export async function findClubsWithTrialEndingOn(targetDateIso: string) {
 
 /** Used by the dashboard subscription summary card. Returns the
  *  next-due invoice (pending or overdue, ordered by due date) and
- *  any unpaid total. */
+ *  any unpaid total.
+ *
+ *  Audit r6 F-46 (2026-05-08): belt-and-braces `.limit(100)` to mirror
+ *  `getPlatformInvoicesByClub`. Outstanding invoices for one club are
+ *  intrinsically bounded (Cavaliq bills monthly; suspension lands well
+ *  before 12-24 unpaid invoices accrue), so this is not a DoS surface
+ *  — the cap simply makes the bound explicit and consistent with the
+ *  sibling list query. */
 export async function getOutstandingPlatformInvoices(clubId: string) {
   const rows = await db
     .select({
@@ -552,7 +559,8 @@ export async function getOutstandingPlatformInvoices(clubId: string) {
         inArray(platformSubscriptionInvoices.status, ['pending', 'overdue']),
       ),
     )
-    .orderBy(asc(platformSubscriptionInvoices.dueDate));
+    .orderBy(asc(platformSubscriptionInvoices.dueDate))
+    .limit(100);
 
   return rows;
 }

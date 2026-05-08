@@ -7,7 +7,7 @@ import {
   markBookingNoShow,
   getMemberByIdIncludingDeactivated,
 } from '@equestrian/db/queries';
-import { calculateNoShowFee, formatMoney } from '@equestrian/shared/utils';
+import { calculateNoShowFee, coerceFeePercent, formatMoney } from '@equestrian/shared/utils';
 import { withAuth,
   successResponse,
   errorResponse, validateUuidParam } from '@/lib/api-utils';
@@ -54,8 +54,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       // unification. Cap the result at `booking.amount` so a future
       // misconfigured percent can never overcharge.
       const feeBase = booking.amount ?? slot.lessonTypePrice;
+      // Audit F-59 (2026-05-08 r6): `coerceFeePercent` throws on
+      // NaN/out-of-range; `clubs.noShowFeePercent` is a numeric column
+      // (Drizzle returns string) and the prior `Number(...)` silently
+      // produced NaN propagating through the fee math. The writer
+      // (`updateBookingRulesSchema`) already constrains to [0,100] so
+      // this should never throw on real data — defense-in-depth.
       const rawFee = calculateNoShowFee({
-        noShowFeePercent: Number(club.noShowFeePercent),
+        noShowFeePercent: coerceFeePercent(club.noShowFeePercent ?? '0', 'noShowFeePercent'),
         lessonPrice: feeBase,
       });
       const noShowFee =
