@@ -17,3 +17,5 @@ export type {
   CancellationFeeResult,
   NoShowFeeParams,
 } from './cancellation-fees';
+export { scrubPiiInString, sanitize } from './log-redactor';
+export type { RedactorConfig } from './log-redactor';
