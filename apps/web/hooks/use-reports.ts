@@ -1,31 +1,17 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type ApiSuccessResponse } from '@equestrian/shared/types';
+import {
+  type ApiSuccessResponse,
+  type RevenueDataPoint,
+  type LessonPopularity,
+  type HorseUtilization,
+  type CancellationStats,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-interface RevenueDataPoint {
-  date: string;
-  revenue: number;
-  count: number;
-}
-
-interface LessonPopularity {
-  lessonTypeName: string;
-  count: number;
-}
-
-interface HorseUtilization {
-  horseName: string;
-  bookingCount: number;
-  maxLessonsPerDay: number;
-}
-
-interface CancellationStats {
-  totalBookings: number;
-  cancelledBookings: number;
-  noShowBookings: number;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): report DTOs consolidated under
+// `packages/shared/src/types/responses/reports.ts`.
 
 export function useRevenueReport(dateFrom: string, dateTo: string) {
   return useQuery({

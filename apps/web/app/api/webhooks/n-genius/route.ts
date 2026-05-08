@@ -281,6 +281,16 @@ async function handlePost(request: NextRequest) {
         bookingResult.permanentFailureReason,
       );
     } else if (
+      // Audit F-13 (2026-05-08 r6): livery flow now signals
+      // permanentFailureReason (e.g. paid for a cancelled invoice).
+      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+    ) {
+      await markWebhookEventPermanentlyFailed(
+        'n_genius',
+        event.eventId,
+        invoiceResult.permanentFailureReason,
+      );
+    } else if (
       bookingMissed &&
       (!invoiceResult || invoiceResult.kind === 'no_target')
     ) {

@@ -132,10 +132,11 @@ function HorseCard({ horse }: { horse: Horse }) {
       </View>
       <View className="flex-1">
         <View className="flex-row items-center gap-2">
+          {/* Audit F-4 (2026-05-08 r6 PR Alpha-2): list route's projection
+              omits `barnName` (only the detail GET returns it). The previous
+              mobile-local `Horse` type lied about the wire shape and the
+              ternary on `horse.barnName` was permanently dead. */}
           <Text className="text-base font-semibold text-gray-900">{horse.name}</Text>
-          {horse.barnName && horse.barnName !== horse.name && (
-            <Text className="text-xs text-gray-400">&ldquo;{horse.barnName}&rdquo;</Text>
-          )}
         </View>
         {subtitle.length > 0 && (
           <Text className="mt-0.5 text-sm text-gray-500">{subtitle}</Text>

@@ -51,6 +51,37 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
     name: 'CRON_SECRET',
     effect: 'every cron endpoint 503s; livery / platform / booking / horse-care reminders all silently skip',
   },
+  // Audit F-17 (2026-05-08 r6): R2 binding required for every
+  // signed-upload + delete path (storage.ts:57). Without these,
+  // the upload presign returns 503 and `documents` POST 500s when
+  // attempting to verify the R2 object.
+  {
+    name: 'R2_ENDPOINT',
+    effect: 'signed uploads + deletes 503; horse documents / horse photos / branding / file uploads all fail',
+  },
+  {
+    name: 'R2_ACCESS_KEY_ID',
+    effect: 'R2 client cannot authenticate; upload presign + verify + delete all fail',
+  },
+  {
+    name: 'R2_SECRET_ACCESS_KEY',
+    effect: 'R2 client cannot authenticate; upload presign + verify + delete all fail',
+  },
+  {
+    name: 'R2_BUCKET_NAME',
+    effect: 'R2 client has no target bucket; upload presign 503',
+  },
+  // Audit F-17 (2026-05-08 r6): Clerk binding required for auth.
+  // Without these, every authenticated route 500s and Clerk webhooks
+  // fail open (signature can't be verified).
+  {
+    name: 'CLERK_SECRET_KEY',
+    effect: 'Clerk SDK cannot mint sessions; every authenticated API route 500s',
+  },
+  {
+    name: 'CLERK_WEBHOOK_SECRET',
+    effect: 'Clerk webhooks cannot verify svix signature; users / orgs / memberships drift between Clerk and DB',
+  },
 ];
 
 export function assertProductionEnvConfigured(): void {
@@ -67,6 +98,19 @@ export function assertProductionEnvConfigured(): void {
       missing,
       note: 'Production env vars missing — features degrade silently. Verify Wrangler secrets.',
     });
+    // Audit F-17 (2026-05-08 r6): hard-exit in production. Mirrors
+    // `assertEncryptionKeyConfigured`'s throw policy
+    // (`packages/db/src/crypto.ts:33`). The warn-only path is fine
+    // for dev / staging where missing secrets are normal; in
+    // production it's a deploy bug that we want to fail closed at
+    // boot rather than degrade silently for hours.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        `assertProductionEnvConfigured: required env var(s) missing in production — ${missing
+          .map((m) => m.split(' — ')[0])
+          .join(', ')}. See logger.warn 'env_misconfigured' for full effect list.`,
+      );
+    }
   }
 
   // Audit F-10 (2026-05-07 r5): PLATFORM_ZIINA_TEST_MODE drives the

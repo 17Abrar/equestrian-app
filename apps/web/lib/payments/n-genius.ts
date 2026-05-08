@@ -85,7 +85,47 @@ function parseCredentials(raw: unknown): NGeniusCredentials {
   return result.data;
 }
 
+/**
+ * Audit r6 F-39 (2026-05-08): per-credentials access-token cache. N-Genius
+ * tokens are valid for ~5 minutes (per the docstring at the top of this
+ * file); pre-fix every adapter method (`createPayment`, `refund`,
+ * `getPaymentStatus`) called `getAccessToken` fresh, costing one identity
+ * round-trip per call. Material for cron runs that drive 50 invoices through
+ * one outlet — that's 50 redundant identity exchanges.
+ *
+ * TTL: 4 minutes, leaving a 60s buffer so an in-flight cached token doesn't
+ * expire mid-request.
+ *
+ * Cache key: SHA-256 of the normalized credentials. We hash rather than
+ * concatenating plaintext so a heap dump of the worker doesn't surface
+ * raw API keys. The hash is stable across calls with the same credentials
+ * (key derivation only reads the fields that affect the auth response —
+ * apiKey + realmName; outlet/webhook fields don't influence token issuance).
+ *
+ * Module-scope `Map` is shared across requests in the same Worker isolate.
+ * On Cloudflare Workers each isolate has its own memory and the eviction
+ * happens via TTL expiry; no LRU bound is needed because the cardinality is
+ * `unique-credential-hashes-per-isolate` — at the 50-club scale that's tiny.
+ */
+const accessTokenCache = new Map<string, { token: string; expiresAt: number }>();
+const TOKEN_TTL_MS = 4 * 60 * 1000;
+
+function hashCredentials(creds: NGeniusCredentials): string {
+  return createHash('sha256')
+    .update(creds.apiKey)
+    .update('|')
+    .update(creds.realmName ?? '')
+    .digest('hex');
+}
+
 async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
+  const cacheKey = hashCredentials(creds);
+  const now = Date.now();
+  const cached = accessTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.token;
+  }
+
   const res = await fetch(`${API_BASE_URL}/identity/auth/access-token`, {
     method: 'POST',
     headers: {
@@ -110,6 +150,10 @@ async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
   if (!json.access_token) {
     throw new PaymentProviderError('AUTH_FAILED', 'N-Genius returned no access_token');
   }
+  accessTokenCache.set(cacheKey, {
+    token: json.access_token,
+    expiresAt: now + TOKEN_TTL_MS,
+  });
   return json.access_token;
 }
 
@@ -522,9 +566,13 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
 
     if (!refundRes.ok) {
       const text = await refundRes.text().catch(() => '');
+      // Audit F-10 (2026-05-08 r6): mark 5xx / 429 retryable so the
+      // route's `withProviderRetry` wrapper actually re-attempts.
+      // Mirrors `createPayment` posture at line 368.
       throw new PaymentProviderError(
         'REFUND_FAILED',
         `N-Genius refund failed (${refundRes.status}): ${safeProviderPreview(text)}`,
+        { retryable: refundRes.status >= 500 || refundRes.status === 429 },
       );
     }
 

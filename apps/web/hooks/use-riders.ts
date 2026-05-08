@@ -2,29 +2,17 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type RiderFiltersInput, type UpdateRiderProfileInput, type CreateRiderInput } from '@equestrian/shared/schemas';
-import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import {
+  type ApiResponse,
+  type PaginatedResponse,
+  type Rider,
+} from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
-export interface Rider {
-  id: string;
-  clubId: string;
-  memberId: string;
-  dateOfBirth: string | null;
-  weightKg: string | null;
-  heightCm: string | null;
-  skillLevel: string;
-  emergencyContactName: string | null;
-  emergencyContactPhone: string | null;
-  emergencyContactRelation: string | null;
-  medicalNotes: string | null;
-  totalLessonsCompleted: number;
-  parentMemberId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  displayName: string | null;
-  email: string | null;
-  phone: string | null;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): `Rider` is now in
+// `packages/shared/src/types/responses/riders.ts` with `skillLevel` typed as
+// the project `SkillLevel` enum.
+export type { Rider };
 
 export function useRiders(filters: Partial<RiderFiltersInput> = {}) {
   const params = new URLSearchParams();
