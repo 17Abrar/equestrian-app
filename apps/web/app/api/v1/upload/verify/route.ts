@@ -4,6 +4,7 @@ import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { deleteR2Object, verifyObjectMagicBytes } from '@/lib/storage';
+import { markR2KeyVerified } from '@/lib/upload-verify-cache';
 import { withAuth, successResponse, errorResponse, validateInput } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
@@ -135,6 +136,12 @@ export async function POST(request: NextRequest) {
           422,
         );
       }
+
+      // Audit F-8 (2026-05-08 r6): cache the successful verification so
+      // the persist-side gate (e.g. `documents` POST) can short-circuit
+      // a second round-trip to R2. TTL bound — verified state expires
+      // before any plausible upload session could go stale.
+      await markR2KeyVerified(data.key, data.contentType);
 
       return successResponse({ ok: true });
     },

@@ -45,8 +45,13 @@ export function ReportsPage() {
   const lessons = useLessonPopularityReport(dateFrom, dateTo);
   const horses = useHorseUtilizationReport(dateFrom, dateTo);
   const cancellations = useCancellationReport(dateFrom, dateTo);
-  const { data: settings } = useClubSettings();
-  const currency = settings?.data.currency ?? 'AED';
+  const settingsQuery = useClubSettings();
+  // Audit F-53 (2026-05-08 r6): the AED fallback only applies while
+  // loading. On settings fetch error, render `Couldn't load` on the
+  // currency-bearing summary cards rather than mislabel SAR/KWD/QAR
+  // tenants. Mirrors the F-51 hasError surface on SummaryCard.
+  const currency = settingsQuery.data?.data.currency ?? 'AED';
+  const settingsErrored = settingsQuery.isError;
 
   const totalRevenue = useMemo(() => {
     if (!revenue.data?.data) return 0;
@@ -84,24 +89,28 @@ export function ReportsPage() {
           value={formatMoney(totalRevenue, currency)}
           icon={TrendingUp}
           loading={revenue.isLoading}
+          hasError={revenue.isError || settingsErrored}
         />
         <SummaryCard
           title="Bookings"
           value={String(totalBookings)}
           icon={BarChart3}
           loading={revenue.isLoading}
+          hasError={revenue.isError}
         />
         <SummaryCard
           title="Cancellation Rate"
           value={`${cancellationRate}%`}
           icon={XCircle}
           loading={cancellations.isLoading}
+          hasError={cancellations.isError}
         />
         <SummaryCard
           title="No-Shows"
           value={String(cancellationStats?.noShowBookings ?? 0)}
           icon={Activity}
           loading={cancellations.isLoading}
+          hasError={cancellations.isError}
         />
       </div>
 
@@ -187,7 +196,23 @@ export function ReportsPage() {
   );
 }
 
-function SummaryCard({ title, value, icon: Icon, loading }: { title: string; value: string; icon: typeof TrendingUp; loading: boolean }) {
+function SummaryCard({
+  title,
+  value,
+  icon: Icon,
+  loading,
+  hasError = false,
+}: {
+  title: string;
+  value: string;
+  icon: typeof TrendingUp;
+  loading: boolean;
+  // Audit F-51 (2026-05-08 r6): when the underlying query errored,
+  // render an inline error indicator instead of a legitimate-looking
+  // zero. Operators were misreading "0% cancellation" as a clean
+  // period when the cancellation query had actually failed.
+  hasError?: boolean;
+}) {
   return (
     <Card>
       <CardContent className="flex items-center gap-4 p-6">
@@ -196,7 +221,15 @@ function SummaryCard({ title, value, icon: Icon, loading }: { title: string; val
         </div>
         <div>
           <p className="text-sm text-muted-foreground">{title}</p>
-          {loading ? <Skeleton className="h-7 w-20" /> : <p className="text-2xl font-bold">{value}</p>}
+          {loading ? (
+            <Skeleton className="h-7 w-20" />
+          ) : hasError ? (
+            <p className="text-sm font-medium text-destructive" title="Failed to load">
+              Couldn&apos;t load
+            </p>
+          ) : (
+            <p className="text-2xl font-bold">{value}</p>
+          )}
         </div>
       </CardContent>
     </Card>

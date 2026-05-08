@@ -41,7 +41,15 @@ export const MAX_WEBHOOK_ATTEMPTS = 3;
  * because environments with reliable worker-timeout enforcement can
  * safely shave the recovery window down.
  */
-const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
+// Audit F-34 (2026-05-08 r6): tightened from 5min to 60s. A genuine
+// Worker crash or eviction mid-processing leaves the `received` claim
+// in place until the threshold elapses. Most webhook processing here
+// is sub-second, and the rider-facing post-redirect page polls for
+// status — a 5min stale window was user-visible during real crashes.
+// 60s is comfortably above any plausible non-crash latency. Still
+// env-tunable via WEBHOOK_STALE_AFTER_MS for environments that need
+// a longer recovery window.
+const DEFAULT_STALE_AFTER_MS = 60 * 1000;
 
 function resolveStaleAfterMs(): number {
   const raw = process.env.WEBHOOK_STALE_AFTER_MS;

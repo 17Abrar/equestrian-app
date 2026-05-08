@@ -12,14 +12,23 @@ import {
 import {
   type ApiResponse,
   type ApiSuccessResponse,
-  type BookingStatus,
   type PaginatedResponse,
-  type PaymentMethod,
-  type PaymentStatus,
+  type Arena,
+  type LessonType,
+  type BookingSlot,
+  type Booking,
+  type CancelPreview,
 } from '@equestrian/shared/types';
 import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
+
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): `Arena | LessonType | BookingSlot |
+// Booking | CancelPreview` now live in `packages/shared/src/types/responses/`
+// so mobile + web narrow against the same shape (mobile previously typed
+// `status: string`). Re-exported here for component-level imports like
+// `import { type BookingSlot } from '@/hooks/use-bookings'`.
+export type { Arena, LessonType, BookingSlot, Booking, CancelPreview };
 
 // Audit LOW-12 (2026-05-05): default onError for high-stakes mutations.
 // Some consumers call `mutate()` (non-async) with their own per-call
@@ -29,91 +38,6 @@ import { reportMutationError } from '@/components/shared/report-mutation-error';
 // the consumer's toast still works AND the error lands in observability.
 function defaultMutationErrorReporter(mutationKey: string) {
   return (err: unknown) => reportMutationError(mutationKey, err);
-}
-
-// ─── Types ────────────────────────────────────────────────────────────
-
-export interface Arena {
-  id: string;
-  clubId: string;
-  name: string;
-  capacity: number | null;
-  surfaceType: string | null;
-  hasLighting: boolean;
-  isIndoor: boolean;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface LessonType {
-  id: string;
-  clubId: string;
-  name: string;
-  type: string;
-  description: string | null;
-  durationMinutes: number;
-  price: number;
-  currency: string;
-  maxRiders: number;
-  minRiders: number;
-  maxSessionsPerDay: number | null;
-  arenaId: string | null;
-  isActive: boolean;
-  color: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BookingSlot {
-  id: string;
-  clubId: string;
-  lessonTypeId: string;
-  arenaId: string | null;
-  coachMemberId: string | null;
-  date: string;
-  startTime: string;
-  endTime: string;
-  maxRiders: number;
-  currentRiders: number;
-  isCancelled: boolean;
-  createdAt: string;
-  lessonTypeName: string;
-  lessonTypeType: string;
-  lessonTypeColor: string | null;
-  lessonTypePrice: number;
-  lessonTypeCurrency: string;
-  arenaName: string | null;
-  coachName: string | null;
-}
-
-export interface Booking {
-  id: string;
-  clubId: string;
-  slotId: string;
-  riderMemberId: string;
-  horseId: string | null;
-  // Audit F-56 (2026-05-07 r5 PR Sigma): use the project-defined enum unions
-  // from `@equestrian/shared/types` instead of bare `string` so a `status ===
-  // 'comfirmed'` typo at the consumer site is a TypeScript error, not silent
-  // dead code.
-  status: BookingStatus;
-  paymentStatus: PaymentStatus;
-  paymentMethod: PaymentMethod | null;
-  amount: number | null;
-  currency: string;
-  horseMatchScore: number | null;
-  createdAt: string;
-  slotDate: string;
-  slotStartTime: string;
-  slotEndTime: string;
-  lessonTypeName: string;
-  lessonTypeType: string;
-  lessonTypePrice: number;
-  lessonTypeCurrency: string;
-  arenaName: string | null;
-  riderName: string | null;
-  horseName: string | null;
 }
 
 // ─── Arenas ───────────────────────────────────────────────────────────
@@ -357,17 +281,6 @@ export function useCreateBooking() {
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
     },
   });
-}
-
-export interface CancelPreview {
-  bookingId: string;
-  isLate: boolean;
-  fee: number;
-  currency: string;
-  cutoffTime: string;
-  hoursUntilSlot: number;
-  cancellationNoticeHours: number;
-  lessonPrice: number;
 }
 
 export function useCancelPreview(bookingId: string | null) {

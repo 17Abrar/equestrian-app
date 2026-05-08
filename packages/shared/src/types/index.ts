@@ -1,5 +1,11 @@
 // API Response Types — used across web and mobile
 
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): per-route response DTOs are now
+// consolidated under `./responses/*`. Re-export them through this index so
+// `@equestrian/shared/types` is a single import path for both the envelope
+// types and the per-route data shapes.
+export * from './responses';
+
 export interface ApiSuccessResponse<T> {
   success: true;
   data: T;

@@ -10,6 +10,7 @@ export type { DateFormatStyle } from './formatters';
 export {
   calculateCancellationFee,
   calculateNoShowFee,
+  coerceFeePercent,
 } from './cancellation-fees';
 export type {
   CancellationFeeParams,
