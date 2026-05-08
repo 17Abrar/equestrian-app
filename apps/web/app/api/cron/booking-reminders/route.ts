@@ -83,8 +83,25 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
   // Cache club lookups across the loop — multiple bookings often share
   // a club, and getClubById is a tenant-scoped network round-trip.
   const clubCache = new Map<string, Awaited<ReturnType<typeof getClubById>>>();
+  // Audit r6 F-15 (2026-05-08): coach lookups follow the same pattern.
+  // Pre-fix this fired one round-trip per candidate booking even when
+  // the small enumerated set of coaches per club (typically <10) meant
+  // most calls hit the same row. At 500 candidates × ~30ms/round-trip,
+  // ~15s of cron wallclock per pass — material against the 5min budget.
+  // The cache is bounded by the candidate set (already capped at 500)
+  // so memory pressure is irrelevant. We cache `null` too: a deleted
+  // coach should resolve to `coachName=undefined` consistently across
+  // the pass without re-querying.
+  const coachCache = new Map<
+    string,
+    Awaited<ReturnType<typeof getMemberByIdIncludingDeactivated>>
+  >();
 
   for (const booking of candidates) {
+    // Audit F-63 (2026-05-08 r6): hoist `hoursFromNow` above the try so
+    // the catch-side `booking_reminder_send_failed` log can include it.
+    // Computed inside the try once the slot instant resolves.
+    let hoursFromNow = NaN;
     try {
       // Resolve the slot's instant in the club's timezone.
       let club = clubCache.get(booking.clubId);
@@ -141,8 +158,7 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // booking falls into multiple consecutive runs' windows; the CAS
       // on `reminder_sent_at` ensures only the first run that wins the
       // UPDATE actually sends.
-      const hoursFromNow =
-        (slotInstant.getTime() - now.getTime()) / MS_PER_HOUR;
+      hoursFromNow = (slotInstant.getTime() - now.getTime()) / MS_PER_HOUR;
       // F-45 (2026-05-07 r4): widen [23..25] → [22..26] so DST spring-
       // forward / fall-back boundaries don't slip a single hourly cron
       // pass and miss the only reminder send for that booking. The CAS
@@ -195,10 +211,17 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
         // may have been deactivated between booking creation and the
         // reminder cron pass; the booking still occurs and the rider
         // should still see the coach's name on the reminder.
-        const coach = await getMemberByIdIncludingDeactivated(
-          booking.clubId,
-          booking.coachMemberId,
-        );
+        // Audit r6 F-15 (2026-05-08): hit the per-pass cache first so
+        // a club with the same coach across many bookings doesn't fan
+        // out N round-trips for the same row.
+        let coach = coachCache.get(booking.coachMemberId);
+        if (coach === undefined) {
+          coach = await getMemberByIdIncludingDeactivated(
+            booking.clubId,
+            booking.coachMemberId,
+          );
+          coachCache.set(booking.coachMemberId, coach);
+        }
         coachName = coach?.displayName ?? undefined;
       }
 
@@ -217,6 +240,15 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
           clubName: club.name,
           clubLogo: club.logoUrl ?? undefined,
         }),
+      });
+      // Audit F-63 (2026-05-08 r6): success-side log with `hoursFromNow`
+      // so the operator dashboard can distribution-plot how reminders
+      // land relative to the 22-26h window. A skewed distribution (e.g.
+      // every send at 25.x hours) signals a cron-schedule misalignment.
+      logger.info('booking_reminder_sent', {
+        bookingId: booking.bookingId,
+        clubId: booking.clubId,
+        hoursFromNow: Math.round(hoursFromNow * 10) / 10,
       });
       sent += 1;
     } catch (err) {
@@ -237,6 +269,11 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       logger.error('booking_reminder_send_failed', {
         bookingId: booking.bookingId,
         clubId: booking.clubId,
+        // Audit F-63 (2026-05-08 r6): tag with `hoursFromNow` so the
+        // operator dashboard can distinguish a send-side failure (every
+        // hour during 22-26h window) from a window-edge skip (one-off
+        // 22h or 26h boundary).
+        hoursFromNow: Math.round(hoursFromNow * 10) / 10,
         error: err instanceof Error ? err.message : 'unknown',
         casReversed: unclaimed !== null,
       });

@@ -28,6 +28,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
+import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { ExerciseScheduleSkeleton } from './horse-tab-skeletons';
 
@@ -45,6 +46,8 @@ interface ExerciseTabProps {
 export function ExerciseTab({ horseId }: ExerciseTabProps) {
   const { data, isLoading, isError, error, refetch } = useExerciseSchedules(horseId);
   const deleteSchedule = useDeleteExerciseSchedule(horseId);
+  // Audit F-50 (2026-05-08 r6): lift Add-dialog state to section root.
+  const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <ExerciseScheduleSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load exercise schedules'} onRetry={() => refetch()} />;
@@ -75,11 +78,15 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
           <Dumbbell className="h-5 w-5 text-muted-foreground" />
           <CardTitle>Exercise Schedule</CardTitle>
         </div>
-        <AddExerciseDialog horseId={horseId} />
+        <AddExerciseDialog horseId={horseId} open={addOpen} onOpenChange={setAddOpen} />
       </CardHeader>
       <CardContent>
         {schedules.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No exercise schedule yet. Add exercises above.</p>
+          <EmptyState
+            title="No exercise schedule yet"
+            description="Map out the week so coaches and grooms know which days are work, rest, or rehab."
+            action={{ label: 'Add Exercise', onClick: () => setAddOpen(true) }}
+          />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {DAYS.map((day, i) => {
@@ -138,8 +145,15 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
   );
 }
 
-function AddExerciseDialog({ horseId }: { horseId: string }) {
-  const [open, setOpen] = useState(false);
+function AddExerciseDialog({
+  horseId,
+  open,
+  onOpenChange,
+}: {
+  horseId: string;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
   const createSchedule = useCreateExerciseSchedule(horseId);
 
   const form = useForm<CreateExerciseScheduleFormValues, unknown, CreateExerciseScheduleInput>({
@@ -152,7 +166,7 @@ function AddExerciseDialog({ horseId }: { horseId: string }) {
       await createSchedule.mutateAsync(data);
       toast.success('Exercise added');
       form.reset();
-      setOpen(false);
+      onOpenChange(false);
     } catch (err) {
       reportMutationError('exercise.create', err, { horseId });
       toast.error(err instanceof Error ? err.message : 'Failed to add exercise');
@@ -160,7 +174,7 @@ function AddExerciseDialog({ horseId }: { horseId: string }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Exercise</Button>
       </DialogTrigger>

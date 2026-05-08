@@ -1,6 +1,7 @@
 import { useAuth, useOrganization } from '@clerk/clerk-expo';
 import { useMemo } from 'react';
 import { createApiClient, type ApiClient } from '@equestrian/api-client';
+import { captureMobileException } from './sentry';
 
 // `EXPO_PUBLIC_*` is statically inlined at bundle time. A release build with
 // the env var unset previously fell through to `http://localhost:3000` — on a
@@ -26,11 +27,15 @@ export function useApiClient(): ApiClient {
         baseUrl: API_BASE_URL,
         getToken: () => getToken(),
         getOrganizationId: () => organization?.id ?? null,
-        // Surface NETWORK_ERROR / INVALID_RESPONSE failures to the device
-        // console so a Cloudflare blip or a misrouted HTML body has a
-        // diagnostic trail (audit D-8). Once @sentry/react-native lands
-        // in mobile, swap this for Sentry.captureException.
+        // Audit F-49 (2026-05-08 r6): forward to Sentry via the
+        // mobile wiring in `lib/sentry.ts`. The console.error stays
+        // as a backstop for the no-DSN dev path so the device console
+        // still surfaces the failure during local development.
         onError: (error, context) => {
+          captureMobileException(error, 'api_client_error', {
+            code: context.code,
+            path: context.path,
+          });
           // eslint-disable-next-line no-console
           console.error('[api-client]', context.code, context.path, error);
         },

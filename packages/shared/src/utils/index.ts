@@ -10,9 +10,12 @@ export type { DateFormatStyle } from './formatters';
 export {
   calculateCancellationFee,
   calculateNoShowFee,
+  coerceFeePercent,
 } from './cancellation-fees';
 export type {
   CancellationFeeParams,
   CancellationFeeResult,
   NoShowFeeParams,
 } from './cancellation-fees';
+export { scrubPiiInString, sanitize } from './log-redactor';
+export type { RedactorConfig } from './log-redactor';

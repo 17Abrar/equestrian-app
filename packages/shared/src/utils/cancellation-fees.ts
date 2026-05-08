@@ -93,3 +93,34 @@ export function calculateNoShowFee(params: NoShowFeeParams): number {
   if (noShowFeePercent <= 0) return 0;
   return Math.round((lessonPrice * noShowFeePercent) / 100);
 }
+
+/**
+ * Audit F-59 (2026-05-08 r6): Drizzle's `numeric` columns return strings
+ * (`'2.50'`), and the prior consumer pattern of `Number(value)` silently
+ * produced `NaN` for malformed input — which `calculateNoShowFee` /
+ * `calculateCancellationFee` then propagated through the math, surfacing
+ * as a `NaN` fee instead of a 500.
+ *
+ * `clubs.lateCancellationFeePercent` and `clubs.noShowFeePercent` are the
+ * two cited columns; the writer (`updateBookingRulesSchema`) constrains
+ * to [0, 100] so the read contract is "string in [0,100]". This helper
+ * enforces it.
+ *
+ * Throws when the input is null/undefined (caller must decide the default
+ * — typically 0) or when parsing produces NaN/out-of-range. Callers that
+ * want the "missing means zero" behavior should pass `value ?? '0'`.
+ */
+export function coerceFeePercent(value: string | number, columnName: string): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (Number.isNaN(parsed)) {
+    throw new Error(
+      `coerceFeePercent: ${columnName} parsed to NaN from ${JSON.stringify(value)}`,
+    );
+  }
+  if (parsed < 0 || parsed > 100) {
+    throw new Error(
+      `coerceFeePercent: ${columnName}=${parsed} out of range [0, 100]`,
+    );
+  }
+  return parsed;
+}

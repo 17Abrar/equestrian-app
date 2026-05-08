@@ -70,14 +70,29 @@ export function FinancesPage() {
 
 function OverviewTab() {
   const { data, isLoading, isError, error, refetch } = useFinanceOverview();
-  const { data: settings } = useClubSettings();
+  const settingsQuery = useClubSettings();
   // Finance totals aren't currency-tagged (they're aggregates across mixed
   // payment rows). Display them in the club's configured currency so the
   // overview matches what the rider sees on their booking invoice.
-  const currency = settings?.data.currency ?? 'AED';
+  // Audit F-53 (2026-05-08 r6): only fall back to AED while settings
+  // are loading. On error we surface an explicit error rather than
+  // mislabel SAR/KWD/QAR clubs as dirhams.
+  const currency = settingsQuery.data?.data.currency ?? 'AED';
 
-  if (isLoading) return <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
+  if (isLoading || settingsQuery.isLoading)
+    return <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load overview'} onRetry={() => refetch()} />;
+  if (settingsQuery.isError)
+    return (
+      <ErrorState
+        message={
+          settingsQuery.error instanceof Error
+            ? settingsQuery.error.message
+            : 'Failed to load club settings (currency)'
+        }
+        onRetry={() => settingsQuery.refetch()}
+      />
+    );
 
   const overview = data?.data;
   if (!overview) return <ErrorState message="No data" />;
@@ -578,17 +593,29 @@ function AddExpenseDialog({
 }
 
 function CouponsTab() {
-  const { data: settings } = useClubSettings();
+  const settingsQuery = useClubSettings();
   // Coupons don't store a currency column; display fixed-amount discounts
   // in the club's configured currency.
-  const currency = settings?.data.currency ?? 'AED';
+  // Audit F-53 (2026-05-08 r6): see OverviewTab for rationale.
+  const currency = settingsQuery.data?.data.currency ?? 'AED';
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
   const [addOpen, setAddOpen] = useState(false);
   const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: DEFAULT_PAGE_SIZE });
 
-  if (isLoading) return <FinanceRowListSkeleton />;
+  if (isLoading || settingsQuery.isLoading) return <FinanceRowListSkeleton />;
   if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
+  if (settingsQuery.isError)
+    return (
+      <ErrorState
+        message={
+          settingsQuery.error instanceof Error
+            ? settingsQuery.error.message
+            : 'Failed to load club settings (currency)'
+        }
+        onRetry={() => settingsQuery.refetch()}
+      />
+    );
 
   const coupons = data?.data ?? [];
 

@@ -160,6 +160,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               // this is defense-in-depth that makes the lock self-
               // contained.
               providerPaymentId: bookingsTable.providerPaymentId,
+              // Audit F-36 (2026-05-08 r6): pull cancellationFee inside
+              // the lock so the refund-cap math uses the live value.
+              // `markBookingNoShow` / `cancelBooking` set it once and
+              // there's no DB-level immutability constraint; a future
+              // writer that mutates it between the pre-lock read at
+              // line 107 and the locked CAS would silently produce a
+              // wrong refund amount. Self-containment of the locked
+              // transaction.
+              cancellationFee: bookingsTable.cancellationFee,
             })
             .from(bookingsTable)
             .where(
@@ -185,10 +194,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // lock read and now would lower refundedSoFar — that's fine,
           // the rider just has more refundable headroom. A second-admin
           // refund that landed first would raise it; recompute remaining.
-          // cancellationFee is immutable once set by markBookingNoShow/
-          // cancelBooking, so the pre-lock read remains authoritative —
-          // audit AI-24.
-          const liveRemaining = (booking.amount ?? 0) - liveSoFar - cancellationFee;
+          // Audit F-36 (2026-05-08 r6): use the post-lock cancellationFee
+          // (was the pre-lock snapshot at `cancellationFee` outer var).
+          const liveCancellationFee = locked.cancellationFee ?? 0;
+          const liveRemaining = (booking.amount ?? 0) - liveSoFar - liveCancellationFee;
           if (liveRemaining <= 0) {
             return { kind: 'nothing-to-refund' as const };
           }

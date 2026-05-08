@@ -84,15 +84,23 @@ export function Sidebar({ role }: SidebarProps) {
   const pendingHorsesCount = canReviewHorses
     ? pendingHorsesQuery.data?.pagination.total ?? 0
     : 0;
+  // Audit F-52 (2026-05-08 r6): distinguish "query failed" from "no
+  // pending horses." Without this, an admin would never know there
+  // are pending horses if the count fetch errored — silently
+  // identical to the zero-pending case. Render a `?` indicator instead
+  // of a number so the admin sees that something failed.
+  const pendingHorsesError = canReviewHorses && pendingHorsesQuery.isError;
 
   function isActive(href: string): boolean {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
   }
 
-  function badgeFor(href: string): number {
-    if (href === '/horses' && pendingHorsesCount > 0) return pendingHorsesCount;
-    return 0;
+  function badgeFor(href: string): { count: number; error: boolean } {
+    if (href === '/horses' && pendingHorsesError) return { count: 0, error: true };
+    if (href === '/horses' && pendingHorsesCount > 0)
+      return { count: pendingHorsesCount, error: false };
+    return { count: 0, error: false };
   }
 
   return (
@@ -117,7 +125,7 @@ export function Sidebar({ role }: SidebarProps) {
 
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
         {navItems.map((item) => {
-          const badgeCount = badgeFor(item.href);
+          const badge = badgeFor(item.href);
           return (
             <Link
               key={item.href}
@@ -132,12 +140,22 @@ export function Sidebar({ role }: SidebarProps) {
             >
               <item.icon className="h-4 w-4" />
               <span className="flex-1">{item.label}</span>
-              {badgeCount > 0 && (
+              {badge.count > 0 && (
                 <Badge
                   variant="secondary"
                   className="h-5 bg-amber-100 px-1.5 text-[11px] text-amber-800 hover:bg-amber-100"
                 >
-                  {badgeCount}
+                  {badge.count}
+                </Badge>
+              )}
+              {badge.count === 0 && badge.error && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 bg-muted px-1.5 text-[11px] text-muted-foreground hover:bg-muted"
+                  title="Pending count failed to load"
+                  aria-label="Pending count unavailable"
+                >
+                  ?
                 </Badge>
               )}
             </Link>

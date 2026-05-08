@@ -8,7 +8,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { tokenCache } from '@/lib/auth';
 import { queryClient } from '@/lib/query-client';
+import { initSentry } from '@/lib/sentry';
 import '../global.css';
+
+// Audit F-49 (2026-05-08 r6): Sentry init at module-load so the SDK
+// hooks the global error handler before any other module
+// initializes. No-op when EXPO_PUBLIC_SENTRY_DSN is unset (dev path).
+initSentry();
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 

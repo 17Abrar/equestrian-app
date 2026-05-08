@@ -2,19 +2,18 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type CreateStaffInput, type UpdateStaffInput } from '@equestrian/shared/schemas';
-import { type ApiResponse, type PaginatedResponse } from '@equestrian/shared/types';
+import {
+  type ApiResponse,
+  type PaginatedResponse,
+  type ClubMember,
+} from '@equestrian/shared/types';
 import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
-export interface ClubMember {
-  id: string;
-  clerkUserId: string;
-  role: string;
-  displayName: string | null;
-  email: string | null;
-  phone: string | null;
-  isActive: boolean;
-}
+// Audit F-4 (2026-05-08 r6 PR Alpha-2): `ClubMember` is now in
+// `packages/shared/src/types/responses/staff.ts`, with `role` typed as the
+// project `UserRole` enum union rather than `string`.
+export type { ClubMember };
 
 // ─── Member Dropdowns ─────────────────────────────────────────────────
 //

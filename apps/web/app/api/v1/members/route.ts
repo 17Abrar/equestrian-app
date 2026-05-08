@@ -1,13 +1,16 @@
 import { type NextRequest } from 'next/server';
 import { type UserRole } from '@equestrian/shared/types';
 import { getMembersByRole } from '@equestrian/db/queries';
+import { userRoleEnum } from '@equestrian/db/schema';
 import {
   withAuth,
   errorResponse,
   parsePagination,
   paginatedListResponse,
+  validateInput,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
+import { z } from 'zod';
 
 // Audit HIGH-2 (2026-05-05 pass 2): the previous shape used a *blocklist*
 // (`STAFF_ROLES`) — a coach with `riders:read` was rejected when probing
@@ -19,11 +22,27 @@ import { hasPermission } from '@/lib/permissions';
 // (admin / manager) keep the freeform query they've always had.
 const RIDER_SCOPED_ROLES: UserRole[] = ['rider'];
 
+// Audit F-7 (2026-05-08 r6): bind `?role=` to the `user_role` pgEnum's
+// literal tuple so a typo (e.g. `?role=admin` vs `?role=club_admin`)
+// surfaces as a 400 instead of bubbling to Postgres as
+// `invalid input value for enum user_role` (500). The downstream
+// `getMembersByRole` does `inArray(clubMembers.role, roles as ClubMemberRole[])`;
+// the cast was nominal, Postgres still rejected at bind time.
+const membersFiltersSchema = z
+  .object({
+    role: z.enum(userRoleEnum.enumValues).optional(),
+  })
+  .strict();
+
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const role = request.nextUrl.searchParams.get('role');
-      const requestedRoles = role ? [role] : [];
+      const rawRole = request.nextUrl.searchParams.get('role');
+      const filters = validateInput(
+        membersFiltersSchema,
+        rawRole == null ? {} : { role: rawRole },
+      );
+      const requestedRoles = filters.role ? [filters.role] : [];
 
       const callerHasStaffRead = hasPermission(ctx.orgRole, 'staff:read');
 
