@@ -165,9 +165,29 @@ export async function getExpensesByClub(clubId: string, filters: ExpenseFilters)
   return { data, total: countResult[0]?.count ?? 0 };
 }
 
+// Audit F-67 (2026-05-08 r6): explicit projection. Detail-by-id reads
+// previously selected `*`, coupling consumers to every column on
+// the table. The single consumer (`expenses/[expenseId]` PATCH) reads
+// `currency` for amount-rescale guard; selecting only what's needed
+// surfaces a future schema add (e.g. PHI on a notes column) before
+// it lands in the response.
 export async function getExpenseById(clubId: string, expenseId: string) {
   const result = await db
-    .select()
+    .select({
+      id: expenses.id,
+      clubId: expenses.clubId,
+      category: expenses.category,
+      description: expenses.description,
+      amount: expenses.amount,
+      currency: expenses.currency,
+      date: expenses.date,
+      horseId: expenses.horseId,
+      receiptUrl: expenses.receiptUrl,
+      vendorName: expenses.vendorName,
+      createdByMemberId: expenses.createdByMemberId,
+      createdAt: expenses.createdAt,
+      updatedAt: expenses.updatedAt,
+    })
     .from(expenses)
     .where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId)))
     .limit(1);
@@ -341,9 +361,37 @@ export async function updateCoupon(clubId: string, couponId: string, data: Parti
   return result[0] ?? null;
 }
 
+// Audit F-67 (2026-05-08 r6): explicit projection. Mirrors the list
+// projection at `getCouponsByClub` line 311; consumers
+// (`coupons/validate`, `bookings` POST coupon-application path) read
+// `discountType`, `discountValue`, `maxDiscount`, `applicableTypes`,
+// `minimumAmount`, `maxUses`, `maxUsesPerRider`, `usageCount`,
+// `firstTimeOnly`, `isStackable`, `status`, `startsAt`, `expiresAt`.
+// Selecting only what's needed surfaces a future schema add (e.g.
+// PHI on a notes column) before it lands in the response.
 export async function getCouponByCode(clubId: string, code: string) {
   const result = await db
-    .select()
+    .select({
+      id: coupons.id,
+      clubId: coupons.clubId,
+      code: coupons.code,
+      discountType: coupons.discountType,
+      discountValue: coupons.discountValue,
+      maxDiscount: coupons.maxDiscount,
+      applicableTypes: coupons.applicableTypes,
+      minimumAmount: coupons.minimumAmount,
+      maxUses: coupons.maxUses,
+      maxUsesPerRider: coupons.maxUsesPerRider,
+      usageCount: coupons.usageCount,
+      firstTimeOnly: coupons.firstTimeOnly,
+      isStackable: coupons.isStackable,
+      status: coupons.status,
+      startsAt: coupons.startsAt,
+      expiresAt: coupons.expiresAt,
+      createdByMemberId: coupons.createdByMemberId,
+      createdAt: coupons.createdAt,
+      updatedAt: coupons.updatedAt,
+    })
     .from(coupons)
     .where(
       and(
