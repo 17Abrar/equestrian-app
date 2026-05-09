@@ -11,23 +11,64 @@ import { clubMembers } from '../schema/club-members';
 
 // ─── Overview ─────────────────────────────────────────────────────────
 
-export async function getFinanceOverview(clubId: string) {
+/**
+ * Audit pass-3 follow-up D (2026-05-09): the previous shape returned
+ * a single `totalRevenue` / `totalExpenses` / `outstandingBalance`
+ * SUM across every row regardless of `bookings.currency` /
+ * `livery_invoices.currency` / `expenses.currency`. As soon as a
+ * club operated in two currencies (an AED stable accepting USD
+ * trail rides, a Saudi club booking expat lessons in USD), the
+ * dashboard cards added apples to oranges and rendered a
+ * meaningless number under the club's primary currency.
+ *
+ * New shape: per-currency arrays. The UI iterates and renders one
+ * card-group per currency. Single-currency clubs (the dominant case
+ * today) get exactly one entry and the UI looks identical to before.
+ */
+export interface CurrencyTotals {
+  currency: string;
+  /** Net of refunds. Bookings + livery, only `paid`/`partial`. */
+  totalRevenue: number;
+  totalExpenses: number;
+  /** Pending bookings + pending/overdue livery invoices. */
+  outstandingBalance: number;
+}
+
+export interface PaymentMethodBreakdownRow {
+  method: string;
+  currency: string;
+  total: number;
+  count: number;
+}
+
+export interface FinanceOverview {
+  totalsByCurrency: CurrencyTotals[];
+  paymentMethodBreakdown: PaymentMethodBreakdownRow[];
+}
+
+export async function getFinanceOverview(clubId: string): Promise<FinanceOverview> {
   // Aggregate from `bookings` and `livery_invoices` — those are the tables
   // that webhook handlers + the cancel/refund route actually write to. The
   // legacy `payments` table is modelled but no code writes to it, so the
   // previous query returned 0 indefinitely (audit C-3). When we eventually
   // populate `payments` (via webhook helpers backfilling row-per-payment),
   // this can be replaced with the simpler SUM over that table.
+  //
+  // GROUP BY currency on every aggregation so the per-currency totals
+  // are accurate. The merge step below stitches the three sources
+  // (booking revenue + livery revenue + expenses + outstanding) into
+  // one row per currency.
   const [
-    bookingRevenueResult,
-    liveryRevenueResult,
-    expenseResult,
-    bookingsOutstandingResult,
-    liveryOutstandingResult,
+    bookingRevenueRows,
+    liveryRevenueRows,
+    expenseRows,
+    bookingsOutstandingRows,
+    liveryOutstandingRows,
     bookingMethodBreakdown,
   ] = await Promise.all([
     db
       .select({
+        currency: bookings.currency,
         total: sql<number>`coalesce(sum(${bookings.amount} - coalesce(${bookings.refundedAmountMinor}, 0)), 0)::int`,
       })
       .from(bookings)
@@ -36,21 +77,29 @@ export async function getFinanceOverview(clubId: string) {
           eq(bookings.clubId, clubId),
           sql`${bookings.paymentStatus} IN ('paid', 'partial')`,
         ),
-      ),
+      )
+      .groupBy(bookings.currency),
     db
       .select({
+        currency: liveryInvoices.currency,
         total: sql<number>`coalesce(sum(${liveryInvoices.amountMinorUnits}), 0)::int`,
       })
       .from(liveryInvoices)
       .where(
         and(eq(liveryInvoices.clubId, clubId), eq(liveryInvoices.status, 'paid')),
-      ),
-    db
-      .select({ total: sql<number>`coalesce(sum(${expenses.amount}), 0)::int` })
-      .from(expenses)
-      .where(eq(expenses.clubId, clubId)),
+      )
+      .groupBy(liveryInvoices.currency),
     db
       .select({
+        currency: expenses.currency,
+        total: sql<number>`coalesce(sum(${expenses.amount}), 0)::int`,
+      })
+      .from(expenses)
+      .where(eq(expenses.clubId, clubId))
+      .groupBy(expenses.currency),
+    db
+      .select({
+        currency: bookings.currency,
         total: sql<number>`coalesce(sum(${bookings.amount} - coalesce(${bookings.refundedAmountMinor}, 0)), 0)::int`,
       })
       .from(bookings)
@@ -61,9 +110,11 @@ export async function getFinanceOverview(clubId: string) {
           sql`${bookings.status} != 'cancelled'`,
           sql`${bookings.amount} IS NOT NULL`,
         ),
-      ),
+      )
+      .groupBy(bookings.currency),
     db
       .select({
+        currency: liveryInvoices.currency,
         total: sql<number>`coalesce(sum(${liveryInvoices.amountMinorUnits}), 0)::int`,
       })
       .from(liveryInvoices)
@@ -72,10 +123,12 @@ export async function getFinanceOverview(clubId: string) {
           eq(liveryInvoices.clubId, clubId),
           sql`${liveryInvoices.status} IN ('pending', 'overdue')`,
         ),
-      ),
+      )
+      .groupBy(liveryInvoices.currency),
     db
       .select({
         method: bookings.paymentMethod,
+        currency: bookings.currency,
         total: sql<number>`coalesce(sum(${bookings.amount} - coalesce(${bookings.refundedAmountMinor}, 0)), 0)::int`,
         count: sql<number>`count(*)::int`,
       })
@@ -87,20 +140,44 @@ export async function getFinanceOverview(clubId: string) {
           sql`${bookings.paymentMethod} IS NOT NULL`,
         ),
       )
-      .groupBy(bookings.paymentMethod),
+      .groupBy(bookings.paymentMethod, bookings.currency),
   ]);
 
-  const totalRevenue =
-    (bookingRevenueResult[0]?.total ?? 0) + (liveryRevenueResult[0]?.total ?? 0);
-  const outstandingBalance =
-    (bookingsOutstandingResult[0]?.total ?? 0) +
-    (liveryOutstandingResult[0]?.total ?? 0);
+  // Stitch the per-currency totals.
+  const byCurrency = new Map<string, CurrencyTotals>();
+  function bump(
+    currency: string,
+    field: 'totalRevenue' | 'totalExpenses' | 'outstandingBalance',
+    amount: number,
+  ): void {
+    const key = currency.toUpperCase();
+    const existing = byCurrency.get(key) ?? {
+      currency: key,
+      totalRevenue: 0,
+      totalExpenses: 0,
+      outstandingBalance: 0,
+    };
+    existing[field] += amount;
+    byCurrency.set(key, existing);
+  }
+  for (const row of bookingRevenueRows) bump(row.currency, 'totalRevenue', row.total);
+  for (const row of liveryRevenueRows) bump(row.currency, 'totalRevenue', row.total);
+  for (const row of expenseRows) bump(row.currency, 'totalExpenses', row.total);
+  for (const row of bookingsOutstandingRows) bump(row.currency, 'outstandingBalance', row.total);
+  for (const row of liveryOutstandingRows) bump(row.currency, 'outstandingBalance', row.total);
 
   return {
-    totalRevenue,
-    totalExpenses: expenseResult[0]?.total ?? 0,
-    outstandingBalance,
-    paymentMethodBreakdown: bookingMethodBreakdown.filter((b) => b.method != null),
+    totalsByCurrency: [...byCurrency.values()].sort((a, b) =>
+      a.currency.localeCompare(b.currency),
+    ),
+    paymentMethodBreakdown: bookingMethodBreakdown
+      .filter((b) => b.method != null)
+      .map((b) => ({
+        method: b.method!,
+        currency: b.currency.toUpperCase(),
+        total: b.total,
+        count: b.count,
+      })),
   };
 }
 

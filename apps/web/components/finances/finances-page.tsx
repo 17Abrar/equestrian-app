@@ -71,13 +71,12 @@ export function FinancesPage() {
 function OverviewTab() {
   const { data, isLoading, isError, error, refetch } = useFinanceOverview();
   const settingsQuery = useClubSettings();
-  // Finance totals aren't currency-tagged (they're aggregates across mixed
-  // payment rows). Display them in the club's configured currency so the
-  // overview matches what the rider sees on their booking invoice.
-  // Audit F-53 (2026-05-08 r6): only fall back to AED while settings
-  // are loading. On error we surface an explicit error rather than
-  // mislabel SAR/KWD/QAR clubs as dirhams.
-  const currency = settingsQuery.data?.data.currency ?? 'AED';
+  // Audit pass-3 follow-up D (2026-05-09): finance totals are now
+  // grouped per-currency on the server. The club's configured
+  // currency is used as the FALLBACK label for the empty-state
+  // (zero rows) and as the sort key so the home currency renders
+  // first when the club operates in multiple.
+  const homeCurrency = settingsQuery.data?.data.currency ?? 'AED';
 
   if (isLoading || settingsQuery.isLoading)
     return <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
@@ -97,43 +96,71 @@ function OverviewTab() {
   const overview = data?.data;
   if (!overview) return <ErrorState message="No data" />;
 
+  // Empty-state: no rows in any currency yet → render zero cards in
+  // the home currency so the dashboard isn't blank.
+  const totals = overview.totalsByCurrency.length > 0
+    ? [...overview.totalsByCurrency].sort((a, b) => {
+        // Home currency first, then alphabetical.
+        if (a.currency === homeCurrency.toUpperCase()) return -1;
+        if (b.currency === homeCurrency.toUpperCase()) return 1;
+        return a.currency.localeCompare(b.currency);
+      })
+    : [{
+        currency: homeCurrency.toUpperCase(),
+        totalRevenue: 0,
+        totalExpenses: 0,
+        outstandingBalance: 0,
+      }];
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-              <TrendingUp className="h-6 w-6 text-green-700" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold">{formatMoney(overview.totalRevenue, currency)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-              <TrendingDown className="h-6 w-6 text-red-700" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Total Expenses</p>
-              <p className="text-2xl font-bold">{formatMoney(overview.totalExpenses, currency)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100">
-              <AlertCircle className="h-6 w-6 text-yellow-700" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Outstanding</p>
-              <p className="text-2xl font-bold">{formatMoney(overview.outstandingBalance, currency)}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {totals.map((row) => (
+        <div key={row.currency} className="space-y-2">
+          {/* Currency-section header — only shown when a club has more
+              than one currency. Keeps single-currency clubs visually
+              identical to the pre-D13 dashboard. */}
+          {totals.length > 1 && (
+            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground">
+              {row.currency}
+            </h2>
+          )}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardContent className="flex items-center gap-4 p-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                  <TrendingUp className="h-6 w-6 text-green-700" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Revenue</p>
+                  <p className="text-2xl font-bold">{formatMoney(row.totalRevenue, row.currency)}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 p-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                  <TrendingDown className="h-6 w-6 text-red-700" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Expenses</p>
+                  <p className="text-2xl font-bold">{formatMoney(row.totalExpenses, row.currency)}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 p-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100">
+                  <AlertCircle className="h-6 w-6 text-yellow-700" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Outstanding</p>
+                  <p className="text-2xl font-bold">{formatMoney(row.outstandingBalance, row.currency)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ))}
 
       {overview.paymentMethodBreakdown.length > 0 && (
         <Card>
@@ -141,11 +168,21 @@ function OverviewTab() {
           <CardContent>
             <div className="space-y-2">
               {overview.paymentMethodBreakdown.map((pm) => (
-                <div key={pm.method ?? 'unknown'} className="flex items-center justify-between">
-                  <span className="text-sm capitalize">{pm.method?.replace('_', ' ') ?? 'Unknown'}</span>
+                <div
+                  key={`${pm.method}-${pm.currency}`}
+                  className="flex items-center justify-between"
+                >
+                  <span className="text-sm capitalize">
+                    {pm.method.replace('_', ' ')}
+                    {totals.length > 1 && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {pm.currency}
+                      </span>
+                    )}
+                  </span>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-muted-foreground">{pm.count} transactions</span>
-                    <span className="font-medium">{formatMoney(pm.total, currency)}</span>
+                    <span className="font-medium">{formatMoney(pm.total, pm.currency)}</span>
                   </div>
                 </div>
               ))}
