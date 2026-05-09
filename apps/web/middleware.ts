@@ -63,7 +63,15 @@ function buildCsp(nonce: string): string {
     `style-src 'self' 'unsafe-inline' ${CLERK_SCRIPT}`,
     "img-src 'self' data: blob: https://*.r2.dev https://img.clerk.com",
     "font-src 'self' data:",
-    `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://maps.googleapis.com`,
+    // R2 hosts: `*.r2.cloudflarestorage.com` is the S3-compatible
+    // endpoint where the browser PUTs presigned uploads (both path-
+    // style and virtual-hosted-style end up under this host). Without
+    // this entry, every direct-to-R2 PUT in `FileUpload` errors out as
+    // a CSP-blocked `TypeError: Failed to fetch`. `*.r2.dev` is the
+    // public-read host where uploaded objects live (already in img-src
+    // for previews; not needed for connect since we don't fetch them
+    // via JS).
+    `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://*.r2.cloudflarestorage.com https://maps.googleapis.com`,
     `frame-src 'self' ${CLERK_FRAME} ${STRIPE_FRAME}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
