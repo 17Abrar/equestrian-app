@@ -17,6 +17,28 @@ export async function getClubById(clubId: string) {
   return result[0] ?? null;
 }
 
+/**
+ * Audit pass-3 (2026-05-09): six routes were doing
+ *   `select({ timezone }).from(clubs).where(eq(clubs.id, clubId))`
+ * inline, without the `isNull(deletedAt)` gate. After Clerk's `org.deleted`
+ * webhook lands, those reads would still resolve a tombstoned club's
+ * timezone — defense-in-depth gap with `getClubById` and the dashboard
+ * read paths. This helper bakes the gate in so callers can't forget it.
+ *
+ * Returns null when the club is missing or soft-deleted; the caller
+ * must default (typical fallback is `Asia/Dubai`, matching the schema's
+ * default).
+ */
+export async function getClubTimezone(clubId: string): Promise<string | null> {
+  const result = await db
+    .select({ timezone: clubs.timezone })
+    .from(clubs)
+    .where(and(eq(clubs.id, clubId), isNull(clubs.deletedAt)))
+    .limit(1);
+
+  return result[0]?.timezone ?? null;
+}
+
 export async function updateClubSettings(clubId: string, data: ClubUpdate) {
   const result = await db
     .update(clubs)

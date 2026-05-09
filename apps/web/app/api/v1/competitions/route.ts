@@ -1,14 +1,12 @@
 import { type NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { createCompetitionSchema, competitionFiltersSchema } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import {
   getCompetitionsByClub,
   createCompetition,
   getArenaById,
+  getClubTimezone,
 } from '@equestrian/db/queries';
-import { db } from '@equestrian/db';
-import { clubs } from '@equestrian/db/schema';
 import {
   withAuth,
   successResponse,
@@ -68,13 +66,9 @@ export async function POST(request: NextRequest) {
       const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
       let registrationDeadline = data.registrationDeadline;
       if (registrationDeadline && DATETIME_LOCAL_RE.test(registrationDeadline)) {
-        const clubRow = await db
-          .select({ timezone: clubs.timezone })
-          .from(clubs)
-          .where(eq(clubs.id, ctx.clubId))
-          .limit(1);
-
-        const timezone = clubRow[0]?.timezone ?? 'Asia/Dubai';
+        // Audit pass-3 (2026-05-09): use the soft-delete-gated helper so
+        // a tombstoned club's timezone can't drive datetime parsing.
+        const timezone = (await getClubTimezone(ctx.clubId)) ?? 'Asia/Dubai';
         registrationDeadline = parseDateTimeLocal(registrationDeadline, timezone).toISOString();
       }
 

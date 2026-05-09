@@ -16,6 +16,23 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
+      // Audit pass-3 (2026-05-09): medications are clinical PHI — see
+      // sibling health/route.ts GET. Coach + groom hold `horses:read`
+      // but should not enumerate drug regimens. Vet role and admins
+      // are admitted via `horses:read_medical` / `horses:update_medical`
+      // / `horses:update`.
+      const allowed =
+        hasPermission(ctx.orgRole, 'horses:read_medical') ||
+        hasPermission(ctx.orgRole, 'horses:update_medical') ||
+        hasPermission(ctx.orgRole, 'horses:update');
+      if (!allowed) {
+        return errorResponse(
+          'FORBIDDEN',
+          'You do not have permission to read horse medications',
+          403,
+        );
+      }
+
       const { horseId } = await params;
       validateUuidParam('horseId', horseId);
       const activeOnly = request.nextUrl.searchParams.get('activeOnly') === 'true';

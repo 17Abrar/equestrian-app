@@ -798,10 +798,29 @@ export async function applyPaymentWebhook({
       });
       return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
     }
-    if (
-      event.currency &&
-      event.currency.toUpperCase() !== bookingRef.currency.toUpperCase()
-    ) {
+    // Audit pass-3 (2026-05-09): refuse to compare an amount when the
+    // event's currency is missing. Previously the `event.currency &&`
+    // short-circuit silently skipped the mismatch guard, so a USD-
+    // intent event without a currency field would fall straight into
+    // the integer comparison against an AED booking — the comparison
+    // is unitless and would pass underfund whenever the USD minor
+    // units happened to exceed AED fils. N-Genius `extractOrderFields`
+    // returns `amountCurrency: undefined` when the embedded payload
+    // omits `payment[0].amount.currencyCode`; some Stripe `charge.
+    // refund.updated` events lack a currency on the parent. Fail
+    // closed: log + return without applying — operator triage tag is
+    // `webhook_amount_without_currency`.
+    if (!event.currency) {
+      logger.error('webhook_amount_without_currency', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        eventId: event.eventId,
+        amountReceived: event.amountReceivedMinorUnits,
+        bookingCurrency: bookingRef.currency,
+      });
+      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+    }
+    if (event.currency.toUpperCase() !== bookingRef.currency.toUpperCase()) {
       logger.error('webhook_currency_mismatch', {
         clubId,
         bookingId: bookingRef.bookingId,
@@ -996,10 +1015,19 @@ export async function applyLiveryInvoiceWebhook({
     });
     return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
   }
-  if (
-    event.currency &&
-    event.currency.toUpperCase() !== invoice.currency.toUpperCase()
-  ) {
+  // Audit pass-3 (2026-05-09): refuse amount comparison when event
+  // currency is missing — matches the booking-side fix above.
+  if (!event.currency) {
+    logger.error('livery_webhook_amount_without_currency', {
+      clubId: invoice.clubId,
+      invoiceId: invoice.id,
+      eventId: event.eventId,
+      amountReceived: event.amountReceivedMinorUnits,
+      invoiceCurrency: invoice.currency,
+    });
+    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
+  }
+  if (event.currency.toUpperCase() !== invoice.currency.toUpperCase()) {
     logger.error('livery_webhook_currency_mismatch', {
       clubId: invoice.clubId,
       invoiceId: invoice.id,

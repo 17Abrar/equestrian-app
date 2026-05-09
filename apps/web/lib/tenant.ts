@@ -6,7 +6,6 @@ import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { type UserRole } from '@equestrian/shared/types';
-import { mapClerkRoleToAppRole } from './clerk-roles';
 import { logger } from './logger';
 
 /**
@@ -65,7 +64,12 @@ interface TenantContext {
  * — i.e., they just signed up and haven't joined or started a club yet.
  */
 export async function getTenantContext(): Promise<TenantContext> {
-  const { userId, orgId, orgRole } = await auth();
+  // Audit pass-3 (2026-05-09): `orgRole` from Clerk's session is no
+  // longer trusted as a fallback role. Path 1 reads role from the
+  // `club_members.role` column (refusing the request if no active
+  // membership exists); Path 2 likewise. The value was inviting the
+  // deactivation-bypass — see the long comment in Path 1.
+  const { userId, orgId } = await auth();
 
   if (!userId) {
     throw new TenantError('UNAUTHORIZED', 'Authentication required');
@@ -95,31 +99,39 @@ export async function getTenantContext(): Promise<TenantContext> {
 
       const foundMember = member[0];
 
-      // Audit auth-5: previously fell open to `'rider'` when neither a
-      // club_members row nor an orgRole was present — a Clerk-org-exists-
-      // but-our-DB-hasn't-caught-up race window let an unproven principal
-      // book lessons. Now we throw NO_MEMBERSHIP so the user lands on a
-      // "your account is being set up" page instead. The narrow gap
-      // between Clerk's `organizationMembership.created` webhook delivery
-      // and our handler writing `club_members` is bounded; legitimate
-      // users retry within seconds.
-      if (!foundMember && !orgRole) {
+      // Audit pass-3 (2026-05-09): NEVER fall back to the Clerk-derived
+      // role when no active `club_members` row exists. Two scenarios
+      // collapsed into one safe outcome:
+      //
+      //   1. Newly-joined user, Clerk's `organizationMembership.created`
+      //      webhook hasn't landed yet → bounded race window, retry-
+      //      within-seconds resolves it.
+      //   2. Deactivated user whose Clerk session is still live —
+      //      `deactivateMember` flips `is_active=false` in our DB but
+      //      doesn't (today) call Clerk `removeOrganizationMembership`,
+      //      so `orgRole` from the JWT is still 'org:admin' for an
+      //      admin who was just revoked. Falling back to that role
+      //      grants them admin powers until their JWT TTL elapses —
+      //      a real authorization-bypass window. Refusing here closes
+      //      the window unconditionally; the corresponding follow-up
+      //      is to remove the Clerk org membership at deactivate time
+      //      so the JWT itself stops carrying the stale role.
+      //
+      // Audit auth-5 supersedes: previously fell open to `'rider'` when
+      // neither a `club_members` row nor an `orgRole` was present.
+      if (!foundMember) {
         throw new TenantError(
           'NO_MEMBERSHIP',
           'Your account is being set up — please refresh in a moment.',
         );
       }
 
-      const appRole: UserRole = foundMember
-        ? foundMember.role
-        : mapClerkRoleToAppRole(orgRole!);
-
       return {
         clubId: foundClub.id,
-        memberId: foundMember?.id ?? null,
+        memberId: foundMember.id,
         userId,
         orgId,
-        orgRole: appRole,
+        orgRole: foundMember.role,
         onboardingCompleted: !!foundClub.onboardingCompletedAt,
       };
     }

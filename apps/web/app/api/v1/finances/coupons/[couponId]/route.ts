@@ -1,11 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { couponBaseSchema, couponPercentageRefine } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
-import { updateCoupon } from '@equestrian/db/queries';
-import { db } from '@equestrian/db';
-import { clubs } from '@equestrian/db/schema';
+import { updateCoupon, getClubTimezone } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
 
 const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
@@ -17,12 +14,8 @@ async function resolveCouponDate(
 ): Promise<Date | undefined> {
   if (!value) return undefined;
   if (DATETIME_LOCAL_RE.test(value)) {
-    const club = await db
-      .select({ timezone: clubs.timezone })
-      .from(clubs)
-      .where(eq(clubs.id, clubId))
-      .limit(1);
-    const tz = club[0]?.timezone ?? 'Asia/Dubai';
+    // Audit pass-3 (2026-05-09): soft-delete-gated helper.
+    const tz = (await getClubTimezone(clubId)) ?? 'Asia/Dubai';
     return parseDateTimeLocal(value, tz);
   }
   return new Date(value);
