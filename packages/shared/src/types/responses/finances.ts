@@ -11,11 +11,28 @@ import type {
   PaymentStatus,
 } from '../index';
 
-export interface FinanceOverview {
+/**
+ * Audit pass-3 follow-up D (2026-05-09): per-currency totals. The
+ * dashboard renders one card-group per currency so a club operating
+ * in two currencies can see each side without the SUMs adding apples
+ * to oranges. Single-currency clubs get exactly one entry and the UI
+ * reads identical to the pre-D dashboard.
+ */
+export interface CurrencyTotals {
+  currency: string;
   totalRevenue: number;
   totalExpenses: number;
   outstandingBalance: number;
-  paymentMethodBreakdown: Array<{ method: string | null; total: number; count: number }>;
+}
+
+export interface FinanceOverview {
+  totalsByCurrency: CurrencyTotals[];
+  paymentMethodBreakdown: Array<{
+    method: string;
+    currency: string;
+    total: number;
+    count: number;
+  }>;
 }
 
 export interface Expense {
