@@ -1,6 +1,6 @@
 import { eq, and, asc, gte, ne, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
-import { clubPaymentAccounts } from '../schema/finances';
+import { clubPaymentAccounts, burnedWebhookSecretHashes } from '../schema/finances';
 import { bookings } from '../schema/bookings';
 import { liveryInvoices } from '../schema/livery-invoices';
 import { encryptField, decryptField } from '../crypto';
@@ -242,15 +242,23 @@ export async function upsertPaymentAccount(
 
     // Audit F-33 (2026-05-08 r6): pre-check that no OTHER club has
     // already bound this webhook-secret hash. The partial UNIQUE in
-    // migration 0048 enforces it at the DB layer too, but pre-checking
+    // migration 0051 enforces it at the DB layer too, but pre-checking
     // converts the unique-violation 23505 into a clean
     // `WebhookSecretReusedError` the route layer can render as a 409
     // with an actionable message. The two layers together cover the
     // race window between read and write — a concurrent insert from
     // the other club would lose to the partial unique index even if
     // it slipped past this check.
+    //
+    // Audit pass-2 D-1 (2026-05-09): also pre-check the
+    // `burned_webhook_secret_hashes` table. F-33 only covers CURRENTLY-
+    // CONNECTED clubs; without the burn check, a club could disconnect,
+    // and another club could then paste their old `whsec_…`. Webhooks
+    // signed with the retired secret would now verify at the new
+    // club's URL.
+    let oldHash: string | null = null;
     if (input.webhookSecretHash) {
-      const [collision] = await tx
+      const [liveCollision] = await tx
         .select({ otherClubId: clubPaymentAccounts.clubId })
         .from(clubPaymentAccounts)
         .where(
@@ -260,7 +268,7 @@ export async function upsertPaymentAccount(
           ),
         )
         .limit(1);
-      if (collision) {
+      if (liveCollision) {
         throw new WebhookSecretReusedError(
           'This webhook secret is already configured for another club. ' +
             'Generate a fresh signing secret in your provider dashboard ' +
@@ -268,6 +276,40 @@ export async function upsertPaymentAccount(
             'so per-club webhook delivery binds correctly.',
         );
       }
+
+      const [burnedCollision] = await tx
+        .select({ id: burnedWebhookSecretHashes.id })
+        .from(burnedWebhookSecretHashes)
+        .where(
+          and(
+            eq(burnedWebhookSecretHashes.provider, input.provider),
+            eq(burnedWebhookSecretHashes.secretHash, input.webhookSecretHash),
+          ),
+        )
+        .limit(1);
+      if (burnedCollision) {
+        throw new WebhookSecretReusedError(
+          'This webhook secret was previously used by another club and ' +
+            'has been retired. Generate a fresh signing secret in your ' +
+            'provider dashboard and paste that one. Re-using retired ' +
+            'secrets would let webhooks signed before disconnect land ' +
+            'at your URL.',
+        );
+      }
+
+      // Read the existing hash before the upsert so we know whether
+      // it changed (and need to burn the old one).
+      const [existing] = await tx
+        .select({ webhookSecretHash: clubPaymentAccounts.webhookSecretHash })
+        .from(clubPaymentAccounts)
+        .where(
+          and(
+            eq(clubPaymentAccounts.clubId, clubId),
+            eq(clubPaymentAccounts.provider, input.provider),
+          ),
+        )
+        .limit(1);
+      oldHash = existing?.webhookSecretHash ?? null;
     }
 
     const encryptedCredentials = input.credentials
@@ -310,6 +352,28 @@ export async function upsertPaymentAccount(
     if (!row) {
       throw new Error('Failed to upsert payment account');
     }
+
+    // Audit pass-2 D-1: if the previous hash differs from the new one,
+    // burn it so a future club can't paste the same `whsec_…` and
+    // start receiving webhooks signed with this club's old secret.
+    // ON CONFLICT DO NOTHING — the same hash burned twice is a no-op
+    // (e.g. an idempotent rotation that landed via two paths).
+    if (oldHash && oldHash !== input.webhookSecretHash) {
+      await tx
+        .insert(burnedWebhookSecretHashes)
+        .values({
+          provider: input.provider,
+          secretHash: oldHash,
+          clubId,
+        })
+        .onConflictDoNothing({
+          target: [
+            burnedWebhookSecretHashes.provider,
+            burnedWebhookSecretHashes.secretHash,
+          ],
+        });
+    }
+
     return toSummary(row);
   });
 }
@@ -375,28 +439,69 @@ export async function setActiveProvider(
  * Disables (soft-disconnects) the account for a given provider. The row is
  * kept so that historical payments referencing it still resolve, but it is
  * no longer eligible to process new charges.
+ *
+ * Audit pass-2 D-1 (2026-05-09): burns the webhook-secret hash into
+ * `burned_webhook_secret_hashes` and clears it from the live row. This
+ * closes the orphan-hash window where, after disconnect, the F-33
+ * partial UNIQUE no longer matches the row (because the predicate
+ * filters non-null hashes only on connected rows) and a different
+ * club could paste the same `whsec_…` to receive webhooks signed by
+ * the disconnected club's secret.
  */
 export async function disconnectPaymentAccount(
   clubId: string,
   provider: PaymentProvider,
 ): Promise<PaymentAccountSummary | null> {
-  const [row] = await db
-    .update(clubPaymentAccounts)
-    .set({
-      status: 'disabled',
-      isActive: false,
-      disconnectedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(clubPaymentAccounts.clubId, clubId),
-        eq(clubPaymentAccounts.provider, provider),
-      ),
-    )
-    .returning();
+  return writeTransaction(async (tx) => {
+    const [existing] = await tx
+      .select({ webhookSecretHash: clubPaymentAccounts.webhookSecretHash })
+      .from(clubPaymentAccounts)
+      .where(
+        and(
+          eq(clubPaymentAccounts.clubId, clubId),
+          eq(clubPaymentAccounts.provider, provider),
+        ),
+      )
+      .limit(1);
 
-  return row ? toSummary(row) : null;
+    const [row] = await tx
+      .update(clubPaymentAccounts)
+      .set({
+        status: 'disabled',
+        isActive: false,
+        disconnectedAt: new Date(),
+        // Clear the live hash — both the partial UNIQUE coverage and
+        // the burned-table check below depend on this being NULL after
+        // disconnect.
+        webhookSecretHash: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(clubPaymentAccounts.clubId, clubId),
+          eq(clubPaymentAccounts.provider, provider),
+        ),
+      )
+      .returning();
+
+    if (existing?.webhookSecretHash) {
+      await tx
+        .insert(burnedWebhookSecretHashes)
+        .values({
+          provider,
+          secretHash: existing.webhookSecretHash,
+          clubId,
+        })
+        .onConflictDoNothing({
+          target: [
+            burnedWebhookSecretHashes.provider,
+            burnedWebhookSecretHashes.secretHash,
+          ],
+        });
+    }
+
+    return row ? toSummary(row) : null;
+  });
 }
 
 /** Records a provider-side error (e.g., from a webhook) for display in settings. */
