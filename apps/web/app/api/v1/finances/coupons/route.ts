@@ -1,11 +1,9 @@
 import { type NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { createCouponSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
-import { getCouponsByClub, createCoupon } from '@equestrian/db/queries';
-import { db } from '@equestrian/db';
-import { clubs, couponStatusEnum } from '@equestrian/db/schema';
+import { getCouponsByClub, createCoupon, getClubTimezone } from '@equestrian/db/queries';
+import { couponStatusEnum } from '@equestrian/db/schema';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
 
 // Audit G-26: a datetime-local string from the admin form (no Z, no
@@ -23,12 +21,8 @@ async function resolveCouponDate(
 ): Promise<Date | undefined> {
   if (!value) return undefined;
   if (DATETIME_LOCAL_RE.test(value)) {
-    const club = await db
-      .select({ timezone: clubs.timezone })
-      .from(clubs)
-      .where(eq(clubs.id, clubId))
-      .limit(1);
-    const tz = club[0]?.timezone ?? 'Asia/Dubai';
+    // Audit pass-3 (2026-05-09): soft-delete-gated helper.
+    const tz = (await getClubTimezone(clubId)) ?? 'Asia/Dubai';
     return parseDateTimeLocal(value, tz);
   }
   return new Date(value);

@@ -12,6 +12,7 @@ import { withAuth,
   parseRequiredBody,
   parsePagination,
   paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
   params: Promise<{ horseId: string; medicationId: string }>;
@@ -20,6 +21,27 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   return withAuth(
     async (ctx) => {
+      // Audit pass-3 (2026-05-09): medication logs include `notes` and
+      // `skip_reason` (encrypted-at-rest under MEDICATION_LOG_ENCRYPTED_
+      // FIELDS — audit F-2 closure). Treating dose history as broadly-
+      // readable defeats the encryption invariant. Admit clinical roles
+      // (vet, admin) AND `horses:update_care` (grooms doing dose admin
+      // who need to see what they've already given today). If a future
+      // workflow needs a non-care, non-clinical reader, grant
+      // `horses:read_medical` rather than relaxing this gate.
+      const allowed =
+        hasPermission(ctx.orgRole, 'horses:read_medical') ||
+        hasPermission(ctx.orgRole, 'horses:update_medical') ||
+        hasPermission(ctx.orgRole, 'horses:update') ||
+        hasPermission(ctx.orgRole, 'horses:update_care');
+      if (!allowed) {
+        return errorResponse(
+          'FORBIDDEN',
+          'You do not have permission to read medication logs',
+          403,
+        );
+      }
+
       const { horseId, medicationId } = await params;
       validateUuidParam('horseId', horseId);
       validateUuidParam('medicationId', medicationId);

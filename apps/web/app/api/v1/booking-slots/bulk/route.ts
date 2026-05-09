@@ -1,5 +1,4 @@
 import { type NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { createRecurringSlotsSchema } from '@equestrian/shared/schemas';
 import { isDateInPast } from '@equestrian/shared/utils';
 import {
@@ -7,9 +6,8 @@ import {
   getArenaById,
   getLessonTypeById,
   getMemberById,
+  getClubTimezone,
 } from '@equestrian/db/queries';
-import { db } from '@equestrian/db';
-import { clubs } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
@@ -18,14 +16,9 @@ export async function POST(request: NextRequest) {
     async (ctx) => {
       const data = await parseRequiredBody(request, createRecurringSlotsSchema);
 
-      // Get club timezone
-      const clubRow = await db
-        .select({ timezone: clubs.timezone })
-        .from(clubs)
-        .where(eq(clubs.id, ctx.clubId))
-        .limit(1);
-
-      const timezone = clubRow[0]?.timezone ?? 'Asia/Dubai';
+      // Get club timezone.
+      // Audit pass-3 (2026-05-09): soft-delete-gated helper.
+      const timezone = (await getClubTimezone(ctx.clubId)) ?? 'Asia/Dubai';
 
       if (isDateInPast(data.dateFrom, timezone)) {
         return errorResponse('INVALID_DATE', 'Start date cannot be in the past', 422);
