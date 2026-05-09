@@ -506,15 +506,18 @@ export async function markPlatformInvoiceOverdueOnly(
 
 /**
  * Round 6.1 — find clubs whose 14-day trial ends in `daysOut` days
- * (1 or 3) and haven't already been emailed at that threshold. The
- * threshold-tracking is implicit in the query: callers pass
- * `daysOut === 3` once and `daysOut === 1` once per cron pass; the
- * trial only crosses each window once, and we DON'T currently track
- * a "trial_reminder_count" column to avoid migration churn. The cron
- * dedupes via the (today + daysOut) date check — a club that already
- * reached `trial_ends_at - 3 days` yesterday won't match again today.
+ * (1 or 3). Pass `daysOut` so the SQL filters out rows where the
+ * matching `trial_reminder_${daysOut}day_sent_at` column is already
+ * set — this is the cheap pre-flight; `markTrialReminderSent` does
+ * the actual CAS-guarded claim before the email send (audit pass-2
+ * C-1).
  */
-export async function findClubsWithTrialEndingOn(targetDateIso: string) {
+export async function findClubsWithTrialEndingOn(
+  targetDateIso: string,
+  daysOut: 1 | 3,
+) {
+  const sentColumn =
+    daysOut === 1 ? clubs.trialReminder1DaySentAt : clubs.trialReminder3DaySentAt;
   const rows = await rawDb
     .select({
       clubId: clubs.id,
@@ -538,9 +541,52 @@ export async function findClubsWithTrialEndingOn(targetDateIso: string) {
         // YYYY-MM-DD string in UTC matches.
         sql`${clubs.trialEndsAt}::date = ${targetDateIso}::date`,
         isNull(clubs.deletedAt),
+        // Audit pass-2 C-1: skip clubs already nudged at this threshold.
+        // Cheap pre-flight; `markTrialReminderSent` is the actual
+        // race-safe claim.
+        isNull(sentColumn),
       ),
     );
   return rows;
+}
+
+/**
+ * Audit pass-2 (2026-05-09 C-1): CAS-guarded claim of a trial-ending
+ * nudge for `(clubId, daysOut)`. Returns true when this caller won
+ * the race (the column was NULL and is now `now()`); returns false
+ * when another isolate already won (the column was non-null) or the
+ * club doesn't exist. Caller sends the email only on `true`.
+ *
+ * Mirrors the booking-reminder / horse-care-reminder dedup pattern.
+ */
+export async function markTrialReminderSent(
+  clubId: string,
+  daysOut: 1 | 3,
+): Promise<boolean> {
+  const column =
+    daysOut === 1 ? clubs.trialReminder1DaySentAt : clubs.trialReminder3DaySentAt;
+  const result = await rawDb
+    .update(clubs)
+    .set({ [daysOut === 1 ? 'trialReminder1DaySentAt' : 'trialReminder3DaySentAt']: new Date() })
+    .where(and(eq(clubs.id, clubId), isNull(column)))
+    .returning({ id: clubs.id });
+  return result.length > 0;
+}
+
+/**
+ * Companion to `markTrialReminderSent` — clears the timestamp when
+ * the email send fails so the next cron pass can re-attempt. Mirrors
+ * `unmarkBookingReminderSent` and `unrecordHorseCareReminderSend`.
+ */
+export async function unmarkTrialReminderSent(
+  clubId: string,
+  daysOut: 1 | 3,
+): Promise<void> {
+  const setKey = daysOut === 1 ? 'trialReminder1DaySentAt' : 'trialReminder3DaySentAt';
+  await rawDb
+    .update(clubs)
+    .set({ [setKey]: null })
+    .where(eq(clubs.id, clubId));
 }
 
 /** Used by the dashboard subscription summary card. Returns the

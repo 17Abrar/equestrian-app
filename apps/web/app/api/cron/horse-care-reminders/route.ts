@@ -5,6 +5,7 @@ import {
   findUpcomingHorseInsuranceExpiries,
   findUpcomingMedicationEnds,
   recordHorseCareReminderSend,
+  unrecordHorseCareReminderSend,
   type CareReminderCandidate,
 } from '@equestrian/db/queries';
 import { getTodayDateString } from '@equestrian/shared/utils';
@@ -222,23 +223,40 @@ async function processKind(
         continue;
       }
 
-      await sendTriggeredEmail({
-        clubId: candidate.clubId,
-        trigger: 'horse_care_reminder',
-        to: candidate.clubEmail,
-        subject: subjectFor(kind, daysUntil, candidate),
-        template: HorseCareReminder({
+      try {
+        await sendTriggeredEmail({
+          clubId: candidate.clubId,
+          trigger: 'horse_care_reminder',
+          to: candidate.clubEmail,
+          subject: subjectFor(kind, daysUntil, candidate),
+          template: HorseCareReminder({
+            kind,
+            dueDate: candidate.dueDate,
+            daysUntil,
+            horseName: candidate.horseName,
+            clubName: candidate.clubName,
+            clubLogo: candidate.clubLogoUrl ?? undefined,
+            careTypeLabel: candidate.careTypeLabel,
+            detail: candidate.detail ?? undefined,
+          }),
+        });
+        sent += 1;
+      } catch (sendErr) {
+        // Audit pass-2 (2026-05-09 C-2): the dedup row was claimed
+        // before the send. A transient Resend failure (rate limit,
+        // 5xx) would otherwise permanently silence this reminder
+        // because the dedup row blocks every future cron pass. Roll
+        // back the dedup so the next pass can retry. Mirrors
+        // `unmarkBookingReminderSent` in the booking-reminders cron
+        // (audit F-61). The outer catch below still logs the failure.
+        await unrecordHorseCareReminderSend({
+          clubId: candidate.clubId,
           kind,
-          dueDate: candidate.dueDate,
-          daysUntil,
-          horseName: candidate.horseName,
-          clubName: candidate.clubName,
-          clubLogo: candidate.clubLogoUrl ?? undefined,
-          careTypeLabel: candidate.careTypeLabel,
-          detail: candidate.detail ?? undefined,
-        }),
-      });
-      sent += 1;
+          sourceId: candidate.sourceId,
+          thresholdDays: chosenThreshold,
+        });
+        throw sendErr;
+      }
     } catch (err) {
       logger.error('horse_care_reminder_send_failed', {
         kind,

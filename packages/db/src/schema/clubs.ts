@@ -72,6 +72,17 @@ export const clubs = pgTable('clubs', {
   subscriptionStatus: subscriptionStatusEnum('subscription_status').notNull().default('trialing'),
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
 
+  // Audit pass-2 (2026-05-09 C-1): per-club dedup for the trial-ending
+  // nudge cron. The previous implementation relied on the date check
+  // `trial_ends_at::date = today + daysOut` for dedup — which works
+  // until the cron's outer try fires a 5xx that worker-entry retries:
+  // each retry within the same UTC day re-fires the nudge. CAS-guard
+  // the send via these timestamp columns: `markTrialReminderSent` does
+  // a `WHERE column IS NULL RETURNING …`; the second isolate observes
+  // the first one's now() and bails. Migration 0053 adds the columns.
+  trialReminder3DaySentAt: timestamp('trial_reminder_3day_sent_at', { withTimezone: true }),
+  trialReminder1DaySentAt: timestamp('trial_reminder_1day_sent_at', { withTimezone: true }),
+
   // Booking settings
   advanceBookingDays: integer('advance_booking_days').notNull().default(30),
   bookingCutoffHours: integer('booking_cutoff_hours').notNull().default(2),

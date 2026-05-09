@@ -8,6 +8,8 @@ import {
   markPlatformInvoiceOverdueOnly,
   setPlatformInvoiceProviderRef,
   findClubsWithTrialEndingOn,
+  markTrialReminderSent,
+  unmarkTrialReminderSent,
   type BillableClub,
 } from '@equestrian/db/queries';
 import {
@@ -496,7 +498,10 @@ async function sendTrialEndingNudges(
 
   for (const daysOut of [3, 1] as const) {
     const targetDate = addDays(utcToday, daysOut);
-    const clubs = await findClubsWithTrialEndingOn(targetDate);
+    // Audit pass-2 C-1: pass `daysOut` so the SQL filter skips clubs
+    // already nudged at this threshold (the matching `trial_reminder_
+    // ${daysOut}day_sent_at` column is non-null).
+    const clubs = await findClubsWithTrialEndingOn(targetDate, daysOut);
 
     for (const club of clubs) {
       if (!club.clubEmail || !club.trialEndsAt) {
@@ -506,6 +511,21 @@ async function sendTrialEndingNudges(
         skipped += 1;
         continue;
       }
+
+      // Audit pass-2 C-1: CAS-guarded claim of the (clubId, daysOut)
+      // dedup row BEFORE the email send. Two concurrent cron isolates
+      // (Cloudflare's scheduled() retries 5xx) serialise on the
+      // UPDATE … WHERE column IS NULL — only the first isolate gets
+      // through, the second's `markTrialReminderSent` returns false
+      // and we skip. On send failure we `unmarkTrialReminderSent`
+      // so the next pass can re-attempt (mirrors the booking-
+      // reminder unmark pattern).
+      const claimed = await markTrialReminderSent(club.clubId, daysOut);
+      if (!claimed) {
+        skipped += 1;
+        continue;
+      }
+
       // The cron only nudges trialing clubs (the SQL filter enforces
       // `subscription_status = 'trialing'`); a club that already
       // upgraded mid-trial gets the regular subscription-invoice-issued
@@ -539,6 +559,8 @@ async function sendTrialEndingNudges(
         if (result.sent) {
           sent += 1;
         } else {
+          // Roll back the dedup so the next pass retries.
+          await unmarkTrialReminderSent(club.clubId, daysOut);
           logger.warn('trial_ending_email_rejected', {
             clubId: club.clubId,
             daysOut,
@@ -547,6 +569,7 @@ async function sendTrialEndingNudges(
           skipped += 1;
         }
       } catch (err) {
+        await unmarkTrialReminderSent(club.clubId, daysOut);
         logger.error('trial_ending_send_failed', {
           clubId: club.clubId,
           daysOut,
