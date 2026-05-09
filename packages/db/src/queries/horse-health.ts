@@ -52,7 +52,15 @@ async function isHorseActiveInClub(clubId: string, horseId: string): Promise<boo
 const HEALTH_ENCRYPTED_FIELDS = ['description', 'diagnosis', 'treatment'] as const;
 
 // Free-form clinical notes on medications are also PHI-sensitive.
-const MEDICATION_ENCRYPTED_FIELDS = ['notes'] as const;
+// Audit pass-2 (2026-05-09 B-3): added `prescribedBy` to the encrypted
+// list. The treating provider's name is HIPAA-style identifying info.
+// Schema column widened from varchar(255) to text in migration 0052.
+const MEDICATION_ENCRYPTED_FIELDS = ['notes', 'prescribedBy'] as const;
+
+// Audit pass-2 (2026-05-09 B-5): user-typed description on a vet/medical/
+// xray-categorised document upload is PHI ("ultrasound on hock", "xray
+// shows hairline fracture"). Encrypt at rest.
+const HORSE_DOCUMENT_ENCRYPTED_FIELDS = ['description'] as const;
 
 // Audit F-2 (2026-05-08 r6 PR Psi): medication-administration logs are the
 // audit trail of what was given, when, and why a dose was skipped.
@@ -256,14 +264,21 @@ export async function getMedications(
   ]);
 
   return {
-    items: rows,
+    // Audit pass-2 B-3: decrypt `prescribedBy` per row. The list
+    // projection above does NOT include `notes` (the original
+    // encrypted column) by design — list rows never surface it. But
+    // `prescribedBy` IS surfaced on the list (the medications tab
+    // renders it inline), so we decrypt per-row here. The cost is one
+    // AES-GCM open per row × pageSize; acceptable on a paginated view.
+    items: rows.map((row) => decryptFields(row, ['prescribedBy'] as const)),
     total: count[0]?.count ?? 0,
   };
 }
 
 /**
  * List-row shape for `getMedications` (audit F-32). Encrypted PHI
- * field `notes` is omitted from the list.
+ * field `notes` is omitted from the list. `prescribedBy` is included
+ * but decrypted at the boundary (audit pass-2 B-3).
  */
 export type MedicationListItem = Awaited<ReturnType<typeof getMedications>>['items'][number];
 
@@ -657,7 +672,13 @@ export async function getDocuments(
       .from(horseDocuments)
       .where(where),
   ]);
-  return { items, total: count[0]?.count ?? 0 };
+  return {
+    // Audit pass-2 B-5: decrypt `description` per row. medical/vet/xray
+    // categories collect descriptions like "ultrasound on hock" which is
+    // PHI; encryption-at-rest closes the disk-leak surface.
+    items: items.map((row) => decryptFields(row, HORSE_DOCUMENT_ENCRYPTED_FIELDS)),
+    total: count[0]?.count ?? 0,
+  };
 }
 
 /** List-row shape for `getDocuments` (audit F-32). */
@@ -665,11 +686,14 @@ export type HorseDocumentListItem = Awaited<ReturnType<typeof getDocuments>>['it
 
 export async function createDocument(clubId: string, horseId: string, data: DocumentCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit pass-2 B-5: encrypt `description` before write.
+  const encrypted = encryptFields(data, HORSE_DOCUMENT_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseDocuments)
-    .values({ ...data, clubId, horseId })
+    .values({ ...data, ...encrypted, clubId, horseId })
     .returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, HORSE_DOCUMENT_ENCRYPTED_FIELDS) : row;
 }
 
 export async function deleteDocument(clubId: string, horseId: string, documentId: string) {
@@ -776,7 +800,11 @@ export async function findUpcomingHealthRecordDueDates(
     horseName: r.horseName,
     dueDate: r.dueDate as string,
     careTypeLabel: humanizeCareLabel(r.recordType, r.title),
-    detail: r.vetName,
+    // Audit pass-2 B-2: drop the vet name from the email payload —
+    // Resend stores email bodies in their logs and `detail` was the
+    // PII vector. The reminder still tells the recipient WHICH horse
+    // and WHEN; the dashboard link covers the rest.
+    detail: null,
   }));
 }
 
@@ -827,7 +855,9 @@ export async function findUpcomingHealthRecordFollowUps(
     horseName: r.horseName,
     dueDate: r.dueDate as string,
     careTypeLabel: 'Vet follow-up',
-    detail: r.vetName ? `Follow-up to: ${r.title} (${r.vetName})` : `Follow-up to: ${r.title}`,
+    // Audit pass-2 B-2: title + vetName are PHI/PII; don't carry them
+    // into Resend's email logs.
+    detail: null,
   }));
 }
 
@@ -870,11 +900,11 @@ export async function findUpcomingHorseInsuranceExpiries(
     horseName: r.horseName,
     dueDate: r.dueDate as string,
     careTypeLabel: 'Insurance renewal',
-    detail: r.insuranceProvider
-      ? r.insurancePolicyNumber
-        ? `${r.insuranceProvider} (policy ${r.insurancePolicyNumber})`
-        : r.insuranceProvider
-      : null,
+    // Audit pass-2 B-2: insurance provider + policy number are PII;
+    // a leak of those into Resend's email logs is the same kind of
+    // disclosure the encryption-at-rest sweep is closing. Recipient
+    // looks them up in the dashboard.
+    detail: null,
   }));
 }
 
@@ -929,7 +959,10 @@ export async function findUpcomingMedicationEnds(
     horseName: r.horseName,
     dueDate: r.dueDate as string,
     careTypeLabel: 'Medication ending',
-    detail: `${r.medicationName} — ${r.dosage}`,
+    // Audit pass-2 B-2: medication name + dosage IS the PHI we encrypt
+    // at rest on `horse_medications`. Don't unencrypt it back into
+    // Resend's email logs — recipient opens the horse profile.
+    detail: null,
   }));
 }
 
@@ -966,9 +999,14 @@ export async function recordHorseCareReminderSend(args: {
   return inserted.length > 0;
 }
 
-function humanizeCareLabel(recordType: string, title: string): string {
-  // Fallback to title when the type slug is empty / unknown — a hand-
-  // entered "Vaccination" title is more useful than the literal slug.
+function humanizeCareLabel(recordType: string, _title: string): string {
+  // Audit pass-2 (2026-05-09 B-2): the previous implementation fell
+  // back to the user-typed `title` for unknown recordTypes. Titles
+  // are freeform PHI ("Ultrasound on left front fetlock") and ended
+  // up in Resend's email-body logs once the cron sent. Stay on the
+  // category map — anything unknown collapses to a generic "Routine
+  // care". The `_title` parameter is kept for callsite back-compat;
+  // the underscore prefix flags it as intentionally unused.
   const map: Record<string, string> = {
     vaccination: 'Vaccination',
     farrier: 'Farrier visit',
@@ -977,10 +1015,7 @@ function humanizeCareLabel(recordType: string, title: string): string {
     checkup: 'Checkup',
     teeth_floating: 'Teeth floating',
   };
-  if (recordType in map) {
-    return map[recordType] ?? title;
-  }
-  return title || 'Routine care';
+  return map[recordType] ?? 'Routine care';
 }
 
 function addIsoDays(iso: string, days: number): string {

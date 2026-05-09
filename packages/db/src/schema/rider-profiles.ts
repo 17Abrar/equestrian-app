@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, numeric, varchar, text, integer, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, date, numeric, text, integer, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
 import { skillLevelEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -18,9 +18,14 @@ export const riderProfiles = pgTable(
     weightKg: numeric('weight_kg', { precision: 5, scale: 1 }),
     heightCm: numeric('height_cm', { precision: 5, scale: 1 }),
     skillLevel: skillLevelEnum('skill_level').notNull().default('beginner'),
-    emergencyContactName: varchar('emergency_contact_name', { length: 255 }),
-    emergencyContactPhone: varchar('emergency_contact_phone', { length: 50 }),
-    emergencyContactRelation: varchar('emergency_contact_relation', { length: 100 }),
+    // Audit pass-2 (2026-05-09): widened from varchar to text to fit
+    // the AES-256-GCM `encryptField` envelope (`v1:` + base64). All
+    // three columns are now encrypted-at-rest; reads decrypt in
+    // `riders.ts`. Migration 0052 widens the columns; the verifier
+    // 0053 + `scripts/backfill-pass-2-phi.mjs` cover existing rows.
+    emergencyContactName: text('emergency_contact_name'),
+    emergencyContactPhone: text('emergency_contact_phone'),
+    emergencyContactRelation: text('emergency_contact_relation'),
     medicalNotes: text('medical_notes'),
     totalLessonsCompleted: integer('total_lessons_completed').notNull().default(0),
     // ON DELETE SET NULL (audit H-7). Without this, deleting a parent member
