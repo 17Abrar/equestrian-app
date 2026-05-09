@@ -3,10 +3,12 @@ import { updateStaffSchema } from '@equestrian/shared/schemas';
 import {
   countActiveAdmins,
   deactivateMember,
+  getClubById,
   getMemberByIdIncludingDeactivated,
   updateMember,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import { removeClerkOrgMembership } from '@/lib/clerk-org-membership';
 
 interface RouteParams {
   params: Promise<{ memberId: string }>;
@@ -147,6 +149,19 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!result) {
         return errorResponse('NOT_FOUND', 'Staff member not found', 404);
       }
+
+      // Audit pass-3 (2026-05-09 follow-up A): also remove the Clerk
+      // org membership so the deactivated user's JWT stops carrying
+      // their `org:admin` claim. Fail-open — DB-side deactivate has
+      // already happened and the resolver-side defense (tenant.ts)
+      // already refuses sessions without an active membership row.
+      const club = await getClubById(ctx.clubId);
+      await removeClerkOrgMembership({
+        clerkOrgId: club?.clerkOrgId ?? null,
+        clerkUserId: result.clerkUserId,
+        clubId: ctx.clubId,
+        memberId,
+      });
 
       void ctx.audit({
         action: 'staff.deactivate',
