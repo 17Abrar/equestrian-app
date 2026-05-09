@@ -62,7 +62,14 @@ export async function findClubsDueForBilling(utcToday: string): Promise<Billable
         // future anchors and are filtered out here.
         sql`${clubs.trialEndsAt} <= ${utcToday}::timestamp + interval '1 day'`,
       ),
-    );
+    )
+    // Bounded run-time so the cron can't hit Workers' wall-clock budget
+    // on a sustained backlog. Mirrors the established pattern at
+    // `findOverdueInvoicesForReminders` (200) and the livery
+    // `findHorsesDueForBilling` (1000). 500 is enough for one pass at
+    // current scale and any future ramp; operators monitoring
+    // `cron_capacity_hit` should bump this if it pegs.
+    .limit(500);
 
   return rows
     .filter(

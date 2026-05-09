@@ -76,7 +76,8 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   // signing secret pasted by the operator at connect time. Cleartext
   // is fine — a hash can't be reversed to the secret. The partial
   // UNIQUE index `club_payment_accounts_webhook_secret_hash_unique`
-  // (migration 0048) enforces "no two clubs use the same webhook
+  // (migration 0051 — was 0048 before the journal-orphan fix in PR
+  // #84 renamed it) enforces "no two clubs use the same webhook
   // secret" so a copy-paste mistake (one operator configuring two
   // clubs in one Stripe dashboard with the same `whsec_…`) is
   // rejected at connect time instead of failing-closed silently in

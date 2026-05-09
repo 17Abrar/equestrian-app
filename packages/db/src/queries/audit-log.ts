@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { MS_PER_DAY, PHI_KEYS } from '@equestrian/shared/constants';
+import { MS_PER_DAY, PHI_KEYS, PII_KEYS } from '@equestrian/shared/constants';
 import { rawDb, writeTransaction } from '../index';
 import { auditLog } from '../schema/operations';
 
@@ -25,8 +25,18 @@ export interface CreateAuditEntryParams {
 // not in audit trails, not in notification data payloads."
 //
 // Lower-cased on lookup so callers don't have to think about casing.
-// Mirrors `apps/web/lib/logger.ts:SENSITIVE_KEYS` PHI subset.
-const PHI_KEYS_LOWER = new Set(PHI_KEYS.map((k) => k.toLowerCase()));
+//
+// Pass-2 follow-up (2026-05-09): also scrub PII_KEYS — the logger's
+// SENSITIVE_KEYS includes `emergencyContact*`, `dateOfBirth`,
+// `displayName`, `guest*` but the audit scrubber only had PHI_KEYS,
+// so a `riderProfile.update` audit row writing
+// `{ emergencyContactPhone: { from, to } }` would persist plaintext PII
+// in the audit log indefinitely while the same payload was redacted in
+// stdout. The keys are now coupled — both lists live in
+// `packages/shared/src/constants` and both writers consume them.
+const REDACTED_KEYS_LOWER = new Set(
+  [...PHI_KEYS, ...PII_KEYS].map((k) => k.toLowerCase()),
+);
 
 function scrubPhiFromChanges(
   changes: Record<string, { from: unknown; to: unknown }> | undefined,
@@ -34,7 +44,7 @@ function scrubPhiFromChanges(
   if (!changes) return changes;
   const result: Record<string, { from: unknown; to: unknown }> = {};
   for (const [key, value] of Object.entries(changes)) {
-    if (PHI_KEYS_LOWER.has(key.toLowerCase())) {
+    if (REDACTED_KEYS_LOWER.has(key.toLowerCase())) {
       result[key] = { from: '[REDACTED]', to: '[REDACTED]' };
     } else {
       result[key] = value;
