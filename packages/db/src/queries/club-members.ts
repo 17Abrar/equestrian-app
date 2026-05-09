@@ -287,6 +287,15 @@ export async function updateMember(clubId: string, memberId: string, data: Membe
  * member. Voluntary-leave flows (none today; future "leave club"
  * button) should write `is_active = false` WITHOUT setting this column,
  * preserving the rider's ability to come back.
+ *
+ * Audit pass-3 (2026-05-09): the row's `clerkUserId` is returned so
+ * the route layer can also call Clerk's
+ * `organizations.deleteOrganizationMembership` after the DB write —
+ * stops the JWT from continuing to carry the deactivated member's
+ * `org:admin` claim until session expiry. The pass-3 fix in
+ * `apps/web/lib/tenant.ts` already neutralises the resolver-side
+ * fallthrough (defense-in-depth); the Clerk-side removal is the
+ * structural complement.
  */
 export async function deactivateMember(clubId: string, memberId: string) {
   const result = await db
@@ -297,7 +306,7 @@ export async function deactivateMember(clubId: string, memberId: string) {
       updatedAt: new Date(),
     })
     .where(and(eq(clubMembers.id, memberId), eq(clubMembers.clubId, clubId)))
-    .returning({ id: clubMembers.id });
+    .returning({ id: clubMembers.id, clerkUserId: clubMembers.clerkUserId });
   return result[0] ?? null;
 }
 

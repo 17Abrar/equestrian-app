@@ -1,6 +1,12 @@
 import { type NextRequest } from 'next/server';
-import { getMemberByIdIncludingDeactivated, updateMember, deactivateMember } from '@equestrian/db/queries';
+import {
+  getClubById,
+  getMemberByIdIncludingDeactivated,
+  updateMember,
+  deactivateMember,
+} from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import { removeClerkOrgMembership } from '@/lib/clerk-org-membership';
 import { updateOwnerSchema } from '@equestrian/shared/schemas';
 
 interface RouteParams {
@@ -87,6 +93,17 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       if (!result) {
         return errorResponse('NOT_FOUND', 'Owner not found', 404);
       }
+
+      // Audit pass-3 (2026-05-09 follow-up A): mirror the staff
+      // deactivate path — remove the Clerk org membership so the
+      // JWT stops carrying the role. Fail-open.
+      const club = await getClubById(ctx.clubId);
+      await removeClerkOrgMembership({
+        clerkOrgId: club?.clerkOrgId ?? null,
+        clerkUserId: result.clerkUserId,
+        clubId: ctx.clubId,
+        memberId,
+      });
 
       void ctx.audit({
         action: 'owner.deactivate',
