@@ -9,6 +9,7 @@ import {
   getBookingSlotById,
   getMemberByIdIncludingDeactivated,
   getClubById,
+  isParentOf,
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
 import { bookings as bookingsTable, bookingSlots } from '@equestrian/db/schema';
@@ -52,7 +53,24 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return errorResponse('NOT_FOUND', 'Booking not found', 404);
     }
 
-    if (!canReadAny && booking.riderMemberId !== ctx.memberId) {
+    // Audit pass-3 follow-up B (2026-05-09): parents (`bookings:read_child`)
+    // book on behalf of their kids — the booking row's `riderMemberId`
+    // points at the CHILD, not the parent. The list endpoint
+    // (`bookings/route.ts`) and the payment endpoint already thread
+    // `isParentOf` through; this detail GET was missing the same gate
+    // and silently 403'd parents trying to read their own kid's booking.
+    const canReadChild = hasPermission(ctx.orgRole, 'bookings:read_child');
+    const isSelf = !!ctx.memberId && booking.riderMemberId === ctx.memberId;
+    let isGuardian = false;
+    if (!isSelf && canReadChild && ctx.memberId) {
+      isGuardian = await isParentOf(
+        ctx.clubId,
+        ctx.memberId,
+        booking.riderMemberId,
+      );
+    }
+
+    if (!canReadAny && !isSelf && !isGuardian) {
       return errorResponse('FORBIDDEN', 'You can only view your own bookings', 403);
     }
 
@@ -73,8 +91,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // Determine permission level
       const canCancelAny = hasPermission(ctx.orgRole, 'bookings:update');
       const canCancelOwn = hasPermission(ctx.orgRole, 'bookings:cancel_own');
+      // Parents who originally booked on behalf of a child should be
+      // able to cancel that booking too — the booking's riderMemberId
+      // is the CHILD, not the parent. `bookings:create_child` is the
+      // grant that lets them book; we accept it as the cancel grant
+      // for the same set of bookings.
+      const canCancelChild = hasPermission(ctx.orgRole, 'bookings:create_child');
 
-      if (!canCancelAny && !canCancelOwn) {
+      if (!canCancelAny && !canCancelOwn && !canCancelChild) {
         return errorResponse('FORBIDDEN', 'You do not have permission to cancel bookings', 403);
       }
 
@@ -101,9 +125,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
       }
 
-      // Riders can only cancel their own bookings
-      if (canCancelOwn && !canCancelAny && existing.riderMemberId !== ctx.memberId) {
-        return errorResponse('FORBIDDEN', 'You can only cancel your own bookings', 403);
+      // Audit pass-3 follow-up B (2026-05-09): mirror the GET branch —
+      // a parent cancelling their kid's booking matches via `isParentOf`,
+      // not riderMemberId equality.
+      if (!canCancelAny) {
+        const isSelf = existing.riderMemberId === ctx.memberId;
+        let isGuardian = false;
+        if (!isSelf && canCancelChild) {
+          isGuardian = await isParentOf(
+            ctx.clubId,
+            ctx.memberId,
+            existing.riderMemberId,
+          );
+        }
+        if (!isSelf && !isGuardian) {
+          return errorResponse('FORBIDDEN', 'You can only cancel your own bookings', 403);
+        }
       }
 
       // Fetch slot and club for fee calculation + email

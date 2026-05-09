@@ -1,5 +1,10 @@
 import { type NextRequest } from 'next/server';
-import { getBookingById, getBookingSlotById, getClubById } from '@equestrian/db/queries';
+import {
+  getBookingById,
+  getBookingSlotById,
+  getClubById,
+  isParentOf,
+} from '@equestrian/db/queries';
 import { calculateCancellationFee, coerceFeePercent } from '@equestrian/shared/utils';
 import { withAuth,
   successResponse,
@@ -24,8 +29,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       // so we don't surface it.
       const canCancelAny = hasPermission(ctx.orgRole, 'bookings:update');
       const canCancelOwn = hasPermission(ctx.orgRole, 'bookings:cancel_own');
+      // Audit pass-3 follow-up B (2026-05-09): parents who originally
+      // booked on behalf of a child should be able to preview the
+      // cancellation too. Mirrors the DELETE in ../route.ts.
+      const canCancelChild = hasPermission(ctx.orgRole, 'bookings:create_child');
 
-      if (!canCancelAny && !canCancelOwn) {
+      if (!canCancelAny && !canCancelOwn && !canCancelChild) {
         return errorResponse('FORBIDDEN', 'You do not have permission to cancel bookings', 403);
       }
 
@@ -34,12 +43,22 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return errorResponse('NOT_FOUND', 'Booking not found', 404);
       }
 
-      // Riders/parents can only preview cancellation for their own bookings.
-      if (!canCancelAny && canCancelOwn) {
+      // Riders/parents can only preview cancellation for their own (or
+      // their child's) bookings.
+      if (!canCancelAny) {
         if (!ctx.memberId) {
           return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
         }
-        if (booking.riderMemberId !== ctx.memberId) {
+        const isSelf = booking.riderMemberId === ctx.memberId;
+        let isGuardian = false;
+        if (!isSelf && canCancelChild) {
+          isGuardian = await isParentOf(
+            ctx.clubId,
+            ctx.memberId,
+            booking.riderMemberId,
+          );
+        }
+        if (!isSelf && !isGuardian) {
           return errorResponse('FORBIDDEN', 'You can only cancel your own bookings', 403);
         }
       }
