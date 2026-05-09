@@ -379,6 +379,13 @@
       "when": 1777334400153,
       "tag": "0053_audit_pass_2_cron_trial_reminder_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1777334400254,
+      "tag": "0054_audit_pass_2_burned_webhook_secret_hashes",
+      "breakpoints": true
     }
   ]
 }

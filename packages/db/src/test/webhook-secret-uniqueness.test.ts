@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import { createTestDb, withTestDb } from './harness';
-import { upsertPaymentAccount, WebhookSecretReusedError } from '../queries';
+import {
+  upsertPaymentAccount,
+  WebhookSecretReusedError,
+  disconnectPaymentAccount,
+} from '../queries';
 import { clubs } from '../schema/clubs';
+import { burnedWebhookSecretHashes } from '../schema/finances';
 
 /**
  * Audit F-33 (2026-05-08 r6): two clubs cannot share the same webhook
@@ -179,6 +185,138 @@ describe('upsertPaymentAccount — webhook-secret-hash uniqueness (F-33)', () =>
       });
 
       expect(second.clubId).toBe(clubB);
+    });
+  });
+});
+
+describe('upsertPaymentAccount — burned webhook hashes (D-1, audit pass-2)', () => {
+  it('burns the previous hash when a club rotates to a new secret', async () => {
+    const { clubA } = await seedTwoClubs(testDb.db);
+    const oldHash = hash('whsec_old_secret');
+    const newHash = hash('whsec_new_secret');
+
+    await withTestDb(testDb.db, async () => {
+      await upsertPaymentAccount(clubA, {
+        provider: 'stripe',
+        status: 'connected',
+        externalAccountId: 'acct_alpha',
+        credentials: { secretKey: 'sk_test', publishableKey: 'pk_test' },
+        metadata: {},
+        webhookSecretHash: oldHash,
+        makeActive: true,
+      });
+
+      // Rotate: same club, new hash.
+      await upsertPaymentAccount(clubA, {
+        provider: 'stripe',
+        status: 'connected',
+        externalAccountId: 'acct_alpha',
+        credentials: { secretKey: 'sk_test', publishableKey: 'pk_test' },
+        metadata: {},
+        webhookSecretHash: newHash,
+        makeActive: true,
+      });
+    });
+
+    // The OLD hash must now be in burned_webhook_secret_hashes.
+    const burnedRows = await testDb.db
+      .select()
+      .from(burnedWebhookSecretHashes)
+      .where(eq(burnedWebhookSecretHashes.secretHash, oldHash));
+    expect(burnedRows).toHaveLength(1);
+    expect(burnedRows[0]?.provider).toBe('stripe');
+    expect(burnedRows[0]?.clubId).toBe(clubA);
+  });
+
+  it('refuses a club to paste another club\'s previously-retired secret', async () => {
+    const { clubA, clubB } = await seedTwoClubs(testDb.db);
+    const sharedHash = hash('whsec_clubA_then_retired');
+
+    await withTestDb(testDb.db, async () => {
+      // Club A connects, then disconnects (which burns the hash).
+      await upsertPaymentAccount(clubA, {
+        provider: 'stripe',
+        status: 'connected',
+        externalAccountId: 'acct_alpha',
+        credentials: { secretKey: 'sk_test_a', publishableKey: 'pk_test_a' },
+        metadata: {},
+        webhookSecretHash: sharedHash,
+        makeActive: true,
+      });
+      await disconnectPaymentAccount(clubA, 'stripe');
+
+      // Club B tries to paste the retired hash — must be rejected.
+      // Without the burned-table check, the F-33 partial UNIQUE would
+      // not catch this (clubA's row is now disabled / hash is null).
+      await expect(
+        upsertPaymentAccount(clubB, {
+          provider: 'stripe',
+          status: 'connected',
+          externalAccountId: 'acct_bravo',
+          credentials: { secretKey: 'sk_test_b', publishableKey: 'pk_test_b' },
+          metadata: {},
+          webhookSecretHash: sharedHash,
+          makeActive: true,
+        }),
+      ).rejects.toBeInstanceOf(WebhookSecretReusedError);
+    });
+  });
+
+  it('disconnect burns the hash and clears it from the live row', async () => {
+    const { clubA } = await seedTwoClubs(testDb.db);
+    const aHash = hash('whsec_to_be_burned_on_disconnect');
+
+    await withTestDb(testDb.db, async () => {
+      await upsertPaymentAccount(clubA, {
+        provider: 'stripe',
+        status: 'connected',
+        externalAccountId: 'acct_alpha',
+        credentials: { secretKey: 'sk_test', publishableKey: 'pk_test' },
+        metadata: {},
+        webhookSecretHash: aHash,
+        makeActive: true,
+      });
+
+      const disconnected = await disconnectPaymentAccount(clubA, 'stripe');
+      expect(disconnected?.status).toBe('disabled');
+    });
+
+    const burnedRows = await testDb.db
+      .select()
+      .from(burnedWebhookSecretHashes)
+      .where(eq(burnedWebhookSecretHashes.secretHash, aHash));
+    expect(burnedRows).toHaveLength(1);
+    expect(burnedRows[0]?.clubId).toBe(clubA);
+  });
+
+  it('the same club can reconnect with a fresh hash after disconnect', async () => {
+    const { clubA } = await seedTwoClubs(testDb.db);
+    const oldHash = hash('whsec_a_old');
+    const newHash = hash('whsec_a_new');
+
+    await withTestDb(testDb.db, async () => {
+      await upsertPaymentAccount(clubA, {
+        provider: 'stripe',
+        status: 'connected',
+        externalAccountId: 'acct_alpha',
+        credentials: { secretKey: 'sk_test', publishableKey: 'pk_test' },
+        metadata: {},
+        webhookSecretHash: oldHash,
+        makeActive: true,
+      });
+      await disconnectPaymentAccount(clubA, 'stripe');
+
+      // Same club, fresh hash — must succeed.
+      const reconnected = await upsertPaymentAccount(clubA, {
+        provider: 'stripe',
+        status: 'connected',
+        externalAccountId: 'acct_alpha',
+        credentials: { secretKey: 'sk_test', publishableKey: 'pk_test' },
+        metadata: {},
+        webhookSecretHash: newHash,
+        makeActive: true,
+      });
+      expect(reconnected.status).toBe('connected');
     });
   });
 });

@@ -120,6 +120,48 @@ export const clubPaymentAccounts = pgTable('club_payment_accounts', {
   // so this lives at the SQL layer.
 ]);
 
+/**
+ * Audit pass-2 (2026-05-09 D-1): burned (retired) webhook-secret
+ * hashes. The F-33 partial UNIQUE on `club_payment_accounts.webhook_
+ * secret_hash` enforces "no two CURRENTLY-CONNECTED clubs share the
+ * same secret hash". When a club disconnects (or rotates to a fresh
+ * secret), their old hash leaves the live table and the F-33 check
+ * stops covering it. Without this companion table, a club could
+ * paste a different club's old secret post-disconnect and start
+ * receiving webhooks signed with that secret.
+ *
+ * Rows here are 64-character SHA-256 hex digests; cheap to keep
+ * indefinitely. `(provider, secret_hash)` is unique — once a hash
+ * is burned, re-burning is a no-op.
+ *
+ * `clubId` records WHICH club previously held the hash for forensic
+ * traceability. ON DELETE SET NULL so the burn record survives a
+ * club soft-delete (the hash should stay burned even if the club
+ * row goes away).
+ *
+ * Migration 0054 creates the table.
+ */
+export const burnedWebhookSecretHashes = pgTable(
+  'burned_webhook_secret_hashes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    provider: paymentProviderEnum('provider').notNull(),
+    secretHash: varchar('secret_hash', { length: 64 }).notNull(),
+    clubId: uuid('club_id').references(() => clubs.id, { onDelete: 'set null' }),
+    retiredAt: timestamp('retired_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('burned_webhook_secret_hashes_provider_hash_unique').on(
+      table.provider,
+      table.secretHash,
+    ),
+    index('idx_burned_webhook_secret_hashes_lookup').on(
+      table.provider,
+      table.secretHash,
+    ),
+  ],
+);
+
 export const liveryContracts = pgTable('livery_contracts', {
   id: uuid('id').primaryKey().defaultRandom(),
   clubId: uuid('club_id')
