@@ -785,6 +785,11 @@ export const couponBaseSchema = z
     isStackable: z.boolean().default(false),
     startsAt: z.string().max(50).optional(),
     expiresAt: z.string().max(50).optional(),
+    // Audit pass-3 follow-up C (2026-05-09): coupon currency. Optional
+    // at the schema level so the route layer can default it from the
+    // club's currency when omitted (the typical UX path). When the
+    // operator passes one explicitly it must be a 3-letter ISO code.
+    currency: z.string().length(3).optional(),
   })
   // `.strict()` for parity with update schemas — unknown keys 422
   // instead of being silently stripped (audit AI-32c).

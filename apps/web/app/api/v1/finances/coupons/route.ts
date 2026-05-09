@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createCouponSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
-import { getCouponsByClub, createCoupon, getClubTimezone } from '@equestrian/db/queries';
+import { getCouponsByClub, createCoupon, getClubById, getClubTimezone } from '@equestrian/db/queries';
 import { couponStatusEnum } from '@equestrian/db/schema';
 import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
 
@@ -64,10 +64,18 @@ export async function POST(request: NextRequest) {
     async (ctx) => {
       const data = await parseRequiredBody(request, createCouponSchema);
 
-      const [startsAt, expiresAt] = await Promise.all([
+      const [startsAt, expiresAt, club] = await Promise.all([
         resolveCouponDate(ctx.clubId, data.startsAt),
         resolveCouponDate(ctx.clubId, data.expiresAt),
+        // Audit pass-3 follow-up C (2026-05-09): default coupon
+        // currency to the club's currency when the operator omits
+        // it. `validateCoupon` later refuses to apply this coupon
+        // to any booking in a different currency, so getting the
+        // default right at create time is the cheap UX win.
+        getClubById(ctx.clubId),
       ]);
+
+      const currency = data.currency ?? club?.currency ?? 'AED';
 
       // `satisfies` (not `as`) so a future change that adds a string-typed
       // timestamp field to `couponBaseSchema` would surface here as a type
@@ -78,6 +86,7 @@ export async function POST(request: NextRequest) {
         ctx.clubId,
         {
           ...data,
+          currency,
           startsAt,
           expiresAt,
         } satisfies Parameters<typeof createCoupon>[1],

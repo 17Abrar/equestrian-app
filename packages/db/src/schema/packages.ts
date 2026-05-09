@@ -110,6 +110,14 @@ export const coupons = pgTable(
     // same minor-unit units as `fixed`.
     discountValue: integer('discount_value').notNull(),
     maxDiscount: integer('max_discount'),
+    // Audit pass-3 follow-up C (2026-05-09): the discount math above
+    // is currency-agnostic. A 200-AED `fixed` coupon applied to a
+    // USD lesson would silently treat it as 200-USD off (~4× over-
+    // discount). `validateCoupon` now refuses to apply a coupon when
+    // its currency doesn't match the booking's. New coupons default
+    // to the club's currency at create time. Migration 0055
+    // backfills existing rows from `clubs.currency`.
+    currency: varchar('currency', { length: 3 }).notNull().default('AED'),
     applicableTypes: text('applicable_types').array(),
     minimumAmount: integer('minimum_amount'),
     maxUses: integer('max_uses'),
