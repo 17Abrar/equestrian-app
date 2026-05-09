@@ -220,8 +220,17 @@ async function handlePost(request: NextRequest) {
         clubId: account.clubId,
         error: err instanceof Error ? err.message : 'unknown',
       });
-      // Fail open on the defense-in-depth check; the freshness window
-      // and signature compare remain the primary auth.
+      // Fail closed: a transient DB error during the defense-in-depth
+      // freshness check leaves the route relying solely on signature
+      // verification. The freshness gate's job is to refuse a replayed
+      // (signed) payload whose providerPaymentId we no longer recognise
+      // — losing that gate quietly under a transient outage is the
+      // wrong direction. 503 lets N-Genius retry once Upstash / Drizzle
+      // recovers; the dedup row hasn't been written yet so the retry
+      // is safe.
+      return new Response('Freshness check temporarily unavailable', {
+        status: 503,
+      });
     }
   }
 

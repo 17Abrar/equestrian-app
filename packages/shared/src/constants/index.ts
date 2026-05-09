@@ -120,6 +120,23 @@ export const PHI_KEYS = [
   'vetInstructions',
 ] as const;
 
+// PII keys — identity / contact / sensitive personal data that isn't
+// strictly PHI but lands in the same redaction discipline. Audit log
+// `changes` JSONB and the structured logger both read from this list.
+// `emergencyContact*` is plaintext at rest today (audit follow-up)
+// but redaction-on-the-way-out is the immediate hardening; encryption-
+// at-rest is the larger fix tracked separately.
+export const PII_KEYS = [
+  'dateOfBirth',
+  'displayName',
+  'emergencyContactName',
+  'emergencyContactPhone',
+  'emergencyContactRelation',
+  'guestEmail',
+  'guestPhone',
+  'guestName',
+] as const;
+
 // Rate-limit presets. Per-route configs reach for one of these instead of
 // open-coding `{ maxRequests, windowMs }` object literals — see audit F-15.
 // `failClosed: true` is route-specific (coupon validate, public join), so
