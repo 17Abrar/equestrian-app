@@ -999,6 +999,32 @@ export async function recordHorseCareReminderSend(args: {
   return inserted.length > 0;
 }
 
+/**
+ * Audit pass-2 (2026-05-09 C-2): companion to
+ * `recordHorseCareReminderSend`. Deletes the dedup row when the email
+ * send fails, so the next cron pass can re-attempt instead of being
+ * permanently silenced. Mirrors `unmarkBookingReminderSent`. Safe
+ * under concurrency: a delete that targets a row another isolate
+ * already processed is a no-op (returns zero rows).
+ */
+export async function unrecordHorseCareReminderSend(args: {
+  clubId: string;
+  kind: string;
+  sourceId: string;
+  thresholdDays: number;
+}): Promise<void> {
+  await rawDb
+    .delete(horseCareReminderSends)
+    .where(
+      and(
+        eq(horseCareReminderSends.clubId, args.clubId),
+        eq(horseCareReminderSends.kind, args.kind),
+        eq(horseCareReminderSends.sourceId, args.sourceId),
+        eq(horseCareReminderSends.thresholdDays, args.thresholdDays),
+      ),
+    );
+}
+
 function humanizeCareLabel(recordType: string, _title: string): string {
   // Audit pass-2 (2026-05-09 B-2): the previous implementation fell
   // back to the user-typed `title` for unknown recordTypes. Titles

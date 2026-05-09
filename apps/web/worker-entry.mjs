@@ -149,13 +149,7 @@ export default {
     //   `15 2 * * *` → platform billing (issuance + reminders + trial)
     //   `0 * * * *`  → booking-reminder cron (hourly)
     //   `0 3 * * *`  → horse-care reminder cron (Round 6.2)
-    // Unknown cron strings fall back to running every billing target
-    // (defensive — a misconfigured wrangler.jsonc shouldn't silently
-    // skip the cron the operator forgot to route). The hourly booking
-    // reminder + the horse-care reminder are intentionally NOT in the
-    // fallback because triggering them on a wrong schedule could fan
-    // out unwanted emails (booking reminder) or repeat already-sent
-    // threshold pings unnecessarily.
+    //   `30 3 * * *` → audit-log prune cron (audit pass-2 C-3)
     const KNOWN_CRON_TARGETS = {
       '0 2 * * *': [{ path: '/api/cron/livery-billing', label: 'livery' }],
       '15 2 * * *': [{ path: '/api/cron/platform-billing', label: 'platform' }],
@@ -164,6 +158,9 @@ export default {
       ],
       '0 3 * * *': [
         { path: '/api/cron/horse-care-reminders', label: 'horse_care' },
+      ],
+      '30 3 * * *': [
+        { path: '/api/cron/audit-prune', label: 'audit_prune' },
       ],
     };
     // Audit F-26 (2026-05-06 comprehensive). Hard-fail an unknown

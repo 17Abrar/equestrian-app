@@ -131,6 +131,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/platform-billing',
   '/api/cron/booking-reminders',
   '/api/cron/horse-care-reminders',
+  '/api/cron/audit-prune',
   // F-43 (2026-05-07 r4): cold-start env-binding self-check. The folder
   // name dropped its leading underscore in Lambda-tris because Next.js
   // App Router treats `_<name>` directories as private (excluded from

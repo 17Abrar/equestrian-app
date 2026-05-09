@@ -58,12 +58,18 @@
   //                       vet follow-ups, insurance expiry, medication
   //                       end. Sequenced after platform-billing's 02:15
   //                       fire so each cron has its own 30s CPU budget.
+  //   03:30 UTC daily   — audit log prune (`/api/cron/audit-prune`). Audit
+  //                       pass-2 (2026-05-09 C-3): split out of livery-
+  //                       billing so a billing failure can't silently
+  //                       freeze retention. Sequenced after horse-care
+  //                       reminders, well before next-day livery (02:00)
+  //                       so a slow prune can't starve the billing run.
   //
   // All are secured by CRON_SECRET comparison server-side, dispatched
   // by `worker-entry.mjs`'s `scheduled()` handler which routes by the
   // event's scheduled-time signature.
   "triggers": {
-    "crons": ["0 2 * * *", "15 2 * * *", "0 * * * *", "0 3 * * *"]
+    "crons": ["0 2 * * *", "15 2 * * *", "0 * * * *", "0 3 * * *", "30 3 * * *"]
   },
 
   // Custom domain binding. Cavaliq's root domain is served from this Worker.

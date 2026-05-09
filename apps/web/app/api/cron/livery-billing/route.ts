@@ -8,7 +8,6 @@ import {
   markInvoiceOverdueOnly,
   setInvoiceProviderRef,
   adminGetActivePaymentAccount,
-  pruneAuditLog,
   type BillableHorse,
   type PaymentAccountWithCredentials,
 } from '@equestrian/db/queries';
@@ -83,19 +82,10 @@ export async function POST(request: NextRequest) {
   // catches inside the helpers already report their own row failures;
   // this guard catches everything else.
   //
-  // Audit F-61 (2026-05-07 r4): pruneAuditLog runs FIRST (independent of
-  // issuance/reminders) so a persistent billing failure doesn't freeze
-  // audit-log retention. Wrapped in its own try/catch so a prune
-  // failure can't suppress issuance + reminders.
-  let auditPruned = 0;
-  try {
-    const result = await pruneAuditLog();
-    auditPruned = result.pruned;
-  } catch (err) {
-    logger.warn('audit_log_prune_failed', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Audit pass-2 (2026-05-09 C-3): pruneAuditLog used to run inside
+  // this cron (audit F-61) so a livery-billing failure could silently
+  // freeze audit-log retention. Now extracted to `/api/cron/audit-
+  // prune` with its own `30 3 * * *` schedule — see worker-entry.mjs.
 
   try {
     const issued = await issueDueInvoices(utcToday);
@@ -107,7 +97,6 @@ export async function POST(request: NextRequest) {
       invoicesSkipped: issued.skipped,
       remindersSent: reminded.sent,
       remindersSkipped: reminded.skipped,
-      auditLogPruned: auditPruned,
     });
 
     return successResponse({
@@ -116,15 +105,12 @@ export async function POST(request: NextRequest) {
       invoicesSkipped: issued.skipped,
       remindersSent: reminded.sent,
       remindersSkipped: reminded.skipped,
-      auditLogPruned: auditPruned,
     });
   } catch (err) {
     logger.error('livery_cron_failed', {
       utcToday,
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
-      // Even on failure, surface that retention DID run (or didn't).
-      auditLogPruned: auditPruned,
     });
     return errorResponse('CRON_FAILED', 'Cron run failed', 500);
   }
