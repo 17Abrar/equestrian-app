@@ -388,6 +388,9 @@ export async function getCouponByCode(clubId: string, code: string) {
       status: coupons.status,
       startsAt: coupons.startsAt,
       expiresAt: coupons.expiresAt,
+      // Audit pass-3 follow-up C (2026-05-09): currency-mismatch gate
+      // in `validateCoupon` reads this column.
+      currency: coupons.currency,
       createdByMemberId: coupons.createdByMemberId,
       createdAt: coupons.createdAt,
       updatedAt: coupons.updatedAt,
@@ -437,6 +440,25 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
 
   if (coupon.startsAt && new Date() < coupon.startsAt) {
     return { valid: false, discount: 0, error: 'This promo code is not yet active' };
+  }
+
+  // Audit pass-3 follow-up C (2026-05-09): refuse to apply a coupon
+  // whose currency doesn't match the booking's. The discount math
+  // (`discountValue`, `maxDiscount`, `minimumAmount`) is in minor
+  // units of the COUPON's currency; a 200-AED `fixed` coupon applied
+  // to a USD booking would silently treat it as 200-USD off without
+  // this gate. `params.currency` defaults to AED upstream when
+  // omitted (legacy callers); the comparison uppercases both sides
+  // for tolerance.
+  if (
+    params.currency &&
+    coupon.currency.toUpperCase() !== params.currency.toUpperCase()
+  ) {
+    return {
+      valid: false,
+      discount: 0,
+      error: `This promo code is in ${coupon.currency.toUpperCase()} and can't be applied to a ${params.currency.toUpperCase()} booking.`,
+    };
   }
 
   if (coupon.maxUses && coupon.usageCount >= coupon.maxUses) {
