@@ -5,8 +5,19 @@ import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
 import { coupons, couponUsages } from '../schema/packages';
 import { riderProfiles } from '../schema/rider-profiles';
+import { decryptField, encryptField } from '../crypto';
 import { calculateCouponDiscount } from '@equestrian/shared/utils';
 import { MS_PER_HOUR } from '@equestrian/shared/constants';
+
+// Audit pass-2 (2026-05-09 B-4): `coachNotes` is freeform PHI-class
+// data ("rider's asthma flared", "saddle sore after fall"). Encrypted-
+// at-rest with the same `encryptField` envelope used elsewhere. The
+// column has no production write path yet — when one ships, the writer
+// MUST call `encryptField` before INSERT/UPDATE. Reads decrypt at the
+// `getBookingById` site below. `decryptField` no-ops on
+// null/empty/non-`v1:` values, so legacy plaintext is back-compat.
+export const BOOKING_PHI_FIELDS = ['coachNotes'] as const;
+export { encryptField as encryptBookingPhi, decryptField as decryptBookingPhi };
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -500,7 +511,13 @@ export async function getBookingById(clubId: string, bookingId: string) {
     .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
     .limit(1);
 
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  // Audit pass-2 B-4: decrypt coachNotes on read. The column has no
+  // production write path yet, so legacy rows are null; this is wired
+  // ahead of the future write path so we don't ship a plaintext-on-disk
+  // window the day a coach starts using it.
+  return { ...row, coachNotes: decryptField(row.coachNotes) };
 }
 
 /**

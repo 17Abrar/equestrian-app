@@ -4,7 +4,17 @@ import { horses } from '../schema/horses';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { bookings, bookingSlots, horsePairingHistory } from '../schema/bookings';
+import { decryptFields, encryptFields } from '../crypto';
 import { escapeLikePattern } from '@equestrian/shared/utils';
+
+// Audit pass-2 (2026-05-09 B-6): freeform fields that reliably collect
+// health-history ("scar on left flank from colic surgery", chronic-
+// condition catch-all). Encrypted at rest with the same envelope used
+// across other PHI columns. `markings` and `notes` are both `text`
+// already so no schema-widen migration is needed for these. Reads
+// decrypt at every site (list + detail); writes go through
+// `encryptFields(data, …)` in `createHorse` / `updateHorse`.
+const HORSE_PHI_FIELDS = ['markings', 'notes'] as const;
 
 type NewHorse = typeof horses.$inferInsert;
 type DrizzleHorseCreate = Omit<NewHorse, 'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'deletedAt'>;
@@ -130,7 +140,9 @@ export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
   ]);
 
   return {
-    data,
+    // Audit pass-2 B-6: decrypt `notes` per row. The list projection
+    // doesn't include `markings`, so only `notes` is decrypted here.
+    data: data.map((row) => ({ ...row, notes: decryptFields({ notes: row.notes }, ['notes'] as const).notes })),
     total: countResult[0]?.count ?? 0,
   };
 }
@@ -227,17 +239,41 @@ export async function getHorseById(clubId: string, horseId: string) {
     )
     .limit(1);
 
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  // Audit pass-2 B-6: decrypt PHI fields on detail read.
+  return decryptFields(row, HORSE_PHI_FIELDS);
 }
 
 export async function createHorse(clubId: string, data: HorseCreate) {
-  const values = { ...toDecimalStrings(data), clubId } as NewHorse;
+  // Audit pass-2 B-6: encrypt PHI fields before write. The double
+  // `unknown` cast threads through `encryptFields<T extends Record
+  // <string, unknown>>` — interface types like `HorseCreate` don't
+  // carry an index signature, but the helper only touches the named
+  // string fields.
+  const encrypted = encryptFields(
+    data as unknown as Record<string, unknown>,
+    HORSE_PHI_FIELDS as readonly string[],
+  ) as unknown as HorseCreate;
+  const values = { ...toDecimalStrings(data), ...encrypted, clubId } as NewHorse;
   const result = await db.insert(horses).values(values).returning();
-  return result[0];
+  const row = result[0];
+  return row ? decryptFields(row, HORSE_PHI_FIELDS) : row;
 }
 
 export async function updateHorse(clubId: string, horseId: string, data: HorseUpdate) {
-  const values = { ...toDecimalStrings(data), updatedAt: new Date() } as Partial<NewHorse>;
+  // Audit pass-2 B-6: encrypt PHI fields. `encryptFields` only writes
+  // keys present in `data`, so PATCH semantics (omitted = leave alone)
+  // are preserved.
+  const encrypted = encryptFields(
+    data as unknown as Record<string, unknown>,
+    HORSE_PHI_FIELDS as readonly string[],
+  ) as unknown as HorseUpdate;
+  const values = {
+    ...toDecimalStrings(data),
+    ...encrypted,
+    updatedAt: new Date(),
+  } as Partial<NewHorse>;
 
   // Encode legal operational-status transitions at the SQL gate (audit E-2).
   // `retired` and `sold` are terminal — once a horse is in either state, the
@@ -261,7 +297,11 @@ export async function updateHorse(clubId: string, horseId: string, data: HorseUp
     .where(and(...conditions))
     .returning();
 
-  return result[0] ?? null;
+  const row = result[0];
+  if (!row) return null;
+  // Audit pass-2 B-6: decrypt PHI fields before returning so PATCH
+  // responses stay symmetric with detail GETs.
+  return decryptFields(row, HORSE_PHI_FIELDS);
 }
 
 export async function getAvailableHorsesForMatching(

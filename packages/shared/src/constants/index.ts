@@ -118,14 +118,25 @@ export const PHI_KEYS = [
   'symptoms',
   'medications',
   'vetInstructions',
+  // Audit pass-2 (2026-05-09 B-3, B-4, B-6): treating-provider name,
+  // coach observations, and freeform horse markings/notes are all
+  // encrypted at rest in the same envelope as the columns above. Add
+  // the field names to the redaction list so a downstream log payload
+  // (logger.info, audit-log changes JSONB) won't leak the freshly-
+  // decrypted plaintext.
+  'prescribedBy',
+  'coachNotes',
+  'markings',
 ] as const;
 
 // PII keys — identity / contact / sensitive personal data that isn't
 // strictly PHI but lands in the same redaction discipline. Audit log
 // `changes` JSONB and the structured logger both read from this list.
-// `emergencyContact*` is plaintext at rest today (audit follow-up)
-// but redaction-on-the-way-out is the immediate hardening; encryption-
-// at-rest is the larger fix tracked separately.
+//
+// Audit pass-2 (2026-05-09 B-1): emergencyContact* are now encrypted
+// at rest (`packages/db/src/queries/riders.ts`) too — keeping them
+// here means freshly-decrypted plaintext spread into a log call still
+// gets scrubbed before reaching stdout / Sentry.
 export const PII_KEYS = [
   'dateOfBirth',
   'displayName',

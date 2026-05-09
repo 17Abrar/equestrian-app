@@ -83,7 +83,12 @@ export const horseMedications = pgTable('horse_medications', {
   startDate: date('start_date').notNull(),
   endDate: date('end_date'),
   isActive: boolean('is_active').notNull().default(true),
-  prescribedBy: varchar('prescribed_by', { length: 255 }),
+  // Audit pass-2 (2026-05-09): widened to text + encrypted. The
+  // treating provider's name is HIPAA-style identifying info; encrypts
+  // alongside `notes` via `MEDICATION_ENCRYPTED_FIELDS` in horse-
+  // health.ts queries. Migration 0052 + verifier 0053 + backfill
+  // script `scripts/backfill-pass-2-phi.mjs`.
+  prescribedBy: text('prescribed_by'),
   notes: text('notes'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -3,31 +3,32 @@ import { eq, and, ilike, asc, sql, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { riderProfiles } from '../schema/rider-profiles';
 import { clubMembers } from '../schema/club-members';
-import { decryptField, encryptField } from '../crypto';
+import { decryptFields, encryptFields } from '../crypto';
 import { escapeLikePattern } from '@equestrian/shared/utils';
 
-// Audit MED-3 (2026-05-05) + HIGH-3 (2026-05-05 pass 2): rider medical
-// notes are PHI-class data. Encrypted-at-rest with AES-256-GCM via
-// `encryptField` (`v1:` + base64(IV || tag || ct)). Two paths matter:
+// Audit MED-3 (2026-05-05) + HIGH-3 (2026-05-05 pass 2) + pass-2
+// (2026-05-09 B-1): rider PHI/PII at rest. Encrypted with AES-256-GCM
+// via `encryptFields` / `decryptFields` (`v1:` + base64(IV || tag ||
+// ct)). All four fields below land in the audit blast radius (a Neon
+// backup leak, a Drizzle Studio session) and now share the same
+// envelope. The medicalNotes encryption shipped first (audit MED-3);
+// the pass-2 sweep adds the emergency-contact trio.
 //
+// Two paths matter:
 //   1. New writes — `createRider`, `updateRiderProfile`,
-//      `upsertRiderProfileByMember` below all run `encryptField` before
-//      handing the value to Drizzle.
-//   2. Pre-2026-05-05 plaintext rows — the original closeout claimed an
-//      in-place backfill via "migration 0034" but never shipped one,
-//      leaving legacy rows plaintext on disk. The pass-2 closeout
-//      ships both pieces: `scripts/backfill-rider-medical-notes.mjs`
-//      runs the encryption in Node-land (Postgres can't reproduce the
-//      AES-GCM envelope without leaking the key into pgcrypto), and
-//      `packages/db/migrations/0034_rider_medical_notes_backfill.sql`
-//      is a verifier that aborts the deploy if any plaintext row
-//      remains. The deploy procedure (DEPLOY.md) sequences the
-//      script before the migrate-neon step.
-//
-// Only `medicalNotes` is encrypted today. Emergency-contact phone is
-// NOT encrypted because it's read on every booking-confirmation email
-// and any error path that hits the rider profile (the decryption cost
-// would compound across hot paths). Revisit if compliance asks.
+//      `upsertRiderProfileByMember` below all run `encryptFields`
+//      before handing values to Drizzle.
+//   2. Pre-encryption plaintext rows — `scripts/backfill-pass-2-phi.mjs`
+//      encrypts in-place using the same AES-GCM envelope; verifier
+//      migration `0053_audit_pass_2_phi_verifier.sql` aborts deploys
+//      until the backfill has run. `0034_rider_medical_notes_backfill.sql`
+//      covers the older medical-notes case.
+const RIDER_PROFILE_ENCRYPTED_FIELDS = [
+  'emergencyContactName',
+  'emergencyContactPhone',
+  'emergencyContactRelation',
+  'medicalNotes',
+] as const;
 
 type NewRiderProfile = typeof riderProfiles.$inferInsert;
 type DrizzleRiderUpdate = Partial<Omit<NewRiderProfile, 'id' | 'clubId' | 'memberId' | 'createdAt' | 'updatedAt'>>;
@@ -122,8 +123,8 @@ export async function getRidersByClub(clubId: string, filters: RiderFilters) {
   ]);
 
   return {
-    // Audit MED-3 (2026-05-05): decrypt medicalNotes per row.
-    data: data.map((row) => ({ ...row, medicalNotes: decryptField(row.medicalNotes) })),
+    // Audit MED-3 + pass-2 B-1: decrypt PHI fields per row.
+    data: data.map((row) => decryptFields(row, RIDER_PROFILE_ENCRYPTED_FIELDS)),
     total: countResult[0]?.count ?? 0,
   };
 }
@@ -160,11 +161,12 @@ export async function getRiderById(clubId: string, riderId: string) {
 
   const row = result[0];
   if (!row) return null;
-  // Audit MED-3: decrypt medical notes on read. `decryptField` returns
-  // the plaintext for an already-encrypted value, OR returns the input
-  // verbatim for a row that hasn't been migrated yet (back-compat for
-  // any rows the migration didn't touch).
-  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
+  // Audit MED-3 + pass-2 B-1: decrypt PHI fields. `decryptFields`
+  // returns plaintext for `v1:`-prefixed values, or pass-through for
+  // rows the backfill hasn't reached yet — the verifier migration
+  // `0053_audit_pass_2_phi_verifier.sql` will abort the next deploy
+  // if any unbackfilled rows remain.
+  return decryptFields(row, RIDER_PROFILE_ENCRYPTED_FIELDS);
 }
 
 export async function getRiderByMemberId(clubId: string, memberId: string) {
@@ -199,7 +201,7 @@ export async function getRiderByMemberId(clubId: string, memberId: string) {
 
   const row = result[0];
   if (!row) return null;
-  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
+  return decryptFields(row, RIDER_PROFILE_ENCRYPTED_FIELDS);
 }
 
 interface CreateRiderData {
@@ -237,6 +239,20 @@ export async function createRider(clubId: string, data: CreateRiderData) {
 
     if (!member) throw new Error('Failed to create member');
 
+    // Audit MED-3 + pass-2 B-1: encrypt every PHI/PII field listed in
+    // `RIDER_PROFILE_ENCRYPTED_FIELDS`. `encryptFields` skips undefined
+    // (so omitted fields don't get a `v1:` prefix written for an empty
+    // value).
+    const encryptedPhi = encryptFields(
+      {
+        emergencyContactName: data.emergencyContactName,
+        emergencyContactPhone: data.emergencyContactPhone,
+        emergencyContactRelation: data.emergencyContactRelation,
+        medicalNotes: data.medicalNotes,
+      } as Record<string, unknown>,
+      RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
+    );
+
     const [profile] = await tx
       .insert(riderProfiles)
       .values({
@@ -246,11 +262,7 @@ export async function createRider(clubId: string, data: CreateRiderData) {
         weightKg: data.weightKg != null ? String(data.weightKg) : null,
         heightCm: data.heightCm != null ? String(data.heightCm) : null,
         skillLevel: data.skillLevel as 'beginner' | 'intermediate' | 'advanced',
-        emergencyContactName: data.emergencyContactName,
-        emergencyContactPhone: data.emergencyContactPhone,
-        emergencyContactRelation: data.emergencyContactRelation,
-        // Audit MED-3: encrypt PHI on write.
-        medicalNotes: encryptField(data.medicalNotes),
+        ...encryptedPhi,
       })
       .returning();
 
@@ -259,15 +271,23 @@ export async function createRider(clubId: string, data: CreateRiderData) {
 }
 
 export async function updateRiderProfile(clubId: string, riderId: string, data: RiderProfileUpdate) {
-  // Audit MED-3 (2026-05-05): encrypt medicalNotes on write. Pass-through
-  // for undefined (PATCH semantics — omitted means leave alone), null
-  // (explicit clear), or empty string (treat as clear). encryptField
-  // handles all three cases.
+  // Audit MED-3 + pass-2 B-1: encrypt every PHI/PII field on PATCH.
+  // PATCH semantics: omitted ≠ null (omitted = leave alone, null =
+  // clear). `encryptFields` only writes keys present in `data`, so
+  // undefined fields stay omitted from the UPDATE SET — preserving
+  // existing values. Double-`unknown` cast: interface types don't
+  // carry an index signature; the helper only touches the named
+  // string fields.
   const partial = toRiderDecimalStrings(data);
-  if (data.medicalNotes !== undefined) {
-    partial.medicalNotes = encryptField(data.medicalNotes ?? null);
-  }
-  const values = { ...partial, updatedAt: new Date() } as Partial<NewRiderProfile>;
+  const encryptedPhi = encryptFields(
+    data as unknown as Record<string, unknown>,
+    RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
+  );
+  const values = {
+    ...partial,
+    ...encryptedPhi,
+    updatedAt: new Date(),
+  } as Partial<NewRiderProfile>;
   const result = await db
     .update(riderProfiles)
     .set(values)
@@ -276,13 +296,12 @@ export async function updateRiderProfile(clubId: string, riderId: string, data: 
 
   const row = result[0];
   if (!row) return null;
-  // Audit r5 F-36 (2026-05-07): decrypt medicalNotes before returning so
-  // PATCH responses stay symmetric with GET — riders/admins receive
-  // plaintext on both reads and writes. Without this the route returned
-  // ciphertext on PATCH; if the client persisted it and PATCHed it back,
-  // the server re-encrypted the already-encrypted value → silent data
+  // Audit r5 F-36 (2026-05-07): decrypt before returning so PATCH
+  // responses stay symmetric with GET. Without this the route returns
+  // ciphertext on PATCH; if the client persists it and PATCHes it back,
+  // the server re-encrypts the already-encrypted value → silent data
   // corruption.
-  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
+  return decryptFields(row, RIDER_PROFILE_ENCRYPTED_FIELDS);
 }
 
 /**
@@ -309,6 +328,24 @@ export async function upsertRiderProfileByMember(
   const weightKg = data.weightKg != null ? String(data.weightKg) : null;
   const heightCm = data.heightCm != null ? String(data.heightCm) : null;
 
+  // Audit MED-3 + pass-2 B-1: encrypt every PHI/PII field. INSERT path
+  // uses null when the caller omitted the field (first-write); UPDATE
+  // path uses `encryptFields(data, …)` which preserves PATCH semantics
+  // (omitted = leave alone).
+  const insertEncryptedPhi = encryptFields(
+    {
+      emergencyContactName: data.emergencyContactName ?? null,
+      emergencyContactPhone: data.emergencyContactPhone ?? null,
+      emergencyContactRelation: data.emergencyContactRelation ?? null,
+      medicalNotes: data.medicalNotes ?? null,
+    } as Record<string, unknown>,
+    RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
+  );
+  const updateEncryptedPhi = encryptFields(
+    data as unknown as Record<string, unknown>,
+    RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
+  );
+
   // For the UPDATE half, only set fields the caller actually supplied.
   // PATCH semantics: omitted ≠ null. Omitted leaves the existing column
   // alone; `null` would explicitly clear it.
@@ -320,20 +357,7 @@ export async function upsertRiderProfileByMember(
     ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth } : {}),
     ...(data.weightKg !== undefined ? { weightKg } : {}),
     ...(data.heightCm !== undefined ? { heightCm } : {}),
-    ...(data.emergencyContactName !== undefined
-      ? { emergencyContactName: data.emergencyContactName }
-      : {}),
-    ...(data.emergencyContactPhone !== undefined
-      ? { emergencyContactPhone: data.emergencyContactPhone }
-      : {}),
-    ...(data.emergencyContactRelation !== undefined
-      ? { emergencyContactRelation: data.emergencyContactRelation }
-      : {}),
-    // Audit MED-3 (2026-05-05): encrypt PHI on write. encryptField
-    // returns null for null/empty, ciphertext for non-empty.
-    ...(data.medicalNotes !== undefined
-      ? { medicalNotes: encryptField(data.medicalNotes) }
-      : {}),
+    ...updateEncryptedPhi,
   };
 
   const result = await db
@@ -346,11 +370,7 @@ export async function upsertRiderProfileByMember(
       dateOfBirth: data.dateOfBirth ?? null,
       weightKg,
       heightCm,
-      emergencyContactName: data.emergencyContactName ?? null,
-      emergencyContactPhone: data.emergencyContactPhone ?? null,
-      emergencyContactRelation: data.emergencyContactRelation ?? null,
-      // Audit MED-3: encrypt on insert too.
-      medicalNotes: encryptField(data.medicalNotes ?? null),
+      ...insertEncryptedPhi,
     })
     .onConflictDoUpdate({
       target: [riderProfiles.clubId, riderProfiles.memberId],
@@ -361,7 +381,7 @@ export async function upsertRiderProfileByMember(
   if (!row) return null;
   // Audit r5 F-36 (2026-05-07): decrypt before returning — see
   // updateRiderProfile for the data-corruption hazard otherwise.
-  return { ...row, medicalNotes: decryptField(row.medicalNotes) };
+  return decryptFields(row, RIDER_PROFILE_ENCRYPTED_FIELDS);
 }
 
 /**
