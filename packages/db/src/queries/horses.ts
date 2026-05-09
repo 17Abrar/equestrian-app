@@ -1,9 +1,15 @@
 import { eq, and, isNull, ilike, asc, desc, sql, SQL, inArray } from 'drizzle-orm';
-import { db } from '../index';
+import { db, writeTransaction } from '../index';
 import { horses } from '../schema/horses';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { bookings, bookingSlots, horsePairingHistory } from '../schema/bookings';
+import {
+  horseHealthRecords,
+  horseMedications,
+  horseDocuments,
+  horseMedicationLogs,
+} from '../schema/horse-health';
 import { decryptFields, encryptFields } from '../crypto';
 import { escapeLikePattern } from '@equestrian/shared/utils';
 
@@ -435,20 +441,73 @@ export type HorseAvailableForMatching = Awaited<
 >[number];
 
 export async function softDeleteHorse(clubId: string, horseId: string) {
-  const result = await db
-    .update(horses)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)))
-    .returning({ id: horses.id });
+  // Audit pass-3 follow-up E (2026-05-09): soft-delete now cascades to
+  // every medical child table — health records, medications,
+  // medication logs, documents — alongside the existing
+  // `horsePairingHistory` cascade (audit C-10). Each child table's
+  // schema-level FK declares `ON DELETE CASCADE` against horses, but
+  // that only fires on hard delete; soft-delete bypassed it and left
+  // medical PHI live indefinitely. Three failure modes the cascade
+  // closes:
+  //   1. GDPR right-to-erasure not honoured for medical records.
+  //   2. A future query that forgets `isHorseActiveInClub` would leak.
+  //   3. A hard-purge later silently CASCADE-deleted the children
+  //      unexpectedly.
+  //
+  // Wrapped in a writeTransaction so the parent UPDATE and the child
+  // DELETEs commit atomically — a partial failure can't leave the
+  // horse soft-deleted with medical rows orphaned (or vice versa).
+  // horse_medication_logs has an FK CASCADE on horse_medications, so
+  // deleting medications technically catches logs too — but explicit
+  // is safer (defends against a future schema reviewer dropping the
+  // CASCADE) and clearer in the log trail.
+  return writeTransaction(async (tx) => {
+    const result = await tx
+      .update(horses)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)))
+      .returning({ id: horses.id });
 
-  if (result[0]) {
-    // Audit C-10 — soft-delete should erase rider/horse pairing history so a
-    // GDPR-style erasure obligation is met. The schema's
-    // `references(..., onDelete: 'cascade')` only fires on hard delete.
-    // Run as a separate statement against the same HTTP connection; on
-    // failure log and continue (the horse is still deleted; pairing rows
-    // are a follow-up the operator can run via a backfill).
-    await db
+    if (!result[0]) {
+      return null;
+    }
+
+    // Order matters only for foreign-key chains: horse_medication_logs
+    // → horse_medications. Delete logs first so the medications delete
+    // doesn't trigger a cascade we're already doing explicitly.
+    await tx
+      .delete(horseMedicationLogs)
+      .where(
+        and(
+          eq(horseMedicationLogs.clubId, clubId),
+          eq(horseMedicationLogs.horseId, horseId),
+        ),
+      );
+    await tx
+      .delete(horseMedications)
+      .where(
+        and(
+          eq(horseMedications.clubId, clubId),
+          eq(horseMedications.horseId, horseId),
+        ),
+      );
+    await tx
+      .delete(horseHealthRecords)
+      .where(
+        and(
+          eq(horseHealthRecords.clubId, clubId),
+          eq(horseHealthRecords.horseId, horseId),
+        ),
+      );
+    await tx
+      .delete(horseDocuments)
+      .where(
+        and(
+          eq(horseDocuments.clubId, clubId),
+          eq(horseDocuments.horseId, horseId),
+        ),
+      );
+    await tx
       .delete(horsePairingHistory)
       .where(
         and(
@@ -456,9 +515,9 @@ export async function softDeleteHorse(clubId: string, horseId: string) {
           eq(horsePairingHistory.horseId, horseId),
         ),
       );
-  }
 
-  return result[0] ?? null;
+    return result[0];
+  });
 }
 
 // ─── Ownership registration (Round 8) ─────────────────────────────────
