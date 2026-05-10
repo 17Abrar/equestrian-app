@@ -230,6 +230,30 @@ export class PaymentProviderError extends Error {
 }
 
 /**
+ * Error codes that mean the operator needs to do something (reconnect a
+ * provider, fix an env var, paste fresh credentials) rather than a
+ * transient retryable failure. Surfaced at `error` log-level rather than
+ * `warn` so they page the operator instead of getting lost.
+ *
+ * Audit pass-4 F-73 (2026-05-10): previously inlined separately in
+ * `livery-billing` (4 codes) and `platform-billing` (2 codes — only
+ * `PROVIDER_NOT_CONFIGURED` and `AUTH_FAILED`). The drift meant a
+ * `MISSING_CREDENTIALS` from platform-billing logged at `warn` and never
+ * paged. Centralised here so both crons share the same set; future
+ * codes added here pick up automatically across consumers.
+ */
+export const OPERATOR_ACTIONABLE_PAY_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ACCOUNT_NOT_CONNECTED',
+  'AUTH_FAILED',
+  'PROVIDER_NOT_CONFIGURED',
+  'MISSING_CREDENTIALS',
+]);
+
+export function isOperatorActionablePayErrorCode(code: string | undefined): boolean {
+  return !!code && OPERATOR_ACTIONABLE_PAY_ERROR_CODES.has(code);
+}
+
+/**
  * Audit F-16 (2026-05-06 comprehensive). Adapters embed up to 200
  * characters of provider response body in their thrown error
  * messages — a useful debug signal but a defense-in-depth gap when

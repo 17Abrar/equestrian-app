@@ -62,15 +62,24 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
   // Anchor: last invoice per horse (max period_start). We left-join so horses
   // that have never been billed still appear. `rawDb` because this is called
   // from the cron handler, outside any tenant transaction.
+  //
+  // Audit pass-4 P-1 (2026-05-10): the WHERE on `inArray(status, ...)` used
+  // to filter out `'cancelled'`, which silently diverged from the semantics
+  // `findHorseBillingAnchor` returns (any latest invoice, irrespective of
+  // status). The cron historically used the round-trip helper because of
+  // that divergence; now that the pre-join consumer (the cron itself) is
+  // wired to `lastInvoicePeriodStart`, the pre-join must match the helper's
+  // semantics. A horse whose latest invoice was cancelled correctly skips
+  // re-issuing the cancelled period — `nextBillingPeriod` advances to
+  // `cancelled.periodStart + 1 month`. If the LEFT JOIN had stayed
+  // status-filtered, the next cron run would have re-issued the cancelled
+  // period, undoing the operator's cancel.
   const lastInvoiceSub = rawDb
     .select({
       horseId: liveryInvoices.horseId,
       lastStart: sql<string | null>`MAX(${liveryInvoices.periodStart})`.as('last_start'),
     })
     .from(liveryInvoices)
-    .where(
-      inArray(liveryInvoices.status, ['pending', 'paid', 'overdue']),
-    )
     .groupBy(liveryInvoices.horseId)
     .as('last_invoice_sub');
 

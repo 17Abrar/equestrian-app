@@ -95,8 +95,13 @@ export function useCancelBooking() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ bookingId, reason: _reason }: { bookingId: string; reason: string }) =>
-      api.delete<Booking>(`/api/v1/bookings/${bookingId}`),
+    mutationFn: ({ bookingId, reason }: { bookingId: string; reason: string }) =>
+      // Audit pass-4 M-2 (2026-05-10): server expects
+      // `cancelBookingSchema`-typed body via DELETE — was previously
+      // dropping `reason` on the floor (renamed to `_reason`).
+      // `cancellationReason` lands in the booking row and the audit
+      // log; without it the trail shows reason-less cancels.
+      api.delete<Booking>(`/api/v1/bookings/${bookingId}`, { reason }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['myBookings'] });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
