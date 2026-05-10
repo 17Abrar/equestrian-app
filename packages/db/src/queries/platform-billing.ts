@@ -546,7 +546,15 @@ export async function findClubsWithTrialEndingOn(
         // race-safe claim.
         isNull(sentColumn),
       ),
-    );
+    )
+    // Audit pass-4 P-9 (2026-05-10): defensive cap. Today the filtered
+    // set is small (a handful of trialing clubs hitting the 1-day or
+    // 3-day window each cron pass), but every other cron candidate
+    // query has a bound — see `findOverdueInvoicesForReminders` (200),
+    // `findHorsesDueForBilling` (1000), `findClubsDueForBilling` (500),
+    // `findUpcomingBookingsForReminder` (500). This was the only one
+    // missing.
+    .limit(500);
   return rows;
 }
 

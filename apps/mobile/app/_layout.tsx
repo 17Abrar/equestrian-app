@@ -16,7 +16,18 @@ import '../global.css';
 // initializes. No-op when EXPO_PUBLIC_SENTRY_DSN is unset (dev path).
 initSentry();
 
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
+// Audit pass-4 M-3 (2026-05-10): fail loud if the publishable key is
+// missing in the release build, mirroring the EXPO_PUBLIC_API_URL guard
+// in `lib/api.ts:11-15`. The previous `!` non-null assertion would let
+// `<ClerkProvider>` mount with an empty string and surface a generic
+// internal Clerk error far from the actual cause; this throws at import
+// time with a clear message that points at the missing env var.
+const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+if (!CLERK_PUBLISHABLE_KEY) {
+  throw new Error(
+    'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Configure it in `app.config.ts` / `eas.json` for release builds and `.env` for local dev.',
+  );
+}
 
 function AuthGuard() {
   const { isSignedIn, isLoaded } = useAuth();

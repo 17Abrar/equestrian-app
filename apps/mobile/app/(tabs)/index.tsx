@@ -109,7 +109,16 @@ export default function HomeScreen() {
   }, [data]);
 
   const upcomingBookings = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0]!;
+    // Audit pass-4 (2026-05-10): `Date.toISOString()` returns the UTC date,
+    // so a 02:00 local-time render in Dubai (UTC+4) sees yesterday-UTC
+    // and silently misclassifies yesterday-local bookings as "upcoming"
+    // (and today-local as past). Same fix as `book.tsx:35-43`'s
+    // `toDateString` from pass 1; this consumer was missed.
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const today = `${yyyy}-${mm}-${dd}`;
     return bookings
       .filter(
         (b) =>

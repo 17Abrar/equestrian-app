@@ -22,6 +22,7 @@ import {
   createPlatformPaymentIntent,
   PlatformZiinaError,
 } from '@/lib/billing/platform-ziina';
+import { isOperatorActionablePayErrorCode } from '@/lib/payments/types';
 import { sendEmail, sendEmailAsync } from '@/lib/email';
 import { SubscriptionInvoiceIssued } from '@equestrian/email-templates/subscription-invoice-issued';
 import { SubscriptionInvoiceOverdue } from '@equestrian/email-templates/subscription-invoice-overdue';
@@ -258,9 +259,13 @@ async function createPayIntentForInvoice(args: {
       payLink: result.paymentUrl,
     };
   } catch (err) {
+    // Audit pass-4 F-73 (2026-05-10): drift fix — was checking only 2
+    // codes inline, livery-billing's set has 4. `MISSING_CREDENTIALS`
+    // and `ACCOUNT_NOT_CONNECTED` from this cron used to log at WARN
+    // and never paged. Shared helper consumes the canonical set in
+    // `lib/payments/types.ts`.
     const code = err instanceof PlatformZiinaError ? err.code : undefined;
-    const isOperatorActionable =
-      code === 'PROVIDER_NOT_CONFIGURED' || code === 'AUTH_FAILED';
+    const isOperatorActionable = isOperatorActionablePayErrorCode(code);
     const fields = {
       clubId: args.clubId,
       code,
@@ -382,10 +387,9 @@ async function sendPlatformReminders(
         // Ziina unreachable — proceed with the stale link, the admin
         // can regenerate from the dashboard. Operator-actionable
         // failures (auth/missing key) escalate; transient failures stay
-        // at warn so they don't page.
+        // at warn so they don't page. Audit pass-4 F-73 — shared helper.
         const code = err instanceof PlatformZiinaError ? err.code : undefined;
-        const isOperatorActionable =
-          code === 'PROVIDER_NOT_CONFIGURED' || code === 'AUTH_FAILED';
+        const isOperatorActionable = isOperatorActionablePayErrorCode(code);
         const fields = {
           invoiceId: inv.invoiceId,
           clubId: inv.clubId,

@@ -228,8 +228,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           riderId: booking.riderMemberId,
           clubId: ctx.clubId,
           description: `${baseDescription} [booking:${booking.id}]`,
-          // Stable idempotency per booking so retries don't duplicate intents.
-          idempotencyKey: `booking_${booking.id}`,
+          // Idempotency key MUST include amount + currency. Audit pass-4
+          // F-69 (2026-05-10): keying on `booking_${id}` alone collides
+          // when the booking's amount is edited (admin coupon adjust,
+          // lesson-type price change). Stripe's idempotency cache REPLAYS
+          // the original response — the rider would see and pay the
+          // STALE amount, not the updated one. Including amount + currency
+          // ensures any business-state change mints a fresh intent.
+          // Ziina's `operation_id` and N-Genius's order-reference inherit
+          // the same fix because all three adapters consume this field.
+          idempotencyKey: `booking_${booking.id}_${booking.currency}_${booking.amount}`,
           returnUrl,
           metadata: {
             bookingId: booking.id,

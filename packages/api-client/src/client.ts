@@ -297,8 +297,13 @@ export function createApiClient(config: ApiClientConfig) {
     patch: <T>(path: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) =>
       request<T>(path, { ...options, method: 'PATCH', body }),
 
-    delete: <T>(path: string, options?: Omit<FetchOptions, 'method' | 'body'>) =>
-      request<T>(path, { ...options, method: 'DELETE' }),
+    // DELETE accepts an optional body — RFC 9110 permits it and our cancel-
+    // booking flow uses it to ship a `cancelBookingSchema`-typed reason.
+    // The mobile `useCancelBooking` hook was previously dropping its
+    // `reason` parameter on the floor (audit pass-4 M-2) because this
+    // method had no body slot.
+    delete: <T>(path: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) =>
+      request<T>(path, { ...options, method: 'DELETE', body }),
   };
 }
 

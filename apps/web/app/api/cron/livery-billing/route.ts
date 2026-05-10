@@ -1,7 +1,6 @@
 import { type NextRequest } from 'next/server';
 import {
   findHorsesDueForBilling,
-  findHorseBillingAnchor,
   createLiveryInvoiceWithGeneratedNumber,
   findOverdueInvoicesForReminders,
   markInvoiceOverdueAndLogReminder,
@@ -14,19 +13,12 @@ import {
 import { getTodayDateString } from '@equestrian/shared/utils';
 import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { getAdapter } from '@/lib/payments/registry';
-import { PaymentProviderError } from '@/lib/payments/types';
+import {
+  PaymentProviderError,
+  isOperatorActionablePayErrorCode,
+} from '@/lib/payments/types';
 import { sendTriggeredEmail, sendTriggeredEmailAsync } from '@/lib/email';
 import { logger } from '@/lib/logger';
-
-// Errors that mean the operator needs to do something (reconnect a provider,
-// fix an env var) rather than retry — escalate to error level so they page
-// instead of getting lost in warn-noise.
-const OPERATOR_ACTIONABLE_PAY_ERROR_CODES = new Set([
-  'ACCOUNT_NOT_CONNECTED',
-  'AUTH_FAILED',
-  'PROVIDER_NOT_CONFIGURED',
-  'MISSING_CREDENTIALS',
-]);
 import { errorResponse, successResponse, requireCronSecret } from '@/lib/api-utils';
 import { LiveryInvoiceIssued } from '@equestrian/email-templates/livery-invoice-issued';
 import { LiveryInvoiceOverdue } from '@equestrian/email-templates/livery-invoice-overdue';
@@ -238,7 +230,7 @@ async function createPayIntent(args: {
     // error level so they page. Generic adapter throws stay at warn so a
     // transient provider 5xx during a cron run doesn't wake anyone up.
     const code = err instanceof PaymentProviderError ? err.code : undefined;
-    const isOperatorActionable = !!code && OPERATOR_ACTIONABLE_PAY_ERROR_CODES.has(code);
+    const isOperatorActionable = isOperatorActionablePayErrorCode(code);
     const fields = {
       horseId: args.horseId,
       clubId: args.clubId,
@@ -281,7 +273,16 @@ async function issueDueInvoices(utcToday: string): Promise<{ issued: number; ski
         skipped += 1;
         continue;
       }
-      const anchor = await findHorseBillingAnchor(horse.clubId, horse.horseId);
+      // Audit pass-4 P-1 (2026-05-10): the anchor is already pre-joined
+      // by `findHorsesDueForBilling` (`lastInvoicePeriodStart` from the
+      // `last_invoice_sub` LEFT JOIN). The previous round-trip-per-horse
+      // call to `findHorseBillingAnchor` was the cron's headline N+1 —
+      // ~30ms × up to 1000 horses × per-day pegged the wallclock budget
+      // at ~30s before any provider call ran. `nextBillingPeriod` only
+      // reads `anchor.periodStart`; the in-row column is exact.
+      const anchor = horse.lastInvoicePeriodStart
+        ? { periodStart: horse.lastInvoicePeriodStart }
+        : null;
       const period = nextBillingPeriod(horse, anchor, clubToday);
       if (!period) {
         skipped += 1;
@@ -382,7 +383,7 @@ interface NextPeriod {
  */
 function nextBillingPeriod(
   horse: BillableHorse,
-  anchor: { periodStart: string; periodEnd: string } | null,
+  anchor: { periodStart: string } | null,
   today: string,
 ): NextPeriod | null {
   const startBase = anchor ? addMonths(anchor.periodStart, 1) : horse.liveryStartDate;
