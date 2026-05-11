@@ -160,7 +160,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       logger.info('slot_cancelled', {
         slotId,
         clubId: ctx.clubId,
-        reason,
+        reasonProvided: reason.length > 0,
         bookingsCancelled: cancelledBookings.length,
         paidBookingsNeedingRefund: cancelledBookings.filter(
           (b) => b.paymentStatus === 'paid',
@@ -171,7 +171,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         action: 'booking_slot.cancel',
         resourceType: 'booking_slot',
         resourceId: slotId,
-        changes: reason ? { reason: { from: null, to: reason } } : undefined,
       });
 
       // Fire cancellation emails per-rider after the response flushes.

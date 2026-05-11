@@ -41,7 +41,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         resourceId: horseId,
         changes: {
           ownershipStatus: { from: 'pending', to: 'declined' },
-          reason: { from: null, to: data.reason },
         },
       });
 

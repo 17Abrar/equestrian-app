@@ -215,7 +215,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
 
       let providerRefundId: string | null = null;
-      let remainingToRefund = 0;
+      let refundAmountRequested = 0;
+      let refundLedgerAmount = 0;
+      let providerRefundStatus: 'pending' | 'succeeded' | 'failed' | null = null;
       let cancelled: { id: string; slotId: string } | null = null;
 
       const result = await writeTransaction(async (tx) => {
@@ -272,6 +274,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           //    between the pre-lock read and the lock can't direct the
           //    refund at the wrong account/charge id (audit B-3).
           let refundIdLocal: string | null = null;
+          let refundStatusLocal: 'pending' | 'succeeded' | 'failed' | null = null;
           if (
             liveRemaining > 0 &&
             locked.paymentProvider &&
@@ -287,7 +290,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
                 reason: data.reason,
                 idempotencyKey: `cancel_refund_${bookingId}_${liveRefundedSoFar}_${liveRemaining}`,
               });
+              if (refund.status === 'failed') {
+                return {
+                  kind: 'provider-error' as const,
+                  code: 'REFUND_FAILED',
+                  message: 'Provider reported the refund as failed',
+                  retryable: false,
+                };
+              }
               refundIdLocal = refund.providerRefundId;
+              refundStatusLocal = refund.status;
             } catch (err) {
               if (err instanceof PaymentProviderError) {
                 return {
@@ -348,8 +360,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           // 7. Update the refund ledger inside the same tx. Mirrors
           //    recordBookingRefund's optimistic CAS but the FOR UPDATE
           //    above means the CAS is a tautology — kept as a guard
-          //    against any future caller that bypasses the lock.
-          if (refundIdLocal && liveRemaining > 0 && locked.amount != null) {
+          //    against any future caller that bypasses the lock. Audit
+          //    pass 6: only ledger terminal succeeded refunds. Pending
+          //    refunds are finalized by provider webhooks/reconciliation.
+          if (
+            refundIdLocal &&
+            refundStatusLocal === 'succeeded' &&
+            liveRemaining > 0 &&
+            locked.amount != null
+          ) {
             const newRefunded = liveRefundedSoFar + liveRemaining;
             const newStatus = newRefunded >= locked.amount ? 'refunded' : 'partial';
 
@@ -372,7 +391,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             kind: 'ok' as const,
             cancelled: cancelledLocal,
             refundId: refundIdLocal,
-            remainingToRefund: liveRemaining,
+            refundStatus: refundStatusLocal,
+            refundAmountRequested: refundIdLocal ? liveRemaining : 0,
+            refundLedgerAmount: refundStatusLocal === 'succeeded' ? liveRemaining : 0,
           };
       });
 
@@ -414,7 +435,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
       cancelled = result.cancelled;
       providerRefundId = result.refundId;
-      remainingToRefund = result.remainingToRefund;
+      providerRefundStatus = result.refundStatus;
+      refundAmountRequested = result.refundAmountRequested;
+      refundLedgerAmount = result.refundLedgerAmount;
 
       if (!cancelled) {
         return errorResponse('CANCEL_FAILED', 'Failed to cancel booking', 500);
@@ -427,11 +450,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         bookingId,
         clubId: ctx.clubId,
         cancelledBy: ctx.memberId,
-        reason: data.reason,
+        reasonProvided: data.reason.length > 0,
         cancellationFee: fee,
         isLateCancellation: feeResult.isLate,
-        refundedAmountMinor: remainingToRefund,
+        refundAmountRequested,
+        refundedAmountMinor: refundLedgerAmount,
         providerRefundId,
+        providerRefundStatus,
       });
 
       void ctx.audit({
@@ -441,11 +466,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         changes: {
           status: { from: existing.status, to: 'cancelled' },
           cancellationFee: { from: 0, to: fee },
-          ...(remainingToRefund > 0
+          ...(refundLedgerAmount > 0
             ? {
                 refundedAmountMinor: {
                   from: refundedSoFar,
-                  to: refundedSoFar + remainingToRefund,
+                  to: refundedSoFar + refundLedgerAmount,
                 },
               }
             : {}),

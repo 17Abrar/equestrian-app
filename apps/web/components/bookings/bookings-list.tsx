@@ -67,6 +67,16 @@ interface ActionDialogState {
   booking: Booking;
 }
 
+interface RefundBookingResult {
+  bookingId: string;
+  provider: string;
+  providerRefundId: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  partial: boolean;
+  refundedAmountMinor: number;
+  remainingRefundableMinor: number;
+}
+
 const ACTION_CONFIG: Record<ActionType, { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }> = {
   cancel: {
     title: 'Cancel Booking',
@@ -88,7 +98,7 @@ const ACTION_CONFIG: Record<ActionType, { title: string; description: string; co
   },
   refund: {
     title: 'Refund Payment',
-    description: 'Issue a full refund through the payment provider that captured this booking. The booking payment status will flip to "refunded" and a webhook will confirm once the provider processes it.',
+    description: 'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
     confirmLabel: 'Issue Refund',
     variant: 'destructive',
   },
@@ -133,7 +143,7 @@ function useRefundBooking() {
     // `res.json()` would resolve a Cloudflare 502 HTML body as a
     // success and skip the `onSuccess` invalidation in subtle ways.
     mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
-      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/bookings/${bookingId}/refund`, {
+      fetchJson<ApiResponse<RefundBookingResult>>(`/api/v1/bookings/${bookingId}/refund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reason ? { reason } : {}),
@@ -176,11 +186,18 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
         await markComplete.mutateAsync(state.booking.id);
         toast.success('Booking marked as completed');
       } else if (state.type === 'refund') {
-        await refundBooking.mutateAsync({
+        const refundResult = await refundBooking.mutateAsync({
           bookingId: state.booking.id,
           reason: reason || undefined,
         });
-        toast.success('Refund issued');
+        if (!refundResult.success) {
+          throw new Error(refundResult.error.message);
+        }
+        if (refundResult.data.status === 'pending') {
+          toast.warning('Refund requested. Booking ledger will update after provider confirmation.');
+        } else {
+          toast.success('Refund issued');
+        }
       }
       setReason('');
       onClose();
