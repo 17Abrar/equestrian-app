@@ -17,6 +17,7 @@ import {
   PaymentProviderError,
   safeProviderPreview,
 } from './types';
+import { fetchProvider } from './provider-fetch';
 
 /**
  * N-Genius (Network International) adapter — UAE's dominant card acquirer.
@@ -126,16 +127,20 @@ async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
     return cached.token;
   }
 
-  const res = await fetch(`${API_BASE_URL}/identity/auth/access-token`, {
-    method: 'POST',
-    headers: {
-      // The API key is the credential directly — NOT base64-encoded.
-      Authorization: `Basic ${creds.apiKey}`,
-      'Content-Type': 'application/vnd.ni-identity.v1+json',
-      Accept: 'application/vnd.ni-identity.v1+json',
+  const res = await fetchProvider(
+    `${API_BASE_URL}/identity/auth/access-token`,
+    {
+      method: 'POST',
+      headers: {
+        // The API key is the credential directly — NOT base64-encoded.
+        Authorization: `Basic ${creds.apiKey}`,
+        'Content-Type': 'application/vnd.ni-identity.v1+json',
+        Accept: 'application/vnd.ni-identity.v1+json',
+      },
+      body: creds.realmName ? JSON.stringify({ realmName: creds.realmName }) : undefined,
     },
-    body: creds.realmName ? JSON.stringify({ realmName: creds.realmName }) : undefined,
-  });
+    { provider: 'N-Genius', operation: 'access token request' },
+  );
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -391,7 +396,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       language: 'en',
     };
 
-    const res = await fetch(
+    const res = await fetchProvider(
       `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders`,
       {
         method: 'POST',
@@ -402,6 +407,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         },
         body: JSON.stringify(body),
       },
+      { provider: 'N-Genius', operation: 'order creation' },
     );
 
     if (!res.ok) {
@@ -436,7 +442,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
 
     // Look the order up to find the `_id` of the payment leg — refunds are
     // posted against a specific payment, not the order reference.
-    const orderRes = await fetch(
+    const orderRes = await fetchProvider(
       `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
       {
         method: 'GET',
@@ -445,6 +451,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           Accept: 'application/vnd.ni-payment.v2+json',
         },
       },
+      { provider: 'N-Genius', operation: 'order lookup' },
     );
 
     if (!orderRes.ok) {
@@ -546,7 +553,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       );
     }
 
-    const refundRes = await fetch(
+    const refundRes = await fetchProvider(
       `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}/payments/${encodeURIComponent(payment._id)}/refund`,
       {
         method: 'POST',
@@ -562,6 +569,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           },
         }),
       },
+      { provider: 'N-Genius', operation: 'refund creation' },
     );
 
     if (!refundRes.ok) {
@@ -592,7 +600,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       (refund.state === 'SUCCESS' || refund.state === 'CAPTURED')
     ) {
       try {
-        const reconcileRes = await fetch(
+        const reconcileRes = await fetchProvider(
           `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
           {
             method: 'GET',
@@ -601,6 +609,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
               Accept: 'application/vnd.ni-payment.v2+json',
             },
           },
+          { provider: 'N-Genius', operation: 'refund reconciliation lookup' },
         );
         if (reconcileRes.ok) {
           const reconcileOrder = (await reconcileRes.json()) as {
@@ -654,7 +663,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     const creds = parseCredentials(input.account.credentials);
     const accessToken = await getAccessToken(creds);
 
-    const res = await fetch(
+    const res = await fetchProvider(
       `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
       {
         method: 'GET',
@@ -663,6 +672,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           Accept: 'application/vnd.ni-payment.v2+json',
         },
       },
+      { provider: 'N-Genius', operation: 'payment status lookup' },
     );
 
     if (!res.ok) {

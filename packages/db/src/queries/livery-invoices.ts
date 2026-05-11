@@ -76,11 +76,12 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
   // period, undoing the operator's cancel.
   const lastInvoiceSub = rawDb
     .select({
+      clubId: liveryInvoices.clubId,
       horseId: liveryInvoices.horseId,
       lastStart: sql<string | null>`MAX(${liveryInvoices.periodStart})`.as('last_start'),
     })
     .from(liveryInvoices)
-    .groupBy(liveryInvoices.horseId)
+    .groupBy(liveryInvoices.clubId, liveryInvoices.horseId)
     .as('last_invoice_sub');
 
   const rows = await rawDb
@@ -110,7 +111,10 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
       clubMembers,
       and(eq(clubMembers.id, horses.ownerMemberId), eq(clubMembers.clubId, horses.clubId)),
     )
-    .leftJoin(lastInvoiceSub, eq(lastInvoiceSub.horseId, horses.id))
+    .leftJoin(
+      lastInvoiceSub,
+      and(eq(lastInvoiceSub.horseId, horses.id), eq(lastInvoiceSub.clubId, horses.clubId)),
+    )
     .where(
       and(
         eq(horses.ownershipStatus, 'active'),
@@ -126,20 +130,19 @@ export async function findHorsesDueForBilling(today: string): Promise<BillableHo
     .orderBy(desc(horses.liveryStartDate))
     .limit(LIVERY_BILLING_CRON_LIMIT);
 
-  return rows
-    .filter((r): r is typeof r & {
+  return rows.filter(
+    (
+      r,
+    ): r is typeof r & {
       ownerMemberId: string;
       ownerEmail: string | null;
       ownerClerkUserId: string;
       monthlyLiveryFeeMinor: number;
       liveryStartDate: string;
     } => {
-      return (
-        !!r.ownerMemberId &&
-        r.monthlyLiveryFeeMinor != null &&
-        !!r.liveryStartDate
-      );
-    });
+      return !!r.ownerMemberId && r.monthlyLiveryFeeMinor != null && !!r.liveryStartDate;
+    },
+  );
 }
 
 /**
@@ -400,6 +403,7 @@ export async function markInvoiceOverdueAndLogReminder(
       and(
         eq(liveryInvoices.id, invoiceId),
         eq(liveryInvoices.clubId, clubId),
+        inArray(liveryInvoices.status, ['pending', 'overdue']),
         eq(liveryInvoices.reminderCount, expectedReminderCount),
       ),
     )
@@ -663,11 +667,7 @@ export async function getLiveryInvoiceForEmail(clubId: string, invoiceId: string
 }
 
 /** Admin manual mark-paid (for off-platform payments). */
-export async function manualMarkLiveryInvoicePaid(
-  clubId: string,
-  invoiceId: string,
-  paidAt: Date,
-) {
+export async function manualMarkLiveryInvoicePaid(clubId: string, invoiceId: string, paidAt: Date) {
   const result = await db
     .update(liveryInvoices)
     .set({
@@ -830,7 +830,9 @@ export async function createLiveryInvoiceWithGeneratedNumber(
         return inserted[0] ?? null;
       } catch (err) {
         const code =
-          err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+          err && typeof err === 'object' && 'code' in err
+            ? String((err as { code: unknown }).code)
+            : '';
         const constraint =
           err && typeof err === 'object' && 'constraint' in err
             ? String((err as { constraint: unknown }).constraint)
@@ -849,4 +851,3 @@ export async function createLiveryInvoiceWithGeneratedNumber(
     );
   });
 }
-

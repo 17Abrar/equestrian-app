@@ -46,6 +46,18 @@ const PAID_EVENTS = new Set(['payment_intent.status.updated']);
 const HANDLED_EVENTS = new Set<string>([...PAID_EVENTS]);
 
 export async function POST(request: NextRequest) {
+  try {
+    return await handlePost(request);
+  } catch (err) {
+    logger.error('platform_webhook_unhandled_error', {
+      error: err instanceof Error ? err.message : 'unknown',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    return new Response('Internal error', { status: 500 });
+  }
+}
+
+async function handlePost(request: NextRequest) {
   // Audit F-17 (2026-05-07 r4): IP-keyed rate limit + failClosed.
   // Pre-fix the platform-Ziina webhook had no rate limit at all —
   // the URL is publicly known (`cavaliq.com/api/webhooks/ziina-

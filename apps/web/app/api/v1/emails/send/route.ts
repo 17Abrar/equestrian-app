@@ -1,4 +1,3 @@
-import { Resend } from 'resend';
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
@@ -6,6 +5,7 @@ import { db } from '@equestrian/db';
 import { clubMembers } from '@equestrian/db/schema';
 import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { sendPlainTextEmailWithRetry } from '@/lib/email';
 import { logger } from '@/lib/logger';
 
 // Plain-text only — no `html` field. A compromised staff account can
@@ -87,43 +87,26 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const resendApiKey = process.env.RESEND_API_KEY;
-      if (!resendApiKey) {
-        return errorResponse('EMAIL_NOT_CONFIGURED', 'Email service is not configured. Set RESEND_API_KEY.', 503);
-      }
-
-      // EMAIL_FROM must be a verified sender on the club's Resend domain.
-      // Falling back to onboarding@resend.dev (Resend's sandbox sender) was
-      // the previous behaviour, but Gmail flags those as "via resend.dev"
-      // and tanks deliverability — refuse to send rather than silently
-      // produce low-trust mail. The dev fallback only applies outside prod
-      // so local testing without EMAIL_FROM still works.
-      const envFrom = process.env.EMAIL_FROM;
-      if (!envFrom && process.env.NODE_ENV === 'production') {
-        return errorResponse(
-          'EMAIL_NOT_CONFIGURED',
-          'Email sender is not configured. Set EMAIL_FROM to a verified Resend address.',
-          503,
-        );
-      }
-      const resend = new Resend(resendApiKey);
-      const fromAddress = envFrom ?? 'Cavaliq <onboarding@resend.dev>';
-
       try {
-        const { data: result, error } = await resend.emails.send({
-          from: fromAddress,
-          to: [data.to],
+        const result = await sendPlainTextEmailWithRetry({
+          to: data.to,
           subject: data.subject,
           text: data.body,
         });
 
-        if (error) {
+        if (!result.sent) {
           logger.error('email_send_failed', {
             clubId: ctx.clubId,
             to: data.to,
             subject: data.subject,
-            error: error.message,
+            error: result.error,
           });
+          if (
+            result.error === 'Email not configured' ||
+            result.error === 'EMAIL_FROM not configured in production'
+          ) {
+            return errorResponse('EMAIL_NOT_CONFIGURED', 'Email service is not configured.', 503);
+          }
           return errorResponse('EMAIL_FAILED', 'Failed to send email', 500);
         }
 
@@ -131,7 +114,7 @@ export async function POST(request: NextRequest) {
           clubId: ctx.clubId,
           to: data.to,
           subject: data.subject,
-          resendId: result?.id,
+          resendId: result.id,
         });
 
         // Audit F-18 (2026-05-08 r6): persist a structured audit row so
@@ -151,7 +134,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        return successResponse({ id: result?.id, message: 'Email sent' }, 201);
+        return successResponse({ id: result.id, message: 'Email sent' }, 201);
       } catch (err) {
         logger.error('email_send_error', {
           error: err instanceof Error ? err.message : 'Unknown error',

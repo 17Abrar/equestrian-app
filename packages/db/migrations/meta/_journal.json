@@ -393,6 +393,13 @@
       "when": 1777420800055,
       "tag": "0055_audit_pass_3_coupons_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1777420800056,
+      "tag": "0056_audit_pass_5_performance_indexes",
+      "breakpoints": true
     }
   ]
 }

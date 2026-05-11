@@ -17,6 +17,8 @@ import {
   PaymentProviderError,
   safeProviderPreview,
 } from './types';
+import { fetchProvider } from './provider-fetch';
+import { toZiinaIdempotencyUuid } from './ziina-operation-id';
 
 /**
  * Ziina adapter — UAE fintech with a PaymentIntent-style API.
@@ -100,10 +102,14 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // Ziina doesn't publish a lightweight "validate this token" endpoint.
     // Probe `GET /payment_intent/<bogus>`: a valid token → 404, an invalid
     // token → 401/403. We accept 404 as proof the credential is usable.
-    const probe = await fetch(`${API_BASE_URL}/payment_intent/ping_00000000`, {
-      method: 'GET',
-      headers: authHeaders(creds.apiKey),
-    });
+    const probe = await fetchProvider(
+      `${API_BASE_URL}/payment_intent/ping_00000000`,
+      {
+        method: 'GET',
+        headers: authHeaders(creds.apiKey),
+      },
+      { provider: 'Ziina', operation: 'credential probe' },
+    );
 
     if (probe.status === 401 || probe.status === 403) {
       throw new PaymentProviderError(
@@ -134,24 +140,29 @@ export const ziinaAdapter: PaymentProviderAdapter = {
   async createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
     const creds = parseCredentials(input.account.credentials);
 
-    const res = await fetch(`${API_BASE_URL}/payment_intent`, {
-      method: 'POST',
-      headers: authHeaders(creds.apiKey),
-      body: JSON.stringify({
-        // `operation_id` is Ziina's idempotency mechanism — resubmitting with
-        // the same value returns the original intent instead of creating a dup.
-        operation_id: input.idempotencyKey,
-        amount: input.amountMinorUnits,
-        currency_code: input.currency.toUpperCase(),
-        message: input.description ?? `Booking ${input.bookingId}`,
-        success_url: input.returnUrl,
-        cancel_url: input.returnUrl,
-        failure_url: input.returnUrl,
-        // Audit F-39 (2026-05-07 r4): driven from credentials so a merchant
-        // in Ziina sandbox can verify their integration without a code change.
-        test: creds.testMode ?? false,
-      }),
-    });
+    const res = await fetchProvider(
+      `${API_BASE_URL}/payment_intent`,
+      {
+        method: 'POST',
+        headers: authHeaders(creds.apiKey),
+        body: JSON.stringify({
+          // `operation_id` is Ziina's idempotency mechanism. Current docs
+          // require a UUID, so normalize Cavaliq's provider-agnostic
+          // idempotency string to a deterministic UUID before sending it.
+          operation_id: toZiinaIdempotencyUuid(input.idempotencyKey),
+          amount: input.amountMinorUnits,
+          currency_code: input.currency.toUpperCase(),
+          message: input.description ?? `Booking ${input.bookingId}`,
+          success_url: input.returnUrl,
+          cancel_url: input.returnUrl,
+          failure_url: input.returnUrl,
+          // Audit F-39 (2026-05-07 r4): driven from credentials so a merchant
+          // in Ziina sandbox can verify their integration without a code change.
+          test: creds.testMode ?? false,
+        }),
+      },
+      { provider: 'Ziina', operation: 'payment intent creation' },
+    );
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -186,16 +197,22 @@ export const ziinaAdapter: PaymentProviderAdapter = {
   async refund(input: RefundInput): Promise<RefundResult> {
     const creds = parseCredentials(input.account.credentials);
 
-    const res = await fetch(`${API_BASE_URL}/refund`, {
-      method: 'POST',
-      headers: authHeaders(creds.apiKey),
-      body: JSON.stringify({
-        // Refunds are idempotent on the `id` field — same id = same refund.
-        id: input.idempotencyKey,
-        payment_intent_id: input.providerPaymentId,
-        amount: input.amountMinorUnits,
-      }),
-    });
+    const res = await fetchProvider(
+      `${API_BASE_URL}/refund`,
+      {
+        method: 'POST',
+        headers: authHeaders(creds.apiKey),
+        body: JSON.stringify({
+          // Refunds are idempotent on the `id` field. Current docs require
+          // a UUID, so normalize Cavaliq's provider-agnostic idempotency
+          // string to a deterministic UUID before sending it.
+          id: toZiinaIdempotencyUuid(input.idempotencyKey),
+          payment_intent_id: input.providerPaymentId,
+          amount: input.amountMinorUnits,
+        }),
+      },
+      { provider: 'Ziina', operation: 'refund creation' },
+    );
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -211,14 +228,10 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     const json = (await res.json()) as { id?: string; status?: string };
 
     const mappedStatus: 'pending' | 'succeeded' | 'failed' =
-      json.status === 'completed'
-        ? 'succeeded'
-        : json.status === 'failed'
-          ? 'failed'
-          : 'pending';
+      json.status === 'completed' ? 'succeeded' : json.status === 'failed' ? 'failed' : 'pending';
 
     return {
-      providerRefundId: json.id ?? input.idempotencyKey,
+      providerRefundId: json.id ?? toZiinaIdempotencyUuid(input.idempotencyKey),
       status: mappedStatus,
     };
   },
@@ -226,12 +239,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
   async getPaymentStatus(input: PaymentStatusInput): Promise<PaymentStatusResult> {
     const creds = parseCredentials(input.account.credentials);
 
-    const res = await fetch(
+    const res = await fetchProvider(
       `${API_BASE_URL}/payment_intent/${encodeURIComponent(input.providerPaymentId)}`,
       {
         method: 'GET',
         headers: authHeaders(creds.apiKey),
       },
+      { provider: 'Ziina', operation: 'payment status lookup' },
     );
 
     if (!res.ok) {
@@ -260,17 +274,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // Per Ziina docs: `X-Hmac-Signature` header carries the hex-encoded
     // SHA-256 HMAC of the raw request body, using the secret configured when
     // the webhook endpoint was registered.
-    const expected = createHmac('sha256', input.webhookSecret)
-      .update(input.body)
-      .digest('hex');
+    const expected = createHmac('sha256', input.webhookSecret).update(input.body).digest('hex');
     // Tolerate a leading `sha256=` prefix that some HMAC pipelines prepend,
     // and normalise case (audit B-8). `expected` is always lowercase per
     // Node's crypto API; `provided` may arrive uppercase from clients that
     // copied the value verbatim.
     const providedRaw = input.signatureHeader.trim();
-    const provided = providedRaw
-      .replace(/^sha256=/i, '')
-      .toLowerCase();
+    const provided = providedRaw.replace(/^sha256=/i, '').toLowerCase();
 
     // Audit F-44 (2026-05-07 r4): length-pad before compare. The previous
     // shape short-circuited on `a.length !== b.length`, leaking the
@@ -292,8 +302,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     providedBuf.copy(providedPadded);
 
     const equal =
-      timingSafeEqual(expectedPadded, providedPadded) &&
-      expectedBuf.length === providedBuf.length;
+      timingSafeEqual(expectedPadded, providedPadded) && expectedBuf.length === providedBuf.length;
     if (!equal) {
       // Length info is useful for distinguishing a format mismatch
       // (recoverable by upgrading the adapter) from a real attacker —
@@ -356,9 +365,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // uses these to call `recordBookingRefund(amount)` so the booking
     // ledger tracks the rider's actual refunded total — see audit C-1.
     const refundAmountMinor =
-      isRefundEvent && typeof payload.data?.amount === 'number'
-        ? payload.data.amount
-        : undefined;
+      isRefundEvent && typeof payload.data?.amount === 'number' ? payload.data.amount : undefined;
     const refundStatus: WebhookEvent['refundStatus'] | undefined = isRefundEvent
       ? status === 'succeeded'
         ? 'succeeded'
@@ -390,9 +397,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // for our dedup purposes that's still distinct per (intent, status,
     // moment-of-state-change). When absent, fall back to body-hash.
     const createdKey =
-      typeof payload.data?.created_at === 'string'
-        ? payload.data.created_at
-        : 'nots';
+      typeof payload.data?.created_at === 'string' ? payload.data.created_at : 'nots';
     // 32 hex chars = 128 bits of entropy on the SHA-256 — collision is
     // astronomically unlikely for any practical webhook volume but cheap
     // to extend from the prior 24 (96 bits).
@@ -406,20 +411,16 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // of a few µs of SHA-256 per webhook. Slice short (16 hex = 64
     // bits) since the rest of the composite already carries entropy;
     // the body-hash is just a tie-breaker.
-    const bodyHashTie = createHash('sha256')
-      .update(input.body)
-      .digest('hex')
-      .slice(0, 16);
+    const bodyHashTie = createHash('sha256').update(input.body).digest('hex').slice(0, 16);
     const eventId = intentId
       ? `${eventName}:${intentId}:${statusKey}:${createdKey}:${bodyHashTie}`
-      : `${eventName}:` +
-        createHash('sha256').update(input.body).digest('hex').slice(0, 32);
+      : `${eventName}:` + createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 
     // For refund events the `id` is the refund's id, not the booking's PI.
     // The booking is keyed by `payment_intent_id`, so surface that as the
     // `providerPaymentId` so `findBookingByProviderPaymentId` can resolve it.
     const providerPaymentId = isRefundEvent
-      ? payload.data?.payment_intent_id ?? payload.data?.id
+      ? (payload.data?.payment_intent_id ?? payload.data?.id)
       : payload.data?.id;
 
     return {

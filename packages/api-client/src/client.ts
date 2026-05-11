@@ -35,6 +35,31 @@ interface ApiClientConfig {
   onError?: (error: unknown, context: { code: string; path: string }) => void;
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+
+function createRequestSignal(callerSignal?: AbortSignal): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  if (callerSignal?.aborted) {
+    return { signal: callerSignal, cleanup: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+
+  callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      callerSignal?.removeEventListener('abort', abortFromCaller);
+    },
+  };
+}
+
 /**
  * Verifies a parsed JSON value matches the `ApiResponse<unknown>` envelope
  * shape: either `{ success: true, data }` or
@@ -141,16 +166,32 @@ export function createApiClient(config: ApiClientConfig) {
       requestHeaders['X-Organization-Id'] = orgId;
     }
 
+    const requestSignal = createRequestSignal(signal);
+
     try {
       const response = await fetch(`${config.baseUrl}${path}`, {
         method,
         headers: requestHeaders,
         body: body ? JSON.stringify(body) : undefined,
-        signal,
+        signal: requestSignal.signal,
       });
 
-      const raw: unknown = await response.json();
+      const raw: unknown = await response.json().catch(() => null);
       const envelope = parseEnvelope<T>(raw);
+      if (!response.ok) {
+        config.onError?.(
+          new Error(`HTTP ${response.status} from ${path}`),
+          { code: `HTTP_${response.status}`, path },
+        );
+        if (envelope) return envelope;
+        return {
+          success: false,
+          error: {
+            code: `HTTP_${response.status}`,
+            message: response.statusText || 'Request failed',
+          },
+        };
+      }
       if (!envelope) {
         config.onError?.(
           new Error(`Invalid response shape from ${path}`),
@@ -191,6 +232,8 @@ export function createApiClient(config: ApiClientConfig) {
           message: error instanceof Error ? error.message : 'An unexpected error occurred',
         },
       };
+    } finally {
+      requestSignal.cleanup();
     }
   }
 
@@ -223,16 +266,32 @@ export function createApiClient(config: ApiClientConfig) {
       requestHeaders['X-Organization-Id'] = orgId;
     }
 
+    const requestSignal = createRequestSignal(signal);
+
     try {
       const response = await fetch(`${config.baseUrl}${path}`, {
         method,
         headers: requestHeaders,
         body: body ? JSON.stringify(body) : undefined,
-        signal,
+        signal: requestSignal.signal,
       });
 
-      const raw: unknown = await response.json();
+      const raw: unknown = await response.json().catch(() => null);
       const envelope = parsePaginatedEnvelope<T>(raw);
+      if (!response.ok) {
+        config.onError?.(
+          new Error(`HTTP ${response.status} from ${path}`),
+          { code: `HTTP_${response.status}`, path },
+        );
+        if (envelope) return envelope;
+        return {
+          success: false,
+          error: {
+            code: `HTTP_${response.status}`,
+            message: response.statusText || 'Request failed',
+          },
+        };
+      }
       if (!envelope) {
         config.onError?.(
           new Error(`Invalid paginated response shape from ${path}`),
@@ -278,6 +337,8 @@ export function createApiClient(config: ApiClientConfig) {
           message: error instanceof Error ? error.message : 'An unexpected error occurred',
         },
       };
+    } finally {
+      requestSignal.cleanup();
     }
   }
 

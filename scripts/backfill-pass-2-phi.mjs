@@ -8,9 +8,20 @@
  * tag || ciphertext)) and the same `ENCRYPTION_KEY` the runtime uses.
  *
  * Companion to:
- *   * `migrations/0052_audit_pass_2_phi_widen_columns.sql` (varchar→text)
- *   * `migrations/0053_audit_pass_2_phi_verifier.sql` (verifier — aborts
- *     deploy if any plaintext rows remain)
+ *   * `migrations/0052_audit_pass_2_phi_widen_columns.sql` (varchar→text).
+ *
+ * NOTE — verifier-migration follow-up still open (pass-5 docstring
+ * correction, 2026-05-10): the older PHI encryption rounds shipped a
+ * SQL verifier in pair with each backfill (see migrations 0034 and
+ * 0048 — both `RAISE EXCEPTION` if plaintext rows remain) so a missed
+ * backfill couldn't slip through deploy. Pass-2 deferred the verifier
+ * because the deploy pipeline runs migrations BEFORE app code, and a
+ * verifier in the same release as the encrypt-on-write code would have
+ * blocked its own deploy. The follow-up (a verifier migration shipped
+ * AFTER prod is confirmed clean) was never written — there is currently
+ * no DB-level gate proving the pass-2 backfill ran. If a future
+ * operator restores from a pre-backfill snapshot, or hand-edits SQL,
+ * plaintext PHI re-lands in these columns with no detection.
  *
  * Idempotent: rows already in `v1:` ciphertext are skipped. Safe to
  * re-run.

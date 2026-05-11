@@ -1,6 +1,8 @@
 import 'server-only';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { safeProviderPreview } from '@/lib/payments/types';
+import { fetchProvider } from '@/lib/payments/provider-fetch';
+import { toZiinaIdempotencyUuid } from '@/lib/payments/ziina-operation-id';
 
 /**
  * Platform-billing Ziina helper. Uses Cavaliq's OWN Ziina merchant
@@ -61,7 +63,7 @@ export class PlatformZiinaError extends Error {
 export interface CreatePlatformPaymentIntentInput {
   amountMinorUnits: number;
   currency: string;
-  /** Stable string passed to Ziina as `operation_id` for idempotent retries. */
+  /** Stable string normalized to Ziina's UUID `operation_id` for idempotent retries. */
   idempotencyKey: string;
   /** Human-readable line on the Ziina hosted page / receipt. */
   message: string;
@@ -78,9 +80,7 @@ export interface CreatePlatformPaymentIntentResult {
   status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'requires_action';
 }
 
-function mapIntentStatus(
-  status: string | undefined,
-): CreatePlatformPaymentIntentResult['status'] {
+function mapIntentStatus(status: string | undefined): CreatePlatformPaymentIntentResult['status'] {
   switch (status) {
     case 'completed':
       return 'succeeded';
@@ -105,22 +105,26 @@ function mapIntentStatus(
 export async function createPlatformPaymentIntent(
   input: CreatePlatformPaymentIntentInput,
 ): Promise<CreatePlatformPaymentIntentResult> {
-  const res = await fetch(`${API_BASE_URL}/payment_intent`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      operation_id: input.idempotencyKey,
-      amount: input.amountMinorUnits,
-      currency_code: input.currency.toUpperCase(),
-      message: input.message,
-      success_url: input.returnUrl,
-      cancel_url: input.returnUrl,
-      failure_url: input.returnUrl,
-      // Audit F-39 (2026-05-07 r4): driven from env so staging can run
-      // sandbox flows without a code change.
-      test: isPlatformZiinaTestMode(),
-    }),
-  });
+  const res = await fetchProvider(
+    `${API_BASE_URL}/payment_intent`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        operation_id: toZiinaIdempotencyUuid(input.idempotencyKey),
+        amount: input.amountMinorUnits,
+        currency_code: input.currency.toUpperCase(),
+        message: input.message,
+        success_url: input.returnUrl,
+        cancel_url: input.returnUrl,
+        failure_url: input.returnUrl,
+        // Audit F-39 (2026-05-07 r4): driven from env so staging can run
+        // sandbox flows without a code change.
+        test: isPlatformZiinaTestMode(),
+      }),
+    },
+    { provider: 'Platform Ziina', operation: 'payment intent creation' },
+  );
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -188,10 +192,7 @@ export function verifyPlatformWebhook(input: {
 }): PlatformWebhookEvent {
   const secret = process.env.PLATFORM_ZIINA_WEBHOOK_SECRET;
   if (!secret) {
-    throw new PlatformWebhookError(
-      'NOT_CONFIGURED',
-      'PLATFORM_ZIINA_WEBHOOK_SECRET is not set',
-    );
+    throw new PlatformWebhookError('NOT_CONFIGURED', 'PLATFORM_ZIINA_WEBHOOK_SECRET is not set');
   }
 
   const providedRaw = (input.signatureHeader ?? '').trim();
@@ -222,8 +223,7 @@ export function verifyPlatformWebhook(input: {
   providedBuf.copy(providedPadded);
 
   const equal =
-    timingSafeEqual(expectedPadded, providedPadded) &&
-    expectedBuf.length === providedBuf.length;
+    timingSafeEqual(expectedPadded, providedPadded) && expectedBuf.length === providedBuf.length;
   if (!equal) {
     throw new PlatformWebhookError(
       'INVALID_SIGNATURE',
@@ -259,9 +259,7 @@ export function verifyPlatformWebhook(input: {
   // partial-refund oscillation) collide and the second is silently
   // `already_processed`.
   const createdKey =
-    typeof payload.data?.created_at === 'string'
-      ? payload.data.created_at
-      : 'nots';
+    typeof payload.data?.created_at === 'string' ? payload.data.created_at : 'nots';
 
   // Audit LOW (2026-05-06 third pass): mirror the per-club ziina handler's
   // body-hash tie-breaker (`apps/web/lib/payments/ziina.ts`). Without it,
@@ -269,14 +267,10 @@ export function verifyPlatformWebhook(input: {
   // on the dedup composite and the second is silently
   // `already_processed`. 16-hex slice = 64 bits, sufficient when the
   // rest of the composite already carries entropy.
-  const bodyHashTie = createHash('sha256')
-    .update(input.body)
-    .digest('hex')
-    .slice(0, 16);
+  const bodyHashTie = createHash('sha256').update(input.body).digest('hex').slice(0, 16);
   const eventId = intentId
     ? `${eventName}:${intentId}:${statusKey}:${createdKey}:${bodyHashTie}`
-    : `${eventName}:` +
-      createHash('sha256').update(input.body).digest('hex').slice(0, 32);
+    : `${eventName}:` + createHash('sha256').update(input.body).digest('hex').slice(0, 32);
 
   return {
     eventId,

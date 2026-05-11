@@ -95,6 +95,8 @@ function getClient(creds: StripeCredentials): Stripe {
   return new Stripe(creds.secretKey, {
     apiVersion: '2025-08-27.basil',
     typescript: true,
+    timeout: 15_000,
+    maxNetworkRetries: 0,
   });
 }
 

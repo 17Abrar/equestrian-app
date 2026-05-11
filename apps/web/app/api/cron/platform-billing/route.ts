@@ -1,7 +1,6 @@
 import { type NextRequest } from 'next/server';
 import {
   findClubsDueForBilling,
-  findClubBillingAnchor,
   createPlatformInvoiceWithGeneratedNumber,
   findOverduePlatformInvoicesForReminders,
   markPlatformInvoiceOverdueAndLogReminder,
@@ -18,12 +17,11 @@ import {
   MS_PER_DAY,
 } from '@equestrian/shared/constants';
 import { getTodayDateString } from '@equestrian/shared/utils';
-import {
-  createPlatformPaymentIntent,
-  PlatformZiinaError,
-} from '@/lib/billing/platform-ziina';
-import { isOperatorActionablePayErrorCode } from '@/lib/payments/types';
-import { sendEmail, sendEmailAsync } from '@/lib/email';
+import { createPlatformPaymentIntent, PlatformZiinaError } from '@/lib/billing/platform-ziina';
+import { PaymentProviderError, isOperatorActionablePayErrorCode } from '@/lib/payments/types';
+import { withProviderRetry } from '@/lib/payments/retry';
+import { sendEmailAsync, sendEmailWithRetry } from '@/lib/email';
+import { mapInBatches } from '@/lib/concurrency';
 import { SubscriptionInvoiceIssued } from '@equestrian/email-templates/subscription-invoice-issued';
 import { SubscriptionInvoiceOverdue } from '@equestrian/email-templates/subscription-invoice-overdue';
 import { TrialEnding } from '@equestrian/email-templates/trial-ending';
@@ -124,7 +122,9 @@ async function issueDuePlatformInvoices(
         continue;
       }
 
-      const anchor = await findClubBillingAnchor(club.clubId);
+      const anchor = club.lastInvoicePeriodStart
+        ? { periodStart: club.lastInvoicePeriodStart }
+        : null;
       const period = nextPlatformBillingPeriod(club, anchor, clubToday);
       if (!period) {
         skipped += 1;
@@ -231,6 +231,13 @@ interface PayIntentResult {
   payLink: string;
 }
 
+function getPlatformPaymentErrorCode(err: unknown): string | undefined {
+  if (err instanceof PlatformZiinaError || err instanceof PaymentProviderError) {
+    return err.code;
+  }
+  return undefined;
+}
+
 /**
  * Issues the Ziina platform payment intent for a fresh invoice. Returns
  * `null` (not throws) on adapter errors — the cron still issues the
@@ -247,13 +254,23 @@ async function createPayIntentForInvoice(args: {
   periodStart: string;
 }): Promise<PayIntentResult | null> {
   try {
-    const result = await createPlatformPaymentIntent({
-      amountMinorUnits: args.amountMinor,
-      currency: args.currency,
-      idempotencyKey: args.idempotencyKey,
-      message: `Cavaliq subscription — ${args.clubName} — ${args.periodStart}`,
-      returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
-    });
+    const result = await withProviderRetry(
+      () =>
+        createPlatformPaymentIntent({
+          amountMinorUnits: args.amountMinor,
+          currency: args.currency,
+          idempotencyKey: args.idempotencyKey,
+          message: `Cavaliq subscription — ${args.clubName} — ${args.periodStart}`,
+          returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
+        }),
+      {
+        label: 'platform_invoice_pay_intent',
+        context: {
+          clubId: args.clubId,
+          periodStart: args.periodStart,
+        },
+      },
+    );
     return {
       providerPaymentId: result.providerPaymentId,
       payLink: result.paymentUrl,
@@ -264,7 +281,7 @@ async function createPayIntentForInvoice(args: {
     // and `ACCOUNT_NOT_CONNECTED` from this cron used to log at WARN
     // and never paged. Shared helper consumes the canonical set in
     // `lib/payments/types.ts`.
-    const code = err instanceof PlatformZiinaError ? err.code : undefined;
+    const code = getPlatformPaymentErrorCode(err);
     const isOperatorActionable = isOperatorActionablePayErrorCode(code);
     const fields = {
       clubId: args.clubId,
@@ -298,7 +315,7 @@ interface NextPeriod {
  */
 function nextPlatformBillingPeriod(
   club: BillableClub,
-  anchor: { periodStart: string; periodEnd: string } | null,
+  anchor: { periodStart: string } | null,
   today: string,
 ): NextPeriod | null {
   // Anchor: the trial_ends_at date (YYYY-MM-DD), or one month after the
@@ -325,107 +342,129 @@ function nextPlatformBillingPeriod(
 // operator decision (not auto, see Cavaliq-internal admin tooling).
 
 const PLATFORM_REMINDER_THRESHOLDS = [7, 14, 30] as const;
+const PLATFORM_REMINDER_BATCH_SIZE = 10;
+const PLATFORM_TRIAL_NUDGE_BATCH_SIZE = 10;
 
-async function sendPlatformReminders(
-  utcToday: string,
-): Promise<{ sent: number; skipped: number }> {
-  const invoices = await findOverduePlatformInvoicesForReminders(utcToday);
+interface CronCounter {
+  sent: number;
+  skipped: number;
+}
+
+function combineCronCounters(results: readonly CronCounter[]): CronCounter {
   let sent = 0;
   let skipped = 0;
+  for (const result of results) {
+    sent += result.sent;
+    skipped += result.skipped;
+  }
+  return { sent, skipped };
+}
 
-  for (const inv of invoices) {
-    try {
-      // Resolve "today" in the club's own timezone — UTC `utcToday` may
-      // be one calendar day off for non-UTC clubs at the day boundary,
-      // leading to a reminder slot being skipped or doubled. Mirrors
-      // livery audit G-3.
-      const clubToday = getTodayDateString(inv.clubTimezone);
-      if (inv.dueDate > clubToday) {
-        skipped += 1;
-        continue;
-      }
-      const daysOverdue = daysBetween(inv.dueDate, clubToday);
-      if (daysOverdue < PLATFORM_REMINDER_THRESHOLDS[0]) {
-        skipped += 1;
-        continue;
-      }
+async function sendPlatformReminders(utcToday: string): Promise<{ sent: number; skipped: number }> {
+  const invoices = await findOverduePlatformInvoicesForReminders(utcToday);
 
-      const nextThreshold = PLATFORM_REMINDER_THRESHOLDS[inv.reminderCount];
-      if (nextThreshold === undefined) {
-        // Past the day-30 reminder — the cadence stops here. Cavaliq-
-        // internal review takes over for stragglers.
-        skipped += 1;
-        continue;
-      }
-      if (daysOverdue < nextThreshold) {
-        skipped += 1;
-        continue;
-      }
-
-      // Refresh the pay link before emailing — Ziina hosted-page links
-      // expire well before 7 days, so an old link in the reminder is a
-      // dead end. The idempotency key includes `reminderCount` so the
-      // adapter mints a fresh intent rather than returning a cached one.
-      let payLink: string | undefined = inv.payLink ?? undefined;
+  const results = await mapInBatches(
+    invoices,
+    PLATFORM_REMINDER_BATCH_SIZE,
+    async (inv): Promise<CronCounter> => {
       try {
-        const refreshed = await createPlatformPaymentIntent({
-          amountMinorUnits: inv.amountMinorUnits,
-          currency: inv.currency,
-          idempotencyKey: `platform:${inv.invoiceId}:reminder:${inv.reminderCount + 1}`,
-          message: `Cavaliq subscription — ${inv.clubName} — ${inv.invoiceNumber}`,
-          returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
-        });
-        await setPlatformInvoiceProviderRef(
-          inv.clubId,
-          inv.invoiceId,
-          'ziina_platform',
-          refreshed.providerPaymentId,
-          refreshed.paymentUrl,
-        );
-        payLink = refreshed.paymentUrl;
-      } catch (err) {
-        // Ziina unreachable — proceed with the stale link, the admin
-        // can regenerate from the dashboard. Operator-actionable
-        // failures (auth/missing key) escalate; transient failures stay
-        // at warn so they don't page. Audit pass-4 F-73 — shared helper.
-        const code = err instanceof PlatformZiinaError ? err.code : undefined;
-        const isOperatorActionable = isOperatorActionablePayErrorCode(code);
-        const fields = {
-          invoiceId: inv.invoiceId,
-          clubId: inv.clubId,
-          code,
-          error: err instanceof Error ? err.message : 'unknown',
-        };
-        if (isOperatorActionable) {
-          logger.error('platform_reminder_pay_intent_failed', fields);
-        } else {
-          logger.warn('platform_reminder_pay_intent_failed', fields);
+        // Resolve "today" in the club's own timezone — UTC `utcToday` may
+        // be one calendar day off for non-UTC clubs at the day boundary,
+        // leading to a reminder slot being skipped or doubled. Mirrors
+        // livery audit G-3.
+        const clubToday = getTodayDateString(inv.clubTimezone);
+        if (inv.dueDate > clubToday) {
+          return { sent: 0, skipped: 1 };
         }
-      }
+        const daysOverdue = daysBetween(inv.dueDate, clubToday);
+        if (daysOverdue < PLATFORM_REMINDER_THRESHOLDS[0]) {
+          return { sent: 0, skipped: 1 };
+        }
 
-      // Audit F-14 (2026-05-06): claim-first ordering. Mark the
-      // invoice + bump reminder_count BEFORE sending, so a partial
-      // failure (mark succeeds, email fails or DB error after a
-      // successful send) doesn't loop the cron into spamming the club
-      // on every subsequent pass. A failed send leaves the threshold
-      // unfulfilled (one missed nudge) and operator sees
-      // `platform_reminder_email_rejected` to manually re-trigger.
-      // Clubs with no email get a one-shot `pending → overdue` status
-      // flip with no counter bump.
-      if (inv.clubEmail) {
-        // CAS on `reminder_count`: see livery-billing/route.ts. A
-        // null return means another isolate already bumped the counter
-        // and sent (or is sending) the email; skip this pass.
+        const nextThreshold = PLATFORM_REMINDER_THRESHOLDS[inv.reminderCount];
+        if (nextThreshold === undefined) {
+          // Past the day-30 reminder — the cadence stops here. Cavaliq-
+          // internal review takes over for stragglers.
+          return { sent: 0, skipped: 1 };
+        }
+        if (daysOverdue < nextThreshold) {
+          return { sent: 0, skipped: 1 };
+        }
+
+        if (!inv.clubEmail) {
+          // Clubs with no email get a one-shot `pending → overdue` status
+          // flip with no counter bump. Do not refresh a pay link for a row
+          // we cannot deliver.
+          await markPlatformInvoiceOverdueOnly(inv.clubId, inv.invoiceId);
+          return { sent: 0, skipped: 1 };
+        }
+
+        // Audit F-14 (2026-05-06): claim-first ordering. Mark the invoice
+        // + bump reminder_count BEFORE provider-link refresh and email send,
+        // so concurrent isolates do not mint duplicate Ziina intents or send
+        // duplicate email for the same reminder threshold. The DB helper also
+        // requires the invoice to still be pending/overdue.
         const claimed = await markPlatformInvoiceOverdueAndLogReminder(
           inv.clubId,
           inv.invoiceId,
           inv.reminderCount,
         );
         if (!claimed) {
-          skipped += 1;
-          continue;
+          return { sent: 0, skipped: 1 };
         }
-        const result = await sendEmail({
+
+        // Refresh the pay link before emailing — Ziina hosted-page links
+        // expire well before 7 days, so an old link in the reminder is a
+        // dead end. The idempotency key includes `reminderCount` so the
+        // adapter mints a fresh intent rather than returning a cached one.
+        let payLink: string | undefined = inv.payLink ?? undefined;
+        try {
+          const refreshed = await withProviderRetry(
+            () =>
+              createPlatformPaymentIntent({
+                amountMinorUnits: inv.amountMinorUnits,
+                currency: inv.currency,
+                idempotencyKey: `platform:${inv.invoiceId}:reminder:${inv.reminderCount + 1}`,
+                message: `Cavaliq subscription — ${inv.clubName} — ${inv.invoiceNumber}`,
+                returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
+              }),
+            {
+              label: 'platform_reminder_pay_intent',
+              context: {
+                clubId: inv.clubId,
+                invoiceId: inv.invoiceId,
+              },
+            },
+          );
+          await setPlatformInvoiceProviderRef(
+            inv.clubId,
+            inv.invoiceId,
+            'ziina_platform',
+            refreshed.providerPaymentId,
+            refreshed.paymentUrl,
+          );
+          payLink = refreshed.paymentUrl;
+        } catch (err) {
+          // Ziina unreachable — proceed with the stale link, the admin
+          // can regenerate from the dashboard. Operator-actionable
+          // failures (auth/missing key) escalate; transient failures stay
+          // at warn so they don't page. Audit pass-4 F-73 — shared helper.
+          const code = getPlatformPaymentErrorCode(err);
+          const isOperatorActionable = isOperatorActionablePayErrorCode(code);
+          const fields = {
+            invoiceId: inv.invoiceId,
+            clubId: inv.clubId,
+            code,
+            error: err instanceof Error ? err.message : 'unknown',
+          };
+          if (isOperatorActionable) {
+            logger.error('platform_reminder_pay_intent_failed', fields);
+          } else {
+            logger.warn('platform_reminder_pay_intent_failed', fields);
+          }
+        }
+
+        const result = await sendEmailWithRetry({
           to: inv.clubEmail,
           subject:
             daysOverdue >= 30
@@ -440,9 +479,7 @@ async function sendPlatformReminders(
             // (issuance excludes trial tier). Belt-and-braces: narrow
             // to paid tiers and skip if it slipped through.
             tier:
-              inv.tier === 'starter' ||
-              inv.tier === 'growing' ||
-              inv.tier === 'professional'
+              inv.tier === 'starter' || inv.tier === 'growing' || inv.tier === 'professional'
                 ? inv.tier
                 : 'starter',
             amountMinorUnits: inv.amountMinorUnits,
@@ -453,33 +490,30 @@ async function sendPlatformReminders(
           }),
         });
         if (result.sent) {
-          sent += 1;
-        } else {
-          // Email infra rejected (most often `EMAIL_FROM` unset in
-          // staging). Threshold already burned per F-14; operator can
-          // re-send manually from the resolved error.
-          logger.error('platform_reminder_email_rejected', {
-            invoiceId: inv.invoiceId,
-            clubId: inv.clubId,
-            error: result.error,
-          });
-          skipped += 1;
+          return { sent: 1, skipped: 0 };
         }
-      } else {
-        await markPlatformInvoiceOverdueOnly(inv.clubId, inv.invoiceId);
-        skipped += 1;
-      }
-    } catch (err) {
-      logger.error('platform_reminder_send_failed', {
-        invoiceId: inv.invoiceId,
-        clubId: inv.clubId,
-        error: err instanceof Error ? err.message : 'unknown',
-      });
-      skipped += 1;
-    }
-  }
 
-  return { sent, skipped };
+        // Email infra rejected (most often `EMAIL_FROM` unset in staging).
+        // Threshold already burned per F-14; operator can re-send manually
+        // from the resolved error.
+        logger.error('platform_reminder_email_rejected', {
+          invoiceId: inv.invoiceId,
+          clubId: inv.clubId,
+          error: result.error,
+        });
+        return { sent: 0, skipped: 1 };
+      } catch (err) {
+        logger.error('platform_reminder_send_failed', {
+          invoiceId: inv.invoiceId,
+          clubId: inv.clubId,
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+        return { sent: 0, skipped: 1 };
+      }
+    },
+  );
+
+  return combineCronCounters(results);
 }
 
 // ─── Trial-ending nudges (Round 6.1) ─────────────────────────────────
@@ -492,9 +526,19 @@ async function sendPlatformReminders(
 // a billing-relationship email the admin can't opt out of without
 // breaking onboarding visibility.
 
-async function sendTrialEndingNudges(
-  utcToday: string,
-): Promise<{ sent: number; skipped: number }> {
+async function rollbackTrialReminderClaim(clubId: string, daysOut: 1 | 3): Promise<void> {
+  try {
+    await unmarkTrialReminderSent(clubId, daysOut);
+  } catch (err) {
+    logger.error('trial_ending_unmark_failed', {
+      clubId,
+      daysOut,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+  }
+}
+
+async function sendTrialEndingNudges(utcToday: string): Promise<{ sent: number; skipped: number }> {
   let sent = 0;
   let skipped = 0;
 
@@ -507,86 +551,86 @@ async function sendTrialEndingNudges(
     // ${daysOut}day_sent_at` column is non-null).
     const clubs = await findClubsWithTrialEndingOn(targetDate, daysOut);
 
-    for (const club of clubs) {
-      if (!club.clubEmail || !club.trialEndsAt) {
-        // No email = can't reach them; no trialEndsAt = the SQL filter
-        // shouldn't have matched (a trialing club always has a trial
-        // end date), but belt-and-braces.
-        skipped += 1;
-        continue;
-      }
+    const results = await mapInBatches(
+      clubs,
+      PLATFORM_TRIAL_NUDGE_BATCH_SIZE,
+      async (club): Promise<CronCounter> => {
+        if (!club.clubEmail || !club.trialEndsAt) {
+          // No email = can't reach them; no trialEndsAt = the SQL filter
+          // shouldn't have matched (a trialing club always has a trial
+          // end date), but belt-and-braces.
+          return { sent: 0, skipped: 1 };
+        }
 
-      // Audit pass-2 C-1: CAS-guarded claim of the (clubId, daysOut)
-      // dedup row BEFORE the email send. Two concurrent cron isolates
-      // (Cloudflare's scheduled() retries 5xx) serialise on the
-      // UPDATE … WHERE column IS NULL — only the first isolate gets
-      // through, the second's `markTrialReminderSent` returns false
-      // and we skip. On send failure we `unmarkTrialReminderSent`
-      // so the next pass can re-attempt (mirrors the booking-
-      // reminder unmark pattern).
-      const claimed = await markTrialReminderSent(club.clubId, daysOut);
-      if (!claimed) {
-        skipped += 1;
-        continue;
-      }
+        // Audit pass-2 C-1: CAS-guarded claim of the (clubId, daysOut)
+        // dedup row BEFORE the email send. Two concurrent cron isolates
+        // (Cloudflare's scheduled() retries 5xx) serialise on the
+        // UPDATE … WHERE column IS NULL — only the first isolate gets
+        // through, the second's `markTrialReminderSent` returns false
+        // and we skip. On send failure we `unmarkTrialReminderSent`
+        // so the next pass can re-attempt (mirrors the booking-
+        // reminder unmark pattern). The DB helper also requires the
+        // club to still be trialing so an upgrade race cannot mark it.
+        const claimed = await markTrialReminderSent(club.clubId, daysOut);
+        if (!claimed) {
+          return { sent: 0, skipped: 1 };
+        }
 
-      // The cron only nudges trialing clubs (the SQL filter enforces
-      // `subscription_status = 'trialing'`); a club that already
-      // upgraded mid-trial gets the regular subscription-invoice-issued
-      // email instead.
-      const tier =
-        club.tier === 'starter' ||
-        club.tier === 'growing' ||
-        club.tier === 'professional'
-          ? club.tier
-          : null;
-      const tierPriceMinor = tier ? PLATFORM_TIER_PRICES_MINOR[tier] : null;
+        // The cron only nudges trialing clubs (the SQL filter enforces
+        // `subscription_status = 'trialing'`); a club that already
+        // upgraded mid-trial gets the regular subscription-invoice-issued
+        // email instead.
+        const tier =
+          club.tier === 'starter' || club.tier === 'growing' || club.tier === 'professional'
+            ? club.tier
+            : null;
+        const tierPriceMinor = tier ? PLATFORM_TIER_PRICES_MINOR[tier] : null;
 
-      try {
-        const result = await sendEmail({
-          to: club.clubEmail,
-          subject:
-            daysOut === 1
-              ? `Your Cavaliq trial ends tomorrow`
-              : `Your Cavaliq trial ends in ${daysOut} days`,
-          template: TrialEnding({
-            recipientName: club.clubName,
-            clubName: club.clubName,
-            daysUntilEnd: daysOut,
-            trialEndDate: club.trialEndsAt.toISOString().slice(0, 10),
-            selectedTier: tier,
-            tierPriceMinor,
-            currency: club.clubCurrency,
-            settingsUrl,
-          }),
-        });
-        if (result.sent) {
-          sent += 1;
-        } else {
+        try {
+          const result = await sendEmailWithRetry({
+            to: club.clubEmail,
+            subject:
+              daysOut === 1
+                ? `Your Cavaliq trial ends tomorrow`
+                : `Your Cavaliq trial ends in ${daysOut} days`,
+            template: TrialEnding({
+              recipientName: club.clubName,
+              clubName: club.clubName,
+              daysUntilEnd: daysOut,
+              trialEndDate: club.trialEndsAt.toISOString().slice(0, 10),
+              selectedTier: tier,
+              tierPriceMinor,
+              currency: club.clubCurrency,
+              settingsUrl,
+            }),
+          });
+          if (result.sent) {
+            return { sent: 1, skipped: 0 };
+          }
+
           // Roll back the dedup so the next pass retries.
-          await unmarkTrialReminderSent(club.clubId, daysOut);
+          await rollbackTrialReminderClaim(club.clubId, daysOut);
           logger.warn('trial_ending_email_rejected', {
             clubId: club.clubId,
             daysOut,
             error: result.error,
           });
-          skipped += 1;
+          return { sent: 0, skipped: 1 };
+        } catch (err) {
+          await rollbackTrialReminderClaim(club.clubId, daysOut);
+          logger.error('trial_ending_send_failed', {
+            clubId: club.clubId,
+            daysOut,
+            error: err instanceof Error ? err.message : 'unknown',
+          });
+          return { sent: 0, skipped: 1 };
         }
-      } catch (err) {
-        await unmarkTrialReminderSent(club.clubId, daysOut);
-        logger.error('trial_ending_send_failed', {
-          clubId: club.clubId,
-          daysOut,
-          error: err instanceof Error ? err.message : 'unknown',
-        });
-        skipped += 1;
-      }
-    }
+      },
+    );
+    const combined = combineCronCounters(results);
+    sent += combined.sent;
+    skipped += combined.skipped;
   }
-
-  // Suppress unused-import warning when the cron fires only issuance.
-  void sendEmailAsync;
-
   return { sent, skipped };
 }
 
@@ -612,9 +656,7 @@ function addMonths(dateIso: string, months: number): string {
   d.setUTCMonth(targetMonth);
   // Clamp day-of-month so a club anchored on the 31st still bills on the
   // last day of February (avoids the "Feb 31 → Mar 3" overflow bug).
-  const daysInTarget = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0),
-  ).getUTCDate();
+  const daysInTarget = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
   d.setUTCDate(Math.min(day, daysInTarget));
   return d.toISOString().slice(0, 10);
 }
