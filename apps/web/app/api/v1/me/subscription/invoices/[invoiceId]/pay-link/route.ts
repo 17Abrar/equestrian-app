@@ -9,6 +9,7 @@ import {
   createPlatformPaymentIntent,
   PlatformZiinaError,
 } from '@/lib/billing/platform-ziina';
+import { PaymentProviderError } from '@/lib/payments/types';
 import { withProviderRetry } from '@/lib/payments/retry';
 import { logger } from '@/lib/logger';
 
@@ -23,8 +24,7 @@ interface RouteParams {
  *     the invoice carries no pay_link and the admin clicks "Refresh".
  *   - The original Ziina hosted page expired before the admin paid.
  *
- * Always issues a fresh Ziina intent (idempotency key includes a
- * monotonic counter via Date.now()) and updates the invoice row via
+ * Always issues a fresh Ziina intent per refresh request and updates the invoice row via
  * `setPlatformInvoiceProviderRef`. The call refuses to act on terminal
  * (paid / cancelled) invoices — `setPlatformInvoiceProviderRef` returns
  * null in that case.
@@ -49,21 +49,17 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       }
 
       try {
-        // Idempotency key includes Date.now() so each refresh produces a
-        // fresh Ziina intent — without that, a stale (expired) intent
-        // would just be returned again.
-        //
-        // Audit F-23 (2026-05-07 r5): wrap in `withProviderRetry`. The
-        // operation_id we send to Ziina is unique per refresh
-        // (`Date.now()` suffix), so a transient 5xx / 429 from Ziina
-        // returns a fresh intent on retry — duplicate-intent risk is
-        // bounded by the same retry-bound (max 3 attempts).
+        // Stable across the retry loop, fresh across user-initiated refresh
+        // requests. Computing this inside the retry closure would create a
+        // different Ziina operation_id for each transient retry and leave
+        // abandoned intents behind.
+        const refreshId = Date.now();
         const intent = await withProviderRetry(
           () =>
             createPlatformPaymentIntent({
               amountMinorUnits: invoice.amountMinorUnits,
               currency: invoice.currency,
-              idempotencyKey: `platform:${ctx.clubId}:${invoice.periodStart}:r${Date.now()}`,
+              idempotencyKey: `platform:${ctx.clubId}:${invoice.periodStart}:r${refreshId}`,
               message: `Cavaliq subscription — ${club.name} — ${invoice.periodStart}`,
               returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/settings/subscription`,
             }),
@@ -109,7 +105,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           providerPaymentId: intent.providerPaymentId,
         });
       } catch (err) {
-        if (err instanceof PlatformZiinaError) {
+        if (err instanceof PlatformZiinaError || err instanceof PaymentProviderError) {
           const status =
             err.code === 'PROVIDER_NOT_CONFIGURED' ? 503 :
             err.code === 'AUTH_FAILED' ? 502 :

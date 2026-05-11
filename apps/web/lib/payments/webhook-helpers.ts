@@ -783,20 +783,30 @@ export async function applyPaymentWebhook({
   // amount semantics handled above.
   if (nextStatus === 'paid' && !isRefundEvent) {
     if (bookingRef.amount == null) {
-      logger.warn('webhook_booking_missing_amount', {
+      logger.error('webhook_booking_missing_amount', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventId: event.eventId,
       });
-      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+      return {
+        kind: 'matched',
+        clubId,
+        bookingId: bookingRef.bookingId,
+        permanentFailureReason: `Payment event ${event.eventId} matched booking ${bookingRef.bookingId}, but the booking amount is missing — manual reconciliation required`,
+      };
     }
     if (event.amountReceivedMinorUnits == null) {
-      logger.warn('webhook_no_amount_received', {
+      logger.error('webhook_no_amount_received', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventId: event.eventId,
       });
-      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+      return {
+        kind: 'matched',
+        clubId,
+        bookingId: bookingRef.bookingId,
+        permanentFailureReason: `Payment event ${event.eventId} did not include an amount for booking ${bookingRef.bookingId} — manual reconciliation required`,
+      };
     }
     // Audit pass-3 (2026-05-09): refuse to compare an amount when the
     // event's currency is missing. Previously the `event.currency &&`
@@ -818,7 +828,12 @@ export async function applyPaymentWebhook({
         amountReceived: event.amountReceivedMinorUnits,
         bookingCurrency: bookingRef.currency,
       });
-      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+      return {
+        kind: 'matched',
+        clubId,
+        bookingId: bookingRef.bookingId,
+        permanentFailureReason: `Payment event ${event.eventId} included amount ${event.amountReceivedMinorUnits} without currency for booking ${bookingRef.bookingId} — manual reconciliation required`,
+      };
     }
     if (event.currency.toUpperCase() !== bookingRef.currency.toUpperCase()) {
       logger.error('webhook_currency_mismatch', {
@@ -828,7 +843,12 @@ export async function applyPaymentWebhook({
         eventCurrency: event.currency,
         bookingCurrency: bookingRef.currency,
       });
-      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+      return {
+        kind: 'matched',
+        clubId,
+        bookingId: bookingRef.bookingId,
+        permanentFailureReason: `Currency mismatch on booking ${bookingRef.bookingId}: expected ${bookingRef.currency}, got ${event.currency}`,
+      };
     }
     if (event.amountReceivedMinorUnits < bookingRef.amount) {
       logger.error('webhook_amount_underfunded', {
@@ -838,7 +858,12 @@ export async function applyPaymentWebhook({
         received: event.amountReceivedMinorUnits,
         expected: bookingRef.amount,
       });
-      return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
+      return {
+        kind: 'matched',
+        clubId,
+        bookingId: bookingRef.bookingId,
+        permanentFailureReason: `Amount underfunded on booking ${bookingRef.bookingId}: received ${event.amountReceivedMinorUnits} < expected ${bookingRef.amount}`,
+      };
     }
     // Audit F-12 (2026-05-07 r4): warn-level overfund. We still mark the
     // booking paid (the rider has paid; refusing the apply would leave them
@@ -1008,12 +1033,17 @@ export async function applyLiveryInvoiceWebhook({
   // signature step gatekeeps third-party forgery; this gatekeeps
   // intra-account misrouting.
   if (event.amountReceivedMinorUnits == null) {
-    logger.warn('livery_webhook_no_amount_received', {
+    logger.error('livery_webhook_no_amount_received', {
       clubId: invoice.clubId,
       invoiceId: invoice.id,
       eventId: event.eventId,
     });
-    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
+    return {
+      kind: 'matched',
+      invoiceId: invoice.id,
+      clubId: invoice.clubId,
+      permanentFailureReason: `Payment event ${event.eventId} did not include an amount for livery invoice ${invoice.id} — manual reconciliation required`,
+    };
   }
   // Audit pass-3 (2026-05-09): refuse amount comparison when event
   // currency is missing — matches the booking-side fix above.
@@ -1025,7 +1055,12 @@ export async function applyLiveryInvoiceWebhook({
       amountReceived: event.amountReceivedMinorUnits,
       invoiceCurrency: invoice.currency,
     });
-    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
+    return {
+      kind: 'matched',
+      invoiceId: invoice.id,
+      clubId: invoice.clubId,
+      permanentFailureReason: `Payment event ${event.eventId} included amount ${event.amountReceivedMinorUnits} without currency for livery invoice ${invoice.id} — manual reconciliation required`,
+    };
   }
   if (event.currency.toUpperCase() !== invoice.currency.toUpperCase()) {
     logger.error('livery_webhook_currency_mismatch', {
@@ -1035,7 +1070,12 @@ export async function applyLiveryInvoiceWebhook({
       eventCurrency: event.currency,
       invoiceCurrency: invoice.currency,
     });
-    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
+    return {
+      kind: 'matched',
+      invoiceId: invoice.id,
+      clubId: invoice.clubId,
+      permanentFailureReason: `Currency mismatch on livery invoice ${invoice.id}: expected ${invoice.currency}, got ${event.currency}`,
+    };
   }
   if (event.amountReceivedMinorUnits < invoice.amountMinorUnits) {
     logger.error('livery_webhook_amount_underfunded', {
@@ -1045,7 +1085,12 @@ export async function applyLiveryInvoiceWebhook({
       received: event.amountReceivedMinorUnits,
       expected: invoice.amountMinorUnits,
     });
-    return { kind: 'matched', invoiceId: invoice.id, clubId: invoice.clubId };
+    return {
+      kind: 'matched',
+      invoiceId: invoice.id,
+      clubId: invoice.clubId,
+      permanentFailureReason: `Amount underfunded on livery invoice ${invoice.id}: received ${event.amountReceivedMinorUnits} < expected ${invoice.amountMinorUnits}`,
+    };
   }
   // Audit F-12 (2026-05-07 r4): symmetric overfund branch — mirrors the
   // booking flow. Don't block the apply (the club has paid); surface the

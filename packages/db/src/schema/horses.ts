@@ -119,6 +119,9 @@ export const horses = pgTable('horses', {
   index('idx_horses_owner_status')
     .on(table.ownerMemberId, table.ownershipStatus)
     .where(sql`owner_member_id IS NOT NULL AND deleted_at IS NULL`),
+  index('idx_horses_livery_billing_due')
+    .on(sql`${table.liveryStartDate} DESC`)
+    .where(sql`ownership_status = 'active' AND COALESCE(monthly_livery_fee_minor, 0) > 0 AND deleted_at IS NULL`),
   // FK target for composite (horse_id, club_id) -> horses(id, club_id) on
   // every horse sub-resource table. Tautologically unique because id is
   // the PK, but Postgres needs the explicit constraint to use the column

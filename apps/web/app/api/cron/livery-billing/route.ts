@@ -13,11 +13,10 @@ import {
 import { getTodayDateString } from '@equestrian/shared/utils';
 import { MS_PER_DAY } from '@equestrian/shared/constants';
 import { getAdapter } from '@/lib/payments/registry';
-import {
-  PaymentProviderError,
-  isOperatorActionablePayErrorCode,
-} from '@/lib/payments/types';
+import { PaymentProviderError, isOperatorActionablePayErrorCode } from '@/lib/payments/types';
+import { withProviderRetry } from '@/lib/payments/retry';
 import { sendTriggeredEmail, sendTriggeredEmailAsync } from '@/lib/email';
+import { mapInBatches } from '@/lib/concurrency';
 import { logger } from '@/lib/logger';
 import { errorResponse, successResponse, requireCronSecret } from '@/lib/api-utils';
 import { LiveryInvoiceIssued } from '@equestrian/email-templates/livery-invoice-issued';
@@ -199,25 +198,36 @@ async function createPayIntent(args: {
   try {
     const adapter = getAdapter(args.account.provider);
     const hostedFn = adapter.createHostedCheckout ?? adapter.createPayment;
-    const result = await hostedFn.call(adapter, {
-      account: args.account,
-      amountMinorUnits: args.amountMinor,
-      currency: args.currency,
-      bookingId: `livery:${args.horseId}:${args.reference}`,
-      riderId: args.ownerMemberId,
-      clubId: args.clubId,
-      description: `Livery — ${args.horseName} — ${args.reference}`,
-      metadata: {
-        resource: 'livery_invoice',
-        horseId: args.horseId,
-        reference: args.reference,
+    const result = await withProviderRetry(
+      () =>
+        hostedFn.call(adapter, {
+          account: args.account,
+          amountMinorUnits: args.amountMinor,
+          currency: args.currency,
+          bookingId: `livery:${args.horseId}:${args.reference}`,
+          riderId: args.ownerMemberId,
+          clubId: args.clubId,
+          description: `Livery — ${args.horseName} — ${args.reference}`,
+          metadata: {
+            resource: 'livery_invoice',
+            horseId: args.horseId,
+            reference: args.reference,
+          },
+          // Audit AI-21 — read from env so dev/staging redirects land on the
+          // right host. Defaults to cavaliq.com in production via the runtime
+          // secret; falls back here only if NEXT_PUBLIC_APP_URL is misconfigured.
+          returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/rider/invoices`,
+          idempotencyKey: args.idempotencyKey,
+        }),
+      {
+        label: 'livery_payment_intent',
+        context: {
+          clubId: args.clubId,
+          horseId: args.horseId,
+          provider: args.account.provider,
+        },
       },
-      // Audit AI-21 — read from env so dev/staging redirects land on the
-      // right host. Defaults to cavaliq.com in production via the runtime
-      // secret; falls back here only if NEXT_PUBLIC_APP_URL is misconfigured.
-      returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/rider/invoices`,
-      idempotencyKey: args.idempotencyKey,
-    });
+    );
 
     return {
       provider: args.account.provider,
@@ -404,105 +414,115 @@ function nextBillingPeriod(
 // ─── Reminders ───────────────────────────────────────────────────────
 
 const REMINDER_THRESHOLDS = [7, 14, 30];
+const LIVERY_REMINDER_BATCH_SIZE = 10;
+
+interface CronCounter {
+  sent: number;
+  skipped: number;
+}
+
+function combineCronCounters(results: readonly CronCounter[]): CronCounter {
+  let sent = 0;
+  let skipped = 0;
+  for (const result of results) {
+    sent += result.sent;
+    skipped += result.skipped;
+  }
+  return { sent, skipped };
+}
 
 async function sendReminders(utcToday: string): Promise<{ sent: number; skipped: number }> {
   const invoices = await findOverdueInvoicesForReminders(utcToday);
   const accountCache: AccountCache = new Map();
-  let sent = 0;
-  let skipped = 0;
 
-  for (const inv of invoices) {
-    // Resolve "today" in the invoice's own club timezone — for non-UTC
-    // zones, `utcToday` may be one calendar day ahead/behind, leading to
-    // reminder slots being skipped or doubled. See audit G-3.
-    const clubToday = getTodayDateString(inv.clubTimezone);
-    if (inv.dueDate > clubToday) {
-      skipped += 1;
-      continue;
-    }
-    const daysOverdue = daysBetween(inv.dueDate, clubToday);
-    if (daysOverdue < REMINDER_THRESHOLDS[0]!) {
-      skipped += 1;
-      continue;
-    }
-
-    const nextThreshold = REMINDER_THRESHOLDS[inv.reminderCount];
-    if (nextThreshold === undefined) {
-      // Past the 30-day reminder — stop sending automated emails.
-      skipped += 1;
-      continue;
-    }
-
-    if (daysOverdue < nextThreshold) {
-      skipped += 1;
-      continue;
-    }
-
-    try {
-      // Before emailing, refresh the pay link. Original hosted-checkout
-      // sessions expire long before 7 days; if we don't regenerate, owners
-      // click a dead link and can't pay from the reminder. The
-      // idempotencyKey includes reminderCount so the adapter mints a fresh
-      // intent rather than returning a stale one.
-      let payLink: string | undefined = inv.payLink ?? undefined;
-      const account = await getAccountCached(inv.clubId, accountCache);
-      if (account) {
-        // Derive a period marker from the invoice number for the intent's
-        // bookingId field — we don't have period_start on the reminder row,
-        // but the invoice_number uniquely identifies the row and the
-        // adapter treats this string opaquely.
-        const refreshed = await createPayIntent({
-          account,
-          amountMinor: inv.amountMinorUnits,
-          currency: inv.currency,
-          horseId: inv.horseId,
-          horseName: inv.horseName,
-          ownerMemberId: inv.ownerMemberId,
-          clubId: inv.clubId,
-          reference: inv.invoiceNumber,
-          idempotencyKey: `livery:${inv.invoiceId}:reminder:${inv.reminderCount + 1}`,
-          accountCache,
-        });
-        if (refreshed) {
-          await setInvoiceProviderRef(
-            inv.clubId,
-            inv.invoiceId,
-            refreshed.provider,
-            refreshed.providerPaymentId,
-            refreshed.payLink,
-          );
-          payLink = refreshed.payLink ?? payLink;
+  const results = await mapInBatches(
+    invoices,
+    LIVERY_REMINDER_BATCH_SIZE,
+    async (inv): Promise<CronCounter> => {
+      try {
+        // Resolve "today" in the invoice's own club timezone — for non-UTC
+        // zones, `utcToday` may be one calendar day ahead/behind, leading to
+        // reminder slots being skipped or doubled. See audit G-3.
+        const clubToday = getTodayDateString(inv.clubTimezone);
+        if (inv.dueDate > clubToday) {
+          return { sent: 0, skipped: 1 };
         }
-      }
+        const daysOverdue = daysBetween(inv.dueDate, clubToday);
+        if (daysOverdue < REMINDER_THRESHOLDS[0]!) {
+          return { sent: 0, skipped: 1 };
+        }
 
-      // Audit F-14 (2026-05-06): claim-first ordering. Increment
-      // reminder_count BEFORE sending so a partial-failure (mark
-      // succeeds, email fails) doesn't loop the cron into spamming the
-      // recipient on every subsequent pass. Trade-off documented:
-      // a failed send leaves the threshold unfulfilled (one missed
-      // nudge) instead of repeating it. Operator sees `livery_reminder
-      // _send_failed` and can re-trigger manually. Mirrors the booking-
-      // reminder cron pattern.
-      //
-      // Owners with no email on file get a one-shot `pending → overdue`
-      // status flip (no counter bump) so a future email patch resumes
-      // the 7/14/30-day cadence from scratch — see audit G-2.
-      if (inv.ownerEmail) {
-        // CAS on `reminder_count`: if a concurrent isolate already
-        // bumped the counter for this row, skip the email — they sent
-        // it. Without this, two concurrent runs each fire the day-7
-        // nudge and advance the counter from 0 to 2 in one pass,
-        // silently skipping day-14 forever.
+        const nextThreshold = REMINDER_THRESHOLDS[inv.reminderCount];
+        if (nextThreshold === undefined) {
+          // Past the 30-day reminder — stop sending automated emails.
+          return { sent: 0, skipped: 1 };
+        }
+
+        if (daysOverdue < nextThreshold) {
+          return { sent: 0, skipped: 1 };
+        }
+
+        if (!inv.ownerEmail) {
+          // Owners with no email on file get a one-shot `pending → overdue`
+          // status flip (no counter bump) so a future email patch resumes
+          // the 7/14/30-day cadence from scratch — see audit G-2. Do not
+          // regenerate a provider link for a row we cannot email.
+          await markInvoiceOverdueOnly(inv.clubId, inv.invoiceId);
+          return { sent: 0, skipped: 1 };
+        }
+
+        // Audit F-14 (2026-05-06): claim-first ordering. Increment
+        // reminder_count BEFORE provider-link refresh and email send. This
+        // prevents duplicate cron isolates from minting multiple provider
+        // intents and sending duplicate emails for the same threshold. The
+        // DB helper also requires the invoice to still be pending/overdue,
+        // so a concurrent payment cannot be moved back to overdue.
         const claimed = await markInvoiceOverdueAndLogReminder(
           inv.clubId,
           inv.invoiceId,
           inv.reminderCount,
         );
         if (!claimed) {
-          skipped += 1;
-          continue;
+          return { sent: 0, skipped: 1 };
         }
-        await sendTriggeredEmail({
+
+        // Before emailing, refresh the pay link. Original hosted-checkout
+        // sessions expire long before 7 days; if we don't regenerate, owners
+        // click a dead link and can't pay from the reminder. The
+        // idempotencyKey includes reminderCount so the adapter mints a fresh
+        // intent rather than returning a stale one.
+        let payLink: string | undefined = inv.payLink ?? undefined;
+        const account = await getAccountCached(inv.clubId, accountCache);
+        if (account) {
+          // Derive a period marker from the invoice number for the intent's
+          // bookingId field — we don't have period_start on the reminder row,
+          // but the invoice_number uniquely identifies the row and the
+          // adapter treats this string opaquely.
+          const refreshed = await createPayIntent({
+            account,
+            amountMinor: inv.amountMinorUnits,
+            currency: inv.currency,
+            horseId: inv.horseId,
+            horseName: inv.horseName,
+            ownerMemberId: inv.ownerMemberId,
+            clubId: inv.clubId,
+            reference: inv.invoiceNumber,
+            idempotencyKey: `livery:${inv.invoiceId}:reminder:${inv.reminderCount + 1}`,
+            accountCache,
+          });
+          if (refreshed) {
+            await setInvoiceProviderRef(
+              inv.clubId,
+              inv.invoiceId,
+              refreshed.provider,
+              refreshed.providerPaymentId,
+              refreshed.payLink,
+            );
+            payLink = refreshed.payLink ?? payLink;
+          }
+        }
+
+        const result = await sendTriggeredEmail({
           clubId: inv.clubId,
           trigger: 'livery_invoice_overdue',
           to: inv.ownerEmail,
@@ -519,22 +539,31 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
             payLink,
           }),
         });
-        sent += 1;
-      } else {
-        await markInvoiceOverdueOnly(inv.clubId, inv.invoiceId);
-        skipped += 1;
-      }
-    } catch (err) {
-      logger.error('livery_reminder_send_failed', {
-        invoiceId: inv.invoiceId,
-        clubId: inv.clubId,
-        error: err instanceof Error ? err.message : 'unknown',
-      });
-      skipped += 1;
-    }
-  }
+        if (result.sent) {
+          return { sent: 1, skipped: 0 };
+        }
+        if (result.skipped) {
+          return { sent: 0, skipped: 1 };
+        }
 
-  return { sent, skipped };
+        logger.error('livery_reminder_email_rejected', {
+          invoiceId: inv.invoiceId,
+          clubId: inv.clubId,
+          error: result.error,
+        });
+        return { sent: 0, skipped: 1 };
+      } catch (err) {
+        logger.error('livery_reminder_send_failed', {
+          invoiceId: inv.invoiceId,
+          clubId: inv.clubId,
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+        return { sent: 0, skipped: 1 };
+      }
+    },
+  );
+
+  return combineCronCounters(results);
 }
 
 // ─── Date helpers ────────────────────────────────────────────────────
@@ -553,9 +582,7 @@ function addMonths(dateIso: string, months: number): string {
   d.setUTCMonth(targetMonth);
   // Clamp the day of month — if we were on the 31st and moved to a shorter
   // month, use the last valid day. Prevents May 31 → July 1 style bugs.
-  const daysInTarget = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0),
-  ).getUTCDate();
+  const daysInTarget = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
   d.setUTCDate(Math.min(day, daysInTarget));
   return d.toISOString().slice(0, 10);
 }

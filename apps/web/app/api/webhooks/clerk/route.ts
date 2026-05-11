@@ -88,6 +88,19 @@ function slugVariants(baseSlug: string): string[] {
 }
 
 export async function POST(request: Request) {
+  try {
+    return await handlePost(request);
+  } catch (err) {
+    logger.error('clerk_webhook_unhandled_error', {
+      requestId: crypto.randomUUID(),
+      error: err instanceof Error ? err.message : 'unknown',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    return new Response('Internal error', { status: 500 });
+  }
+}
+
+async function handlePost(request: Request) {
   // Audit F-9 (2026-05-06 r2): generate a requestId at handler entry so
   // every log line — pre-verify and post-verify — carries the same
   // correlation tag. The other webhook handlers (Stripe, Ziina) stamp

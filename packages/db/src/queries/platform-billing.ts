@@ -16,6 +16,7 @@ export interface BillableClub {
   tier: 'trial' | 'starter' | 'growing' | 'professional';
   status: 'trialing' | 'active' | 'past_due' | 'cancelled';
   trialEndsAt: Date;
+  lastInvoicePeriodStart: string | null;
 }
 
 /**
@@ -34,6 +35,17 @@ export interface BillableClub {
  * reminder cadence's job.)
  */
 export async function findClubsDueForBilling(utcToday: string): Promise<BillableClub[]> {
+  const lastInvoiceSub = rawDb
+    .select({
+      clubId: platformSubscriptionInvoices.clubId,
+      lastStart: sql<string | null>`MAX(${platformSubscriptionInvoices.periodStart})`.as(
+        'last_start',
+      ),
+    })
+    .from(platformSubscriptionInvoices)
+    .groupBy(platformSubscriptionInvoices.clubId)
+    .as('last_platform_invoice_sub');
+
   const rows = await rawDb
     .select({
       clubId: clubs.id,
@@ -46,8 +58,10 @@ export async function findClubsDueForBilling(utcToday: string): Promise<Billable
       trialEndsAt: clubs.trialEndsAt,
       isActive: clubs.isActive,
       deletedAt: clubs.deletedAt,
+      lastInvoicePeriodStart: lastInvoiceSub.lastStart,
     })
     .from(clubs)
+    .leftJoin(lastInvoiceSub, eq(lastInvoiceSub.clubId, clubs.id))
     .where(
       and(
         eq(clubs.isActive, true),
@@ -72,9 +86,7 @@ export async function findClubsDueForBilling(utcToday: string): Promise<Billable
     .limit(500);
 
   return rows
-    .filter(
-      (r): r is typeof r & { trialEndsAt: Date } => r.trialEndsAt instanceof Date,
-    )
+    .filter((r): r is typeof r & { trialEndsAt: Date } => r.trialEndsAt instanceof Date)
     .map((r) => ({
       clubId: r.clubId,
       clubName: r.clubName,
@@ -84,6 +96,7 @@ export async function findClubsDueForBilling(utcToday: string): Promise<Billable
       tier: r.tier,
       status: r.status,
       trialEndsAt: r.trialEndsAt,
+      lastInvoicePeriodStart: r.lastInvoicePeriodStart,
     }));
 }
 
@@ -140,10 +153,7 @@ export async function createPlatformInvoice(input: CreatePlatformInvoiceInput) {
     .insert(platformSubscriptionInvoices)
     .values(values)
     .onConflictDoNothing({
-      target: [
-        platformSubscriptionInvoices.clubId,
-        platformSubscriptionInvoices.periodStart,
-      ],
+      target: [platformSubscriptionInvoices.clubId, platformSubscriptionInvoices.periodStart],
     })
     .returning();
   return result[0] ?? null;
@@ -201,16 +211,15 @@ export async function createPlatformInvoiceWithGeneratedNumber(
             status: 'pending',
           })
           .onConflictDoNothing({
-            target: [
-              platformSubscriptionInvoices.clubId,
-              platformSubscriptionInvoices.periodStart,
-            ],
+            target: [platformSubscriptionInvoices.clubId, platformSubscriptionInvoices.periodStart],
           })
           .returning();
         return inserted[0] ?? null;
       } catch (err) {
         const code =
-          err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+          err && typeof err === 'object' && 'code' in err
+            ? String((err as { code: unknown }).code)
+            : '';
         const constraint =
           err && typeof err === 'object' && 'constraint' in err
             ? String((err as { constraint: unknown }).constraint)
@@ -467,6 +476,7 @@ export async function markPlatformInvoiceOverdueAndLogReminder(
       and(
         eq(platformSubscriptionInvoices.id, invoiceId),
         eq(platformSubscriptionInvoices.clubId, clubId),
+        inArray(platformSubscriptionInvoices.status, ['pending', 'overdue']),
         eq(platformSubscriptionInvoices.reminderCount, expectedReminderCount),
       ),
     )
@@ -483,10 +493,7 @@ export async function markPlatformInvoiceOverdueAndLogReminder(
  * call against an already-overdue row is a no-op (the WHERE filters
  * `status = 'pending'`).
  */
-export async function markPlatformInvoiceOverdueOnly(
-  clubId: string,
-  invoiceId: string,
-) {
+export async function markPlatformInvoiceOverdueOnly(clubId: string, invoiceId: string) {
   const result = await rawDb
     .update(platformSubscriptionInvoices)
     .set({
@@ -512,12 +519,8 @@ export async function markPlatformInvoiceOverdueOnly(
  * the actual CAS-guarded claim before the email send (audit pass-2
  * C-1).
  */
-export async function findClubsWithTrialEndingOn(
-  targetDateIso: string,
-  daysOut: 1 | 3,
-) {
-  const sentColumn =
-    daysOut === 1 ? clubs.trialReminder1DaySentAt : clubs.trialReminder3DaySentAt;
+export async function findClubsWithTrialEndingOn(targetDateIso: string, daysOut: 1 | 3) {
+  const sentColumn = daysOut === 1 ? clubs.trialReminder1DaySentAt : clubs.trialReminder3DaySentAt;
   const rows = await rawDb
     .select({
       clubId: clubs.id,
@@ -567,16 +570,19 @@ export async function findClubsWithTrialEndingOn(
  *
  * Mirrors the booking-reminder / horse-care-reminder dedup pattern.
  */
-export async function markTrialReminderSent(
-  clubId: string,
-  daysOut: 1 | 3,
-): Promise<boolean> {
-  const column =
-    daysOut === 1 ? clubs.trialReminder1DaySentAt : clubs.trialReminder3DaySentAt;
+export async function markTrialReminderSent(clubId: string, daysOut: 1 | 3): Promise<boolean> {
+  const column = daysOut === 1 ? clubs.trialReminder1DaySentAt : clubs.trialReminder3DaySentAt;
   const result = await rawDb
     .update(clubs)
     .set({ [daysOut === 1 ? 'trialReminder1DaySentAt' : 'trialReminder3DaySentAt']: new Date() })
-    .where(and(eq(clubs.id, clubId), isNull(column)))
+    .where(
+      and(
+        eq(clubs.id, clubId),
+        eq(clubs.subscriptionStatus, 'trialing'),
+        isNull(clubs.deletedAt),
+        isNull(column),
+      ),
+    )
     .returning({ id: clubs.id });
   return result.length > 0;
 }
@@ -586,10 +592,7 @@ export async function markTrialReminderSent(
  * the email send fails so the next cron pass can re-attempt. Mirrors
  * `unmarkBookingReminderSent` and `unrecordHorseCareReminderSend`.
  */
-export async function unmarkTrialReminderSent(
-  clubId: string,
-  daysOut: 1 | 3,
-): Promise<void> {
+export async function unmarkTrialReminderSent(clubId: string, daysOut: 1 | 3): Promise<void> {
   const setKey = daysOut === 1 ? 'trialReminder1DaySentAt' : 'trialReminder3DaySentAt';
   await rawDb
     .update(clubs)

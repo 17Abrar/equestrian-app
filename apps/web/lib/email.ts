@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { Resend } from 'resend';
 import { render } from '@react-email/components';
 import { after } from 'next/server';
 import { rawDb } from '@equestrian/db';
@@ -18,6 +17,10 @@ import type { ReactElement } from 'react';
 // no-show alerts, owner approvals) bypassed it by going through this module
 // directly.
 const FALLBACK_FROM_ADDRESS = 'Cavaliq <onboarding@resend.dev>';
+const RESEND_BASE_URL = process.env.RESEND_BASE_URL ?? 'https://api.resend.com';
+const RESEND_FETCH_TIMEOUT_MS = 15_000;
+const MAX_RETRY_AFTER_DELAY_MS = 15_000;
+const RETRY_BACKOFFS_MS = [500, 1500] as const;
 
 function resolveFromAddress(): string | null {
   const configured = process.env.EMAIL_FROM;
@@ -26,20 +29,23 @@ function resolveFromAddress(): string | null {
   }
   if (process.env.NODE_ENV === 'production') {
     logger.error('email_from_unset_in_prod', {
-      message: 'EMAIL_FROM is not set; refusing to send transactional mail from the resend.dev sandbox sender',
+      message:
+        'EMAIL_FROM is not set; refusing to send transactional mail from the resend.dev sandbox sender',
     });
     return null;
   }
   return FALLBACK_FROM_ADDRESS;
 }
 
-function getResendClient(): Resend | null {
+function getResendApiKey(): string | null {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    logger.warn('email_not_configured', { message: 'RESEND_API_KEY not set — emails will be skipped' });
+    logger.warn('email_not_configured', {
+      message: 'RESEND_API_KEY not set — emails will be skipped',
+    });
     return null;
   }
-  return new Resend(apiKey);
+  return apiKey;
 }
 
 interface SendEmailParams {
@@ -48,17 +54,102 @@ interface SendEmailParams {
   template: ReactElement;
 }
 
+interface SendPlainTextEmailParams {
+  to: string;
+  subject: string;
+  text: string;
+}
+
+export interface EmailSendResult {
+  sent: boolean;
+  id?: string;
+  error?: string;
+  retryAfterMs?: number;
+  skipped?: boolean;
+}
+
+interface ResendEmailPayload {
+  from: string;
+  to: string[];
+  subject: string;
+  html?: string;
+  text?: string;
+}
+
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return seconds * 1000;
+  }
+  const dateMs = Date.parse(value);
+  if (!Number.isFinite(dateMs)) return undefined;
+  return Math.max(0, dateMs - Date.now());
+}
+
+function readStringField(value: unknown, field: string): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const candidate = record[field];
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
+async function parseResendError(response: Response): Promise<string> {
+  const raw = await response.text().catch(() => '');
+  if (raw) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const message = readStringField(parsed, 'message');
+      if (message) return message;
+    } catch {
+      return raw.slice(0, 500);
+    }
+  }
+  return response.statusText || 'Resend request failed';
+}
+
+async function postResendEmail(payload: ResendEmailPayload): Promise<EmailSendResult> {
+  const apiKey = getResendApiKey();
+  if (!apiKey) {
+    return { sent: false, error: 'Email not configured' };
+  }
+
+  try {
+    const response = await fetch(`${RESEND_BASE_URL}/emails`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(RESEND_FETCH_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      return {
+        sent: false,
+        error: await parseResendError(response),
+        retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
+      };
+    }
+
+    const data: unknown = await response.json().catch(() => null);
+    return { sent: true, id: readStringField(data, 'id') };
+  } catch (err) {
+    return {
+      sent: false,
+      error: err instanceof Error ? err.message : 'Unable to reach Resend',
+    };
+  }
+}
+
 /**
  * Sends an email using Resend + React Email template.
  * Fire-and-forget — never throws. Returns success/failure status.
  * If RESEND_API_KEY is not set, silently skips.
  */
-export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolean; id?: string; error?: string }> {
-  const resend = getResendClient();
-  if (!resend) {
-    return { sent: false, error: 'Email not configured' };
-  }
-
+export async function sendEmail(params: SendEmailParams): Promise<EmailSendResult> {
   const fromAddress = resolveFromAddress();
   if (!fromAddress) {
     // Already logged via `email_from_unset_in_prod` in resolveFromAddress.
@@ -68,29 +159,29 @@ export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolea
   try {
     const html = await render(params.template);
 
-    const { data, error } = await resend.emails.send({
+    const result = await postResendEmail({
       from: fromAddress,
       to: [params.to],
       subject: params.subject,
       html,
     });
 
-    if (error) {
+    if (!result.sent) {
       logger.error('email_send_failed', {
         to: params.to,
         subject: params.subject,
-        error: error.message,
+        error: result.error,
       });
-      return { sent: false, error: error.message };
+      return result;
     }
 
     logger.info('email_sent', {
       to: params.to,
       subject: params.subject,
-      id: data?.id,
+      id: result.id,
     });
 
-    return { sent: true, id: data?.id };
+    return result;
   } catch (err) {
     logger.error('email_send_error', {
       to: params.to,
@@ -101,34 +192,73 @@ export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolea
   }
 }
 
+export async function sendPlainTextEmail(
+  params: SendPlainTextEmailParams,
+): Promise<EmailSendResult> {
+  const fromAddress = resolveFromAddress();
+  if (!fromAddress) {
+    return { sent: false, error: 'EMAIL_FROM not configured in production' };
+  }
+
+  const result = await postResendEmail({
+    from: fromAddress,
+    to: [params.to],
+    subject: params.subject,
+    text: params.text,
+  });
+
+  if (!result.sent) {
+    logger.error('email_send_failed', {
+      to: params.to,
+      subject: params.subject,
+      error: result.error,
+    });
+    return result;
+  }
+
+  logger.info('email_sent', {
+    to: params.to,
+    subject: params.subject,
+    id: result.id,
+  });
+
+  return result;
+}
+
 /**
  * Retries `send` up to `maxAttempts` times with bounded backoff. Stops on the
  * first `{ sent: true }`. Used by the fire-and-forget paths so a Resend blip
  * during the post-response window doesn't permanently drop transactional
- * email (booking confirmations, livery invoices). Total wallclock is capped
- * at ~2.2s so we stay inside Cloudflare's `after()` budget on Workers.
+ * email (booking confirmations, livery invoices). Normal backoff is ~2.2s;
+ * Resend `Retry-After` is honoured up to 15s per retry so rate-limit bursts
+ * do not immediately hammer the API again.
  */
-const RETRY_BACKOFFS_MS = [500, 1500] as const;
-
 async function sendWithRetry(
-  send: () => Promise<{ sent: boolean; error?: string }>,
+  send: () => Promise<EmailSendResult>,
   context: { to: string; subject: string; trigger?: NotificationTrigger; clubId?: string },
-): Promise<void> {
+): Promise<EmailSendResult> {
   const maxAttempts = RETRY_BACKOFFS_MS.length + 1;
+  let finalResult: EmailSendResult = { sent: false, error: 'Email send was not attempted' };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const result = await send();
-    if (result.sent) return;
+    finalResult = result;
+    if (result.sent) return result;
     if (attempt < maxAttempts) {
       // sendEmail already logged this attempt at `email_send_failed`; the
       // retry log here gives the operator a single grep-friendly event to
       // see how many retries it took without re-walking the failed-send
       // events. Jitter so concurrent failures don't all retry in lockstep.
       const base = RETRY_BACKOFFS_MS[attempt - 1]!;
-      const delay = base + Math.floor(Math.random() * 250);
+      const retryAfterMs = result.retryAfterMs;
+      const delayBase =
+        retryAfterMs !== undefined ? Math.min(retryAfterMs, MAX_RETRY_AFTER_DELAY_MS) : base;
+      const delay =
+        retryAfterMs !== undefined ? delayBase : delayBase + Math.floor(Math.random() * 250);
       logger.warn('email_send_retry_scheduled', {
         ...context,
         attempt,
         nextDelayMs: delay,
+        retryAfterMs,
         error: result.error,
       });
       await new Promise<void>((resolve) => setTimeout(resolve, delay));
@@ -141,6 +271,23 @@ async function sendWithRetry(
       });
     }
   }
+  return finalResult;
+}
+
+export async function sendEmailWithRetry(params: SendEmailParams): Promise<EmailSendResult> {
+  return sendWithRetry(() => sendEmail(params), {
+    to: params.to,
+    subject: params.subject,
+  });
+}
+
+export async function sendPlainTextEmailWithRetry(
+  params: SendPlainTextEmailParams,
+): Promise<EmailSendResult> {
+  return sendWithRetry(() => sendPlainTextEmail(params), {
+    to: params.to,
+    subject: params.subject,
+  });
 }
 
 /**
@@ -148,10 +295,10 @@ async function sendWithRetry(
  * the task completes even on Cloudflare Workers, which otherwise freezes
  * the isolate after the response returns and kills any unawaited promises.
  *
- * Retries transient failures with bounded backoff (~2.2s max) so a Resend
- * blip doesn't drop the email permanently. Permanent failures (invalid
- * recipient, template render error) exhaust retries and log
- * `email_send_exhausted` at error level for paging.
+ * Retries transient failures with bounded backoff. Normal backoff is ~2.2s;
+ * Resend `Retry-After` can extend an individual delay to 15s. Permanent
+ * failures (invalid recipient, template render error) exhaust retries and
+ * log `email_send_exhausted` at error level for paging.
  *
  * Safe to call from any request handler; falls back to bare fire-and-forget
  * if called outside a request context (e.g. from a script).
@@ -248,7 +395,7 @@ interface TriggeredEmailParams extends SendEmailParams {
  * breaks the whole send on Workers (the fallback fire-and-forget is then
  * killed by isolate termination).
  */
-export async function sendTriggeredEmail(params: TriggeredEmailParams): Promise<void> {
+export async function sendTriggeredEmail(params: TriggeredEmailParams): Promise<EmailSendResult> {
   const { clubId, trigger, ...emailParams } = params;
   const enabled = await isNotificationEnabled(clubId, trigger);
   if (!enabled) {
@@ -258,9 +405,13 @@ export async function sendTriggeredEmail(params: TriggeredEmailParams): Promise<
       to: emailParams.to,
       subject: emailParams.subject,
     });
-    return;
+    return {
+      sent: false,
+      skipped: true,
+      error: 'Email disabled by notification preference',
+    };
   }
-  await sendWithRetry(() => sendEmail(emailParams), {
+  return sendWithRetry(() => sendEmail(emailParams), {
     to: emailParams.to,
     subject: emailParams.subject,
     clubId,
