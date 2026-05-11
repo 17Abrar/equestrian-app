@@ -106,7 +106,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     logger.info('competition_entry_withdrawn', {
       entryId,
       clubId: ctx.clubId,
-      reason: data.reason,
+      reasonProvided: data.reason.length > 0,
     });
 
     // Audit F-18 (2026-05-07 r4): drop the freeform `reason` from

@@ -220,46 +220,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return { kind: 'not-refundable' as const, status: locked.paymentStatus };
           }
 
-          // Audit F-44 (2026-05-07 r5) + F-11 (2026-05-08 r6) — refund
-          // idempotency-key analysis. Two concerns pull in opposite
-          // directions:
-          //
-          //  (a) F-44: reverse-then-redo within 24h. Admin refunds $50
-          //      (key=`refund_X_0_5000`), Stripe issues refund_X. The
-          //      refund is reversed via `charge.refund.updated failed`;
-          //      ledger goes 50→0. Admin refunds $50 AGAIN within 24h
-          //      using the same key. Stripe's idempotency replay
-          //      returns refund_X with its CURRENT status (`failed`).
-          //      `recordBookingRefund` runs unconditionally below
-          //      (no `refund.status` check), so the ledger advances
-          //      0→50 even though no new money moved. Adding
-          //      `Date.now()` to the key forces a FRESH refund on
-          //      every retry, side-stepping the replay.
-          //
-          //  (b) F-11: crash mid-refund. Worker calls Stripe with
-          //      key=A, Stripe issues refund_X, worker crashes BEFORE
-          //      `recordBookingRefund` commits. Admin retries; new
-          //      `Date.now()` mints key=B; Stripe issues refund_Y.
-          //      Rider gets DOUBLE-refunded. F-11 recommends dropping
-          //      `Date.now()` so the retry hits Stripe's replay and
-          //      no second refund issues.
-          //
-          // The two fixes conflict. (a) needs Date.now() to issue a
-          // fresh refund post-reversal; (b) needs a stable key to
-          // benefit from Stripe replay. The correct simultaneous fix
-          // is to drop Date.now() AND inspect `refund.status` before
-          // calling `recordBookingRefund` — only advance the ledger
-          // on `status === 'succeeded'`. Until that status check
-          // lands, Date.now() stays. The audit-r6 ledger-test suite
-          // (`packages/db/src/test/refund-ledger.test.ts:F-11
-          // describe block`) validates the ledger half of the
-          // analysis: post-reversal advance works correctly.
-          //
-          // Server-stamped (not client-controlled), so safe against
-          // client-side replay. The FOR UPDATE lock above already
-          // serializes admin-side double-clicks. Within-millisecond
-          // resolution is fine — the refund route is rate-limited
-          // to 10/min.
+          // Audit F-11 / F-44 follow-up (2026-05-11): use a stable
+          // provider idempotency key and only advance the local refund
+          // ledger when the provider reports a terminal `succeeded`
+          // refund. This preserves provider replay for crash/retry
+          // safety while avoiding the reverse-then-redo bug where a
+          // replayed failed refund could be recorded as money returned.
           const refund = await withProviderRetry(
             () =>
               adapter.refund({
@@ -267,7 +233,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 providerPaymentId: lockedProviderPaymentId,
                 amountMinorUnits: finalAmount,
                 reason: data.reason,
-                idempotencyKey: `refund_${bookingId}_${liveSoFar}_${finalAmount}_${Date.now()}`,
+                idempotencyKey: `refund_${bookingId}_${liveSoFar}_${finalAmount}`,
               }),
             {
               label: 'booking_refund',
@@ -278,6 +244,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               },
             },
           );
+
+          if (refund.status === 'failed') {
+            return {
+              kind: 'provider-failed' as const,
+              refund,
+              liveSoFar,
+              liveCancellationFee,
+              finalAmount,
+              previousStatus: locked.paymentStatus,
+            };
+          }
+
+          if (refund.status !== 'succeeded') {
+            return {
+              kind: 'provider-pending' as const,
+              refund,
+              liveSoFar,
+              liveCancellationFee,
+              finalAmount,
+              previousStatus: locked.paymentStatus,
+            };
+          }
 
           // Inside the transaction, the CAS in recordBookingRefund is a
           // tautology — we hold the row lock — but it's cheap and
@@ -302,6 +290,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             refund,
             updated,
             liveSoFar,
+            liveCancellationFee,
             finalAmount,
             previousStatus: locked.paymentStatus,
           };
@@ -325,6 +314,54 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             'REFUND_RACE',
             'Another refund was recorded in the meantime. Check the booking and try again if more refund is due.',
             409,
+          );
+        }
+        if (result.kind === 'provider-failed') {
+          logger.warn('booking_refund_provider_failed_status', {
+            requestId: ctx.requestId,
+            bookingId,
+            clubId: ctx.clubId,
+            provider,
+            providerRefundId: result.refund.providerRefundId,
+            refundStatus: result.refund.status,
+            amountMinor: result.finalAmount,
+          });
+          return errorResponse(
+            'REFUND_FAILED',
+            'Provider reported the refund as failed. No booking ledger update was recorded.',
+            502,
+          );
+        }
+        if (result.kind === 'provider-pending') {
+          logger.info('booking_refund_pending', {
+            requestId: ctx.requestId,
+            bookingId,
+            clubId: ctx.clubId,
+            provider,
+            providerRefundId: result.refund.providerRefundId,
+            refundStatus: result.refund.status,
+            amountMinor: result.finalAmount,
+            currentRefundedTotal: result.liveSoFar,
+          });
+
+          void ctx.audit({
+            action: 'booking.refund.pending',
+            resourceType: 'booking',
+            resourceId: bookingId,
+          });
+
+          return successResponse(
+            {
+              bookingId,
+              provider,
+              providerRefundId: result.refund.providerRefundId,
+              status: result.refund.status,
+              partial: false,
+              refundedAmountMinor: result.liveSoFar,
+              remainingRefundableMinor:
+                (booking.amount ?? 0) - result.liveSoFar - result.liveCancellationFee,
+            },
+            202,
           );
         }
 
@@ -365,7 +402,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           partial: result.updated.paymentStatus === 'partial',
           refundedAmountMinor: result.updated.refundedAmountMinor,
           remainingRefundableMinor:
-            (booking.amount ?? 0) - result.updated.refundedAmountMinor - cancellationFee,
+            (booking.amount ?? 0) - result.updated.refundedAmountMinor - result.liveCancellationFee,
         });
       } catch (err) {
         if (err instanceof PaymentProviderError) {
@@ -393,4 +430,3 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     },
   );
 }
-
