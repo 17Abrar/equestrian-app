@@ -8,7 +8,13 @@ import {
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
 import { bookings as bookingsTable } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseOptionalBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { withProviderRetry } from '@/lib/payments/retry';
@@ -94,11 +100,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (booking.amount == null) {
-        return errorResponse(
-          'NO_BOOKING_AMOUNT',
-          'Booking has no captured amount to refund.',
-          422,
-        );
+        return errorResponse('NO_BOOKING_AMOUNT', 'Booking has no captured amount to refund.', 422);
       }
 
       const refundedSoFar = booking.refundedAmountMinor ?? 0;
@@ -171,12 +173,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               cancellationFee: bookingsTable.cancellationFee,
             })
             .from(bookingsTable)
-            .where(
-              and(
-                eq(bookingsTable.id, bookingId),
-                eq(bookingsTable.clubId, ctx.clubId),
-              ),
-            )
+            .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.clubId, ctx.clubId)))
             .for('update')
             .limit(1);
           const locked = lockedRows[0];

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { matchHorsesToRider, type MatchHorse, type MatchRider, type MatchInput } from './horse-matching';
+import {
+  matchHorsesToRider,
+  type MatchHorse,
+  type MatchRider,
+  type MatchInput,
+} from './horse-matching';
 
 function makeRider(overrides: Partial<MatchRider> = {}): MatchRider {
   return {
@@ -41,10 +46,12 @@ function makeInput(overrides: Partial<MatchInput> = {}): MatchInput {
 
 describe('matchHorsesToRider', () => {
   it('returns exact skill level match with high score', () => {
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ skillLevel: 'intermediate' }),
-      availableHorses: [makeHorse({ skillLevel: 'intermediate' })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ skillLevel: 'intermediate' }),
+        availableHorses: [makeHorse({ skillLevel: 'intermediate' })],
+      }),
+    );
 
     expect(result).toHaveLength(1);
     expect(result[0]!.score).toBeGreaterThanOrEqual(80);
@@ -52,177 +59,215 @@ describe('matchHorsesToRider', () => {
   });
 
   it('filters out horse over weight limit', () => {
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 100 }),
-      availableHorses: [makeHorse({ weightLimit: 90 })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 100 }),
+        availableHorses: [makeHorse({ weightLimit: 90 })],
+      }),
+    );
 
     expect(result).toHaveLength(0);
   });
 
   it('filters out horse at weight limit', () => {
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 90 }),
-      availableHorses: [makeHorse({ weightLimit: 90 })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 90 }),
+        availableHorses: [makeHorse({ weightLimit: 90 })],
+      }),
+    );
 
     // Weight is at limit (not over), so horse is eligible
     expect(result).toHaveLength(1);
   });
 
   it('gives well-under-weight a higher score', () => {
-    const heavyRider = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 85 }),
-      availableHorses: [makeHorse({ weightLimit: 90 })],
-    }));
+    const heavyRider = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 85 }),
+        availableHorses: [makeHorse({ weightLimit: 90 })],
+      }),
+    );
 
-    const lightRider = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 60 }),
-      availableHorses: [makeHorse({ weightLimit: 90 })],
-    }));
+    const lightRider = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 60 }),
+        availableHorses: [makeHorse({ weightLimit: 90 })],
+      }),
+    );
 
     expect(lightRider[0]!.score).toBeGreaterThan(heavyRider[0]!.score);
   });
 
   it('filters out horse at max workload', () => {
-    const result = matchHorsesToRider(makeInput({
-      availableHorses: [makeHorse({ lessonsToday: 3, maxLessonsPerDay: 3 })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        availableHorses: [makeHorse({ lessonsToday: 3, maxLessonsPerDay: 3 })],
+      }),
+    );
 
     expect(result).toHaveLength(0);
   });
 
   it('penalizes horse with busy day', () => {
-    const fresh = matchHorsesToRider(makeInput({
-      availableHorses: [makeHorse({ id: 'fresh', lessonsToday: 0 })],
-    }));
+    const fresh = matchHorsesToRider(
+      makeInput({
+        availableHorses: [makeHorse({ id: 'fresh', lessonsToday: 0 })],
+      }),
+    );
 
-    const busy = matchHorsesToRider(makeInput({
-      availableHorses: [makeHorse({ id: 'busy', lessonsToday: 2, maxLessonsPerDay: 3 })],
-    }));
+    const busy = matchHorsesToRider(
+      makeInput({
+        availableHorses: [makeHorse({ id: 'busy', lessonsToday: 2, maxLessonsPerDay: 3 })],
+      }),
+    );
 
     // 2/3 = 0.67 which is below busy threshold (0.7), so no penalty. Fresh gets bonus.
     expect(fresh[0]!.score).toBeGreaterThan(busy[0]!.score);
   });
 
   it('filters out horse with wrong status', () => {
-    const result = matchHorsesToRider(makeInput({
-      availableHorses: [makeHorse({ status: 'injured' })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        availableHorses: [makeHorse({ status: 'injured' })],
+      }),
+    );
 
     expect(result).toHaveLength(0);
   });
 
   it('filters out already-booked horse', () => {
-    const result = matchHorsesToRider(makeInput({
-      dateTime: '2026-04-01T10:00:00',
-      availableHorses: [makeHorse({ bookedSlots: ['2026-04-01T10:00:00'] })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        dateTime: '2026-04-01T10:00:00',
+        availableHorses: [makeHorse({ bookedSlots: ['2026-04-01T10:00:00'] })],
+      }),
+    );
 
     expect(result).toHaveLength(0);
   });
 
   it('filters out horse when rider under min age', () => {
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ age: 8 }),
-      availableHorses: [makeHorse({ minRiderAge: 12 })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ age: 8 }),
+        availableHorses: [makeHorse({ minRiderAge: 12 })],
+      }),
+    );
 
     expect(result).toHaveLength(0);
   });
 
   it('rewards positive past pairings', () => {
-    const noPast = matchHorsesToRider(makeInput({
-      rider: makeRider({ id: 'rider-1' }),
-      availableHorses: [makeHorse({ pairingHistory: [] })],
-    }));
+    const noPast = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ id: 'rider-1' }),
+        availableHorses: [makeHorse({ pairingHistory: [] })],
+      }),
+    );
 
-    const goodPast = matchHorsesToRider(makeInput({
-      rider: makeRider({ id: 'rider-1' }),
-      availableHorses: [
-        makeHorse({ pairingHistory: [{ riderId: 'rider-1', rating: 5 }] }),
-      ],
-    }));
+    const goodPast = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ id: 'rider-1' }),
+        availableHorses: [makeHorse({ pairingHistory: [{ riderId: 'rider-1', rating: 5 }] })],
+      }),
+    );
 
     expect(goodPast[0]!.score).toBeGreaterThan(noPast[0]!.score);
-    expect(goodPast[0]!.reasons).toContain(
-      'Rider has ridden Thunder before with great results',
-    );
+    expect(goodPast[0]!.reasons).toContain('Rider has ridden Thunder before with great results');
   });
 
   it('penalizes negative past pairings', () => {
-    const badPast = matchHorsesToRider(makeInput({
-      rider: makeRider({ id: 'rider-1' }),
-      availableHorses: [
-        makeHorse({ pairingHistory: [{ riderId: 'rider-1', rating: 1 }] }),
-      ],
-    }));
+    const badPast = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ id: 'rider-1' }),
+        availableHorses: [makeHorse({ pairingHistory: [{ riderId: 'rider-1', rating: 1 }] })],
+      }),
+    );
 
-    const noPast = matchHorsesToRider(makeInput({
-      rider: makeRider({ id: 'rider-1' }),
-      availableHorses: [makeHorse({ pairingHistory: [] })],
-    }));
+    const noPast = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ id: 'rider-1' }),
+        availableHorses: [makeHorse({ pairingHistory: [] })],
+      }),
+    );
 
     expect(badPast[0]!.score).toBeLessThan(noPast[0]!.score);
     expect(badPast[0]!.warnings).toContain('Previous pairing had issues');
   });
 
   it('rewards calm temperament for group lessons', () => {
-    const calm = matchHorsesToRider(makeInput({
-      lessonType: 'group',
-      availableHorses: [makeHorse({ temperament: ['calm'] })],
-    }));
+    const calm = matchHorsesToRider(
+      makeInput({
+        lessonType: 'group',
+        availableHorses: [makeHorse({ temperament: ['calm'] })],
+      }),
+    );
 
-    const energetic = matchHorsesToRider(makeInput({
-      lessonType: 'group',
-      availableHorses: [makeHorse({ temperament: ['energetic'] })],
-    }));
+    const energetic = matchHorsesToRider(
+      makeInput({
+        lessonType: 'group',
+        availableHorses: [makeHorse({ temperament: ['energetic'] })],
+      }),
+    );
 
     expect(calm[0]!.score).toBeGreaterThan(energetic[0]!.score);
   });
 
   it('rewards bombproof temperament for desert rides', () => {
-    const bombproof = matchHorsesToRider(makeInput({
-      lessonType: 'desert_ride',
-      availableHorses: [makeHorse({ temperament: ['bombproof'] })],
-    }));
+    const bombproof = matchHorsesToRider(
+      makeInput({
+        lessonType: 'desert_ride',
+        availableHorses: [makeHorse({ temperament: ['bombproof'] })],
+      }),
+    );
 
-    const regular = matchHorsesToRider(makeInput({
-      lessonType: 'desert_ride',
-      availableHorses: [makeHorse({ temperament: ['responsive'] })],
-    }));
+    const regular = matchHorsesToRider(
+      makeInput({
+        lessonType: 'desert_ride',
+        availableHorses: [makeHorse({ temperament: ['responsive'] })],
+      }),
+    );
 
     expect(bombproof[0]!.score).toBeGreaterThan(regular[0]!.score);
   });
 
   it('warns when advanced horse paired with beginner', () => {
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ skillLevel: 'beginner' }),
-      availableHorses: [makeHorse({ skillLevel: 'advanced' })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ skillLevel: 'beginner' }),
+        availableHorses: [makeHorse({ skillLevel: 'advanced' })],
+      }),
+    );
 
     expect(result[0]!.warnings).toContain('Horse may be too advanced for this rider');
   });
 
   it('includes horse with no weight limit (weightLimit 0) for any rider weight', () => {
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 120 }),
-      availableHorses: [makeHorse({ weightLimit: 0 })],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 120 }),
+        availableHorses: [makeHorse({ weightLimit: 0 })],
+      }),
+    );
 
     expect(result).toHaveLength(1);
   });
 
   it('does not give weight bonus or penalty when weight limit is not configured', () => {
-    const withLimit = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 60 }),
-      availableHorses: [makeHorse({ id: 'h1', weightLimit: 90 })],
-    }));
+    const withLimit = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 60 }),
+        availableHorses: [makeHorse({ id: 'h1', weightLimit: 90 })],
+      }),
+    );
 
-    const noLimit = matchHorsesToRider(makeInput({
-      rider: makeRider({ weight: 60 }),
-      availableHorses: [makeHorse({ id: 'h2', weightLimit: 0 })],
-    }));
+    const noLimit = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ weight: 60 }),
+        availableHorses: [makeHorse({ id: 'h2', weightLimit: 0 })],
+      }),
+    );
 
     // Horse with configured limit (90kg) and light rider (60kg) should get weight bonus
     // Horse with no limit (0) should get no weight adjustment (neither bonus nor penalty)
@@ -230,9 +275,11 @@ describe('matchHorsesToRider', () => {
   });
 
   it('returns empty array when no horses available', () => {
-    const result = matchHorsesToRider(makeInput({
-      availableHorses: [],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        availableHorses: [],
+      }),
+    );
 
     expect(result).toEqual([]);
   });
@@ -254,10 +301,12 @@ describe('matchHorsesToRider', () => {
       makeHorse({ id: 'h3', name: 'Advanced Horse', skillLevel: 'advanced' }),
     ];
 
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ skillLevel: 'intermediate' }),
-      availableHorses: horses,
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ skillLevel: 'intermediate' }),
+        availableHorses: horses,
+      }),
+    );
 
     for (let i = 1; i < result.length; i++) {
       expect(result[i - 1]!.score).toBeGreaterThanOrEqual(result[i]!.score);
@@ -266,18 +315,20 @@ describe('matchHorsesToRider', () => {
 
   it('clamps score between 0 and 100', () => {
     // Worst case scenario
-    const result = matchHorsesToRider(makeInput({
-      rider: makeRider({ skillLevel: 'beginner', weight: 88 }),
-      availableHorses: [
-        makeHorse({
-          skillLevel: 'advanced',
-          weightLimit: 90,
-          lessonsToday: 2,
-          maxLessonsPerDay: 3,
-          pairingHistory: [{ riderId: 'rider-1', rating: 1 }],
-        }),
-      ],
-    }));
+    const result = matchHorsesToRider(
+      makeInput({
+        rider: makeRider({ skillLevel: 'beginner', weight: 88 }),
+        availableHorses: [
+          makeHorse({
+            skillLevel: 'advanced',
+            weightLimit: 90,
+            lessonsToday: 2,
+            maxLessonsPerDay: 3,
+            pairingHistory: [{ riderId: 'rider-1', rating: 1 }],
+          }),
+        ],
+      }),
+    );
 
     expect(result[0]!.score).toBeGreaterThanOrEqual(0);
     expect(result[0]!.score).toBeLessThanOrEqual(100);

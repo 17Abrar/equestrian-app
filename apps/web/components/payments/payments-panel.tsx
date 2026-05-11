@@ -7,7 +7,14 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { CheckCircle2, AlertCircle, Loader2, Link2, Unlink } from 'lucide-react';
 import { formatDate } from '@equestrian/shared/utils';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,11 +130,7 @@ export function PaymentsPanel() {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       {PROVIDERS.map((info) => (
-        <ProviderCard
-          key={info.name}
-          info={info}
-          account={byProvider.get(info.name) ?? null}
-        />
+        <ProviderCard key={info.name} info={info} account={byProvider.get(info.name) ?? null} />
       ))}
     </div>
   );
@@ -149,11 +152,7 @@ function ProviderCard({ info, account }: ProviderCardProps) {
   return (
     <Card
       className={
-        isActive
-          ? 'border-green-200 bg-green-50/30'
-          : hasError
-            ? 'border-red-200 bg-red-50/30'
-            : ''
+        isActive ? 'border-green-200 bg-green-50/30' : hasError ? 'border-red-200 bg-red-50/30' : ''
       }
     >
       <CardHeader>
@@ -161,21 +160,17 @@ function ProviderCard({ info, account }: ProviderCardProps) {
           <CardTitle className="text-lg">{info.displayName}</CardTitle>
           <StatusBadge account={account} />
         </div>
-        <CardDescription className="text-xs leading-relaxed">
-          {info.tagline}
-        </CardDescription>
+        <CardDescription className="text-xs leading-relaxed">{info.tagline}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 pb-3">
         {account?.externalAccountId && (
-          <div className="text-xs text-muted-foreground">
+          <div className="text-muted-foreground text-xs">
             <span className="font-medium">Account:</span>{' '}
-            <code className="rounded bg-muted px-1 py-0.5">
-              {account.externalAccountId}
-            </code>
+            <code className="bg-muted rounded px-1 py-0.5">{account.externalAccountId}</code>
           </div>
         )}
         {account?.connectedAt && (
-          <div className="text-xs text-muted-foreground">
+          <div className="text-muted-foreground text-xs">
             Connected {formatDate(account.connectedAt)}
           </div>
         )}
@@ -187,9 +182,7 @@ function ProviderCard({ info, account }: ProviderCardProps) {
         )}
       </CardContent>
       <CardFooter className="flex-wrap gap-2">
-        {!isConnected && !isDisabled && (
-          <ConnectAction info={info} />
-        )}
+        {!isConnected && !isDisabled && <ConnectAction info={info} />}
         {isDisabled && <ConnectAction info={info} label="Reconnect" />}
         {isConnected && !isActive && <SetActiveButton provider={info.name} />}
         {isConnected && <DisconnectButton provider={info.name} displayName={info.displayName} />}
@@ -200,13 +193,25 @@ function ProviderCard({ info, account }: ProviderCardProps) {
 
 function StatusBadge({ account }: { account: PaymentAccount | null }) {
   if (!account || account.status === 'pending') {
-    return <Badge variant="outline" className="text-xs">Not connected</Badge>;
+    return (
+      <Badge variant="outline" className="text-xs">
+        Not connected
+      </Badge>
+    );
   }
   if (account.status === 'error') {
-    return <Badge variant="destructive" className="text-xs">Error</Badge>;
+    return (
+      <Badge variant="destructive" className="text-xs">
+        Error
+      </Badge>
+    );
   }
   if (account.status === 'disabled') {
-    return <Badge variant="secondary" className="text-xs">Disabled</Badge>;
+    return (
+      <Badge variant="secondary" className="text-xs">
+        Disabled
+      </Badge>
+    );
   }
   if (account.isActive) {
     return (
@@ -216,7 +221,11 @@ function StatusBadge({ account }: { account: PaymentAccount | null }) {
       </Badge>
     );
   }
-  return <Badge variant="secondary" className="text-xs">Connected</Badge>;
+  return (
+    <Badge variant="secondary" className="text-xs">
+      Connected
+    </Badge>
+  );
 }
 
 // ─── Connect action: dispatches to the right flow ────────────────────
@@ -246,10 +255,7 @@ const stripeSchema = z
     webhookSigningSecret: z
       .string()
       .optional()
-      .refine(
-        (v) => !v || v.startsWith('whsec_'),
-        'Webhook secret must start with "whsec_"',
-      ),
+      .refine((v) => !v || v.startsWith('whsec_'), 'Webhook secret must start with "whsec_"'),
   })
   // Live/test parity. The server enforces this too (lib/payments/stripe.ts),
   // but failing fast in the form avoids a round-trip on an obvious mistake.
@@ -309,9 +315,8 @@ function StripeConnectDialog({ label }: { label: string }) {
             >
               dashboard.stripe.com/apikeys
             </a>
-            . Use live keys (<code>sk_live_…</code> / <code>pk_live_…</code>) for
-            production. Your keys are encrypted before storage and used only to
-            charge cards on your Stripe account.
+            . Use live keys (<code>sk_live_…</code> / <code>pk_live_…</code>) for production. Your
+            keys are encrypted before storage and used only to charge cards on your Stripe account.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -345,17 +350,16 @@ function StripeConnectDialog({ label }: { label: string }) {
                 </FormItem>
               )}
             />
-            <div className="rounded-md bg-muted/50 p-3 space-y-3">
+            <div className="bg-muted/50 space-y-3 rounded-md p-3">
               <p className="text-xs font-medium">Webhook (recommended)</p>
-              <p className="text-xs text-muted-foreground">
-                In Stripe, add a webhook endpoint pointing at your stable&apos;s
-                Cavaliq webhook URL — Settings → Payments will show the exact URL
-                once Stripe is connected. Subscribe to{' '}
+              <p className="text-muted-foreground text-xs">
+                In Stripe, add a webhook endpoint pointing at your stable&apos;s Cavaliq webhook URL
+                — Settings → Payments will show the exact URL once Stripe is connected. Subscribe to{' '}
                 <code className="text-[10px]">payment_intent.succeeded</code>,{' '}
                 <code className="text-[10px]">payment_intent.payment_failed</code>,{' '}
                 <code className="text-[10px]">charge.refunded</code>, and{' '}
-                <code className="text-[10px]">charge.refund.updated</code>. Paste
-                the signing secret below.
+                <code className="text-[10px]">charge.refund.updated</code>. Paste the signing secret
+                below.
               </p>
               <FormField
                 control={form.control}
@@ -407,7 +411,17 @@ function StripeConnectDialog({ label }: { label: string }) {
 // list can be unblocked by support adding the code to the list rather
 // than freeing the field — keeping the dropdown bounded prevents a
 // typo from corrupting the credentials row.
-const N_GENIUS_CURRENCIES = ['AED', 'SAR', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'USD'] as const;
+const N_GENIUS_CURRENCIES = [
+  'AED',
+  'SAR',
+  'KWD',
+  'QAR',
+  'BHD',
+  'OMR',
+  'JOD',
+  'EGP',
+  'USD',
+] as const;
 type NGeniusCurrency = (typeof N_GENIUS_CURRENCIES)[number];
 
 const nGeniusSchema = z.object({
@@ -543,18 +557,18 @@ function NGeniusConnectDialog({ label }: { label: string }) {
                     </SelectContent>
                   </Select>
                   <FormDescription className="text-xs">
-                    Match your N-Genius outlet&apos;s configured currency. Bookings in any
-                    other currency will be refused before reaching the provider.
+                    Match your N-Genius outlet&apos;s configured currency. Bookings in any other
+                    currency will be refused before reaching the provider.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <div className="rounded-md bg-muted/50 p-3 space-y-3">
+            <div className="bg-muted/50 space-y-3 rounded-md p-3">
               <p className="text-xs font-medium">Webhook (optional)</p>
-              <p className="text-xs text-muted-foreground">
-                If you set a custom header on your webhook in the N-Genius portal, copy the
-                name and value here so incoming webhooks can be verified.
+              <p className="text-muted-foreground text-xs">
+                If you set a custom header on your webhook in the N-Genius portal, copy the name and
+                value here so incoming webhooks can be verified.
               </p>
               <FormField
                 control={form.control}
@@ -733,12 +747,7 @@ function SetActiveButton({ provider }: { provider: PaymentProviderName }) {
   }
 
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={handleClick}
-      disabled={setActive.isPending}
-    >
+    <Button size="sm" variant="outline" onClick={handleClick} disabled={setActive.isPending}>
       Set active
     </Button>
   );

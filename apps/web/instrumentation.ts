@@ -51,11 +51,7 @@ export async function register() {
 // signature — wrapping it as `(...args) => { try {...} catch }` keeps the
 // type compatibility while letting lint reason about the void-return
 // shape correctly.
-export const onRequestError: typeof Sentry.captureRequestError = (
-  err,
-  request,
-  context,
-) => {
+export const onRequestError: typeof Sentry.captureRequestError = (err, request, context) => {
   try {
     Sentry.captureRequestError(err, request, context);
   } catch (sentryErr) {

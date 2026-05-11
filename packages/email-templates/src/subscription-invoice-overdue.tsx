@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { safeHref } from './util/safe-href';
@@ -58,9 +66,8 @@ export function SubscriptionInvoiceOverdue({
           <Text style={styles.greeting}>Hi {recipientName},</Text>
 
           <Text style={styles.text}>
-            Your Cavaliq {TIER_LABELS[tier]} subscription invoice for{' '}
-            {clubName} is past due. Settle it now to keep your dashboard
-            and all rider-facing surfaces (booking, payments, livery
+            Your Cavaliq {TIER_LABELS[tier]} subscription invoice for {clubName} is past due. Settle
+            it now to keep your dashboard and all rider-facing surfaces (booking, payments, livery
             invoicing, emails) working without interruption.
           </Text>
 
@@ -87,17 +94,15 @@ export function SubscriptionInvoiceOverdue({
 
           {daysOverdue >= 30 && (
             <Text style={styles.warning}>
-              <strong>Subscription suspension:</strong> accounts that
-              remain unpaid past 30 days may be suspended after manual
-              review. Reach out to support if you need a payment plan.
+              <strong>Subscription suspension:</strong> accounts that remain unpaid past 30 days may
+              be suspended after manual review. Reach out to support if you need a payment plan.
             </Text>
           )}
 
           <Text style={styles.text}>
-            Already paid? You can disregard this — the invoice will flip
-            to paid automatically once Ziina confirms. If you don&apos;t
-            see it update within an hour, refresh Settings → Subscription
-            and click the invoice to regenerate the link.
+            Already paid? You can disregard this — the invoice will flip to paid automatically once
+            Ziina confirms. If you don&apos;t see it update within an hour, refresh Settings →
+            Subscription and click the invoice to regenerate the link.
           </Text>
 
           <Hr style={styles.hr} />
@@ -137,9 +142,21 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#991b1b', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px', fontWeight: '600' as const },
+  label: {
+    fontSize: '11px',
+    color: '#991b1b',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+    fontWeight: '600' as const,
+  },
   value: { fontSize: '14px', color: '#7f1d1d', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#b91c1c', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#b91c1c',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   button: {
     backgroundColor: '#b91c1c',
     color: '#ffffff',

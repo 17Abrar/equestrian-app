@@ -6,10 +6,20 @@ import { toast } from 'sonner';
 import { useState } from 'react';
 import { z } from 'zod';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import { createLessonTypeSchema, type CreateLessonTypeFormValues, type CreateLessonTypeInput } from '@equestrian/shared/schemas';
+import {
+  createLessonTypeSchema,
+  type CreateLessonTypeFormValues,
+  type CreateLessonTypeInput,
+} from '@equestrian/shared/schemas';
 import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
 import { formatMoney } from '@equestrian/shared/utils';
-import { useLessonTypes, useCreateLessonType, useUpdateLessonType, useDeleteLessonType, type LessonType } from '@/hooks/use-bookings';
+import {
+  useLessonTypes,
+  useCreateLessonType,
+  useUpdateLessonType,
+  useDeleteLessonType,
+  type LessonType,
+} from '@/hooks/use-bookings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -17,14 +27,30 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
@@ -94,46 +120,133 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Lesson Type</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Lesson Type
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>New Lesson Type</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>New Lesson Type</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">Quick start:</p>
+              <p className="text-muted-foreground mb-2 text-sm">Quick start:</p>
               <div className="flex flex-wrap gap-1.5">
                 {DEFAULT_LESSON_TYPES.map((s) => (
-                  <Badge key={s} variant="outline" className="cursor-pointer hover:bg-accent text-xs" onClick={() => selectSuggestion(s)}>{s}</Badge>
+                  <Badge
+                    key={s}
+                    variant="outline"
+                    className="hover:bg-accent cursor-pointer text-xs"
+                    onClick={() => selectSuggestion(s)}
+                  >
+                    {s}
+                  </Badge>
                 ))}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem><FormLabel>Name *</FormLabel><FormControl><Input placeholder="e.g. Group Lesson" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="type" render={({ field }) => (
-                <FormItem><FormLabel>Type ID *</FormLabel><FormControl><Input placeholder="e.g. group" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Group Lesson" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type ID *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. group" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <FormField control={form.control} name="durationMinutes" render={({ field }) => (
-                <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="price" render={({ field }) => (
-                <FormItem><FormLabel>Price</FormLabel><FormControl><NumberInput step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="color" render={({ field }) => (
-                <FormItem><FormLabel>Color</FormLabel><FormControl><Input type="color" className="h-10 w-full" {...field} value={field.value ?? '#3b82f6'} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (min)</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="color"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Color</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="color"
+                        className="h-10 w-full"
+                        {...field}
+                        value={field.value ?? '#3b82f6'}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem><FormLabel>Max Riders</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="minRiders" render={({ field }) => (
-                <FormItem><FormLabel>Min Riders</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="maxRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Riders</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="minRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Min Riders</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={createLessonType.isPending}>
               {createLessonType.isPending ? 'Creating...' : 'Create Lesson Type'}
@@ -160,10 +273,7 @@ function LessonTypesListSkeleton({ rows = 3 }: { rows?: number }) {
       <CardContent>
         <div className="space-y-2">
           {Array.from({ length: rows }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
+            <div key={i} className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex items-center gap-3">
                 <Skeleton className="h-4 w-4 rounded" />
                 <div className="space-y-1.5">
@@ -188,7 +298,13 @@ export function LessonTypesList() {
   const deleteLessonType = useDeleteLessonType();
 
   if (isLoading) return <LessonTypesListSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const lessonTypes = data?.data ?? [];
 
@@ -210,17 +326,23 @@ export function LessonTypesList() {
       </CardHeader>
       <CardContent>
         {lessonTypes.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">No lesson types yet. Create one to start scheduling.</p>
+          <p className="text-muted-foreground py-4 text-center text-sm">
+            No lesson types yet. Create one to start scheduling.
+          </p>
         ) : (
           <div className="space-y-2">
             {lessonTypes.map((lt) => (
               <div key={lt.id} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="flex items-center gap-3">
-                  <div className="h-4 w-4 rounded" style={{ backgroundColor: lt.color ?? '#6366f1' }} />
+                  <div
+                    className="h-4 w-4 rounded"
+                    style={{ backgroundColor: lt.color ?? '#6366f1' }}
+                  />
                   <div>
                     <p className="font-medium">{lt.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {lt.durationMinutes} min · {formatMoney(lt.price, lt.currency)} · {lt.maxRiders} riders max
+                    <p className="text-muted-foreground text-xs">
+                      {lt.durationMinutes} min · {formatMoney(lt.price, lt.currency)} ·{' '}
+                      {lt.maxRiders} riders max
                     </p>
                   </div>
                 </div>
@@ -228,18 +350,27 @@ export function LessonTypesList() {
                   <EditLessonTypeDialog lessonType={lt} />
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Delete ${lt.name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={`Delete ${lt.name}`}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Remove {lt.name}?</AlertDialogTitle>
-                        <AlertDialogDescription>This will deactivate the lesson type. Existing bookings won't be affected.</AlertDialogDescription>
+                        <AlertDialogDescription>
+                          This will deactivate the lesson type. Existing bookings won't be affected.
+                        </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleDelete(lt.id)}>Remove</AlertDialogAction>
+                        <AlertDialogAction onClick={() => handleDelete(lt.id)}>
+                          Remove
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -287,59 +418,102 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${lessonType.name}`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label={`Edit ${lessonType.name}`}
+        >
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Edit {lessonType.name}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Edit {lessonType.name}</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid grid-cols-3 gap-3">
-              <FormField control={form.control} name="durationMinutes" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Duration (min)</FormLabel>
-                  <FormControl>
-                    <NumberInput {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="price" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Price</FormLabel>
-                  <FormControl>
-                    <NumberInput step="0.01" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="color" render={({ field }) => (
-                <FormItem><FormLabel>Color</FormLabel><FormControl><Input type="color" className="h-10" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (min)</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="color"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Color</FormLabel>
+                    <FormControl>
+                      <Input type="color" className="h-10" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Max Riders</FormLabel>
-                  <FormControl>
-                    <NumberInput {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="minRiders" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Min Riders</FormLabel>
-                  <FormControl>
-                    <NumberInput {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="maxRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Riders</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="minRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Min Riders</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={updateLessonType.isPending}>
               {updateLessonType.isPending ? 'Saving...' : 'Save Changes'}

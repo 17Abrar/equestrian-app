@@ -71,7 +71,15 @@ const PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'horses:read_own',
     'horses:update_own',
   ],
-  parent: ['bookings:create_child', 'bookings:read_child', 'bookings:cancel_own', 'profile:*', 'payments:*', 'competitions:read', 'competitions:register_child'],
+  parent: [
+    'bookings:create_child',
+    'bookings:read_child',
+    'bookings:cancel_own',
+    'profile:*',
+    'payments:*',
+    'competitions:read',
+    'competitions:register_child',
+  ],
   groom: ['dashboard:read', 'horses:read', 'tasks:*', 'horses:update_care', 'lesson_types:read'],
   veterinarian: ['horses:read', 'horses:read_medical', 'horses:update_medical'],
 };

@@ -31,7 +31,9 @@ export function EmailsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Emails</h1>
-        <p className="mt-1 text-muted-foreground">Send emails to riders and manage communications</p>
+        <p className="text-muted-foreground mt-1">
+          Send emails to riders and manage communications
+        </p>
       </div>
 
       <Tabs defaultValue="compose">
@@ -110,18 +112,14 @@ function ComposeTab() {
               {...form.register('to')}
             />
             {form.formState.errors.to && (
-              <p className="mt-1 text-xs text-destructive">{form.formState.errors.to.message}</p>
+              <p className="text-destructive mt-1 text-xs">{form.formState.errors.to.message}</p>
             )}
           </div>
           <div>
             <label className="text-sm font-medium">Subject *</label>
-            <Input
-              placeholder="Email subject..."
-              className="mt-1"
-              {...form.register('subject')}
-            />
+            <Input placeholder="Email subject..." className="mt-1" {...form.register('subject')} />
             {form.formState.errors.subject && (
-              <p className="mt-1 text-xs text-destructive">
+              <p className="text-destructive mt-1 text-xs">
                 {form.formState.errors.subject.message}
               </p>
             )}
@@ -135,7 +133,7 @@ function ComposeTab() {
               {...form.register('body')}
             />
             {form.formState.errors.body && (
-              <p className="mt-1 text-xs text-destructive">{form.formState.errors.body.message}</p>
+              <p className="text-destructive mt-1 text-xs">{form.formState.errors.body.message}</p>
             )}
           </div>
           <Button type="submit" disabled={isSubmitting}>

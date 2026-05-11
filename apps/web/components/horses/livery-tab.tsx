@@ -79,9 +79,7 @@ function useHorseLiveryInvoices(horseId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['livery-invoices', 'horse', horseId],
     queryFn: () =>
-      fetchJson<ApiSuccessResponse<LiveryInvoice[]>>(
-        `/api/v1/horses/${horseId}/livery-invoices`,
-      ),
+      fetchJson<ApiSuccessResponse<LiveryInvoice[]>>(`/api/v1/horses/${horseId}/livery-invoices`),
     enabled,
     staleTime: STALE_TIME_FREQUENT,
   });
@@ -91,10 +89,9 @@ function useMarkInvoicePaid(horseId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (invoiceId: string) =>
-      fetchJson<ApiSuccessResponse<unknown>>(
-        `/api/v1/livery-invoices/${invoiceId}/mark-paid`,
-        { method: 'PATCH' },
-      ),
+      fetchJson<ApiSuccessResponse<unknown>>(`/api/v1/livery-invoices/${invoiceId}/mark-paid`, {
+        method: 'PATCH',
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
     },
@@ -105,10 +102,9 @@ function useCancelInvoice(horseId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (invoiceId: string) =>
-      fetchJson<ApiSuccessResponse<unknown>>(
-        `/api/v1/livery-invoices/${invoiceId}/cancel`,
-        { method: 'PATCH' },
-      ),
+      fetchJson<ApiSuccessResponse<unknown>>(`/api/v1/livery-invoices/${invoiceId}/cancel`, {
+        method: 'PATCH',
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['livery-invoices', 'horse', horseId] });
     },
@@ -171,11 +167,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
               label="Monthly livery fee"
               value={formatFee(horse.monthlyLiveryFeeMinor, horse.clubCurrency ?? 'AED')}
             />
-            <Field
-              icon={Calendar}
-              label="Livery start date"
-              value={horse.liveryStartDate ?? '—'}
-            />
+            <Field icon={Calendar} label="Livery start date" value={horse.liveryStartDate ?? '—'} />
             <Field
               icon={Calendar}
               label="Livery end date"
@@ -185,11 +177,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
 
           {horse.ownershipStatus === 'active' && (
             <div className="flex justify-end pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRetireOpen(true)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setRetireOpen(true)}>
                 <Archive className="mr-2 h-4 w-4" />
                 Retire ownership
               </Button>
@@ -199,10 +187,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
       </Card>
 
       {(horse.ownershipStatus === 'active' || horse.ownershipStatus === 'retired') && (
-        <InvoicesCard
-          horseId={horse.id}
-          invoicesQuery={invoicesQuery}
-        />
+        <InvoicesCard horseId={horse.id} invoicesQuery={invoicesQuery} />
       )}
 
       <AlertDialog open={retireOpen} onOpenChange={setRetireOpen}>
@@ -210,9 +195,8 @@ export function LiveryTab({ horse }: LiveryTabProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Retire {horse.name}&apos;s ownership?</AlertDialogTitle>
             <AlertDialogDescription>
-              Billing stops on the end date you choose. Operational status
-              (available / resting / etc.) isn&apos;t affected — mark the horse
-              sold or off-site separately if needed.
+              Billing stops on the end date you choose. Operational status (available / resting /
+              etc.) isn&apos;t affected — mark the horse sold or off-site separately if needed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
@@ -226,10 +210,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={retire.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onConfirmRetire}
-              disabled={retire.isPending}
-            >
+            <AlertDialogAction onClick={onConfirmRetire} disabled={retire.isPending}>
               {retire.isPending ? 'Retiring…' : 'Retire'}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -248,15 +229,18 @@ function InvoicesCard({
 }) {
   const markPaid = useMarkInvoicePaid(horseId);
   const cancelInvoice = useCancelInvoice(horseId);
-  const [cancelTarget, setCancelTarget] = useState<
-    { id: string; invoiceNumber: string } | null
-  >(null);
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; invoiceNumber: string } | null>(
+    null,
+  );
   // Audit F-28 (2026-05-07 r5): mark-paid is now confirmation-gated
   // because the financial side-effects (hides from outstanding totals,
   // stops reminder cron) are irreversible — same logic as cancel.
-  const [markPaidTarget, setMarkPaidTarget] = useState<
-    { id: string; invoiceNumber: string; amountMinorUnits: number; currency: string } | null
-  >(null);
+  const [markPaidTarget, setMarkPaidTarget] = useState<{
+    id: string;
+    invoiceNumber: string;
+    amountMinorUnits: number;
+    currency: string;
+  } | null>(null);
 
   const invoices = invoicesQuery.data?.data ?? [];
 
@@ -295,13 +279,9 @@ function InvoicesCard({
         {invoicesQuery.isLoading && <LiveryInvoicesTableSkeleton />}
 
         {invoicesQuery.isError && (
-          <p className="text-sm text-destructive">
+          <p className="text-destructive text-sm">
             Couldn&apos;t load invoices.{' '}
-            <button
-              type="button"
-              className="underline"
-              onClick={() => invoicesQuery.refetch()}
-            >
+            <button type="button" className="underline" onClick={() => invoicesQuery.refetch()}>
               Try again
             </button>
           </p>
@@ -309,9 +289,8 @@ function InvoicesCard({
 
         {!invoicesQuery.isLoading && !invoicesQuery.isError && invoices.length === 0 && (
           <EmptyNote>
-            No livery invoices yet. The first invoice is issued automatically
-            on this horse&apos;s billing anniversary, or you can wait for the
-            next cron run.
+            No livery invoices yet. The first invoice is issued automatically on this horse&apos;s
+            billing anniversary, or you can wait for the next cron run.
           </EmptyNote>
         )}
 
@@ -331,9 +310,7 @@ function InvoicesCard({
               <TableBody>
                 {invoices.map((inv) => (
                   <TableRow key={inv.id}>
-                    <TableCell className="font-mono text-xs">
-                      {inv.invoiceNumber}
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">{inv.invoiceNumber}</TableCell>
                     <TableCell className="text-sm">
                       {inv.periodStart}
                       <span className="text-muted-foreground"> → {inv.periodEnd}</span>
@@ -344,18 +321,11 @@ function InvoicesCard({
                     <TableCell>
                       <InvoiceStatusBadge status={inv.status} />
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {inv.dueDate}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{inv.dueDate}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         {inv.payLink && inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                            title="Open pay link"
-                          >
+                          <Button variant="ghost" size="sm" asChild title="Open pay link">
                             <a
                               href={safeHref(inv.payLink)}
                               target="_blank"
@@ -395,7 +365,7 @@ function InvoicesCard({
                               disabled={cancelInvoice.isPending}
                               title="Cancel invoice"
                             >
-                              <Ban className="h-3.5 w-3.5 text-destructive" />
+                              <Ban className="text-destructive h-3.5 w-3.5" />
                             </Button>
                           </>
                         )}
@@ -409,26 +379,18 @@ function InvoicesCard({
         )}
       </CardContent>
 
-      <AlertDialog
-        open={!!cancelTarget}
-        onOpenChange={(open) => !open && setCancelTarget(null)}
-      >
+      <AlertDialog open={!!cancelTarget} onOpenChange={(open) => !open && setCancelTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Cancel invoice {cancelTarget?.invoiceNumber}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Cancel invoice {cancelTarget?.invoiceNumber}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The invoice will be marked cancelled and the cron will stop
-              sending reminders for it. This cannot be undone — you&apos;ll
-              need to wait for the next billing cycle or create a new one
-              manually.
+              The invoice will be marked cancelled and the cron will stop sending reminders for it.
+              This cannot be undone — you&apos;ll need to wait for the next billing cycle or create
+              a new one manually.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={cancelInvoice.isPending}>
-              Keep invoice
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={cancelInvoice.isPending}>Keep invoice</AlertDialogCancel>
             <AlertDialogAction
               onClick={onConfirmCancel}
               disabled={cancelInvoice.isPending}
@@ -450,33 +412,22 @@ function InvoicesCard({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Mark invoice {markPaidTarget?.invoiceNumber} paid?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Mark invoice {markPaidTarget?.invoiceNumber} paid?</AlertDialogTitle>
             <AlertDialogDescription>
               {markPaidTarget && (
                 <>
                   This records payment of{' '}
                   <strong>
-                    {formatCurrency(
-                      markPaidTarget.amountMinorUnits,
-                      markPaidTarget.currency,
-                    )}
+                    {formatCurrency(markPaidTarget.amountMinorUnits, markPaidTarget.currency)}
                   </strong>{' '}
-                  against the ledger and stops reminder emails for this
-                  invoice. There is no undo.
+                  against the ledger and stops reminder emails for this invoice. There is no undo.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={markPaid.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onConfirmMarkPaid}
-              disabled={markPaid.isPending}
-            >
+            <AlertDialogCancel disabled={markPaid.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onConfirmMarkPaid} disabled={markPaid.isPending}>
               {markPaid.isPending ? 'Marking…' : 'Mark paid'}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -486,22 +437,14 @@ function InvoicesCard({
   );
 }
 
-function Field({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof User;
-  label: string;
-  value: string;
-}) {
+function Field({ icon: Icon, label, value }: { icon: typeof User; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="rounded-md bg-muted p-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
+      <div className="bg-muted rounded-md p-2">
+        <Icon className="text-muted-foreground h-4 w-4" />
       </div>
       <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-muted-foreground text-xs">{label}</p>
         <p className="text-sm font-medium">{value}</p>
       </div>
     </div>
@@ -509,11 +452,7 @@ function Field({
 }
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-      {children}
-    </p>
-  );
+  return <p className="bg-muted text-muted-foreground rounded-md p-3 text-sm">{children}</p>;
 }
 
 function StatusBadge({ status }: { status: Horse['ownershipStatus'] }) {

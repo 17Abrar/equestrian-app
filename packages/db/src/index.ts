@@ -106,9 +106,7 @@ export const db = new Proxy({} as HttpDb, {
  * keep this path narrow — most routes don't need it and use `db` over
  * HTTP instead.
  */
-export async function writeTransaction<T>(
-  fn: (tx: WsTx) => Promise<T>,
-): Promise<T> {
+export async function writeTransaction<T>(fn: (tx: WsTx) => Promise<T>): Promise<T> {
   // When a test harness has installed an ambient executor (via
   // `__runWithExecutorForTest`), join its transaction instead of opening
   // a real Postgres connection. The pglite-backed test executor exposes
@@ -116,10 +114,15 @@ export async function writeTransaction<T>(
   // writeTransaction-wrapped queries (createBooking, cancelBooking, etc.)
   // without a live Neon pool. Audit AI-22.
   const testExecutor = executorStore.getStore();
-  if (testExecutor && typeof (testExecutor as { transaction?: unknown }).transaction === 'function') {
-    const txFn = (testExecutor as {
-      transaction: (cb: (tx: unknown) => Promise<T>) => Promise<T>;
-    }).transaction;
+  if (
+    testExecutor &&
+    typeof (testExecutor as { transaction?: unknown }).transaction === 'function'
+  ) {
+    const txFn = (
+      testExecutor as {
+        transaction: (cb: (tx: unknown) => Promise<T>) => Promise<T>;
+      }
+    ).transaction;
     return txFn.call(testExecutor, (tx: unknown) => {
       return executorStore.run(tx as AnyExecutor, () => fn(tx as WsTx));
     });
@@ -180,10 +183,7 @@ export type PoolDatabase = WsDb;
  * dispatches by method name at runtime, so any drizzle-like object
  * with the same surface works.
  */
-export function __runWithExecutorForTest<T>(
-  executor: unknown,
-  fn: () => Promise<T>,
-): Promise<T> {
+export function __runWithExecutorForTest<T>(executor: unknown, fn: () => Promise<T>): Promise<T> {
   return executorStore.run(executor as AnyExecutor, () =>
     rawExecutorStore.run(executor as AnyExecutor, fn),
   );

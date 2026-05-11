@@ -8,12 +8,7 @@ import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/l
 // contacts, medical notes). Coaches/grooms/vets shouldn't accidentally
 // create one for themselves and start showing up in rider reports. Audit
 // AI-3.
-const RIDER_PROFILE_ELIGIBLE_ROLES: UserRole[] = [
-  'rider',
-  'parent',
-  'horse_owner',
-  'club_admin',
-];
+const RIDER_PROFILE_ELIGIBLE_ROLES: UserRole[] = ['rider', 'parent', 'horse_owner', 'club_admin'];
 
 export async function GET() {
   return withAuth(async (ctx) => {

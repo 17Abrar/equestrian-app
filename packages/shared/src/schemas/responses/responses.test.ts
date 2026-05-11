@@ -44,15 +44,12 @@ describe('horseListItemSchema (F-69 companion)', () => {
   });
 
   it('rejects a row whose status drifts to an unknown literal', () => {
-    expect(
-      horseListItemSchema.safeParse({ ...validRow, status: 'pasture' }).success,
-    ).toBe(false);
+    expect(horseListItemSchema.safeParse({ ...validRow, status: 'pasture' }).success).toBe(false);
   });
 
   it('rejects a row whose ownerMemberId is a non-UUID string', () => {
     expect(
-      horseListItemSchema.safeParse({ ...validRow, ownerMemberId: 'not-a-uuid' })
-        .success,
+      horseListItemSchema.safeParse({ ...validRow, ownerMemberId: 'not-a-uuid' }).success,
     ).toBe(false);
   });
 
@@ -63,9 +60,7 @@ describe('horseListItemSchema (F-69 companion)', () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect((parsed.data as Record<string, unknown>).newServerColumn).toBe(
-        'value',
-      );
+      expect((parsed.data as Record<string, unknown>).newServerColumn).toBe('value');
     }
   });
 });
@@ -97,22 +92,18 @@ describe('bookingListItemSchema (F-69 companion)', () => {
   });
 
   it('rejects a row whose paymentStatus drifts to an unknown literal', () => {
-    expect(
-      bookingListItemSchema.safeParse({ ...validRow, paymentStatus: 'voided' })
-        .success,
-    ).toBe(false);
+    expect(bookingListItemSchema.safeParse({ ...validRow, paymentStatus: 'voided' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects a row whose amount comes through as a string (Drizzle numeric pitfall)', () => {
-    expect(
-      bookingListItemSchema.safeParse({ ...validRow, amount: '12000' }).success,
-    ).toBe(false);
+    expect(bookingListItemSchema.safeParse({ ...validRow, amount: '12000' }).success).toBe(false);
   });
 
   it('accepts a row with null horseId / horseName (no horse assigned)', () => {
     expect(
-      bookingListItemSchema.safeParse({ ...validRow, horseId: null, horseName: null })
-        .success,
+      bookingListItemSchema.safeParse({ ...validRow, horseId: null, horseName: null }).success,
     ).toBe(true);
   });
 });

@@ -18,7 +18,7 @@ Sentry for error tracking.
    pnpm --filter @equestrian/web exec wrangler login
    ```
 2. **Add `cavaliq.com` as a Cloudflare zone** (if it isn't already). Done in
-   the Cloudflare dashboard: *Websites → Add a Site*. Point your registrar's
+   the Cloudflare dashboard: _Websites → Add a Site_. Point your registrar's
    nameservers at Cloudflare when prompted.
 3. **Route binding**: `wrangler.jsonc` already lists `cavaliq.com` and
    `www.cavaliq.com` as custom domains. On first deploy, Cloudflare will
@@ -145,13 +145,16 @@ the deploy loop below — that's the routine, not this one-time section.
 ## One-time: external provider configuration
 
 ### Clerk
+
 In the Clerk dashboard:
+
 1. **Allowed origins**: add `https://cavaliq.com` and `https://www.cavaliq.com`.
 2. **Webhook endpoint**: `https://cavaliq.com/api/webhooks/clerk` — subscribe
    to `organization.created/updated/deleted`, `organizationMembership.created/updated/deleted`.
    Copy the signing secret → set it as `CLERK_WEBHOOK_SECRET`.
 
 ### Stripe (per-club, no platform setup)
+
 Cavaliq is **not** a Stripe Connect platform. There is no platform-wide
 Stripe configuration to do — each club connects their own Stripe account
 themselves from Settings → Payments. For your reference (or to share with
@@ -172,14 +175,18 @@ clubs onboarding), the per-club steps are:
    through a platform Stripe account.
 
 ### N-Genius
+
 In the Network International merchant portal (per club, not platform-wide):
+
 1. **Webhook URL**: `https://cavaliq.com/api/webhooks/n-genius`.
 2. **Custom header**: pick a name like `X-Webhook-Token` and a long random
    value — the club enters both when they connect N-Genius in our settings.
    Network International reviews/whitelists the URL before activating.
 
 ### Ziina
+
 In the Ziina business dashboard (per club):
+
 1. **Webhook URL**: `https://cavaliq.com/api/webhooks/ziina/<clubId>` — the
    per-club path is deliberate, since Ziina payloads don't carry a merchant
    id. The club's `clubId` is visible in the Cavaliq URL when they're
@@ -188,6 +195,7 @@ In the Ziina business dashboard (per club):
    connect form.
 
 ### Sentry (source maps)
+
 Set these as **build-time** env vars (in GitHub Actions / CI, not in
 `wrangler.jsonc`):
 
@@ -207,16 +215,18 @@ external credentials:
 
 **Sentry alert-rules sync** (only if you wire it into CI later — by
 default the script runs locally via `pnpm sentry:alerts`):
+
 - `SENTRY_ALERTS_AUTH_TOKEN` — user token, scopes `alerts:write` +
-  `project:read`. Generate at *Settings → Account → API → Auth Tokens*.
+  `project:read`. Generate at _Settings → Account → API → Auth Tokens_.
 
 **Neon test-branch smoke job** (runs on every PR + main push):
+
 - Repository **secret** `NEON_API_KEY` — generate at
-  *console.neon.tech → Account settings → API keys*. Scope: full
+  _console.neon.tech → Account settings → API keys_. Scope: full
   account access.
 - Repository **variable** `NEON_PROJECT_ID` — visible in your Neon
-  project URL (e.g. `crimson-flower-12345678`). Use a *variable*, not
-  a *secret* — secrets are masked from logs and the create-branch
+  project URL (e.g. `crimson-flower-12345678`). Use a _variable_, not
+  a _secret_ — secrets are masked from logs and the create-branch
   action prints the project id during normal output.
 
 Without these, the `neon-smoke` job will fail on the create-branch
@@ -380,6 +390,7 @@ Worker rollback is instant — no rebuild required.
 Today there's only the `production` environment (Cavaliq's main domain).
 When you want a staging environment, duplicate the `wrangler.jsonc` block
 under `env.staging` with:
+
 - a staging worker name (e.g. `cavaliq-staging`)
 - routes pointing at `staging.cavaliq.com`
 - `NEXT_PUBLIC_APP_URL=https://staging.cavaliq.com`
@@ -387,7 +398,7 @@ under `env.staging` with:
 - **`PLATFORM_ZIINA_TEST_MODE=true`** (audit F-10 / F-25, 2026-05-07
   r5). Required so platform-billing payment intents go to Ziina
   sandbox. Without it, a staging worker provisioned with a sandbox
-  `PLATFORM_ZIINA_API_KEY` will issue *live* intents that Ziina either
+  `PLATFORM_ZIINA_API_KEY` will issue _live_ intents that Ziina either
   rejects or mis-routes — the staging worker quietly fails. Set with
   `wrangler secret put PLATFORM_ZIINA_TEST_MODE --env staging` and
   paste `true`. Production must leave this unset.
@@ -541,7 +552,7 @@ prep):
 
 - `SENTRY_ALERTS_AUTH_TOKEN` ✓
 - `SENTRY_ORG_SLUG` / `SENTRY_PROJECT_SLUG` / `SENTRY_BASE_URL` —
-  repo *variables*.
+  repo _variables_.
 
 Optional Slack delivery — install the Sentry → Slack integration in
 Sentry's UI, then set repo variables:

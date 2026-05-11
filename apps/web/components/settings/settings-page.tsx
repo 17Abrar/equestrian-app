@@ -4,7 +4,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { type z } from 'zod';
-import { updateClubProfileSchema, updateBookingRulesSchema, type UpdateClubProfileInput, type UpdateBookingRulesInput } from '@equestrian/shared/schemas';
+import {
+  updateClubProfileSchema,
+  updateBookingRulesSchema,
+  type UpdateClubProfileInput,
+  type UpdateBookingRulesInput,
+} from '@equestrian/shared/schemas';
 import { useClubSettings, useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,7 +98,7 @@ export function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="mt-1 text-muted-foreground">Configure your club preferences</p>
+        <p className="text-muted-foreground mt-1">Configure your club preferences</p>
       </div>
 
       <Tabs defaultValue="profile">
@@ -133,7 +138,8 @@ export function SettingsPage() {
             <CardHeader>
               <CardTitle>Payment Providers</CardTitle>
               <CardDescription>
-                Connect a payment processor so riders can pay for lessons online. Only one provider can be active at a time — the active one is used for all new bookings.
+                Connect a payment processor so riders can pay for lessons online. Only one provider
+                can be active at a time — the active one is used for all new bookings.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -147,8 +153,8 @@ export function SettingsPage() {
             <CardHeader>
               <CardTitle>Cavaliq Subscription</CardTitle>
               <CardDescription>
-                Your monthly Cavaliq subscription. Invoices are issued automatically — pay them
-                via the Ziina link to keep your account active.
+                Your monthly Cavaliq subscription. Invoices are issued automatically — pay them via
+                the Ziina link to keep your account active.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -208,86 +214,208 @@ function ClubProfileForm({ settings }: { settings: ClubSettings }) {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem><FormLabel>Club Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="city" render={({ field }) => (
-                <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="country" render={({ field }) => (
-                <FormItem><FormLabel>Country</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="timezone" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Timezone</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? 'Asia/Dubai'}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="Asia/Dubai">Asia/Dubai (UTC+4)</SelectItem>
-                      <SelectItem value="Asia/Riyadh">Asia/Riyadh (UTC+3)</SelectItem>
-                      <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
-                      <SelectItem value="America/New_York">America/New York (EST)</SelectItem>
-                      <SelectItem value="America/Los_Angeles">America/Los Angeles (PST)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="currency" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Currency</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? 'AED'}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="AED">AED (UAE Dirham)</SelectItem>
-                      <SelectItem value="SAR">SAR (Saudi Riyal)</SelectItem>
-                      <SelectItem value="USD">USD (US Dollar)</SelectItem>
-                      <SelectItem value="GBP">GBP (British Pound)</SelectItem>
-                      <SelectItem value="EUR">EUR (Euro)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Club Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>City</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="country"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Country</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="timezone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Timezone</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? 'Asia/Dubai'}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Asia/Dubai">Asia/Dubai (UTC+4)</SelectItem>
+                        <SelectItem value="Asia/Riyadh">Asia/Riyadh (UTC+3)</SelectItem>
+                        <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
+                        <SelectItem value="America/New_York">America/New York (EST)</SelectItem>
+                        <SelectItem value="America/Los_Angeles">
+                          America/Los Angeles (PST)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? 'AED'}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="AED">AED (UAE Dirham)</SelectItem>
+                        <SelectItem value="SAR">SAR (Saudi Riyal)</SelectItem>
+                        <SelectItem value="USD">USD (US Dollar)</SelectItem>
+                        <SelectItem value="GBP">GBP (British Pound)</SelectItem>
+                        <SelectItem value="EUR">EUR (Euro)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <FormField control={form.control} name="address" render={({ field }) => (
-              <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea rows={3} placeholder="Tell riders about your club..." {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField control={form.control} name="websiteUrl" render={({ field }) => (
-                <FormItem><FormLabel>Website</FormLabel><FormControl><Input type="url" placeholder="https://..." {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="logoUrl" render={({ field }) => (
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Logo</FormLabel>
+                  <FormLabel>Address</FormLabel>
                   <FormControl>
-                    <FileUpload
-                      value={field.value ?? ''}
-                      onChange={field.onChange}
-                      folder="club/logo"
-                      accept="image/*"
-                      preview
-                      label="Drop club logo here"
-                    />
+                    <Textarea rows={2} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )} />
-              <FormField control={form.control} name="socialInstagram" render={({ field }) => (
-                <FormItem><FormLabel>Instagram</FormLabel><FormControl><Input placeholder="@yourclub" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="socialFacebook" render={({ field }) => (
-                <FormItem><FormLabel>Facebook</FormLabel><FormControl><Input placeholder="facebook.com/yourclub" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea rows={3} placeholder="Tell riders about your club..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="websiteUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Website</FormLabel>
+                    <FormControl>
+                      <Input type="url" placeholder="https://..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="logoUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Logo</FormLabel>
+                    <FormControl>
+                      <FileUpload
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        folder="club/logo"
+                        accept="image/*"
+                        preview
+                        label="Drop club logo here"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="socialInstagram"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Instagram</FormLabel>
+                    <FormControl>
+                      <Input placeholder="@yourclub" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="socialFacebook"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Facebook</FormLabel>
+                    <FormControl>
+                      <Input placeholder="facebook.com/yourclub" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" disabled={updateSettings.isPending}>
               {updateSettings.isPending ? 'Saving...' : 'Save Profile'}
@@ -309,10 +437,7 @@ const CALENDAR_VIEW_VALUES = ['day', 'week', 'month', 'agenda'] as const;
 type CalendarView = (typeof CALENDAR_VIEW_VALUES)[number];
 
 function isCalendarView(v: string | null | undefined): v is CalendarView {
-  return (
-    typeof v === 'string' &&
-    CALENDAR_VIEW_VALUES.includes(v as CalendarView)
-  );
+  return typeof v === 'string' && CALENDAR_VIEW_VALUES.includes(v as CalendarView);
 }
 
 function BookingRulesForm({ settings }: { settings: ClubSettings }) {
@@ -356,83 +481,143 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField control={form.control} name="advanceBookingDays" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Advance Booking Window (days)</FormLabel>
-                  <FormControl><NumberInput {...field} /></FormControl>
-                  <FormDescription>How far in advance riders can book</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="bookingCutoffHours" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Booking Cutoff (hours)</FormLabel>
-                  <FormControl><NumberInput {...field} /></FormControl>
-                  <FormDescription>Minimum hours before lesson start to book</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="cancellationNoticeHours" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cancellation Notice (hours)</FormLabel>
-                  <FormControl><NumberInput {...field} /></FormControl>
-                  <FormDescription>Hours before lesson to cancel without penalty</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="defaultLessonDurationMinutes" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Default Lesson Duration (min)</FormLabel>
-                  <FormControl><NumberInput {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="lateCancellationFeePercent" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Late Cancellation Fee (%)</FormLabel>
-                  <FormControl><NumberInput step="0.01" min="0" max="100" {...field} /></FormControl>
-                  <FormDescription>Percentage of lesson price charged for late cancellations (0 = no fee)</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="noShowFeePercent" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>No-Show Fee (%)</FormLabel>
-                  <FormControl><NumberInput step="0.01" min="0" max="100" {...field} /></FormControl>
-                  <FormDescription>Percentage of lesson price charged when a rider doesn&apos;t show up</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-            <FormField control={form.control} name="defaultCalendarView" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Default Calendar View</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? 'week'}>
-                  <FormControl><SelectTrigger className="w-48"><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="day">Day</SelectItem>
-                    <SelectItem value="week">Week</SelectItem>
-                    <SelectItem value="month">Month</SelectItem>
-                    <SelectItem value="agenda">Agenda</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <div className="flex items-center gap-4">
-              <FormField control={form.control} name="allowOverbooking" render={({ field }) => (
-                <FormItem className="flex items-center gap-2">
-                  <FormLabel>Allow Overbooking</FormLabel>
-                  <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                </FormItem>
-              )} />
-              {form.watch('allowOverbooking') && (
-                <FormField control={form.control} name="overbookingLimit" render={({ field }) => (
+              <FormField
+                control={form.control}
+                name="advanceBookingDays"
+                render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Overbooking Limit</FormLabel>
-                    <FormControl><NumberInput className="w-20" {...field} /></FormControl>
+                    <FormLabel>Advance Booking Window (days)</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormDescription>How far in advance riders can book</FormDescription>
+                    <FormMessage />
                   </FormItem>
-                )} />
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="bookingCutoffHours"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Booking Cutoff (hours)</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormDescription>Minimum hours before lesson start to book</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="cancellationNoticeHours"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cancellation Notice (hours)</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormDescription>Hours before lesson to cancel without penalty</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="defaultLessonDurationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Default Lesson Duration (min)</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lateCancellationFeePercent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Late Cancellation Fee (%)</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" min="0" max="100" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Percentage of lesson price charged for late cancellations (0 = no fee)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="noShowFeePercent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>No-Show Fee (%)</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" min="0" max="100" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Percentage of lesson price charged when a rider doesn&apos;t show up
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="defaultCalendarView"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Default Calendar View</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value ?? 'week'}>
+                    <FormControl>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="day">Day</SelectItem>
+                      <SelectItem value="week">Week</SelectItem>
+                      <SelectItem value="month">Month</SelectItem>
+                      <SelectItem value="agenda">Agenda</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="flex items-center gap-4">
+              <FormField
+                control={form.control}
+                name="allowOverbooking"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2">
+                    <FormLabel>Allow Overbooking</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              {form.watch('allowOverbooking') && (
+                <FormField
+                  control={form.control}
+                  name="overbookingLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Overbooking Limit</FormLabel>
+                      <FormControl>
+                        <NumberInput className="w-20" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
               )}
             </div>
             <Button type="submit" disabled={updateSettings.isPending}>

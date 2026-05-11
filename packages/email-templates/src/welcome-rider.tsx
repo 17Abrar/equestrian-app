@@ -1,6 +1,4 @@
-import {
-  Html, Head, Body, Container, Heading, Text, Hr, Img,
-} from '@react-email/components';
+import { Html, Head, Body, Container, Heading, Text, Hr, Img } from '@react-email/components';
 
 interface WelcomeRiderProps {
   riderName: string;
@@ -8,11 +6,7 @@ interface WelcomeRiderProps {
   clubLogo?: string;
 }
 
-export function WelcomeRider({
-  riderName,
-  clubName,
-  clubLogo,
-}: WelcomeRiderProps) {
+export function WelcomeRider({ riderName, clubName, clubLogo }: WelcomeRiderProps) {
   return (
     <Html>
       <Head />
@@ -28,9 +22,7 @@ export function WelcomeRider({
             You&apos;ve been added as a rider at {clubName}. We&apos;re excited to have you!
           </Text>
 
-          <Text style={styles.text}>
-            Here&apos;s what you can do:
-          </Text>
+          <Text style={styles.text}>Here&apos;s what you can do:</Text>
 
           <Text style={styles.listItem}>🐴 Browse available lessons and book your first ride</Text>
           <Text style={styles.listItem}>📅 Check the schedule for upcoming classes</Text>
@@ -40,8 +32,8 @@ export function WelcomeRider({
           <Hr style={styles.hr} />
 
           <Text style={styles.footer}>
-            If you have any questions, don&apos;t hesitate to reach out to {clubName}.
-            We look forward to seeing you at the stable!
+            If you have any questions, don&apos;t hesitate to reach out to {clubName}. We look
+            forward to seeing you at the stable!
           </Text>
 
           <Text style={styles.clubName}>{clubName}</Text>

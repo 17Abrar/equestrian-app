@@ -107,12 +107,7 @@ export default function RiderBookingDetailPage({
   }
 
   if (!booking) {
-    return (
-      <ErrorState
-        message="Booking not found"
-        onRetry={() => query.refetch()}
-      />
-    );
+    return <ErrorState message="Booking not found" onRetry={() => query.refetch()} />;
   }
 
   const amountDisplay =
@@ -131,11 +126,9 @@ export default function RiderBookingDetailPage({
 
       <div>
         <h1 className="text-2xl font-bold">{booking.lessonTypeName}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-1 text-sm">
           Booking reference{' '}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">
-            {booking.id.slice(0, 8)}
-          </code>
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">{booking.id.slice(0, 8)}</code>
         </p>
       </div>
 
@@ -152,16 +145,16 @@ export default function RiderBookingDetailPage({
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Calendar className="text-muted-foreground h-4 w-4" />
             {formatDate(booking.slotDate, 'long')}
           </div>
           <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="text-muted-foreground h-4 w-4" />
             {formatTime(booking.slotStartTime)} – {formatTime(booking.slotEndTime)}
           </div>
           {booking.arenaName && (
             <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <MapPin className="text-muted-foreground h-4 w-4" />
               {booking.arenaName}
             </div>
           )}
@@ -220,11 +213,7 @@ function PaymentBanner({
 
   if (booking.paymentStatus === 'paid') {
     return (
-      <Banner
-        tone="success"
-        icon={<CheckCircle2 className="h-5 w-5" />}
-        title="Payment received"
-      >
+      <Banner tone="success" icon={<CheckCircle2 className="h-5 w-5" />} title="Payment received">
         You&apos;re all set. See you at the stable.
       </Banner>
     );
@@ -241,19 +230,15 @@ function PaymentBanner({
   if (booking.paymentStatus === 'partial') {
     return (
       <Banner tone="muted" title="Partial refund issued">
-        Part of your payment for this booking was refunded. Contact your
-        stable if you have questions about the amount.
+        Part of your payment for this booking was refunded. Contact your stable if you have
+        questions about the amount.
       </Banner>
     );
   }
 
   if (booking.paymentStatus === 'failed') {
     return (
-      <Banner
-        tone="error"
-        icon={<AlertCircle className="h-5 w-5" />}
-        title="Payment failed"
-      >
+      <Banner tone="error" icon={<AlertCircle className="h-5 w-5" />} title="Payment failed">
         The last payment attempt didn&apos;t go through. You can try again below.
         <div className="mt-3">
           <Button size="sm" onClick={onPayClick}>
@@ -281,8 +266,8 @@ function PaymentBanner({
         icon={<Loader2 className="h-5 w-5 animate-spin" />}
         title="Confirming your payment…"
       >
-        We&apos;re waiting for the payment processor to confirm. This usually takes a few
-        seconds — this page will update automatically.
+        We&apos;re waiting for the payment processor to confirm. This usually takes a few seconds —
+        this page will update automatically.
         <Badge variant="secondary" className="ml-2 text-xs">
           {statusLabel}
         </Badge>
@@ -291,14 +276,10 @@ function PaymentBanner({
   }
 
   return (
-    <Banner
-      tone="warn"
-      icon={<AlertCircle className="h-5 w-5" />}
-      title="Payment needed"
-    >
+    <Banner tone="warn" icon={<AlertCircle className="h-5 w-5" />} title="Payment needed">
       Your booking is reserved. Complete payment to confirm.
       {isPolling && (
-        <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="text-muted-foreground ml-2 inline-flex items-center gap-1 text-xs">
           <Loader2 className="h-3 w-3 animate-spin" /> checking…
         </span>
       )}

@@ -70,10 +70,7 @@ export const platformSubscriptionInvoices = pgTable(
     // can race here; createPlatformInvoiceWithGeneratedNumber's
     // onConflictDoNothing returns null on the loser, which the caller
     // treats as "already issued" and increments the skipped counter.
-    unique('platform_subscription_invoices_unique_club_period').on(
-      table.clubId,
-      table.periodStart,
-    ),
+    unique('platform_subscription_invoices_unique_club_period').on(table.clubId, table.periodStart),
     // Per-club unique invoice number — same pattern as
     // livery_invoices_club_number_unique. The 23505 retry loop in
     // createPlatformInvoiceWithGeneratedNumber lives behind this.

@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { safeHref } from './util/safe-href';
 
@@ -30,20 +38,22 @@ export function HorseRegistrationSubmitted({
           <Text style={styles.greeting}>Hi {adminName},</Text>
 
           <Text style={styles.text}>
-            {ownerName} has registered a new horse at {clubName} and is waiting
-            for your approval.
+            {ownerName} has registered a new horse at {clubName} and is waiting for your approval.
           </Text>
 
           <Section style={styles.card}>
             <Text style={styles.label}>Horse</Text>
-            <Text style={styles.value}>{horseName}{horseBreed ? ` · ${horseBreed}` : ''}</Text>
+            <Text style={styles.value}>
+              {horseName}
+              {horseBreed ? ` · ${horseBreed}` : ''}
+            </Text>
             <Text style={styles.label}>Owner</Text>
             <Text style={styles.value}>{ownerName}</Text>
           </Section>
 
           <Text style={styles.text}>
-            Review the registration to set the monthly livery fee and
-            confirm the start date, or decline with a reason.
+            Review the registration to set the monthly livery fee and confirm the start date, or
+            decline with a reason.
           </Text>
 
           <Section style={{ textAlign: 'center' as const, margin: '24px 0' }}>
@@ -54,9 +64,7 @@ export function HorseRegistrationSubmitted({
 
           <Hr style={styles.hr} />
 
-          <Text style={styles.footer}>
-            Cavaliq — {clubName}
-          </Text>
+          <Text style={styles.footer}>Cavaliq — {clubName}</Text>
         </Container>
       </Body>
     </Html>
@@ -81,7 +89,13 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px' },
+  label: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+  },
   value: { fontSize: '14px', color: '#111827', fontWeight: '500' as const, margin: '0 0 12px' },
   button: {
     backgroundColor: '#8b5cf6',

@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, text, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  text,
+  timestamp,
+  index,
+  uniqueIndex,
+  foreignKey,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { joinRequestStatusEnum } from './enums';
 import { clubs } from './clubs';

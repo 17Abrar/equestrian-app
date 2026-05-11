@@ -188,10 +188,7 @@ export async function joinClubInstantly(input: {
     })
     .from(clubMembers)
     .where(
-      and(
-        eq(clubMembers.clubId, input.clubId),
-        eq(clubMembers.clerkUserId, input.clerkUserId),
-      ),
+      and(eq(clubMembers.clubId, input.clubId), eq(clubMembers.clerkUserId, input.clerkUserId)),
     )
     .limit(1);
 

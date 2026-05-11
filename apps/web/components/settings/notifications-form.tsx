@@ -10,13 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-} from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/ui/form';
 import {
   useUpdateSettings,
   type ClubSettings,
@@ -142,9 +136,7 @@ const notificationsFormSchema = z.object(
 );
 type NotificationsFormValues = Record<string, boolean>;
 
-function prefsToFormValues(
-  prefs: NotificationPreferences | undefined,
-): NotificationsFormValues {
+function prefsToFormValues(prefs: NotificationPreferences | undefined): NotificationsFormValues {
   return TRIGGERS.reduce<NotificationsFormValues>((acc, t) => {
     acc[t.key] = prefs?.[t.key]?.email ?? true;
     return acc;
@@ -211,7 +203,7 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
           <form onSubmit={form.handleSubmit(onSave)} className="space-y-6">
             <section>
               <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Mail className="text-muted-foreground h-4 w-4" />
                 Sent to riders and owners
               </div>
               <div className="space-y-1 rounded-lg border">
@@ -226,7 +218,7 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
 
             <section>
               <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <Bell className="h-4 w-4 text-muted-foreground" />
+                <Bell className="text-muted-foreground h-4 w-4" />
                 Sent to club staff
               </div>
               <div className="space-y-1 rounded-lg border">
@@ -262,10 +254,10 @@ function TriggerRow({ form, trigger }: TriggerRowProps) {
       control={form.control}
       name={trigger.key}
       render={({ field }) => (
-        <FormItem className="flex items-start justify-between gap-4 px-4 py-3 space-y-0">
+        <FormItem className="flex items-start justify-between gap-4 space-y-0 px-4 py-3">
           <div className="space-y-0.5">
             <FormLabel className="text-sm font-medium">{trigger.title}</FormLabel>
-            <p className="text-xs text-muted-foreground">{trigger.description}</p>
+            <p className="text-muted-foreground text-xs">{trigger.description}</p>
           </div>
           <FormControl>
             <Switch

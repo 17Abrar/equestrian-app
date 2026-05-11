@@ -6,12 +6,15 @@ import {
   getMedicationByIds,
   getMemberById,
 } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -82,8 +85,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // attribute the dose to the wrong member if they happen to be in
       // another club. Force ctx.memberId unless the supplied UUID
       // matches an active member of this club.
-      let administeredByMemberId: string | null | undefined =
-        ctx.memberId;
+      let administeredByMemberId: string | null | undefined = ctx.memberId;
       if (data.administeredByMemberId) {
         const member = await getMemberById(ctx.clubId, data.administeredByMemberId);
         if (!member || !member.isActive) {

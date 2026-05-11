@@ -1,11 +1,6 @@
 import { type NextRequest } from 'next/server';
-import {
-  getBookingById,
-  markBookingComplete,
-} from '@equestrian/db/queries';
-import { withAuth,
-  successResponse,
-  errorResponse, validateUuidParam } from '@/lib/api-utils';
+import { getBookingById, markBookingComplete } from '@equestrian/db/queries';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {

@@ -26,7 +26,10 @@ type NewHorse = typeof horses.$inferInsert;
 type DrizzleHorseCreate = Omit<NewHorse, 'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'deletedAt'>;
 
 /** Accepts numbers for decimal fields — converts to strings for Drizzle/Postgres */
-interface HorseCreate extends Omit<DrizzleHorseCreate, 'heightHands' | 'weightKg' | 'weightLimitKg'> {
+interface HorseCreate extends Omit<
+  DrizzleHorseCreate,
+  'heightHands' | 'weightKg' | 'weightLimitKg'
+> {
   heightHands?: number | string | null;
   weightKg?: number | string | null;
   weightLimitKg?: number | string | null;
@@ -70,10 +73,7 @@ interface HorseFilters {
 }
 
 export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
-  const conditions: SQL[] = [
-    eq(horses.clubId, clubId),
-    isNull(horses.deletedAt),
-  ];
+  const conditions: SQL[] = [eq(horses.clubId, clubId), isNull(horses.deletedAt)];
 
   if (filters.status) {
     conditions.push(sql`${horses.status} = ${filters.status}`);
@@ -96,9 +96,8 @@ export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
 
   // Pending horses are ordered by submission time (newest first) — that's what
   // the admin wants in the approvals queue. Everything else is alphabetical.
-  const order = filters.ownershipStatus === 'pending'
-    ? desc(horses.ownershipSubmittedAt)
-    : asc(horses.name);
+  const order =
+    filters.ownershipStatus === 'pending' ? desc(horses.ownershipSubmittedAt) : asc(horses.name);
 
   // Audit F-8 (2026-05-07 r4): the previous `db.select().from(horses)` pulled
   // every column on the wide horses table (~50 columns: insurance numbers,
@@ -148,7 +147,10 @@ export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
   return {
     // Audit pass-2 B-6: decrypt `notes` per row. The list projection
     // doesn't include `markings`, so only `notes` is decrypted here.
-    data: data.map((row) => ({ ...row, notes: decryptFields({ notes: row.notes }, ['notes'] as const).notes })),
+    data: data.map((row) => ({
+      ...row,
+      notes: decryptFields({ notes: row.notes }, ['notes'] as const).notes,
+    })),
     total: countResult[0]?.count ?? 0,
   };
 }
@@ -288,11 +290,7 @@ export async function updateHorse(clubId: string, horseId: string, data: HorseUp
   // / sale audit) and lets matching pick a horse that's been removed from the
   // school string. Updates that don't touch `status` (name, gear, photos)
   // still work on terminal rows so admins can fix typos.
-  const conditions = [
-    eq(horses.id, horseId),
-    eq(horses.clubId, clubId),
-    isNull(horses.deletedAt),
-  ];
+  const conditions = [eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)];
   if (values.status !== undefined) {
     conditions.push(sql`${horses.status} NOT IN ('retired', 'sold')`);
   }
@@ -396,10 +394,7 @@ export async function getAvailableHorsesForMatching(
       rating: horsePairingHistory.rating,
     })
     .from(horsePairingHistory)
-    .innerJoin(
-      horses,
-      and(eq(horses.id, horsePairingHistory.horseId), eq(horses.clubId, clubId)),
-    )
+    .innerJoin(horses, and(eq(horses.id, horsePairingHistory.horseId), eq(horses.clubId, clubId)))
     .where(
       and(
         eq(horsePairingHistory.clubId, clubId),
@@ -477,44 +472,19 @@ export async function softDeleteHorse(clubId: string, horseId: string) {
     // doesn't trigger a cascade we're already doing explicitly.
     await tx
       .delete(horseMedicationLogs)
-      .where(
-        and(
-          eq(horseMedicationLogs.clubId, clubId),
-          eq(horseMedicationLogs.horseId, horseId),
-        ),
-      );
+      .where(and(eq(horseMedicationLogs.clubId, clubId), eq(horseMedicationLogs.horseId, horseId)));
     await tx
       .delete(horseMedications)
-      .where(
-        and(
-          eq(horseMedications.clubId, clubId),
-          eq(horseMedications.horseId, horseId),
-        ),
-      );
+      .where(and(eq(horseMedications.clubId, clubId), eq(horseMedications.horseId, horseId)));
     await tx
       .delete(horseHealthRecords)
-      .where(
-        and(
-          eq(horseHealthRecords.clubId, clubId),
-          eq(horseHealthRecords.horseId, horseId),
-        ),
-      );
+      .where(and(eq(horseHealthRecords.clubId, clubId), eq(horseHealthRecords.horseId, horseId)));
     await tx
       .delete(horseDocuments)
-      .where(
-        and(
-          eq(horseDocuments.clubId, clubId),
-          eq(horseDocuments.horseId, horseId),
-        ),
-      );
+      .where(and(eq(horseDocuments.clubId, clubId), eq(horseDocuments.horseId, horseId)));
     await tx
       .delete(horsePairingHistory)
-      .where(
-        and(
-          eq(horsePairingHistory.clubId, clubId),
-          eq(horsePairingHistory.horseId, horseId),
-        ),
-      );
+      .where(and(eq(horsePairingHistory.clubId, clubId), eq(horsePairingHistory.horseId, horseId)));
 
     return result[0];
   });
@@ -640,11 +610,7 @@ export async function approveHorseOwnership(
   return result[0] ?? null;
 }
 
-export async function declineHorseOwnership(
-  clubId: string,
-  horseId: string,
-  reason: string,
-) {
+export async function declineHorseOwnership(clubId: string, horseId: string, reason: string) {
   const result = await db
     .update(horses)
     .set({
@@ -735,9 +701,9 @@ export async function getHorsesOwnedByUser(
       })
       .from(horses)
       .innerJoin(
-      clubMembers,
-      and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
-    )
+        clubMembers,
+        and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
+      )
       .innerJoin(clubs, eq(horses.clubId, clubs.id))
       .where(where)
       .orderBy(desc(horses.createdAt))
@@ -747,9 +713,9 @@ export async function getHorsesOwnedByUser(
       .select({ count: sql<number>`count(*)::int` })
       .from(horses)
       .innerJoin(
-      clubMembers,
-      and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
-    )
+        clubMembers,
+        and(eq(horses.ownerMemberId, clubMembers.id), eq(clubMembers.clubId, horses.clubId)),
+      )
       .innerJoin(clubs, eq(horses.clubId, clubs.id))
       .where(where),
   ]);

@@ -2,12 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  PaymentElement,
-  useElements,
-  useStripe,
-} from '@stripe/react-stripe-js';
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -20,10 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  usePaymentForBooking,
-  type BookingPaymentResult,
-} from '@/hooks/use-booking-payment';
+import { usePaymentForBooking, type BookingPaymentResult } from '@/hooks/use-booking-payment';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 // Each club runs Stripe under their own merchant account, so the
@@ -83,8 +75,8 @@ export function PayBookingDialog({
     if (payment) return;
 
     // Audit F-71 (2026-05-07 r5 PR Sigma): inner-async-IIFE replaces the
-     // `.then().catch()` chain (CLAUDE.md: "Do NOT use `.then()` chains.
-     // Use `async/await`.").
+    // `.then().catch()` chain (CLAUDE.md: "Do NOT use `.then()` chains.
+    // Use `async/await`.").
     let cancelled = false;
     void (async () => {
       try {
@@ -98,8 +90,7 @@ export function PayBookingDialog({
           setPayment(res.data);
         } else {
           const message =
-            (res as { error?: { message?: string } }).error?.message ??
-            'Could not start payment';
+            (res as { error?: { message?: string } }).error?.message ?? 'Could not start payment';
           setError(message);
         }
       } catch (err: unknown) {
@@ -119,9 +110,7 @@ export function PayBookingDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Complete Payment</DialogTitle>
-          {displayAmount && (
-            <DialogDescription>Amount due: {displayAmount}</DialogDescription>
-          )}
+          {displayAmount && <DialogDescription>Amount due: {displayAmount}</DialogDescription>}
         </DialogHeader>
 
         {error && (
@@ -281,8 +270,7 @@ function StripePaymentForm({
       return;
     }
     if (intentStatus === 'requires_payment_method') {
-      const message =
-        'That payment method was declined. Try a different card or method below.';
+      const message = 'That payment method was declined. Try a different card or method below.';
       setSubmitError(message);
       toast.error(message);
       setSubmitting(false);
@@ -330,16 +318,10 @@ function StripePaymentForm({
 
 // ─── Redirect flow (N-Genius, Ziina) ─────────────────────────────────
 
-function RedirectFlow({
-  paymentUrl,
-  onCancel,
-}: {
-  paymentUrl: string;
-  onCancel: () => void;
-}) {
+function RedirectFlow({ paymentUrl, onCancel }: { paymentUrl: string; onCancel: () => void }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         You&apos;ll be taken to a secure payment page to complete the charge. After paying,
         you&apos;ll be redirected back to your booking.
       </p>

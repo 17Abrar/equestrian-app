@@ -1,10 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  getBookingSlotById,
-  getMemberById,
-  validateCoupon,
-} from '@equestrian/db/queries';
+import { getBookingSlotById, getMemberById, validateCoupon } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
@@ -32,11 +28,7 @@ export async function POST(request: NextRequest) {
         hasPermission(ctx.orgRole, 'bookings:create_child');
 
       if (!canValidate) {
-        return errorResponse(
-          'FORBIDDEN',
-          'You do not have permission to validate coupons',
-          403,
-        );
+        return errorResponse('FORBIDDEN', 'You do not have permission to validate coupons', 403);
       }
 
       const data = await parseRequiredBody(request, validateCouponRequestSchema);
@@ -52,11 +44,7 @@ export async function POST(request: NextRequest) {
           return errorResponse('NO_MEMBER', 'Member profile not found', 403);
         }
         if (data.riderMemberId !== ctx.memberId) {
-          return errorResponse(
-            'FORBIDDEN',
-            'You can only validate coupons for yourself',
-            403,
-          );
+          return errorResponse('FORBIDDEN', 'You can only validate coupons for yourself', 403);
         }
       } else {
         // Staff path: confirm the rider actually belongs to this club. The
@@ -66,11 +54,7 @@ export async function POST(request: NextRequest) {
         // coupon link.
         const rider = await getMemberById(ctx.clubId, data.riderMemberId);
         if (!rider) {
-          return errorResponse(
-            'INVALID_RIDER',
-            'Rider is not a member of this club',
-            400,
-          );
+          return errorResponse('INVALID_RIDER', 'Rider is not a member of this club', 400);
         }
       }
 

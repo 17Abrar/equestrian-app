@@ -41,7 +41,8 @@ export function useHealthRecords(horseId: string, recordType?: string) {
   const params = recordType ? `?recordType=${recordType}` : '';
   return useQuery({
     queryKey: ['horses', horseId, 'health', recordType],
-    queryFn: () => fetchJson<ApiSuccessResponse<HealthRecord[]>>(`/api/v1/horses/${horseId}/health${params}`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<HealthRecord[]>>(`/api/v1/horses/${horseId}/health${params}`),
     enabled: !!horseId,
   });
 }
@@ -65,7 +66,9 @@ export function useDeleteHealthRecord(horseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (recordId: string) =>
-      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/health/${recordId}`, { method: 'DELETE' }),
+      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/health/${recordId}`, {
+        method: 'DELETE',
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['horses', horseId, 'health'] });
     },
@@ -78,7 +81,8 @@ export function useMedications(horseId: string, activeOnly = false) {
   const params = activeOnly ? '?activeOnly=true' : '';
   return useQuery({
     queryKey: ['horses', horseId, 'medications', activeOnly],
-    queryFn: () => fetchJson<ApiSuccessResponse<Medication[]>>(`/api/v1/horses/${horseId}/medications${params}`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<Medication[]>>(`/api/v1/horses/${horseId}/medications${params}`),
     enabled: !!horseId,
   });
 }
@@ -118,7 +122,10 @@ export function useUpdateMedication(horseId: string, medicationId: string) {
 export function useMedicationLogs(horseId: string, medicationId: string) {
   return useQuery({
     queryKey: ['horses', horseId, 'medications', medicationId, 'logs'],
-    queryFn: () => fetchJson<ApiSuccessResponse<MedicationLog[]>>(`/api/v1/horses/${horseId}/medications/${medicationId}/logs`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<MedicationLog[]>>(
+        `/api/v1/horses/${horseId}/medications/${medicationId}/logs`,
+      ),
     enabled: !!horseId && !!medicationId,
   });
 }
@@ -127,13 +134,18 @@ export function useCreateMedicationLog(horseId: string, medicationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateMedicationLogInput) =>
-      fetchJson<ApiResponse<MedicationLog>>(`/api/v1/horses/${horseId}/medications/${medicationId}/logs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
+      fetchJson<ApiResponse<MedicationLog>>(
+        `/api/v1/horses/${horseId}/medications/${medicationId}/logs`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        },
+      ),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['horses', horseId, 'medications', medicationId, 'logs'] });
+      void queryClient.invalidateQueries({
+        queryKey: ['horses', horseId, 'medications', medicationId, 'logs'],
+      });
     },
   });
 }
@@ -143,7 +155,8 @@ export function useCreateMedicationLog(horseId: string, medicationId: string) {
 export function useFeedingPlans(horseId: string) {
   return useQuery({
     queryKey: ['horses', horseId, 'feeding'],
-    queryFn: () => fetchJson<ApiSuccessResponse<FeedingPlan[]>>(`/api/v1/horses/${horseId}/feeding`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<FeedingPlan[]>>(`/api/v1/horses/${horseId}/feeding`),
     enabled: !!horseId,
   });
 }
@@ -167,7 +180,9 @@ export function useDeleteFeedingPlan(horseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (planId: string) =>
-      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/feeding/${planId}`, { method: 'DELETE' }),
+      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/feeding/${planId}`, {
+        method: 'DELETE',
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['horses', horseId, 'feeding'] });
     },
@@ -179,7 +194,8 @@ export function useDeleteFeedingPlan(horseId: string) {
 export function useExerciseSchedules(horseId: string) {
   return useQuery({
     queryKey: ['horses', horseId, 'exercise'],
-    queryFn: () => fetchJson<ApiSuccessResponse<ExerciseSchedule[]>>(`/api/v1/horses/${horseId}/exercise`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<ExerciseSchedule[]>>(`/api/v1/horses/${horseId}/exercise`),
     enabled: !!horseId,
   });
 }
@@ -203,7 +219,9 @@ export function useDeleteExerciseSchedule(horseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (scheduleId: string) =>
-      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/exercise/${scheduleId}`, { method: 'DELETE' }),
+      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/exercise/${scheduleId}`, {
+        method: 'DELETE',
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['horses', horseId, 'exercise'] });
     },
@@ -216,7 +234,10 @@ export function useDocuments(horseId: string, category?: string) {
   const params = category ? `?category=${category}` : '';
   return useQuery({
     queryKey: ['horses', horseId, 'documents', category],
-    queryFn: () => fetchJson<ApiSuccessResponse<HorseDocument[]>>(`/api/v1/horses/${horseId}/documents${params}`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<HorseDocument[]>>(
+        `/api/v1/horses/${horseId}/documents${params}`,
+      ),
     enabled: !!horseId,
   });
 }
@@ -240,7 +261,9 @@ export function useDeleteDocument(horseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (documentId: string) =>
-      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/documents/${documentId}`, { method: 'DELETE' }),
+      fetchJson<ApiResponse<{ id: string }>>(`/api/v1/horses/${horseId}/documents/${documentId}`, {
+        method: 'DELETE',
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['horses', horseId, 'documents'] });
     },

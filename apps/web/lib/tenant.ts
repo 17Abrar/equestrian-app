@@ -246,9 +246,7 @@ export async function getTenantContext(): Promise<TenantContext> {
   };
 }
 
-export async function withTenantContext<T>(
-  fn: (ctx: TenantContext) => Promise<T>,
-): Promise<T> {
+export async function withTenantContext<T>(fn: (ctx: TenantContext) => Promise<T>): Promise<T> {
   const ctx = await getTenantContext();
   return fn(ctx);
 }

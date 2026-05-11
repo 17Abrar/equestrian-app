@@ -10,7 +10,12 @@ interface CavaliqMarkProps {
   priority?: boolean;
 }
 
-export function CavaliqMark({ variant = 'light', size = 24, className, priority }: CavaliqMarkProps) {
+export function CavaliqMark({
+  variant = 'light',
+  size = 24,
+  className,
+  priority,
+}: CavaliqMarkProps) {
   const src = variant === 'dark' ? '/brand/cavaliq-mark-dark.svg' : '/brand/cavaliq-mark.svg';
   return (
     <Image
@@ -36,11 +41,14 @@ interface CavaliqLogoProps {
   priority?: boolean;
 }
 
-export function CavaliqLogo({ variant = 'light', height = 32, className, priority }: CavaliqLogoProps) {
+export function CavaliqLogo({
+  variant = 'light',
+  height = 32,
+  className,
+  priority,
+}: CavaliqLogoProps) {
   const src =
-    variant === 'dark'
-      ? '/brand/cavaliq-logo-dark-trimmed.png'
-      : '/brand/cavaliq-logo-trimmed.png';
+    variant === 'dark' ? '/brand/cavaliq-logo-dark-trimmed.png' : '/brand/cavaliq-logo-trimmed.png';
   const width = Math.round((LOCKUP_NATURAL_WIDTH / LOCKUP_NATURAL_HEIGHT) * height);
   return (
     <Image
@@ -61,7 +69,11 @@ interface CavaliqWordmarkProps {
   className?: string;
 }
 
-export function CavaliqWordmark({ variant = 'light', height = 24, className }: CavaliqWordmarkProps) {
+export function CavaliqWordmark({
+  variant = 'light',
+  height = 24,
+  className,
+}: CavaliqWordmarkProps) {
   const src =
     variant === 'dark'
       ? '/brand/cavaliq-wordmark-dark-trimmed.png'

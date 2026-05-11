@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Section, Img,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Section,
+  Img,
 } from '@react-email/components';
 
 interface BookingReminderProps {
@@ -35,17 +43,33 @@ export function BookingReminder({
           <Heading style={styles.heading}>Lesson Reminder</Heading>
 
           <Text style={styles.greeting}>Hi {riderName},</Text>
-          <Text style={styles.text}>
-            Just a reminder — your lesson is coming up tomorrow!
-          </Text>
+          <Text style={styles.text}>Just a reminder — your lesson is coming up tomorrow!</Text>
 
           <Section style={styles.detailsBox}>
-            <Text style={styles.detailRow}><strong>Lesson:</strong> {lessonType}</Text>
-            <Text style={styles.detailRow}><strong>Date:</strong> {date}</Text>
-            <Text style={styles.detailRow}><strong>Time:</strong> {time}</Text>
-            {horseName && <Text style={styles.detailRow}><strong>Horse:</strong> {horseName}</Text>}
-            {coachName && <Text style={styles.detailRow}><strong>Coach:</strong> {coachName}</Text>}
-            {arena && <Text style={styles.detailRow}><strong>Arena:</strong> {arena}</Text>}
+            <Text style={styles.detailRow}>
+              <strong>Lesson:</strong> {lessonType}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Date:</strong> {date}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Time:</strong> {time}
+            </Text>
+            {horseName && (
+              <Text style={styles.detailRow}>
+                <strong>Horse:</strong> {horseName}
+              </Text>
+            )}
+            {coachName && (
+              <Text style={styles.detailRow}>
+                <strong>Coach:</strong> {coachName}
+              </Text>
+            )}
+            {arena && (
+              <Text style={styles.detailRow}>
+                <strong>Arena:</strong> {arena}
+              </Text>
+            )}
           </Section>
 
           <Text style={styles.text}>

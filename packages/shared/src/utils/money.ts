@@ -16,7 +16,17 @@
  */
 const THREE_DECIMAL_CURRENCIES = new Set(['BHD', 'JOD', 'KWD', 'OMR', 'TND']);
 const ZERO_DECIMAL_CURRENCIES = new Set([
-  'JPY', 'KRW', 'VND', 'CLP', 'PYG', 'RWF', 'UGX', 'VUV', 'XAF', 'XOF', 'XPF',
+  'JPY',
+  'KRW',
+  'VND',
+  'CLP',
+  'PYG',
+  'RWF',
+  'UGX',
+  'VUV',
+  'XAF',
+  'XOF',
+  'XPF',
 ]);
 
 // Cache Intl probes so a hot path doesn't pay the constructor cost per

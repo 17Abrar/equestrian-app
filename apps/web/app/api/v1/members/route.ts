@@ -38,10 +38,7 @@ export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const rawRole = request.nextUrl.searchParams.get('role');
-      const filters = validateInput(
-        membersFiltersSchema,
-        rawRole == null ? {} : { role: rawRole },
-      );
+      const filters = validateInput(membersFiltersSchema, rawRole == null ? {} : { role: rawRole });
       const requestedRoles = filters.role ? [filters.role] : [];
 
       const callerHasStaffRead = hasPermission(ctx.orgRole, 'staff:read');

@@ -14,7 +14,7 @@ import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
  */
 export default function SelectOrgPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <header className="border-b">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" aria-label="Cavaliq home">
@@ -25,10 +25,8 @@ export default function SelectOrgPage() {
 
       <main className="mx-auto max-w-4xl px-4 py-14 sm:px-6">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Welcome to Cavaliq
-          </h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Welcome to Cavaliq</h1>
+          <p className="text-muted-foreground mt-2">
             You&apos;re signed in — pick how you want to use the platform.
           </p>
         </div>
@@ -36,14 +34,14 @@ export default function SelectOrgPage() {
         <div className="mt-10 grid gap-4 md:grid-cols-2">
           <Card>
             <CardContent className="space-y-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <Search className="h-6 w-6 text-primary" />
+              <div className="bg-primary/10 flex h-12 w-12 items-center justify-center rounded-full">
+                <Search className="text-primary h-6 w-6" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold">Ride at a club</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Browse clubs near you, join one (or many), and start booking lessons.
-                  Your progress follows you across clubs.
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Browse clubs near you, join one (or many), and start booking lessons. Your
+                  progress follows you across clubs.
                 </p>
               </div>
               <Button className="w-full" asChild>
@@ -54,14 +52,14 @@ export default function SelectOrgPage() {
 
           <Card>
             <CardContent className="space-y-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <Plus className="h-6 w-6 text-primary" />
+              <div className="bg-primary/10 flex h-12 w-12 items-center justify-center rounded-full">
+                <Plus className="text-primary h-6 w-6" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold">Run your own club</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Manage horses, riders, staff, and bookings from one dashboard. Get paid
-                  via Stripe, N-Genius, or Ziina.
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Manage horses, riders, staff, and bookings from one dashboard. Get paid via
+                  Stripe, N-Genius, or Ziina.
                 </p>
               </div>
               <Button className="w-full" variant="outline" asChild>
@@ -76,7 +74,7 @@ export default function SelectOrgPage() {
           </Card>
         </div>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
+        <p className="text-muted-foreground mt-8 text-center text-xs">
           Already joined a club but not seeing it? Try signing out and back in.
         </p>
       </main>

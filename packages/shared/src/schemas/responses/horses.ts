@@ -30,18 +30,9 @@ export const horseStatusSchema = z.enum([
   'sold',
 ]);
 
-export const horseSkillLevelSchema = z.enum([
-  'beginner',
-  'intermediate',
-  'advanced',
-]);
+export const horseSkillLevelSchema = z.enum(['beginner', 'intermediate', 'advanced']);
 
-export const horseOwnershipStatusSchema = z.enum([
-  'pending',
-  'active',
-  'retired',
-  'declined',
-]);
+export const horseOwnershipStatusSchema = z.enum(['pending', 'active', 'retired', 'declined']);
 
 /**
  * Runtime schema for `GET /api/v1/horses` paginated list items.

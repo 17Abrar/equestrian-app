@@ -6,7 +6,11 @@ import { Search, Users, Plus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { createRiderSchema, type CreateRiderFormValues, type CreateRiderInput } from '@equestrian/shared/schemas';
+import {
+  createRiderSchema,
+  type CreateRiderFormValues,
+  type CreateRiderInput,
+} from '@equestrian/shared/schemas';
 import { useRiders, useCreateRider } from '@/hooks/use-riders';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
@@ -98,15 +102,15 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Riders</h1>
-          <p className="mt-1 text-muted-foreground">Manage rider profiles and progress</p>
+          <p className="text-muted-foreground mt-1">Manage rider profiles and progress</p>
         </div>
         {canCreate && <AddRiderDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
             placeholder="Search riders..."
             value={search}
@@ -123,9 +127,7 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
             setSkillLevel(
               v === 'all'
                 ? undefined
-                : SKILL_LEVELS_FILTER.includes(
-                      v as (typeof SKILL_LEVELS_FILTER)[number],
-                    )
+                : SKILL_LEVELS_FILTER.includes(v as (typeof SKILL_LEVELS_FILTER)[number])
                   ? (v as (typeof SKILL_LEVELS_FILTER)[number])
                   : undefined,
             );
@@ -158,11 +160,7 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
         <EmptyState
           title="No riders yet"
           description="Riders will appear here once they join your club"
-          action={
-            canCreate
-              ? { label: 'Add Rider', onClick: () => setAddOpen(true) }
-              : undefined
-          }
+          action={canCreate ? { label: 'Add Rider', onClick: () => setAddOpen(true) } : undefined}
         />
       )}
 
@@ -170,22 +168,18 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.data.map((rider) => (
-              <Link
-                key={rider.id}
-                href={`/riders/${rider.id}`}
-                className="block"
-              >
+              <Link key={rider.id} href={`/riders/${rider.id}`} className="block">
                 <Card className="transition-shadow hover:shadow-md">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                        <Users className="h-5 w-5 text-muted-foreground" />
+                      <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+                        <Users className="text-muted-foreground h-5 w-5" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <h3 className="truncate font-semibold">
                           {rider.displayName ?? 'Unnamed Rider'}
                         </h3>
-                        <p className="truncate text-sm text-muted-foreground">
+                        <p className="text-muted-foreground truncate text-sm">
                           {rider.email ?? 'No email'}
                         </p>
                       </div>
@@ -223,7 +217,7 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-muted-foreground text-sm">
                 Page {page} of {data.pagination.totalPages}
               </span>
               <Button
@@ -287,42 +281,110 @@ function AddRiderDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="displayName" render={({ field }) => (
-                <FormItem><FormLabel>Name *</FormLabel><FormControl><Input placeholder="Full name" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>Email *</FormLabel><FormControl><Input type="email" placeholder="rider@example.com" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email *</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="rider@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input placeholder="+971..." {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
-                <FormItem><FormLabel>Date of Birth</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+971..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dateOfBirth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Birth</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-3 gap-4">
-              <FormField control={form.control} name="weightKg" render={({ field }) => (
-                <FormItem><FormLabel>Weight (kg)</FormLabel><FormControl><NumberInput step="0.1" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="heightCm" render={({ field }) => (
-                <FormItem><FormLabel>Height (cm)</FormLabel><FormControl><NumberInput step="0.1" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="skillLevel" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Skill Level</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? 'beginner'}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="beginner">Beginner</SelectItem>
-                      <SelectItem value="intermediate">Intermediate</SelectItem>
-                      <SelectItem value="advanced">Advanced</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="weightKg"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Weight (kg)</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.1" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="heightCm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Height (cm)</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.1" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="skillLevel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Skill Level</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? 'beginner'}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="beginner">Beginner</SelectItem>
+                        <SelectItem value="intermediate">Intermediate</SelectItem>
+                        <SelectItem value="advanced">Advanced</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={createRider.isPending}>
               {createRider.isPending ? 'Adding...' : 'Add Rider'}

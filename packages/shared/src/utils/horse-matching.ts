@@ -104,9 +104,7 @@ export function matchHorsesToRider(input: MatchInput): MatchResult[] {
   });
 
   // Sort by score descending and return top matches
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, TOP_MATCHES_COUNT);
+  return scored.sort((a, b) => b.score - a.score).slice(0, TOP_MATCHES_COUNT);
 }
 
 function scoreSkillMatch(
@@ -194,11 +192,7 @@ function scoreWorkload(
   return 0;
 }
 
-function scoreTemperament(
-  temperament: string[],
-  lessonType: string,
-  reasons: string[],
-): number {
+function scoreTemperament(temperament: string[], lessonType: string, reasons: string[]): number {
   if (lessonType === 'group' && temperament.includes('calm')) {
     reasons.push('Calm temperament, great for group lessons');
     return TEMPERAMENT_MATCH_SCORE;

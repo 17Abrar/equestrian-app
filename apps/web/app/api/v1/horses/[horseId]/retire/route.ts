@@ -1,11 +1,14 @@
 import { type NextRequest } from 'next/server';
 import { retireHorseOwnershipSchema } from '@equestrian/shared/schemas';
-import {
-  retireHorseOwnership,
-  cancelPendingInvoicesForHorse,
-} from '@equestrian/db/queries';
+import { retireHorseOwnership, cancelPendingInvoicesForHorse } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
-import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseOptionalBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -37,11 +40,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
 
       if (!result) {
-        return errorResponse(
-          'NOT_ACTIVE',
-          'Horse not found or is not an active ownership',
-          409,
-        );
+        return errorResponse('NOT_ACTIVE', 'Horse not found or is not an active ownership', 409);
       }
 
       void ctx.audit({

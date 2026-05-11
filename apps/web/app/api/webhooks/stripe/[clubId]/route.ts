@@ -33,17 +33,10 @@ import { logger } from '@/lib/logger';
  */
 
 const PAID_EVENTS = new Set(['payment_intent.succeeded']);
-const FAILED_EVENTS = new Set([
-  'payment_intent.payment_failed',
-  'payment_intent.canceled',
-]);
+const FAILED_EVENTS = new Set(['payment_intent.payment_failed', 'payment_intent.canceled']);
 const REFUND_EVENTS = new Set(['charge.refunded', 'charge.refund.updated']);
 
-const HANDLED_EVENTS = new Set<string>([
-  ...PAID_EVENTS,
-  ...FAILED_EVENTS,
-  ...REFUND_EVENTS,
-]);
+const HANDLED_EVENTS = new Set<string>([...PAID_EVENTS, ...FAILED_EVENTS, ...REFUND_EVENTS]);
 
 const clubIdSchema = z.string().uuid();
 
@@ -249,17 +242,15 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
       // Audit F-13 (2026-05-08 r6): livery flow now signals
       // permanentFailureReason (e.g. paid for a cancelled invoice).
       // Same handling as the booking branch.
-      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+      invoiceResult?.kind === 'matched' &&
+      invoiceResult.permanentFailureReason
     ) {
       await markWebhookEventPermanentlyFailed(
         'stripe',
         event.eventId,
         invoiceResult.permanentFailureReason,
       );
-    } else if (
-      bookingMissed &&
-      (!invoiceResult || invoiceResult.kind === 'no_target')
-    ) {
+    } else if (bookingMissed && (!invoiceResult || invoiceResult.kind === 'no_target')) {
       // Both the booking AND the livery invoice helpers came up empty
       // — neither side can ever resolve this event. F-19 escalation.
       await markWebhookEventPermanentlyFailed(

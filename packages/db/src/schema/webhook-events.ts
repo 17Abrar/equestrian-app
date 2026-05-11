@@ -74,9 +74,7 @@ export const webhookEvents = pgTable(
     // Audit AI-36 — promoted to pgEnum.
     status: webhookEventStatusEnum('status').notNull().default('received'),
     attemptCount: integer('attempt_count').notNull().default(1),
-    lastAttemptedAt: timestamp('last_attempted_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    lastAttemptedAt: timestamp('last_attempted_at', { withTimezone: true }).notNull().defaultNow(),
     lastError: text('last_error'),
     // Nullable (audit H-9) — only set once status flips to 'processed'.
     // Previous NOT NULL DEFAULT now() conflated "row inserted" with "event

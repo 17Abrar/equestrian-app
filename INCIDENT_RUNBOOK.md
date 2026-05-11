@@ -27,9 +27,9 @@ them changes.
    - Clerk — https://status.clerk.com/
    - Resend — https://resend.com/status
    - Upstash — https://status.upstash.com/
-   If any are red, attach the linked incident to the customer-comms
-   draft and skip to "Customer comms" below — there is nothing to fix
-   on our side until upstream recovers.
+     If any are red, attach the linked incident to the customer-comms
+     draft and skip to "Customer comms" below — there is nothing to fix
+     on our side until upstream recovers.
 3. **Run the deep health probe**:
    `curl https://cavaliq.com/api/v1/health?deep=1`
    Returns 200 with per-subsystem status when all green; 503 with the
@@ -87,8 +87,8 @@ log lines.
    credentials blob (audit F-53, 2026-05-07 r5).
 2. Check `webhook_events` table for the affected provider:
    `SELECT status, count(*) FROM webhook_events
-    WHERE provider = 'stripe' AND last_attempted_at > now() - interval '1 hour'
-    GROUP BY status`
+WHERE provider = 'stripe' AND last_attempted_at > now() - interval '1 hour'
+GROUP BY status`
    Many `permanently_failed` rows mean the org-not-found race is
    stuck — usually a Clerk org delete that didn't propagate cleanly.
 3. To replay a single event manually, the provider's dashboard has
@@ -151,11 +151,13 @@ Within 5 business days of any incident that hit a customer:
 **Audit MED-5 (2026-05-05).** When `apps/web/app/api/webhooks/clerk/route.ts` receives `organizationMembership.created` BEFORE its sibling `organization.created` event (Svix delivery is best-effort, not strictly ordered), the handler can't find the club row to attach the member to. It returns 503 for Svix to retry; if all retries also lose the race, after `MAX_WEBHOOK_ATTEMPTS=3` the row auto-promotes to `permanently_failed` and the membership is silently dropped — the org ends with no admin in `club_members`.
 
 ### Symptoms
+
 - A new club admin completes Clerk signup, lands on `/select-org` and stays there.
 - `wrangler tail` shows `webhook_permanently_failed` with `provider=clerk`, `eventType=organizationMembership.created`.
 - Clerk dashboard lists the user as an org member; Cavaliq DB has zero `club_members` rows for that `clerk_org_id`.
 
 ### Resync procedure
+
 1. Pull the affected `org_id` from the failed log entry (Sentry tag `clerkOrgId` or the `wrangler tail` line).
 2. Fetch the org's member list from Clerk:
    ```
@@ -183,6 +185,7 @@ Within 5 business days of any incident that hit a customer:
 4. Verify the user can now load the dashboard.
 
 ### Prevention
+
 Long-term: build an automated resync triggered when `permanently_failed` Clerk-membership rows are detected. Until then, the Sentry alert on `webhook_permanently_failed` with `provider=clerk` (configured via `scripts/setup-sentry-alerts.mjs`) pages on-call.
 
 ## Past incidents

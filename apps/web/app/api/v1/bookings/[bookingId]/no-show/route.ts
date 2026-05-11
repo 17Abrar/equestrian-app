@@ -8,9 +8,7 @@ import {
   getMemberByIdIncludingDeactivated,
 } from '@equestrian/db/queries';
 import { calculateNoShowFee, coerceFeePercent, formatMoney } from '@equestrian/shared/utils';
-import { withAuth,
-  successResponse,
-  errorResponse, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 import { sendTriggeredEmail } from '@/lib/email';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
@@ -64,8 +62,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         noShowFeePercent: coerceFeePercent(club.noShowFeePercent ?? '0', 'noShowFeePercent'),
         lessonPrice: feeBase,
       });
-      const noShowFee =
-        booking.amount != null ? Math.min(rawFee, booking.amount) : rawFee;
+      const noShowFee = booking.amount != null ? Math.min(rawFee, booking.amount) : rawFee;
 
       const updated = await markBookingNoShow(ctx.clubId, bookingId, noShowFee);
 

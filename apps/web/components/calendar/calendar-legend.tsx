@@ -29,13 +29,13 @@ export function CalendarLegend({ slots, competitions }: CalendarLegendProps) {
       {uniqueTypes.map(([type, { name, color }]) => (
         <div key={type} className="flex items-center gap-1.5">
           <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
-          <span className="text-xs text-muted-foreground">{name}</span>
+          <span className="text-muted-foreground text-xs">{name}</span>
         </div>
       ))}
       {competitions.length > 0 && (
         <div className="flex items-center gap-1.5">
           <div className="h-3 w-3 rounded-sm border-2 border-amber-500 bg-amber-100" />
-          <span className="text-xs text-muted-foreground">Competition</span>
+          <span className="text-muted-foreground text-xs">Competition</span>
         </div>
       )}
     </div>

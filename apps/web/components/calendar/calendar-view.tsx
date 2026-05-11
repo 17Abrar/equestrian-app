@@ -43,10 +43,7 @@ export function CalendarView() {
     dateTo: calendar.dateRange.to,
   });
 
-  const competitionsQuery = useCompetitionsCalendar(
-    calendar.dateRange.from,
-    calendar.dateRange.to,
-  );
+  const competitionsQuery = useCompetitionsCalendar(calendar.dateRange.from, calendar.dateRange.to);
 
   const isLoading = slotsQuery.isLoading || competitionsQuery.isLoading;
   const isError = slotsQuery.isError || competitionsQuery.isError;
@@ -74,10 +71,7 @@ export function CalendarView() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
         <div className="flex items-center gap-2">
-          <CreateSingleSlotDialog
-            open={singleSlotOpen}
-            onOpenChange={setSingleSlotOpen}
-          />
+          <CreateSingleSlotDialog open={singleSlotOpen} onOpenChange={setSingleSlotOpen} />
           <CreateRecurringSlotsDialog
             open={recurringSlotsOpen}
             onOpenChange={setRecurringSlotsOpen}
@@ -112,19 +106,11 @@ export function CalendarView() {
       )}
 
       {calendar.view === 'week' && (
-        <WeekView
-          weekDates={calendar.weekDates}
-          slots={slots}
-          competitions={competitions}
-        />
+        <WeekView weekDates={calendar.weekDates} slots={slots} competitions={competitions} />
       )}
 
       {calendar.view === 'day' && (
-        <DayView
-          date={calendar.currentDate}
-          slots={slots}
-          competitions={competitions}
-        />
+        <DayView date={calendar.currentDate} slots={slots} competitions={competitions} />
       )}
 
       {calendar.view === 'month' && (
@@ -139,9 +125,7 @@ export function CalendarView() {
         />
       )}
 
-      {calendar.view === 'agenda' && (
-        <AgendaView slots={slots} competitions={competitions} />
-      )}
+      {calendar.view === 'agenda' && <AgendaView slots={slots} competitions={competitions} />}
 
       <CalendarLegend slots={slots} competitions={competitions} />
 

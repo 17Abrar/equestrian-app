@@ -63,8 +63,7 @@ function toSummary(row: PaymentAccountRow): PaymentAccountSummary {
   // it to UI/API responses — consumers should look at the
   // `metadata.hasWebhookSecret` boolean stamped by the adapter when
   // they need a "configured?" signal.
-  const { encryptedCredentials: _secret, webhookSecretHash: _hash, ...rest } =
-    row;
+  const { encryptedCredentials: _secret, webhookSecretHash: _hash, ...rest } = row;
   return rest;
 }
 
@@ -173,12 +172,7 @@ export async function getActivePaymentAccount(
   const rows = await db
     .select()
     .from(clubPaymentAccounts)
-    .where(
-      and(
-        eq(clubPaymentAccounts.clubId, clubId),
-        eq(clubPaymentAccounts.isActive, true),
-      ),
-    )
+    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.isActive, true)))
     .limit(1);
 
   const row = rows[0];
@@ -192,12 +186,7 @@ export async function getPaymentAccountByProvider(
   const rows = await db
     .select()
     .from(clubPaymentAccounts)
-    .where(
-      and(
-        eq(clubPaymentAccounts.clubId, clubId),
-        eq(clubPaymentAccounts.provider, provider),
-      ),
-    )
+    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)))
     .limit(1);
 
   const row = rows[0];
@@ -367,10 +356,7 @@ export async function upsertPaymentAccount(
           clubId,
         })
         .onConflictDoNothing({
-          target: [
-            burnedWebhookSecretHashes.provider,
-            burnedWebhookSecretHashes.secretHash,
-          ],
+          target: [burnedWebhookSecretHashes.provider, burnedWebhookSecretHashes.secretHash],
         });
     }
 
@@ -401,10 +387,7 @@ export async function setActiveProvider(
       })
       .from(clubPaymentAccounts)
       .where(
-        and(
-          eq(clubPaymentAccounts.clubId, clubId),
-          eq(clubPaymentAccounts.provider, provider),
-        ),
+        and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)),
       )
       .limit(1);
 
@@ -457,10 +440,7 @@ export async function disconnectPaymentAccount(
       .select({ webhookSecretHash: clubPaymentAccounts.webhookSecretHash })
       .from(clubPaymentAccounts)
       .where(
-        and(
-          eq(clubPaymentAccounts.clubId, clubId),
-          eq(clubPaymentAccounts.provider, provider),
-        ),
+        and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)),
       )
       .limit(1);
 
@@ -477,10 +457,7 @@ export async function disconnectPaymentAccount(
         updatedAt: new Date(),
       })
       .where(
-        and(
-          eq(clubPaymentAccounts.clubId, clubId),
-          eq(clubPaymentAccounts.provider, provider),
-        ),
+        and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)),
       )
       .returning();
 
@@ -493,10 +470,7 @@ export async function disconnectPaymentAccount(
           clubId,
         })
         .onConflictDoNothing({
-          target: [
-            burnedWebhookSecretHashes.provider,
-            burnedWebhookSecretHashes.secretHash,
-          ],
+          target: [burnedWebhookSecretHashes.provider, burnedWebhookSecretHashes.secretHash],
         });
     }
 
@@ -517,12 +491,7 @@ export async function recordPaymentAccountError(
       lastError: message.slice(0, 2048),
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(clubPaymentAccounts.clubId, clubId),
-        eq(clubPaymentAccounts.provider, provider),
-      ),
-    );
+    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)));
 }
 
 /**
@@ -572,12 +541,7 @@ export async function adminGetPaymentAccountByProvider(
   const rows = await rawDb
     .select()
     .from(clubPaymentAccounts)
-    .where(
-      and(
-        eq(clubPaymentAccounts.clubId, clubId),
-        eq(clubPaymentAccounts.provider, provider),
-      ),
-    )
+    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)))
     .limit(1);
 
   const row = rows[0];
@@ -594,12 +558,7 @@ export async function adminGetActivePaymentAccount(
   const rows = await rawDb
     .select()
     .from(clubPaymentAccounts)
-    .where(
-      and(
-        eq(clubPaymentAccounts.clubId, clubId),
-        eq(clubPaymentAccounts.isActive, true),
-      ),
-    )
+    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.isActive, true)))
     .limit(1);
 
   const row = rows[0];
@@ -819,7 +778,8 @@ export async function wasProviderPaymentIssuedRecently(
 // a webhook to a different booking. The marker is appended at
 // create-time by `descriptionForRecovery` (`apps/web/lib/payments/
 // types.ts`); end-anchoring matches that exact placement.
-const BOOKING_DESCRIPTION_MARKER_REGEX = /\[booking:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\s*$/i;
+const BOOKING_DESCRIPTION_MARKER_REGEX =
+  /\[booking:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\s*$/i;
 
 export async function findBookingByIdInDescription(
   description: string | undefined,

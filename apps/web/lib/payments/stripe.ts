@@ -133,9 +133,7 @@ function mapIntentStatus(status: Stripe.PaymentIntent.Status): PaymentIntentStat
   }
 }
 
-function mapRefundStatus(
-  status: Stripe.Refund['status'],
-): 'pending' | 'succeeded' | 'failed' {
+function mapRefundStatus(status: Stripe.Refund['status']): 'pending' | 'succeeded' | 'failed' {
   switch (status) {
     case 'succeeded':
       return 'succeeded';
@@ -482,9 +480,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
         }
         const refundsList = charge.refunds?.data ?? [];
         if (refundsList.length > 0) {
-          const sorted = [...refundsList].sort(
-            (a, b) => (b.created ?? 0) - (a.created ?? 0),
-          );
+          const sorted = [...refundsList].sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
           const latest = sorted[0];
           if (latest) {
             refundStatus = latest.status as WebhookEvent['refundStatus'];

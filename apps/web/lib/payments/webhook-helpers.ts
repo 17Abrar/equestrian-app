@@ -259,11 +259,7 @@ export async function applyPaymentWebhook({
     currency: string;
   } | null = null;
   if (event.providerPaymentId) {
-    bookingRef = await findBookingByProviderPaymentId(
-      event.providerPaymentId,
-      provider,
-      clubId,
-    );
+    bookingRef = await findBookingByProviderPaymentId(event.providerPaymentId, provider, clubId);
     if (!clubId) clubId = bookingRef?.clubId;
   }
 
@@ -637,17 +633,8 @@ export async function applyPaymentWebhook({
     };
   }
 
-  if (
-    isRefundEvent &&
-    event.refundStatus === 'succeeded' &&
-    explicitDelta &&
-    explicitDelta > 0
-  ) {
-    const recorded = await recordBookingRefund(
-      clubId,
-      bookingRef.bookingId,
-      explicitDelta,
-    );
+  if (isRefundEvent && event.refundStatus === 'succeeded' && explicitDelta && explicitDelta > 0) {
+    const recorded = await recordBookingRefund(clubId, bookingRef.bookingId, explicitDelta);
     if (recorded) {
       logger.info('booking_refund_recorded_from_webhook', {
         clubId,
@@ -701,9 +688,7 @@ export async function applyPaymentWebhook({
     return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
-  const nextStatus = isRefundEvent
-    ? 'refunded'
-    : toBookingPaymentStatus(event.status);
+  const nextStatus = isRefundEvent ? 'refunded' : toBookingPaymentStatus(event.status);
 
   if (!nextStatus) {
     // Nothing to update.
@@ -713,10 +698,7 @@ export async function applyPaymentWebhook({
   // Don't downgrade from a terminal state back to `pending` — webhooks
   // can arrive out of order.
   const terminal = new Set(['paid', 'partial', 'refunded']);
-  if (
-    terminal.has(bookingRef.currentPaymentStatus) &&
-    !terminal.has(nextStatus)
-  ) {
+  if (terminal.has(bookingRef.currentPaymentStatus) && !terminal.has(nextStatus)) {
     logger.info('webhook_skipping_status_downgrade', {
       clubId,
       bookingId: bookingRef.bookingId,
@@ -1134,10 +1116,7 @@ export async function applyLiveryInvoiceWebhook({
       clubMembers,
       and(eq(clubMembers.id, invoice.ownerMemberId), eq(clubMembers.clubId, invoice.clubId)),
     )
-    .innerJoin(
-      horses,
-      and(eq(horses.id, invoice.horseId), eq(horses.clubId, invoice.clubId)),
-    )
+    .innerJoin(horses, and(eq(horses.id, invoice.horseId), eq(horses.clubId, invoice.clubId)))
     .where(eq(clubs.id, invoice.clubId))
     .limit(1);
 

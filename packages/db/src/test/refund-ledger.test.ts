@@ -86,9 +86,7 @@ async function seedPaidBooking(
 describe('recordBookingRefund', () => {
   it('partial refund sets status="partial" and accumulates refundedAmountMinor', async () => {
     const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
-    const result = await withTestDb(testDb.db, () =>
-      recordBookingRefund(clubId, bookingId, 2_000),
-    );
+    const result = await withTestDb(testDb.db, () => recordBookingRefund(clubId, bookingId, 2_000));
     expect(result?.paymentStatus).toBe('partial');
     expect(result?.refundedAmountMinor).toBe(2_000);
   });
@@ -176,9 +174,7 @@ describe('recordBookingRefund', () => {
       expect(successes.length).toBe(2);
       // Running total reflects both — lost-update would have left this
       // at 2_000 or 3_000 instead of 5_000.
-      const finalTotal = Math.max(
-        ...successes.map((r) => r!.refundedAmountMinor),
-      );
+      const finalTotal = Math.max(...successes.map((r) => r!.refundedAmountMinor));
       expect(finalTotal).toBe(5_000);
     });
   });

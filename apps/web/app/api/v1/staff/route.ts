@@ -2,7 +2,14 @@ import { type NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createStaffSchema, staffFiltersSchema } from '@equestrian/shared/schemas';
 import { getStaffByClub, createMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  paginatedResponse,
+  errorResponse,
+  validateInput,
+  parseRequiredBody,
+} from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {

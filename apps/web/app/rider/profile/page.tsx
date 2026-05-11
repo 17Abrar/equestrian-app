@@ -86,17 +86,15 @@ const riderProfileFormSchema = z.object({
   weightKg: z
     .string()
     .max(20)
-    .refine(
-      (v) => v === '' || (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 500),
-      { message: 'Enter a positive weight up to 500 kg' },
-    ),
+    .refine((v) => v === '' || (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 500), {
+      message: 'Enter a positive weight up to 500 kg',
+    }),
   heightCm: z
     .string()
     .max(20)
-    .refine(
-      (v) => v === '' || (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 300),
-      { message: 'Enter a positive height up to 300 cm' },
-    ),
+    .refine((v) => v === '' || (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 300), {
+      message: 'Enter a positive height up to 300 cm',
+    }),
   emergencyContactName: z.string().max(255),
   emergencyContactPhone: z.string().max(50),
   emergencyContactRelation: z.string().max(100),
@@ -170,8 +168,13 @@ function ProfileSkeleton() {
 
 export default function RiderProfilePage() {
   const { data: meData, isLoading: meLoading } = useCurrentUser();
-  const { data: profileData, isLoading: profileLoading, isError, error, refetch } =
-    useRiderProfile();
+  const {
+    data: profileData,
+    isLoading: profileLoading,
+    isError,
+    error,
+    refetch,
+  } = useRiderProfile();
 
   const me = meData?.data;
   const profile = profileData?.data ?? null;
@@ -201,9 +204,7 @@ export default function RiderProfilePage() {
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex items-center gap-4">
-            <UserButton
-              appearance={{ elements: { userButtonAvatarBox: 'h-16 w-16' } }}
-            />
+            <UserButton appearance={{ elements: { userButtonAvatarBox: 'h-16 w-16' } }} />
             <div>
               <p className="font-medium">{profile?.displayName ?? 'Rider'}</p>
               <Badge variant="secondary" className="mt-1">
@@ -233,13 +234,10 @@ export default function RiderProfilePage() {
           </CardHeader>
           <CardContent className="space-y-1 divide-y">
             <div className="flex items-center gap-3 py-2">
-              <Shield className="h-4 w-4 text-muted-foreground" />
+              <Shield className="text-muted-foreground h-4 w-4" />
               <div>
-                <p className="text-xs text-muted-foreground">Skill level</p>
-                <Badge
-                  className={SKILL_LEVEL_COLORS[profile.skillLevel] ?? ''}
-                  variant="secondary"
-                >
+                <p className="text-muted-foreground text-xs">Skill level</p>
+                <Badge className={SKILL_LEVEL_COLORS[profile.skillLevel] ?? ''} variant="secondary">
                   {profile.skillLevel}
                 </Badge>
               </div>
@@ -278,7 +276,7 @@ export default function RiderProfilePage() {
             />
             {profile.medicalNotes && (
               <div className="py-2">
-                <p className="text-xs text-muted-foreground">Medical notes</p>
+                <p className="text-muted-foreground text-xs">Medical notes</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm">{profile.medicalNotes}</p>
               </div>
             )}
@@ -288,9 +286,9 @@ export default function RiderProfilePage() {
 
       <Card>
         <CardContent className="p-4">
-          <p className="text-sm text-muted-foreground">
-            To update your email, password, or connected accounts, click your avatar above to
-            open account settings.
+          <p className="text-muted-foreground text-sm">
+            To update your email, password, or connected accounts, click your avatar above to open
+            account settings.
           </p>
         </CardContent>
       </Card>
@@ -310,9 +308,9 @@ function InfoRow({
   if (!value) return null;
   return (
     <div className="flex items-center gap-3 py-2">
-      <Icon className="h-4 w-4 text-muted-foreground" />
+      <Icon className="text-muted-foreground h-4 w-4" />
       <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-muted-foreground text-xs">{label}</p>
         <p className="text-sm font-medium">{value}</p>
       </div>
     </div>
@@ -371,9 +369,9 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
           {profile ? 'Edit riding profile' : 'Set up your riding profile'}
         </CardTitle>
         {!profile && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your stable uses this to match you to the right horses and handle emergencies.
-            You can update it anytime.
+          <p className="text-muted-foreground mt-1 text-sm">
+            Your stable uses this to match you to the right horses and handle emergencies. You can
+            update it anytime.
           </p>
         )}
       </CardHeader>
@@ -459,7 +457,7 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
               />
             </div>
 
-            <div className="rounded-lg border p-4 space-y-3">
+            <div className="space-y-3 rounded-lg border p-4">
               <p className="text-sm font-medium">Emergency contact</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField
@@ -482,11 +480,7 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
                     <FormItem>
                       <FormLabel className="text-xs">Phone</FormLabel>
                       <FormControl>
-                        <Input
-                          type="tel"
-                          placeholder="+971 50 123 4567"
-                          {...field}
-                        />
+                        <Input type="tel" placeholder="+971 50 123 4567" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -515,17 +509,11 @@ function RiderProfileEditor({ profile, onCancel, onSaved }: EditorProps) {
                 <FormItem>
                   <FormLabel>Medical notes</FormLabel>
                   <FormDescription>
-                    Allergies, medications, injuries, or anything the stable
-                    should know. Private — only your stable&apos;s admins and
-                    coaches see this.
+                    Allergies, medications, injuries, or anything the stable should know. Private —
+                    only your stable&apos;s admins and coaches see this.
                   </FormDescription>
                   <FormControl>
-                    <Textarea
-                      rows={3}
-                      placeholder="Optional"
-                      maxLength={5000}
-                      {...field}
-                    />
+                    <Textarea rows={3} placeholder="Optional" maxLength={5000} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

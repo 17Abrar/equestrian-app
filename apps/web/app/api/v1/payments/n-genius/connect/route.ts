@@ -30,45 +30,46 @@ const WEBHOOK_HEADER_NAME_DENYLIST = new Set([
 // payment receipts).
 const MIN_WEBHOOK_HEADER_VALUE_LENGTH = 32;
 
-const connectSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
-  outletReference: z.string().min(1, 'Outlet reference is required'),
-  /** Some N-Genius tenant configurations require a realmName for the identity exchange. */
-  realmName: z.string().optional(),
-  /** Custom header name the merchant configured in the N-Genius portal (e.g. "X-Webhook-Token"). */
-  webhookHeaderName: z
-    .string()
-    .min(1)
-    .max(255)
-    .refine(
-      (name) => !WEBHOOK_HEADER_NAME_DENYLIST.has(name.toLowerCase()),
-      'Header name conflicts with a standard HTTP header — pick a custom name like X-Webhook-Token',
-    )
-    .optional(),
-  /** Secret value N-Genius will echo in the configured header on each webhook delivery. */
-  webhookHeaderValue: z
-    .string()
-    .min(
-      MIN_WEBHOOK_HEADER_VALUE_LENGTH,
-      `Webhook secret must be at least ${MIN_WEBHOOK_HEADER_VALUE_LENGTH} characters of high-entropy random data — generate via \`openssl rand -hex 32\``,
-    )
-    .max(512)
-    .optional(),
-  /**
-   * Audit LOW (2026-05-06): the outlet's settlement currency.
-   * Defaults to AED for the GCC-dominant tenant case but is captured
-   * here so SAR / KWD / etc. operators can connect without every
-   * payment 422-blocking on the currency-parity check downstream.
-   * 3-letter ISO 4217. The adapter's credential schema enforces the
-   * same constraint at the encryption boundary.
-   */
-  defaultCurrency: z
-    .string()
-    .length(3)
-    .regex(/^[A-Z]{3}$/, 'Currency must be a 3-letter ISO 4217 code (e.g. AED, SAR, KWD)')
-    .default('AED'),
-  makeActive: z.boolean().default(true),
-})
+const connectSchema = z
+  .object({
+    apiKey: z.string().min(1, 'API key is required'),
+    outletReference: z.string().min(1, 'Outlet reference is required'),
+    /** Some N-Genius tenant configurations require a realmName for the identity exchange. */
+    realmName: z.string().optional(),
+    /** Custom header name the merchant configured in the N-Genius portal (e.g. "X-Webhook-Token"). */
+    webhookHeaderName: z
+      .string()
+      .min(1)
+      .max(255)
+      .refine(
+        (name) => !WEBHOOK_HEADER_NAME_DENYLIST.has(name.toLowerCase()),
+        'Header name conflicts with a standard HTTP header — pick a custom name like X-Webhook-Token',
+      )
+      .optional(),
+    /** Secret value N-Genius will echo in the configured header on each webhook delivery. */
+    webhookHeaderValue: z
+      .string()
+      .min(
+        MIN_WEBHOOK_HEADER_VALUE_LENGTH,
+        `Webhook secret must be at least ${MIN_WEBHOOK_HEADER_VALUE_LENGTH} characters of high-entropy random data — generate via \`openssl rand -hex 32\``,
+      )
+      .max(512)
+      .optional(),
+    /**
+     * Audit LOW (2026-05-06): the outlet's settlement currency.
+     * Defaults to AED for the GCC-dominant tenant case but is captured
+     * here so SAR / KWD / etc. operators can connect without every
+     * payment 422-blocking on the currency-parity check downstream.
+     * 3-letter ISO 4217. The adapter's credential schema enforces the
+     * same constraint at the encryption boundary.
+     */
+    defaultCurrency: z
+      .string()
+      .length(3)
+      .regex(/^[A-Z]{3}$/, 'Currency must be a 3-letter ISO 4217 code (e.g. AED, SAR, KWD)')
+      .default('AED'),
+    makeActive: z.boolean().default(true),
+  })
   // Audit F-2 (2026-05-06): `.strict()` BEFORE `.refine()` — `.refine`
   // returns ZodEffects which doesn't expose `.strict()`. Without this,
   // a caller can sneak `{ ..., role: 'club_admin' }` through.
@@ -102,12 +103,8 @@ export async function POST(request: NextRequest) {
             outletReference: data.outletReference,
             defaultCurrency: data.defaultCurrency,
             ...(data.realmName ? { realmName: data.realmName } : {}),
-            ...(data.webhookHeaderName
-              ? { webhookHeaderName: data.webhookHeaderName }
-              : {}),
-            ...(data.webhookHeaderValue
-              ? { webhookHeaderValue: data.webhookHeaderValue }
-              : {}),
+            ...(data.webhookHeaderName ? { webhookHeaderName: data.webhookHeaderName } : {}),
+            ...(data.webhookHeaderValue ? { webhookHeaderValue: data.webhookHeaderValue } : {}),
           },
         });
 

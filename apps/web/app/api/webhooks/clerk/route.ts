@@ -47,9 +47,10 @@ interface MembershipEvent {
  * an operator filters Sentry by during incident triage. Both event
  * shapes (organization.* and organizationMembership.*) are handled.
  */
-function extractClerkIds(
-  event: OrganizationEvent | MembershipEvent,
-): { clerkOrgId: string | null; clerkUserId: string | null } {
+function extractClerkIds(event: OrganizationEvent | MembershipEvent): {
+  clerkOrgId: string | null;
+  clerkUserId: string | null;
+} {
   if (event.type.startsWith('organizationMembership.')) {
     const m = event as MembershipEvent;
     return {
@@ -348,9 +349,8 @@ async function handlePost(request: Request) {
           return new Response('Club not found, retry pending', { status: 503 });
         }
 
-        const displayName = [userData.first_name, userData.last_name]
-          .filter(Boolean)
-          .join(' ') || undefined;
+        const displayName =
+          [userData.first_name, userData.last_name].filter(Boolean).join(' ') || undefined;
 
         await db
           .insert(clubMembers)

@@ -1,7 +1,11 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type CreateExpenseInput, type UpdateExpenseInput, type CreateCouponInput } from '@equestrian/shared/schemas';
+import {
+  type CreateExpenseInput,
+  type UpdateExpenseInput,
+  type CreateCouponInput,
+} from '@equestrian/shared/schemas';
 import {
   type ApiSuccessResponse,
   type ApiResponse,
@@ -25,7 +29,15 @@ export function useFinanceOverview() {
   });
 }
 
-export function useExpenses(filters: { category?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number } = {}) {
+export function useExpenses(
+  filters: {
+    category?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    pageSize?: number;
+  } = {},
+) {
   const params = new URLSearchParams();
   if (filters.category) params.set('category', filters.category);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
@@ -35,7 +47,8 @@ export function useExpenses(filters: { category?: string; dateFrom?: string; dat
 
   return useQuery({
     queryKey: ['finances', 'expenses', filters],
-    queryFn: () => fetchJson<PaginatedResponse<Expense>>(`/api/v1/finances/expenses?${params.toString()}`),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<Expense>>(`/api/v1/finances/expenses?${params.toString()}`),
   });
 }
 
@@ -93,7 +106,8 @@ export function usePayments(filters: { status?: string; page?: number; pageSize?
 
   return useQuery({
     queryKey: ['finances', 'payments', filters],
-    queryFn: () => fetchJson<PaginatedResponse<Payment>>(`/api/v1/finances/payments?${params.toString()}`),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<Payment>>(`/api/v1/finances/payments?${params.toString()}`),
   });
 }
 
@@ -105,7 +119,8 @@ export function useInvoices(filters: { status?: string; page?: number; pageSize?
 
   return useQuery({
     queryKey: ['finances', 'invoices', filters],
-    queryFn: () => fetchJson<PaginatedResponse<Invoice>>(`/api/v1/finances/invoices?${params.toString()}`),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<Invoice>>(`/api/v1/finances/invoices?${params.toString()}`),
   });
 }
 
@@ -117,7 +132,8 @@ export function useCoupons(filters: { status?: string; page?: number; pageSize?:
 
   return useQuery({
     queryKey: ['finances', 'coupons', filters],
-    queryFn: () => fetchJson<PaginatedResponse<Coupon>>(`/api/v1/finances/coupons?${params.toString()}`),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<Coupon>>(`/api/v1/finances/coupons?${params.toString()}`),
   });
 }
 

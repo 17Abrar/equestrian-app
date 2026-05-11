@@ -1,13 +1,14 @@
 import { type NextRequest } from 'next/server';
 import { updateExpenseSchema } from '@equestrian/shared/schemas';
 import { toMinorUnits } from '@equestrian/shared/utils';
+import { getExpenseById, updateExpense, deleteExpense, getHorseById } from '@equestrian/db/queries';
 import {
-  getExpenseById,
-  updateExpense,
-  deleteExpense,
-  getHorseById,
-} from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ expenseId: string }>;
@@ -55,11 +56,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (data.horseId) {
         const horse = await getHorseById(ctx.clubId, data.horseId);
         if (!horse) {
-          return errorResponse(
-            'INVALID_HORSE',
-            'Horse not found in this club',
-            400,
-          );
+          return errorResponse('INVALID_HORSE', 'Horse not found in this club', 400);
         }
       }
 

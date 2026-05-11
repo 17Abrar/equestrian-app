@@ -2,7 +2,14 @@ import { type NextRequest } from 'next/server';
 import { createExpenseSchema, expenseFiltersSchema } from '@equestrian/shared/schemas';
 import { getExpensesByClub, createExpense, getHorseById } from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  paginatedResponse,
+  errorResponse,
+  validateInput,
+  parseRequiredBody,
+} from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   return withAuth(
@@ -29,20 +36,20 @@ export async function POST(request: NextRequest) {
       if (data.horseId) {
         const horse = await getHorseById(ctx.clubId, data.horseId);
         if (!horse) {
-          return errorResponse(
-            'INVALID_HORSE',
-            'Horse not found in this club',
-            400,
-          );
+          return errorResponse('INVALID_HORSE', 'Horse not found in this club', 400);
         }
       }
 
       // Convert at the user-entered currency, not a hardcoded 2-decimal scale
       // — KWD/BHD/JOD/OMR/TND are 3-decimal, JPY/KRW/etc. are 0-decimal.
-      const expense = await createExpense(ctx.clubId, {
-        ...data,
-        amount: toMinorUnits(data.amount, data.currency),
-      }, ctx.memberId ?? undefined);
+      const expense = await createExpense(
+        ctx.clubId,
+        {
+          ...data,
+          amount: toMinorUnits(data.amount, data.currency),
+        },
+        ctx.memberId ?? undefined,
+      );
 
       if (!expense) {
         return errorResponse('CREATE_FAILED', 'Failed to create expense', 500);

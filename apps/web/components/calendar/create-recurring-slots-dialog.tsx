@@ -5,7 +5,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { CalendarPlus } from 'lucide-react';
-import { createRecurringSlotsSchema, type CreateRecurringSlotsFormValues, type CreateRecurringSlotsInput } from '@equestrian/shared/schemas';
+import {
+  createRecurringSlotsSchema,
+  type CreateRecurringSlotsFormValues,
+  type CreateRecurringSlotsInput,
+} from '@equestrian/shared/schemas';
 import { useLessonTypes, useCreateRecurringSlots } from '@/hooks/use-bookings';
 import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
@@ -13,13 +17,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
@@ -107,62 +124,122 @@ export function CreateRecurringSlotsDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="lessonTypeId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Lesson Type *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select lesson type" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {lessonTypes.map((lt) => (
-                      <SelectItem key={lt.id} value={lt.id}>{lt.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="lessonTypeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Lesson Type *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select lesson type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {lessonTypes.map((lt) => (
+                        <SelectItem key={lt.id} value={lt.id}>
+                          {lt.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="arenaId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Arena</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Any arena" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {arenas.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="coachMemberId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Coach</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Any coach" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {coaches.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.displayName ?? c.email ?? 'Unnamed'}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="arenaId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Arena</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Any arena" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {arenas.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coachMemberId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Coach</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Any coach" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {coaches.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.displayName ?? c.email ?? 'Unnamed'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <FormField control={form.control} name="startTime" render={({ field }) => (
-                <FormItem><FormLabel>Start Time *</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="endTime" render={({ field }) => (
-                <FormItem><FormLabel>End Time *</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem><FormLabel>Max Riders *</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="startTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Time *</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>End Time *</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Riders *</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <FormField
@@ -181,7 +258,10 @@ export function CreateRecurringSlotsDialog({
                           onClick={() => {
                             const current = form.getValues('daysOfWeek') ?? [];
                             if (isChecked) {
-                              form.setValue('daysOfWeek', current.filter((d) => d !== day.value));
+                              form.setValue(
+                                'daysOfWeek',
+                                current.filter((d) => d !== day.value),
+                              );
                             } else {
                               form.setValue('daysOfWeek', [...current, day.value]);
                             }
@@ -203,12 +283,32 @@ export function CreateRecurringSlotsDialog({
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="dateFrom" render={({ field }) => (
-                <FormItem><FormLabel>From Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="dateTo" render={({ field }) => (
-                <FormItem><FormLabel>To Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="dateFrom"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>From Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dateTo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>To Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <Button type="submit" className="w-full" disabled={createSlots.isPending}>

@@ -72,11 +72,7 @@ export async function createAudience(
   return rows[0];
 }
 
-export async function updateAudience(
-  clubId: string,
-  audienceId: string,
-  data: AudienceUpdate,
-) {
+export async function updateAudience(clubId: string, audienceId: string, data: AudienceUpdate) {
   const rows = await db
     .update(audiences)
     .set({ ...data, updatedAt: new Date() })
@@ -129,10 +125,7 @@ export async function resolveAudienceMembers(
       .select({ memberId: riderProfiles.memberId })
       .from(riderProfiles)
       .where(
-        and(
-          eq(riderProfiles.clubId, clubId),
-          eq(riderProfiles.skillLevel, filters.skillLevel),
-        ),
+        and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.skillLevel, filters.skillLevel)),
       );
     conditions.push(inArray(clubMembers.id, matchingMemberIds));
   }
@@ -148,9 +141,7 @@ export async function resolveAudienceMembers(
       .groupBy(bookings.riderMemberId)
       .having(sql`count(*)::int >= ${filters.minBookings}`)
       .as('booking_counts');
-    const qualifyingIds = db
-      .select({ memberId: bookingCounts.memberId })
-      .from(bookingCounts);
+    const qualifyingIds = db.select({ memberId: bookingCounts.memberId }).from(bookingCounts);
     conditions.push(inArray(clubMembers.id, qualifyingIds));
   }
 
@@ -187,10 +178,7 @@ export async function resolveAudienceMembers(
  *   - minBookings      → `inArray(memberId, bookings GROUP BY HAVING count >= N)`
  *   - activeWithinDays → `inArray(memberId, distinct bookings WHERE created_at >= since)`
  */
-function buildAudiencePredicates(
-  clubId: string,
-  filters: AudienceFilters,
-): SQL[] {
+function buildAudiencePredicates(clubId: string, filters: AudienceFilters): SQL[] {
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
     eq(clubMembers.role, 'rider'),
@@ -202,10 +190,7 @@ function buildAudiencePredicates(
       .select({ memberId: riderProfiles.memberId })
       .from(riderProfiles)
       .where(
-        and(
-          eq(riderProfiles.clubId, clubId),
-          eq(riderProfiles.skillLevel, filters.skillLevel),
-        ),
+        and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.skillLevel, filters.skillLevel)),
       );
     conditions.push(inArray(clubMembers.id, matchingMemberIds));
   }
@@ -221,9 +206,7 @@ function buildAudiencePredicates(
       .groupBy(bookings.riderMemberId)
       .having(sql`count(*)::int >= ${filters.minBookings}`)
       .as('booking_counts');
-    const qualifyingIds = db
-      .select({ memberId: bookingCounts.memberId })
-      .from(bookingCounts);
+    const qualifyingIds = db.select({ memberId: bookingCounts.memberId }).from(bookingCounts);
     conditions.push(inArray(clubMembers.id, qualifyingIds));
   }
 
@@ -283,7 +266,5 @@ export async function countAudienceMembersBatch(
   filterSets: AudienceFilters[],
 ): Promise<number[]> {
   if (filterSets.length === 0) return [];
-  return Promise.all(
-    filterSets.map((filters) => countAudienceMembers(clubId, filters)),
-  );
+  return Promise.all(filterSets.map((filters) => countAudienceMembers(clubId, filters)));
 }

@@ -5,11 +5,7 @@ import {
   getArenasByClub,
   getLessonTypesByClub,
 } from '@equestrian/db/queries';
-import {
-  withAuth,
-  successResponse,
-  errorResponse,
-} from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 /**

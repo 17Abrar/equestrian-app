@@ -1,12 +1,15 @@
 import { type NextRequest } from 'next/server';
 import { createFeedingPlanSchema } from '@equestrian/shared/schemas';
 import { getFeedingPlans, createFeedingPlan, getHorseById } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;

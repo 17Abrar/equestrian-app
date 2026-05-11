@@ -90,7 +90,7 @@ export function AudiencesTab() {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="rounded-lg border bg-card p-4 space-y-3">
+          <div key={i} className="bg-card space-y-3 rounded-lg border p-4">
             <Skeleton className="h-5 w-3/4" />
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-2/3" />
@@ -189,7 +189,7 @@ function AudienceRow({ audience }: { audience: Audience }) {
           )}
         </div>
         {audience.description && (
-          <p className="mt-1 text-sm text-muted-foreground">{audience.description}</p>
+          <p className="text-muted-foreground mt-1 text-sm">{audience.description}</p>
         )}
       </div>
       <div className="flex items-center gap-1">
@@ -364,7 +364,7 @@ function AudienceFormDialog({
               {...form.register('name')}
             />
             {form.formState.errors.name && (
-              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+              <p className="text-destructive text-xs">{form.formState.errors.name.message}</p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -376,7 +376,7 @@ function AudienceFormDialog({
               {...form.register('description')}
             />
             {form.formState.errors.description && (
-              <p className="text-xs text-destructive">
+              <p className="text-destructive text-xs">
                 {form.formState.errors.description.message}
               </p>
             )}
@@ -428,9 +428,7 @@ function FiltersEditor({ filters, onChange }: FiltersEditorProps) {
           <Label className="text-xs">Skill level</Label>
           <Select
             value={filters.skillLevel ?? 'any'}
-            onValueChange={(v) =>
-              update('skillLevel', v === 'any' ? undefined : (v as SkillLevel))
-            }
+            onValueChange={(v) => update('skillLevel', v === 'any' ? undefined : (v as SkillLevel))}
           >
             <SelectTrigger>
               <SelectValue />
@@ -505,8 +503,8 @@ function LivePreview({ filters }: { filters: AudienceFilters }) {
   });
 
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
-      <Users className="h-4 w-4 text-muted-foreground" />
+    <div className="bg-muted/40 flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
+      <Users className="text-muted-foreground h-4 w-4" />
       <span>
         {isFetching ? (
           <span className="text-muted-foreground">Calculating…</span>

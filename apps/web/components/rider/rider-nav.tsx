@@ -59,13 +59,13 @@ export function RiderNav() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-card">
+    <header className="bg-card sticky top-0 z-50 border-b">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <Link href="/rider" aria-label="Cavaliq home">
             <CavaliqLogo height={28} priority />
           </Link>
-          <span className="hidden h-6 w-px bg-border sm:block" aria-hidden="true" />
+          <span className="bg-border hidden h-6 w-px sm:block" aria-hidden="true" />
           <ActiveStableSwitcher />
         </div>
 
@@ -100,7 +100,7 @@ export function RiderNav() {
 
       {/* Mobile bottom nav */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 border-t bg-card sm:hidden"
+        className="bg-card fixed inset-x-0 bottom-0 z-50 border-t sm:hidden"
         aria-label="Mobile navigation"
       >
         <div className="flex items-center justify-around py-2">
@@ -111,9 +111,7 @@ export function RiderNav() {
               aria-current={isActive(item.href) ? 'page' : undefined}
               className={cn(
                 'flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors',
-                isActive(item.href)
-                  ? 'text-foreground font-medium'
-                  : 'text-muted-foreground',
+                isActive(item.href) ? 'text-foreground font-medium' : 'text-muted-foreground',
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -157,11 +155,11 @@ function ActiveStableSwitcher() {
   if (memberships.length <= 1) {
     return (
       <div
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground"
+        className="text-muted-foreground flex items-center gap-1.5 rounded-md px-2 py-1 text-sm"
         aria-label={`Booking from ${user.activeClub.name}`}
       >
         <Building2 className="h-4 w-4" aria-hidden="true" />
-        <span className="max-w-[12rem] truncate font-medium text-foreground">
+        <span className="text-foreground max-w-[12rem] truncate font-medium">
           {user.activeClub.name}
         </span>
       </div>
@@ -195,17 +193,15 @@ function ActiveStableSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         disabled={switching}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+        className="hover:bg-accent focus:ring-ring flex items-center gap-1.5 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 disabled:opacity-60"
         aria-label={`Booking from ${user.activeClub.name} — click to switch`}
       >
-        <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <span className="max-w-[12rem] truncate font-medium">
-          {user.activeClub.name}
-        </span>
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        <Building2 className="text-muted-foreground h-4 w-4" aria-hidden="true" />
+        <span className="max-w-[12rem] truncate font-medium">{user.activeClub.name}</span>
+        <ChevronDown className="text-muted-foreground h-3.5 w-3.5" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+        <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
           Booking from
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -217,7 +213,7 @@ function ActiveStableSwitcher() {
           >
             <span className="truncate">{m.clubName}</span>
             {m.clubId === activeClubId && (
-              <Check className="h-4 w-4 text-primary" aria-hidden="true" />
+              <Check className="text-primary h-4 w-4" aria-hidden="true" />
             )}
           </DropdownMenuItem>
         ))}

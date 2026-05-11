@@ -8,7 +8,13 @@ import {
   cancelPendingInvoicesForHorse,
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
-import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseOptionalBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -35,11 +41,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       if (ownership.ownershipStatus !== 'active') {
-        return errorResponse(
-          'NOT_ACTIVE',
-          'Only active ownerships can be retired',
-          409,
-        );
+        return errorResponse('NOT_ACTIVE', 'Only active ownerships can be retired', 409);
       }
 
       // Atomic retire + cancel-invoices — see audit G-6. Without the
@@ -47,11 +49,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // retired but the cron still firing reminders for invoices the
       // owner cannot settle.
       const result = await writeTransaction(async () => {
-        const retired = await retireHorseOwnership(
-          ownership.clubId,
-          horseId,
-          data.liveryEndDate,
-        );
+        const retired = await retireHorseOwnership(ownership.clubId, horseId, data.liveryEndDate);
         if (!retired) return null;
         const cancelled = await cancelPendingInvoicesForHorse(ownership.clubId, horseId);
         return { horse: retired, cancelled };

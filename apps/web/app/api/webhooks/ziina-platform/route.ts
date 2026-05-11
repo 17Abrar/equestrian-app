@@ -8,10 +8,7 @@ import {
   markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
-import {
-  verifyPlatformWebhook,
-  PlatformWebhookError,
-} from '@/lib/billing/platform-ziina';
+import { verifyPlatformWebhook, PlatformWebhookError } from '@/lib/billing/platform-ziina';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { sendEmailAsync } from '@/lib/email';
 import { SubscriptionPaymentReceived } from '@equestrian/email-templates/subscription-payment-received';
@@ -170,11 +167,7 @@ async function handlePost(request: NextRequest) {
     // operator could only spot the gap by tailing logs. Park the dedup
     // row in `permanently_failed` so the alert fires.
     if (permanentFailureReason) {
-      await markWebhookEventPermanentlyFailed(
-        PROVIDER,
-        event.eventId,
-        permanentFailureReason,
-      );
+      await markWebhookEventPermanentlyFailed(PROVIDER, event.eventId, permanentFailureReason);
     } else {
       await markWebhookEventProcessed(PROVIDER, event.eventId);
     }
@@ -224,10 +217,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   // paid. The signature check above already proved the body is from
   // Cavaliq's account, so this is belt-and-braces against a future
   // multi-account confusion.
-  if (
-    args.eventCurrency &&
-    args.eventCurrency.toUpperCase() !== invoice.currency.toUpperCase()
-  ) {
+  if (args.eventCurrency && args.eventCurrency.toUpperCase() !== invoice.currency.toUpperCase()) {
     logger.error('platform_webhook_currency_mismatch', {
       invoiceId: invoice.id,
       clubId: invoice.clubId,
@@ -273,10 +263,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   // the dedup row flips to `processed`, the money sits unreconciled in
   // Cavaliq's Ziina balance, and the operator sees nothing.
   if (invoice.status === 'cancelled') {
-    if (
-      args.eventAmountReceived !== undefined &&
-      args.eventAmountReceived > 0
-    ) {
+    if (args.eventAmountReceived !== undefined && args.eventAmountReceived > 0) {
       logger.error('platform_webhook_paid_for_cancelled_invoice', {
         invoiceId: invoice.id,
         clubId: invoice.clubId,

@@ -1,12 +1,12 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type RiderFiltersInput, type UpdateRiderProfileInput, type CreateRiderInput } from '@equestrian/shared/schemas';
 import {
-  type ApiResponse,
-  type PaginatedResponse,
-  type Rider,
-} from '@equestrian/shared/types';
+  type RiderFiltersInput,
+  type UpdateRiderProfileInput,
+  type CreateRiderInput,
+} from '@equestrian/shared/schemas';
+import { type ApiResponse, type PaginatedResponse, type Rider } from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): `Rider` is now in

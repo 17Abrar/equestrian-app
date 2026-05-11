@@ -96,11 +96,7 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     if (!membership[0]) {
-      return errorResponse(
-        'NOT_A_MEMBER',
-        'You are not a member of this stable',
-        403,
-      );
+      return errorResponse('NOT_A_MEMBER', 'You are not a member of this stable', 403);
     }
 
     const response = successResponse({ clubId: data.clubId });

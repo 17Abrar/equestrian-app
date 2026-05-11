@@ -29,20 +29,53 @@ import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { useClubSettings } from '@/hooks/use-settings';
-import {
-  HealthRecordsTableSkeleton,
-  MedicationListSkeleton,
-} from './horse-tab-skeletons';
+import { HealthRecordsTableSkeleton, MedicationListSkeleton } from './horse-tab-skeletons';
 
 const RECORD_TYPE_COLORS: Record<string, string> = {
   vaccination: 'bg-blue-100 text-blue-800',
@@ -86,7 +119,13 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
   const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <HealthRecordsTableSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load records'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load records'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const records = data?.data ?? [];
 
@@ -104,11 +143,14 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <Stethoscope className="h-5 w-5 text-muted-foreground" />
+          <Stethoscope className="text-muted-foreground h-5 w-5" />
           <CardTitle>Health Records</CardTitle>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={typeFilter ?? 'all'} onValueChange={(v) => setTypeFilter(v === 'all' ? undefined : v)}>
+          <Select
+            value={typeFilter ?? 'all'}
+            onValueChange={(v) => setTypeFilter(v === 'all' ? undefined : v)}
+          >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All types" />
             </SelectTrigger>
@@ -124,7 +166,12 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
-          <AddHealthRecordDialog horseId={horseId} currency={currency} open={addOpen} onOpenChange={setAddOpen} />
+          <AddHealthRecordDialog
+            horseId={horseId}
+            currency={currency}
+            open={addOpen}
+            onOpenChange={setAddOpen}
+          />
         </div>
       </CardHeader>
       <CardContent>
@@ -161,24 +208,37 @@ function HealthRecordsSection({ horseId }: { horseId: string }) {
                   <TableCell>{r.cost != null ? formatMoney(r.cost, currency) : '—'}</TableCell>
                   <TableCell>
                     {r.followUpNeeded ? (
-                      <Badge variant="outline" className="text-orange-600">{r.followUpDate ?? 'Needed'}</Badge>
-                    ) : '—'}
+                      <Badge variant="outline" className="text-orange-600">
+                        {r.followUpDate ?? 'Needed'}
+                      </Badge>
+                    ) : (
+                      '—'
+                    )}
                   </TableCell>
                   <TableCell>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Delete record">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Delete record"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete this record?</AlertDialogTitle>
-                          <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                          <AlertDialogDescription>
+                            This action cannot be undone.
+                          </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(r.id)}>Delete</AlertDialogAction>
+                          <AlertDialogAction onClick={() => handleDelete(r.id)}>
+                            Delete
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -209,12 +269,20 @@ function AddHealthRecordDialog({
   const form = useForm<CreateHealthRecordFormValues, unknown, CreateHealthRecordInput>({
     resolver: zodResolver(createHealthRecordSchema),
     // Local-timezone today: see getTodayLocalDateString comment.
-    defaultValues: { recordType: 'vet_visit', title: '', date: getTodayLocalDateString(), followUpNeeded: false },
+    defaultValues: {
+      recordType: 'vet_visit',
+      title: '',
+      date: getTodayLocalDateString(),
+      followUpNeeded: false,
+    },
   });
 
   async function onSubmit(data: CreateHealthRecordInput) {
     try {
-      const apiData = { ...data, cost: data.cost != null ? toMinorUnits(data.cost, currency) : undefined };
+      const apiData = {
+        ...data,
+        cost: data.cost != null ? toMinorUnits(data.cost, currency) : undefined,
+      };
       await createRecord.mutateAsync(apiData);
       toast.success('Health record added');
       form.reset();
@@ -228,68 +296,167 @@ function AddHealthRecordDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Record</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Record
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Add Health Record</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Health Record</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="recordType" render={({ field }) => (
+              <FormField
+                control={form.control}
+                name="recordType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="vaccination">Vaccination</SelectItem>
+                        <SelectItem value="vet_visit">Vet Visit</SelectItem>
+                        <SelectItem value="dental">Dental</SelectItem>
+                        <SelectItem value="deworming">Deworming</SelectItem>
+                        <SelectItem value="blood_test">Blood Test</SelectItem>
+                        <SelectItem value="injury">Injury</SelectItem>
+                        <SelectItem value="farrier">Farrier</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Type *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="vaccination">Vaccination</SelectItem>
-                      <SelectItem value="vet_visit">Vet Visit</SelectItem>
-                      <SelectItem value="dental">Dental</SelectItem>
-                      <SelectItem value="deworming">Deworming</SelectItem>
-                      <SelectItem value="blood_test">Blood Test</SelectItem>
-                      <SelectItem value="injury">Injury</SelectItem>
-                      <SelectItem value="farrier">Farrier</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Title *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Annual vaccination" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
-              )} />
-              <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem><FormLabel>Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-            </div>
-            <FormField control={form.control} name="title" render={({ field }) => (
-              <FormItem><FormLabel>Title *</FormLabel><FormControl><Input placeholder="e.g. Annual vaccination" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea rows={2} placeholder="Details..." {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="vetName" render={({ field }) => (
-                <FormItem><FormLabel>Vet Name</FormLabel><FormControl><Input placeholder="Dr. Smith" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="cost" render={({ field }) => (
-                <FormItem><FormLabel>Cost</FormLabel><FormControl><NumberInput step="0.01" placeholder="e.g. 500" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="diagnosis" render={({ field }) => (
-                <FormItem><FormLabel>Diagnosis</FormLabel><FormControl><Input placeholder="If applicable" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="treatment" render={({ field }) => (
-                <FormItem><FormLabel>Treatment</FormLabel><FormControl><Input placeholder="Treatment given" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="nextDueDate" render={({ field }) => (
-                <FormItem><FormLabel>Next Due Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="followUpNeeded" render={({ field }) => (
-                <FormItem className="flex items-center gap-2 pt-6">
-                  <FormLabel>Follow-up Needed</FormLabel>
-                  <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea rows={2} placeholder="Details..." {...field} />
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
-              )} />
+              )}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="vetName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vet Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Dr. Smith" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="cost"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cost</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" placeholder="e.g. 500" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="diagnosis"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Diagnosis</FormLabel>
+                    <FormControl>
+                      <Input placeholder="If applicable" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="treatment"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Treatment</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Treatment given" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="nextDueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Next Due Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="followUpNeeded"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 pt-6">
+                    <FormLabel>Follow-up Needed</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={createRecord.isPending}>
               {createRecord.isPending ? 'Adding...' : 'Add Record'}
@@ -310,7 +477,13 @@ function MedicationsSection({ horseId }: { horseId: string }) {
   const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <MedicationListSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load medications'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load medications'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const medications = data?.data ?? [];
 
@@ -318,7 +491,7 @@ function MedicationsSection({ horseId }: { horseId: string }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <Pill className="h-5 w-5 text-muted-foreground" />
+          <Pill className="text-muted-foreground h-5 w-5" />
           <CardTitle>Medications</CardTitle>
         </div>
         <div className="flex items-center gap-2">
@@ -332,9 +505,11 @@ function MedicationsSection({ horseId }: { horseId: string }) {
         {medications.length === 0 ? (
           <EmptyState
             title={showAll ? 'No medications' : 'No active medications'}
-            description={showAll
-              ? 'Once you log a course of medication, it shows here whether active or completed.'
-              : "Switch to 'Show All' to see past courses, or add a new prescription below."}
+            description={
+              showAll
+                ? 'Once you log a course of medication, it shows here whether active or completed.'
+                : "Switch to 'Show All' to see past courses, or add a new prescription below."
+            }
             action={{ label: 'Add Medication', onClick: () => setAddOpen(true) }}
           />
         ) : (
@@ -362,7 +537,11 @@ function MedicationCard({ horseId, medication }: { horseId: string; medication: 
       });
       toast.success(wasAdministered ? 'Medication administered' : 'Medication skipped');
     } catch (err) {
-      reportMutationError('medication.log', err, { horseId, medicationId: medication.id, wasAdministered });
+      reportMutationError('medication.log', err, {
+        horseId,
+        medicationId: medication.id,
+        wasAdministered,
+      });
       toast.error('Failed to log medication');
     }
   }
@@ -371,18 +550,22 @@ function MedicationCard({ horseId, medication }: { horseId: string; medication: 
     <div className="flex items-center justify-between rounded-lg border p-3">
       <div>
         <p className="font-semibold">{medication.medicationName}</p>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           {medication.dosage} — {medication.frequency}
         </p>
         {medication.timeOfDay && medication.timeOfDay.length > 0 && (
           <div className="mt-1 flex gap-1">
             {medication.timeOfDay.map((t) => (
-              <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
+              <Badge key={t} variant="outline" className="text-xs">
+                {t}
+              </Badge>
             ))}
           </div>
         )}
         {medication.prescribedBy && (
-          <p className="mt-1 text-xs text-muted-foreground">Prescribed by {medication.prescribedBy}</p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Prescribed by {medication.prescribedBy}
+          </p>
         )}
       </div>
       <div className="flex items-center gap-2">
@@ -411,7 +594,9 @@ function MedicationCard({ horseId, medication }: { horseId: string; medication: 
           </>
         )}
         {!medication.isActive && (
-          <Badge variant="outline" className="text-muted-foreground">Inactive</Badge>
+          <Badge variant="outline" className="text-muted-foreground">
+            Inactive
+          </Badge>
         )}
       </div>
     </div>
@@ -432,7 +617,13 @@ function AddMedicationDialog({
   type MedFormValues = z.input<typeof createMedicationSchema>;
   const form = useForm<MedFormValues, unknown, CreateMedicationInput>({
     resolver: zodResolver(createMedicationSchema),
-    defaultValues: { medicationName: '', dosage: '', frequency: '', startDate: getTodayLocalDateString(), isActive: true },
+    defaultValues: {
+      medicationName: '',
+      dosage: '',
+      frequency: '',
+      startDate: getTodayLocalDateString(),
+      isActive: true,
+    },
   });
 
   async function onSubmit(data: CreateMedicationInput) {
@@ -450,37 +641,112 @@ function AddMedicationDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Medication</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Medication
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Medication</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Medication</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="medicationName" render={({ field }) => (
-              <FormItem><FormLabel>Name *</FormLabel><FormControl><Input placeholder="e.g. Bute" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="medicationName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Bute" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="dosage" render={({ field }) => (
-                <FormItem><FormLabel>Dosage *</FormLabel><FormControl><Input placeholder="e.g. 1g" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="frequency" render={({ field }) => (
-                <FormItem><FormLabel>Frequency *</FormLabel><FormControl><Input placeholder="e.g. Twice daily" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="dosage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dosage *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 1g" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="frequency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Frequency *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Twice daily" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="startDate" render={({ field }) => (
-                <FormItem><FormLabel>Start Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="endDate" render={({ field }) => (
-                <FormItem><FormLabel>End Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="endDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>End Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <FormField control={form.control} name="prescribedBy" render={({ field }) => (
-              <FormItem><FormLabel>Prescribed By</FormLabel><FormControl><Input placeholder="Vet name" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="notes" render={({ field }) => (
-              <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="prescribedBy"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Prescribed By</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Vet name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <Textarea rows={2} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={createMedication.isPending}>
               {createMedication.isPending ? 'Adding...' : 'Add Medication'}
             </Button>

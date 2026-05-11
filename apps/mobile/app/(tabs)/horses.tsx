@@ -1,11 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,7 +45,7 @@ export default function HorsesScreen() {
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <View className="px-6 pt-4 pb-2">
+        <View className="px-6 pb-2 pt-4">
           <Text className="text-2xl font-bold text-gray-900">Horses</Text>
           <Text className="mt-1 text-base text-gray-500">
             {horses.length > 0 ? `${horses.length} in the stable` : 'Your stable roster'}
@@ -67,9 +61,7 @@ export default function HorsesScreen() {
 
         {!isLoading && errorMessage && (
           <View className="mx-6 items-center rounded-2xl border border-red-200 bg-red-50 px-6 py-8">
-            <Text className="text-lg font-semibold text-red-700">
-              Couldn&apos;t load horses
-            </Text>
+            <Text className="text-lg font-semibold text-red-700">Couldn&apos;t load horses</Text>
             <Text className="mt-1 text-center text-sm text-red-500">{errorMessage}</Text>
             <TouchableOpacity
               className="mt-4 rounded-xl bg-red-600 px-6 py-2.5"
@@ -138,9 +130,7 @@ function HorseCard({ horse }: { horse: Horse }) {
               ternary on `horse.barnName` was permanently dead. */}
           <Text className="text-base font-semibold text-gray-900">{horse.name}</Text>
         </View>
-        {subtitle.length > 0 && (
-          <Text className="mt-0.5 text-sm text-gray-500">{subtitle}</Text>
-        )}
+        {subtitle.length > 0 && <Text className="mt-0.5 text-sm text-gray-500">{subtitle}</Text>}
         <View className="mt-1.5 flex-row items-center gap-2">
           <View className={`rounded-full px-2 py-0.5 ${statusStyle.bg}`}>
             <Text className={`text-[11px] font-medium ${statusStyle.text}`}>
@@ -148,9 +138,7 @@ function HorseCard({ horse }: { horse: Horse }) {
             </Text>
           </View>
           <View className="rounded-full bg-gray-100 px-2 py-0.5">
-            <Text className="text-[11px] font-medium text-gray-700">
-              {horse.skillLevel}
-            </Text>
+            <Text className="text-[11px] font-medium text-gray-700">{horse.skillLevel}</Text>
           </View>
         </View>
       </View>

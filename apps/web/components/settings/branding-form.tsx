@@ -135,7 +135,7 @@ export function BrandingForm({ settings }: { settings: ClubSettings }) {
               className="rounded-lg border p-4"
               style={{ borderColor: normalizeHex(primaryColor) ?? '#6366f1' }}
             >
-              <p className="text-xs text-muted-foreground">Preview</p>
+              <p className="text-muted-foreground text-xs">Preview</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <span
                   className="rounded-md px-3 py-1.5 text-sm font-medium text-white"
@@ -266,12 +266,7 @@ interface ColorPickerFieldProps {
   placeholder: string;
 }
 
-function ColorPickerField({
-  field,
-  label,
-  description,
-  placeholder,
-}: ColorPickerFieldProps) {
+function ColorPickerField({ field, label, description, placeholder }: ColorPickerFieldProps) {
   const hex = normalizeHex(field.value) ?? '#000000';
 
   return (

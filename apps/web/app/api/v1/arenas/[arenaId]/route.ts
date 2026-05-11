@@ -1,11 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { updateArenaSchema } from '@equestrian/shared/schemas';
 import { getArenaById, updateArena, deleteArena } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
-  validateUuidParam } from '@/lib/api-utils';
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ arenaId: string }>;

@@ -1,6 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { getLiveryInvoicesByHorse } from '@equestrian/db/queries';
-import { withAuth, parsePagination, paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  parsePagination,
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;

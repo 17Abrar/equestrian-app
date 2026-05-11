@@ -4,7 +4,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { createCompetitionSchema, type CreateCompetitionFormValues, type CreateCompetitionInput } from '@equestrian/shared/schemas';
+import {
+  createCompetitionSchema,
+  type CreateCompetitionFormValues,
+  type CreateCompetitionInput,
+} from '@equestrian/shared/schemas';
 import { useCreateCompetition } from '@/hooks/use-competitions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

@@ -4,7 +4,12 @@ import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Calendar, Clock, MapPin, ArrowRight, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useBookings, useCancelBooking, useCancelPreview, type Booking } from '@/hooks/use-bookings';
+import {
+  useBookings,
+  useCancelBooking,
+  useCancelPreview,
+  type Booking,
+} from '@/hooks/use-bookings';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -40,8 +45,8 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
   return (
     <Card className="transition-shadow hover:shadow-md">
       <CardContent className="flex items-center gap-4 p-4">
-        <div className="flex h-12 w-12 flex-col items-center justify-center rounded-lg bg-accent text-xs font-medium">
-          <span className="text-[10px] uppercase text-muted-foreground">
+        <div className="bg-accent flex h-12 w-12 flex-col items-center justify-center rounded-lg text-xs font-medium">
+          <span className="text-muted-foreground text-[10px] uppercase">
             {formatDate(booking.slotDate).split(' ')[0]}
           </span>
           <span className="text-lg font-bold leading-tight">
@@ -49,9 +54,9 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
           </span>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">{booking.lessonTypeName}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{booking.lessonTypeName}</p>
+          <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               {formatDate(booking.slotDate)}
@@ -68,8 +73,8 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
             )}
           </div>
           {booking.horseName && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Horse: <span className="font-medium text-foreground">{booking.horseName}</span>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Horse: <span className="text-foreground font-medium">{booking.horseName}</span>
             </p>
           )}
         </div>
@@ -79,7 +84,7 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
             {booking.status}
           </Badge>
           {booking.amount !== null && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-muted-foreground text-xs">
               {formatAmount(booking.amount, booking.currency)}
             </span>
           )}
@@ -87,7 +92,7 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2 text-xs"
               onClick={(e) => {
                 e.stopPropagation();
                 onCancel(booking);
@@ -142,12 +147,15 @@ function CancelDialog({ booking, open, onOpenChange }: CancelDialogProps) {
   const preview = previewData?.data;
 
   // Reset reason whenever the dialog opens/closes
-  const handleOpenChange = useCallback((nextOpen: boolean) => {
-    if (!nextOpen) {
-      setReason('');
-    }
-    onOpenChange(nextOpen);
-  }, [onOpenChange]);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        setReason('');
+      }
+      onOpenChange(nextOpen);
+    },
+    [onOpenChange],
+  );
 
   function handleConfirmCancel() {
     if (!booking) return;
@@ -191,13 +199,14 @@ function CancelDialog({ booking, open, onOpenChange }: CancelDialogProps) {
             <div>
               <p className="text-sm font-medium text-amber-800">Late Cancellation Fee</p>
               <p className="text-sm text-amber-700">
-                This booking is within the {preview.cancellationNoticeHours}-hour cancellation window.
-                A fee of <strong>{formatAmount(preview.fee, preview.currency)}</strong> will be applied.
+                This booking is within the {preview.cancellationNoticeHours}-hour cancellation
+                window. A fee of <strong>{formatAmount(preview.fee, preview.currency)}</strong> will
+                be applied.
               </p>
             </div>
           </div>
         ) : preview && !preview.isLate ? (
-          <p className="text-sm text-muted-foreground">No cancellation fee will be applied.</p>
+          <p className="text-muted-foreground text-sm">No cancellation fee will be applied.</p>
         ) : null}
 
         {/* Reason input */}
@@ -215,9 +224,7 @@ function CancelDialog({ booking, open, onOpenChange }: CancelDialogProps) {
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={cancelBooking.isPending}>
-            Keep Booking
-          </AlertDialogCancel>
+          <AlertDialogCancel disabled={cancelBooking.isPending}>Keep Booking</AlertDialogCancel>
           {/* Use a regular Button instead of AlertDialogAction to prevent
               Radix from auto-closing the dialog before the mutation completes. */}
           <Button
@@ -294,11 +301,7 @@ export function RiderHome() {
         ) : (
           <div className="space-y-3">
             {upcomingBookings.map((booking) => (
-              <BookingCard
-                key={booking.id}
-                booking={booking}
-                onCancel={setCancelTarget}
-              />
+              <BookingCard key={booking.id} booking={booking} onCancel={setCancelTarget} />
             ))}
           </div>
         )}
@@ -324,7 +327,9 @@ export function RiderHome() {
       <CancelDialog
         booking={cancelTarget}
         open={!!cancelTarget}
-        onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null);
+        }}
       />
     </div>
   );

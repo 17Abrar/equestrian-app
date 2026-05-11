@@ -64,21 +64,32 @@ export function ReportsPage() {
   }, [revenue.data]);
 
   const cancellationStats = cancellations.data?.data;
-  const cancellationRate = cancellationStats && cancellationStats.totalBookings > 0
-    ? ((cancellationStats.cancelledBookings / cancellationStats.totalBookings) * 100).toFixed(1)
-    : '0';
+  const cancellationRate =
+    cancellationStats && cancellationStats.totalBookings > 0
+      ? ((cancellationStats.cancelledBookings / cancellationStats.totalBookings) * 100).toFixed(1)
+      : '0';
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="mt-1 text-muted-foreground">Analytics and performance insights</p>
+          <p className="text-muted-foreground mt-1">Analytics and performance insights</p>
         </div>
         <div className="flex items-center gap-2">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-40"
+          />
           <span className="text-muted-foreground">to</span>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40" />
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-40"
+          />
         </div>
       </div>
 
@@ -116,20 +127,27 @@ export function ReportsPage() {
 
       {/* Lesson Popularity */}
       <Card>
-        <CardHeader><CardTitle>Lesson Popularity</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Lesson Popularity</CardTitle>
+        </CardHeader>
         <CardContent>
           {lessons.isLoading && <ReportRowListSkeleton />}
-          {lessons.isError && <ErrorState message="Failed to load" onRetry={() => lessons.refetch()} />}
+          {lessons.isError && (
+            <ErrorState message="Failed to load" onRetry={() => lessons.refetch()} />
+          )}
           {lessons.data?.data && (
             <div className="space-y-3">
               {lessons.data.data.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No bookings in this period.</p>
+                <p className="text-muted-foreground text-sm">No bookings in this period.</p>
               ) : (
                 lessons.data.data.map((l) => (
                   <div key={l.lessonTypeName} className="flex items-center justify-between">
                     <span className="font-medium">{l.lessonTypeName}</span>
                     <div className="flex items-center gap-2">
-                      <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(l.count * 4, 200)}px` }} />
+                      <div
+                        className="bg-primary h-2 rounded-full"
+                        style={{ width: `${Math.min(l.count * 4, 200)}px` }}
+                      />
                       <Badge variant="outline">{l.count} bookings</Badge>
                     </div>
                   </div>
@@ -142,20 +160,24 @@ export function ReportsPage() {
 
       {/* Horse Utilization */}
       <Card>
-        <CardHeader><CardTitle>Horse Utilization</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Horse Utilization</CardTitle>
+        </CardHeader>
         <CardContent>
           {horses.isLoading && <ReportRowListSkeleton />}
-          {horses.isError && <ErrorState message="Failed to load" onRetry={() => horses.refetch()} />}
+          {horses.isError && (
+            <ErrorState message="Failed to load" onRetry={() => horses.refetch()} />
+          )}
           {horses.data?.data && (
             <div className="space-y-3">
               {horses.data.data.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No horse data in this period.</p>
+                <p className="text-muted-foreground text-sm">No horse data in this period.</p>
               ) : (
                 horses.data.data.map((h) => (
                   <div key={h.horseName} className="flex items-center justify-between">
                     <span className="font-medium">{h.horseName}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-muted-foreground text-sm">
                         {h.bookingCount} lessons (max {h.maxLessonsPerDay}/day)
                       </span>
                     </div>
@@ -169,14 +191,18 @@ export function ReportsPage() {
 
       {/* Revenue by Day */}
       <Card>
-        <CardHeader><CardTitle>Revenue by Day</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Revenue by Day</CardTitle>
+        </CardHeader>
         <CardContent>
           {revenue.isLoading && <ReportRowListSkeleton />}
-          {revenue.isError && <ErrorState message="Failed to load" onRetry={() => revenue.refetch()} />}
+          {revenue.isError && (
+            <ErrorState message="Failed to load" onRetry={() => revenue.refetch()} />
+          )}
           {revenue.data?.data && (
             <div className="space-y-2">
               {revenue.data.data.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No revenue data in this period.</p>
+                <p className="text-muted-foreground text-sm">No revenue data in this period.</p>
               ) : (
                 revenue.data.data.map((d) => (
                   <div key={d.date} className="flex items-center justify-between text-sm">
@@ -216,15 +242,15 @@ function SummaryCard({
   return (
     <Card>
       <CardContent className="flex items-center gap-4 p-6">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-          <Icon className="h-6 w-6 text-muted-foreground" />
+        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+          <Icon className="text-muted-foreground h-6 w-6" />
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="text-muted-foreground text-sm">{title}</p>
           {loading ? (
             <Skeleton className="h-7 w-20" />
           ) : hasError ? (
-            <p className="text-sm font-medium text-destructive" title="Failed to load">
+            <p className="text-destructive text-sm font-medium" title="Failed to load">
               Couldn&apos;t load
             </p>
           ) : (

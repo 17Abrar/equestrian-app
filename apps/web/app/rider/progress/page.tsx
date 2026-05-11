@@ -37,16 +37,24 @@ function useRiderProfile() {
   });
 }
 
-function StatCard({ icon: Icon, label, value }: { icon: typeof TrendingUp; label: string; value: string | number }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof TrendingUp;
+  label: string;
+  value: string | number;
+}) {
   return (
     <Card>
       <CardContent className="flex items-center gap-3 p-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-          <Icon className="h-5 w-5 text-muted-foreground" />
+        <div className="bg-accent flex h-10 w-10 items-center justify-center rounded-lg">
+          <Icon className="text-muted-foreground h-5 w-5" />
         </div>
         <div>
           <p className="text-2xl font-bold">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-muted-foreground text-xs">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -110,8 +118,20 @@ function ProgressSkeleton() {
 }
 
 export default function RiderProgressPage() {
-  const { data: profileData, isLoading: profileLoading, isError: profileError, error: profileErr, refetch: refetchProfile } = useRiderProfile();
-  const { data: completedData, isLoading: completedLoading, isError: completedError, error: completedErr, refetch: refetchCompleted } = useBookings({ status: 'completed', pageSize: 10 });
+  const {
+    data: profileData,
+    isLoading: profileLoading,
+    isError: profileError,
+    error: profileErr,
+    refetch: refetchProfile,
+  } = useRiderProfile();
+  const {
+    data: completedData,
+    isLoading: completedLoading,
+    isError: completedError,
+    error: completedErr,
+    refetch: refetchCompleted,
+  } = useBookings({ status: 'completed', pageSize: 10 });
   const { data: upcomingData } = useBookings({ status: 'confirmed', pageSize: 1 });
   // PaginatedResponse<T>.pagination is non-optional once `data` is loaded —
   // the extra `?.` was defensive theater (audit E-9). The first `?.` covers
@@ -148,17 +168,15 @@ export default function RiderProgressPage() {
           label="Skill Level"
           value={profile.skillLevel.charAt(0).toUpperCase() + profile.skillLevel.slice(1)}
         />
-        <StatCard
-          icon={Award}
-          label="Upcoming"
-          value={upcomingCount}
-        />
+        <StatCard icon={Award} label="Upcoming" value={upcomingCount} />
         <StatCard
           icon={TrendingUp}
           label="This Month"
-          value={completedBookings.filter(
-            (b) => b.slotDate.startsWith(new Date().toISOString().slice(0, 7)),
-          ).length}
+          value={
+            completedBookings.filter((b) =>
+              b.slotDate.startsWith(new Date().toISOString().slice(0, 7)),
+            ).length
+          }
         />
       </div>
 
@@ -172,10 +190,13 @@ export default function RiderProgressPage() {
             <Badge className={SKILL_LEVEL_COLORS[profile.skillLevel] ?? ''} variant="secondary">
               {profile.skillLevel}
             </Badge>
-            <p className="text-sm text-muted-foreground">
-              {profile.skillLevel === 'beginner' && 'You\'re building a solid foundation. Keep going!'}
-              {profile.skillLevel === 'intermediate' && 'Great progress! You\'re developing strong riding skills.'}
-              {profile.skillLevel === 'advanced' && 'Excellent! You\'ve mastered advanced riding techniques.'}
+            <p className="text-muted-foreground text-sm">
+              {profile.skillLevel === 'beginner' &&
+                "You're building a solid foundation. Keep going!"}
+              {profile.skillLevel === 'intermediate' &&
+                "Great progress! You're developing strong riding skills."}
+              {profile.skillLevel === 'advanced' &&
+                "Excellent! You've mastered advanced riding techniques."}
             </p>
           </div>
         </CardContent>
@@ -216,15 +237,16 @@ export default function RiderProgressPage() {
                 <CardContent className="flex items-center justify-between p-3">
                   <div>
                     <p className="text-sm font-medium">{booking.lessonTypeName}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       {new Date(`${booking.slotDate}T00:00:00`).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
-                      })} at {formatTime(booking.slotStartTime)}
+                      })}{' '}
+                      at {formatTime(booking.slotStartTime)}
                     </p>
                   </div>
                   {booking.horseName && (
-                    <span className="text-xs text-muted-foreground">{booking.horseName}</span>
+                    <span className="text-muted-foreground text-xs">{booking.horseName}</span>
                   )}
                 </CardContent>
               </Card>

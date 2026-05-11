@@ -58,7 +58,9 @@ export function useCoachMembers() {
 
 // ─── Staff CRUD ───────────────────────────────────────────────────────
 
-export function useStaff(filters: { search?: string; role?: string; page?: number; pageSize?: number } = {}) {
+export function useStaff(
+  filters: { search?: string; role?: string; page?: number; pageSize?: number } = {},
+) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
   if (filters.role) params.set('role', filters.role);

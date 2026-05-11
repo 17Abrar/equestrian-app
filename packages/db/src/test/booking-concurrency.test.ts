@@ -183,14 +183,11 @@ describe('createBooking — coupon TOCTOU', () => {
     // 5 riders try to redeem a coupon capped at 2 uses on a 5-seat slot.
     // Without the FOR UPDATE on the coupon row, all 5 reads see
     // usage_count=0 and all 5 commit — blowing past maxUses.
-    const { clubId, slotId, riderIds, couponId } = await seedClubWithSlot(
-      testDb.db,
-      {
-        maxRiders: 5,
-        riderCount: 5,
-        couponMaxUses: 2,
-      },
-    );
+    const { clubId, slotId, riderIds, couponId } = await seedClubWithSlot(testDb.db, {
+      maxRiders: 5,
+      riderCount: 5,
+      couponMaxUses: 2,
+    });
 
     const results = await withTestDb(testDb.db, () =>
       Promise.allSettled(
@@ -213,8 +210,7 @@ describe('createBooking — coupon TOCTOU', () => {
     const couponBlocked = results.filter(
       (r) =>
         r.status === 'rejected' &&
-        ((r as PromiseRejectedResult).reason as Error)?.message ===
-          'COUPON_MAX_USES_REACHED',
+        ((r as PromiseRejectedResult).reason as Error)?.message === 'COUPON_MAX_USES_REACHED',
     ).length;
 
     expect(successes).toBe(2);
@@ -224,14 +220,11 @@ describe('createBooking — coupon TOCTOU', () => {
   it('respects coupon maxUsesPerRider when one rider double-books concurrently', async () => {
     // Rider tries to redeem the same coupon twice on a slot with maxRiders=3.
     // maxUsesPerRider=1 should block the second attempt.
-    const { clubId, slotId, riderIds, couponId } = await seedClubWithSlot(
-      testDb.db,
-      {
-        maxRiders: 3,
-        riderCount: 1,
-        couponMaxUsesPerRider: 1,
-      },
-    );
+    const { clubId, slotId, riderIds, couponId } = await seedClubWithSlot(testDb.db, {
+      maxRiders: 3,
+      riderCount: 1,
+      couponMaxUsesPerRider: 1,
+    });
 
     const rid = riderIds[0]!;
     const results = await withTestDb(testDb.db, () =>
@@ -272,14 +265,11 @@ describe('createBooking — coupon TOCTOU', () => {
     // Capacity-rejection must roll back the usage row + coupon counter
     // increment. Otherwise a "lucky loser" who hit a full slot with a
     // coupon attached would burn their per-rider allowance.
-    const { clubId, slotId, riderIds, couponId } = await seedClubWithSlot(
-      testDb.db,
-      {
-        maxRiders: 1,
-        riderCount: 2,
-        couponMaxUsesPerRider: 1,
-      },
-    );
+    const { clubId, slotId, riderIds, couponId } = await seedClubWithSlot(testDb.db, {
+      maxRiders: 1,
+      riderCount: 2,
+      couponMaxUsesPerRider: 1,
+    });
 
     await withTestDb(testDb.db, () =>
       Promise.allSettled([
@@ -315,9 +305,7 @@ describe('createBooking — coupon TOCTOU', () => {
     expect(couponAfter[0]?.usageCount).toBe(1);
 
     // Exactly one booking row should exist (the rider who won the slot).
-    const bookingsAfter = await testDb.db
-      .select()
-      .from(bookings);
+    const bookingsAfter = await testDb.db.select().from(bookings);
     expect(bookingsAfter).toHaveLength(1);
   });
 });

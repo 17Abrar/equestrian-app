@@ -102,9 +102,7 @@ describe('getActiveMembershipsForUser', () => {
       clubDeleted: true,
     });
 
-    const memberships = await withTestDb(testDb.db, () =>
-      getActiveMembershipsForUser('user_tomb'),
-    );
+    const memberships = await withTestDb(testDb.db, () => getActiveMembershipsForUser('user_tomb'));
 
     expect(memberships).toHaveLength(1);
     expect(memberships[0]?.clubName).toBe('Live Club');

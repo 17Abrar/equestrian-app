@@ -34,25 +34,51 @@ export function HealthRecordsTableSkeleton({ rows = 4 }: SkeletonCountProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead><Skeleton className="h-3 w-12" /></TableHead>
-              <TableHead><Skeleton className="h-3 w-12" /></TableHead>
-              <TableHead><Skeleton className="h-3 w-12" /></TableHead>
-              <TableHead><Skeleton className="h-3 w-12" /></TableHead>
-              <TableHead><Skeleton className="h-3 w-12" /></TableHead>
-              <TableHead><Skeleton className="h-3 w-16" /></TableHead>
+              <TableHead>
+                <Skeleton className="h-3 w-12" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-3 w-12" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-3 w-12" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-3 w-12" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-3 w-12" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-3 w-16" />
+              </TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {Array.from({ length: rows }).map((_, i) => (
               <TableRow key={i}>
-                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                <TableCell><Skeleton className="h-8 w-8 rounded-md" /></TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-32" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -78,10 +104,7 @@ export function MedicationListSkeleton({ rows = 3 }: SkeletonCountProps) {
       <CardContent>
         <div className="space-y-3">
           {Array.from({ length: rows }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
+            <div key={i} className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-2">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-3 w-48" />
@@ -110,10 +133,7 @@ export function FeedingPlanListSkeleton({ rows = 3 }: SkeletonCountProps) {
       <CardContent>
         <div className="space-y-3">
           {Array.from({ length: rows }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
+            <div key={i} className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Skeleton className="h-4 w-32" />
@@ -176,10 +196,7 @@ export function DocumentsListSkeleton({ rows = 4 }: SkeletonCountProps) {
       <CardContent>
         <div className="space-y-2">
           {Array.from({ length: rows }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
+            <div key={i} className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex items-center gap-3">
                 <Skeleton className="h-8 w-8 rounded" />
                 <div className="space-y-1.5">
@@ -203,11 +220,21 @@ export function LiveryInvoicesTableSkeleton({ rows = 4 }: SkeletonCountProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead><Skeleton className="h-3 w-16" /></TableHead>
-            <TableHead><Skeleton className="h-3 w-16" /></TableHead>
-            <TableHead><Skeleton className="h-3 w-16" /></TableHead>
-            <TableHead><Skeleton className="h-3 w-16" /></TableHead>
-            <TableHead><Skeleton className="h-3 w-12" /></TableHead>
+            <TableHead>
+              <Skeleton className="h-3 w-16" />
+            </TableHead>
+            <TableHead>
+              <Skeleton className="h-3 w-16" />
+            </TableHead>
+            <TableHead>
+              <Skeleton className="h-3 w-16" />
+            </TableHead>
+            <TableHead>
+              <Skeleton className="h-3 w-16" />
+            </TableHead>
+            <TableHead>
+              <Skeleton className="h-3 w-12" />
+            </TableHead>
             <TableHead className="text-right">
               <Skeleton className="ml-auto h-3 w-16" />
             </TableHead>
@@ -216,11 +243,21 @@ export function LiveryInvoicesTableSkeleton({ rows = 4 }: SkeletonCountProps) {
         <TableBody>
           {Array.from({ length: rows }).map((_, i) => (
             <TableRow key={i}>
-              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
                   <Skeleton className="h-7 w-7 rounded" />

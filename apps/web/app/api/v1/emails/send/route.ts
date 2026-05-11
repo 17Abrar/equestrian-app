@@ -75,10 +75,11 @@ export async function POST(request: NextRequest) {
 
       // Per-club daily cap (audit AI-23) — bound the blast radius of a
       // compromised admin to 500 sends/day per club.
-      const clubDay = await checkRateLimit(
-        `email:club_day:${ctx.clubId}`,
-        { maxRequests: 500, windowMs: 24 * 60 * 60_000, failClosed: true },
-      );
+      const clubDay = await checkRateLimit(`email:club_day:${ctx.clubId}`, {
+        maxRequests: 500,
+        windowMs: 24 * 60 * 60_000,
+        failClosed: true,
+      });
       if (!clubDay.allowed) {
         return errorResponse(
           'CLUB_DAILY_CAP',

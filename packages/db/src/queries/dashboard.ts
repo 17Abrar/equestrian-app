@@ -20,83 +20,78 @@ export async function getDashboardStats(clubId: string) {
   const timezone = clubRow[0]?.timezone ?? 'Asia/Dubai';
   const today = getTodayDateString(timezone);
 
-  const [
-    horseCounts,
-    riderCount,
-    todayBookingCount,
-    todaySlotCount,
-    recentBookings,
-  ] = await Promise.all([
-    db
-      .select({
-        total: sql<number>`count(*)::int`,
-        available: sql<number>`count(*) filter (where ${horses.status} = 'available')::int`,
-      })
-      .from(horses)
-      .where(and(eq(horses.clubId, clubId), isNull(horses.deletedAt))),
+  const [horseCounts, riderCount, todayBookingCount, todaySlotCount, recentBookings] =
+    await Promise.all([
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          available: sql<number>`count(*) filter (where ${horses.status} = 'available')::int`,
+        })
+        .from(horses)
+        .where(and(eq(horses.clubId, clubId), isNull(horses.deletedAt))),
 
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(riderProfiles)
-      .where(eq(riderProfiles.clubId, clubId)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(riderProfiles)
+        .where(eq(riderProfiles.clubId, clubId)),
 
-    db
-      .select({
-        total: sql<number>`count(*)::int`,
-        confirmed: sql<number>`count(*) filter (where ${bookings.status} = 'confirmed')::int`,
-        pending: sql<number>`count(*) filter (where ${bookings.status} = 'pending')::int`,
-      })
-      .from(bookings)
-      // Bind clubId on the join so a row with a mis-tenanted slotId
-      // (planted by a future bug) can't surface in this club's count.
-      // Audit AI-32b.
-      .innerJoin(
-        bookingSlots,
-        and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
-      )
-      .where(
-        and(
-          eq(bookings.clubId, clubId),
-          sql`${bookingSlots.date} = ${today}`,
-          // Audit M-5: exclude cancelled bookings from "today's bookings"
-          // counts. They were inflating the dashboard tile.
-          sql`${bookings.status} != 'cancelled'`,
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          confirmed: sql<number>`count(*) filter (where ${bookings.status} = 'confirmed')::int`,
+          pending: sql<number>`count(*) filter (where ${bookings.status} = 'pending')::int`,
+        })
+        .from(bookings)
+        // Bind clubId on the join so a row with a mis-tenanted slotId
+        // (planted by a future bug) can't surface in this club's count.
+        // Audit AI-32b.
+        .innerJoin(
+          bookingSlots,
+          and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+        )
+        .where(
+          and(
+            eq(bookings.clubId, clubId),
+            sql`${bookingSlots.date} = ${today}`,
+            // Audit M-5: exclude cancelled bookings from "today's bookings"
+            // counts. They were inflating the dashboard tile.
+            sql`${bookings.status} != 'cancelled'`,
+          ),
         ),
-      ),
 
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(bookingSlots)
-      .where(
-        and(
-          eq(bookingSlots.clubId, clubId),
-          sql`${bookingSlots.date} = ${today}`,
-          eq(bookingSlots.isCancelled, false),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(bookingSlots)
+        .where(
+          and(
+            eq(bookingSlots.clubId, clubId),
+            sql`${bookingSlots.date} = ${today}`,
+            eq(bookingSlots.isCancelled, false),
+          ),
         ),
-      ),
 
-    db
-      .select({
-        id: bookings.id,
-        status: bookings.status,
-        createdAt: bookings.createdAt,
-        slotDate: bookingSlots.date,
-        slotStartTime: bookingSlots.startTime,
-        riderName: clubMembers.displayName,
-      })
-      .from(bookings)
-      .innerJoin(
-        bookingSlots,
-        and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
-      )
-      .innerJoin(
-        clubMembers,
-        and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
-      )
-      .where(eq(bookings.clubId, clubId))
-      .orderBy(sql`${bookings.createdAt} desc`)
-      .limit(5),
-  ]);
+      db
+        .select({
+          id: bookings.id,
+          status: bookings.status,
+          createdAt: bookings.createdAt,
+          slotDate: bookingSlots.date,
+          slotStartTime: bookingSlots.startTime,
+          riderName: clubMembers.displayName,
+        })
+        .from(bookings)
+        .innerJoin(
+          bookingSlots,
+          and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),
+        )
+        .innerJoin(
+          clubMembers,
+          and(eq(bookings.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+        )
+        .where(eq(bookings.clubId, clubId))
+        .orderBy(sql`${bookings.createdAt} desc`)
+        .limit(5),
+    ]);
 
   return {
     horses: {

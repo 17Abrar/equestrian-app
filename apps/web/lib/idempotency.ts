@@ -73,12 +73,7 @@ export type IdempotencyLookup =
   | { kind: 'mismatch' }
   | { kind: 'miss' };
 
-function cacheKey(
-  scope: string,
-  clubId: string,
-  memberId: string | null,
-  key: string,
-): string {
+function cacheKey(scope: string, clubId: string, memberId: string | null, key: string): string {
   return `idemp:${scope}:${clubId}:${memberId ?? 'anon'}:${key}`;
 }
 
@@ -92,9 +87,7 @@ export async function readIdempotency(
   const redis = getRedis();
   if (!redis) return { kind: 'miss' };
   try {
-    const cached = await redis.get<CachedEntry>(
-      cacheKey(scope, clubId, memberId, key),
-    );
+    const cached = await redis.get<CachedEntry>(cacheKey(scope, clubId, memberId, key));
     if (!cached) return { kind: 'miss' };
     if (cached.fingerprint !== bodyFingerprint) return { kind: 'mismatch' };
     return { kind: 'hit', status: cached.status, body: cached.body };

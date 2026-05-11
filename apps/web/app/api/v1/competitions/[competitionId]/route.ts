@@ -8,7 +8,13 @@ import {
   getArenaById,
   getClubTimezone,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string }>;
@@ -46,11 +52,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           activeOnly: true,
         });
         if (!arena) {
-          return errorResponse(
-            'INVALID_ARENA',
-            'Arena not found, or has been deactivated.',
-            400,
-          );
+          return errorResponse('INVALID_ARENA', 'Arena not found, or has been deactivated.', 400);
         }
       }
 

@@ -9,12 +9,12 @@
 ## Summary
 
 | Severity | Count |
-|---|---|
-| CRITICAL | 0 |
-| HIGH | 5 |
-| MED | 14 |
-| LOW | 36 |
-| NIT | 21 |
+| -------- | ----- |
+| CRITICAL | 0     |
+| HIGH     | 5     |
+| MED      | 14    |
+| LOW      | 36    |
+| NIT      | 21    |
 
 No CRITICAL findings — no exploitable cross-tenant leaks, no payment double-charge, no webhook bypass, no plaintext secrets, no raw card-data handling. Five rounds of prior audit (visible in code comments tagged `audit F-N (2026-05-…)`) have closed every serious correctness bug; the residual surface is defense-in-depth gaps, two PHI encryption gaps that mirror the rider-medical-notes pattern, one structural type-safety debt around response DTOs, and one performance hot spot on the audiences-list endpoint.
 
@@ -28,7 +28,7 @@ The five HIGH findings cluster into three themes: (1) PHI encryption coverage in
 
 **Where:** `apps/web/app/api/v1/finances/coupons/route.ts:37-41`, `packages/db/src/schema/enums.ts:63-68`, `packages/db/src/queries/finances.ts:279`
 
-**Finding:** The list filter accepts `z.enum(['active', 'inactive', 'expired'])` but the DB column `coupons.status` is the pgEnum `coupon_status` with values `('active','paused','expired','exhausted')`. Two concrete failures: (a) `?status=paused` (a legitimate operator-set state — `updateCouponSchema` at `apps/web/app/api/v1/finances/coupons/[couponId]/route.ts:49` accepts it) is rejected at validation with a 400, so the UI cannot list paused coupons. (b) `?status=inactive` passes validation, then the query runs `sql\`${coupons.status} = ${filters.status}\`` against the enum column. Postgres errors `invalid input value for enum coupon_status: "inactive"` and the route returns a 500.
+**Finding:** The list filter accepts `z.enum(['active', 'inactive', 'expired'])` but the DB column `coupons.status` is the pgEnum `coupon_status` with values `('active','paused','expired','exhausted')`. Two concrete failures: (a) `?status=paused` (a legitimate operator-set state — `updateCouponSchema` at `apps/web/app/api/v1/finances/coupons/[couponId]/route.ts:49` accepts it) is rejected at validation with a 400, so the UI cannot list paused coupons. (b) `?status=inactive` passes validation, then the query runs `sql\`${coupons.status} = ${filters.status}\``against the enum column. Postgres errors`invalid input value for enum coupon_status: "inactive"` and the route returns a 500.
 
 **Why it matters:** UI filter dropdown is wired to a contract the DB enforces against. A stale enum literal here means the filter is functionally broken AND produces user-visible 500s — the worst combination (broken AND noisy).
 
@@ -41,10 +41,12 @@ The five HIGH findings cluster into three themes: (1) PHI encryption coverage in
 **Where:** `packages/db/src/schema/horse-health.ts:127-128`, `packages/db/src/queries/horse-health.ts:55,340-347`
 
 **Finding:** Schema:
+
 ```ts
 skipReason: text('skip_reason'),
 notes: text('notes'),
 ```
+
 `createMedicationLog` calls `db.insert(horseMedicationLogs).values({ ...data, clubId, horseId })` with no `encryptFields` wrap. `MEDICATION_ENCRYPTED_FIELDS` (line 55) covers only `horseMedications.notes` — NOT the logs. The PHI key list (`packages/shared/src/constants/index.ts:112`) names `notes` as PHI, and the logger redacts it in stdout, but the column itself is plaintext on disk.
 
 **Why it matters:** Medication-log rows are the audit trail of what was administered, when, and why a dose was skipped. `skip_reason` ("rider rejected — abscess flared") and `notes` are clinical PHI. A Neon backup leak or a Drizzle Studio session by an operator surfaces medical content the rest of the codebase treats as encrypted. The logger's redaction is irrelevant if the column itself is plaintext at rest.
@@ -82,6 +84,7 @@ notes: text('notes'),
 **Where:** `packages/db/src/queries/audiences.ts:271-293`, consumer `apps/web/app/api/v1/emails/audiences/route.ts:46-57`
 
 **Finding:**
+
 ```ts
 const rows = await db
   .select({ memberId: …, skillLevel: …, totalBookings: sql<number>`coalesce(${bookingAgg.totalBookings}, 0)`, lastBookingAt: bookingAgg.lastBookingAt })
@@ -92,11 +95,13 @@ const rows = await db
 
 return filterSets.map((filters) => { /* in-memory scan over rows */ });
 ```
+
 No `.limit()`. Pulled across every active rider in the tenant on every audience-list GET (the route paginates audiences themselves but invokes this batch fn over all per-page audience filter sets). Docblock at line 245 says "We pull every eligible rider plus the attributes the filters reference once" — explicitly unbounded by design.
 
 **Why it matters:** Tenant-scoped, fully unbounded read on `clubMembers + riderProfiles + bookings` aggregate. JSR's seed dataset is small but the model is "hundreds of clubs, thousands of riders each." A 5,000-rider club loads 5,000 rows per refetch; tab focus re-runs the GET. CPU + memory grow linearly; combined with the no-limit JOIN the query plan also degrades. Tenant-side DoS surface — a malicious admin can hammer their own audiences endpoint to exhaust the per-club connection budget. Per the rubric, "unbounded query on tenant table = HIGH."
 
 **Recommendation:** Two paths:
+
 1. Push the per-filter-set logic into SQL: emit one `count(*)` per filter set with WHERE predicates equivalent to the in-memory filters. For a paginated UI of 25 audiences, that's ≤25 sub-second `count(*)` queries — modern Postgres handles this in tens of milliseconds total.
 2. Cap the in-memory load with a hard `.limit(MEMBERS_PREVIEW_CAP)` (already used in `resolveAudienceMembers:168`). Counts above the cap surface as `>${CAP}`. Trades exactness for guaranteed bound.
 
@@ -107,11 +112,19 @@ No `.limit()`. Pulled across every active rider in the tenant on every audience-
 **Where:** `apps/web/app/api/webhooks/n-genius/route.ts:115-143`, `packages/db/src/queries/payment-accounts.ts:731-748`
 
 **Finding:** Single-URL receiver looks up the club from `payload.outletId` via `findWebhookConfigByExternalId(outletId, 'n_genius')`. The query has zero clubId binding, only `(externalAccountId, provider, status)`:
+
 ```ts
 const account = await findWebhookConfigByExternalId(outletId, 'n_genius');
-if (!account) { return new Response('Unknown outlet', { status: 401 }); }
-event = await nGeniusAdapter.verifyWebhook({ body, signatureHeader: provided, webhookSecret: headerValue });
+if (!account) {
+  return new Response('Unknown outlet', { status: 401 });
+}
+event = await nGeniusAdapter.verifyWebhook({
+  body,
+  signatureHeader: provided,
+  webhookSecret: headerValue,
+});
 ```
+
 No UNIQUE constraint enforces `(provider, external_account_id)` is single-tenant. Stripe's per-club webhook (`/api/webhooks/stripe/[clubId]`) and Ziina's per-club webhook (`/api/webhooks/ziina/[clubId]`) URL-bind clubId, making cross-tenant routing structurally impossible. N-Genius alone trusts a body-supplied identifier.
 
 **Why it matters:** If two clubs ever share an outletId (operator error, a column-copying schema migration, or a future N-Genius rebrand collapsing outlet IDs), the lookup picks the first row by Drizzle default order and the webhook posts payments against the wrong club. The `wasProviderPaymentIssuedRecently` defense-in-depth check is documented at line 222 as fail-open.
@@ -152,7 +165,7 @@ No UNIQUE constraint enforces `(provider, external_account_id)` is single-tenant
 
 **Why it matters:** These indexes are the entire defense against booking-creation races — `createBooking` at `packages/db/src/queries/bookings.ts:521-674` relies on them plus the atomic `currentRiders + 1` UPDATE. If a future contributor regenerates the schema for a new table without realizing 0015's invariants are SQL-only, dedup fails open.
 
-**Recommendation:** Declare the CHECK constraint via `check('bookings_guest_contact_required_check', sql\`...\`)` in table-extras (Drizzle supports it). For the two partial unique indexes, add a comment block at table-extras level documenting them as SQL-only artifacts of migration 0015 (mirror lines 236-243 for `idx_bookings_provider_payment`).
+**Recommendation:** Declare the CHECK constraint via `check('bookings_guest_contact_required_check', sql\`...\`)`in table-extras (Drizzle supports it). For the two partial unique indexes, add a comment block at table-extras level documenting them as SQL-only artifacts of migration 0015 (mirror lines 236-243 for`idx_bookings_provider_payment`).
 
 ---
 
@@ -188,7 +201,7 @@ No UNIQUE constraint enforces `(provider, external_account_id)` is single-tenant
 
 **Why it matters:** Once a clubId is known, the route is a free DoS amplifier against the Worker's CPU budget. Lower severity than the public platform-Ziina case (clubIds are UUIDs not slugs), but the asymmetry is unintentional.
 
-**Recommendation:** Mirror the n-genius/platform-Ziina pattern: `checkRateLimit(\`webhook:stripe:${ip}\`, { maxRequests: 60, windowMs: 60_000, failClosed: true })` early in `handlePost`. Stripe's documented retry cadence (5 attempts over ~3 days) sits comfortably under 60/min. Same for Ziina.
+**Recommendation:** Mirror the n-genius/platform-Ziina pattern: `checkRateLimit(\`webhook:stripe:${ip}\`, { maxRequests: 60, windowMs: 60_000, failClosed: true })`early in`handlePost`. Stripe's documented retry cadence (5 attempts over ~3 days) sits comfortably under 60/min. Same for Ziina.
 
 ---
 
@@ -237,10 +250,12 @@ No UNIQUE constraint enforces `(provider, external_account_id)` is single-tenant
 **Why it matters:** Critical user flow (booking creation) on the most-used mobile screen. Cellular connectivity on mobile is flakier than web; an error state with a retry button converts "the app's broken" support tickets into self-service recoveries.
 
 **Recommendation:**
+
 ```tsx
 const { data: slotsData, isLoading, refetch: refetchSlots } = useBookingSlots({ dateFrom, dateTo });
 const slotsErrorMessage = slotsData && !slotsData.success ? slotsData.error.message : null;
 ```
+
 Add a render branch with `Try again` button calling `refetchSlots()`. Mirror the home/horses patterns.
 
 ---
@@ -286,6 +301,7 @@ Add a render branch with `Try again` button calling `refetchSlots()`. Mirror the
 **Where:** `apps/web/app/api/v1/me/active-club/route.ts:65-70` (POST has guard) vs `:134-153` (DELETE does not)
 
 **Finding:** POST runs `if (!isSameOriginRequest(request)) return errorResponse('FORBIDDEN', 'Cross-origin request blocked', 403);`. DELETE skips entirely:
+
 ```ts
 export async function DELETE() {
   const { userId } = await auth();
@@ -331,11 +347,13 @@ export async function DELETE() {
 **Where:** `apps/web/app/api/v1/health/route.ts:28-42`, `lib/redis.ts`
 
 **Finding:** Public health endpoint, intentionally unauthenticated for the external monitor. `?deep=1` mode hits Postgres (`SELECT 1`) AND Upstash Redis (`PING`) on every request:
+
 ```ts
 const rl = await checkRateLimit(`health:${ip}`, { maxRequests: 120, windowMs: 60_000 });
 await rawDb.execute(sql`SELECT 1`);
 await redis.ping();
 ```
+
 `failClosed` is NOT set. Upstash outage drops throttle to per-isolate counters; a deep-probe spammer floods the Neon HTTP pool. 120/min/IP is high for a probe touching Postgres on every hit (other unauth DB-touching endpoints sit at 5-20/min/IP).
 
 **Why it matters:** Tenant-isolation isn't directly affected, but the deep probe shares the Neon connection pool with every authenticated route. 1000 RPS attack from a single IP under an Upstash outage burns the pool and degrades all tenant traffic.
@@ -349,6 +367,7 @@ await redis.ping();
 **Where:** `packages/db/src/schema/operations.ts:195-246` (esp. 197-199, 240-245)
 
 **Finding:** Schema documents the gap explicitly:
+
 ```ts
 // F-10 community_posts.topic_id INTENTIONALLY left as single-column FK.
 // Topics can be system-level (`club_id IS NULL`); a naive composite would
@@ -356,6 +375,7 @@ await redis.ping();
 // partial constraint or a topic-club materialization; deferred until
 // the community feature ships.
 ```
+
 A forged `topicId` from another club is currently accepted at the DB layer when a member POSTs a community post. The community feature is documented as not-yet-shipped (no consuming routes), so this is dormant.
 
 **Why it matters:** Latent. No exploit path today. But the schema ships in production migrations; a contributor adding the feature without re-reading the comment block misses the constraint and wires cross-tenant smuggle on the way in.
@@ -385,11 +405,13 @@ A forged `topicId` from another club is currently accepted at the DB layer when 
 **Why it matters:** Community feature isn't shipped, but the schema is the source of truth; a future endpoint with a poorly-validated body could write nonsense rows.
 
 **Recommendation:**
+
 ```sql
 ALTER TABLE community_votes
   ADD CONSTRAINT community_votes_target_xor_check
   CHECK ((post_id IS NOT NULL)::int + (comment_id IS NOT NULL)::int = 1);
 ```
+
 Mirror via Drizzle `check()`.
 
 ---
@@ -414,7 +436,7 @@ Mirror via Drizzle `check()`.
 
 **Why it matters:** Low impact, but cheap to enforce.
 
-**Recommendation:** Add `check('lesson_types_riders_minmax_check', sql\`${table.minRiders} <= ${table.maxRiders}\`)` to table-extras and a matching `.refine(...)` on `createLessonTypeSchema`.
+**Recommendation:** Add `check('lesson_types_riders_minmax_check', sql\`${table.minRiders} <= ${table.maxRiders}\`)`to table-extras and a matching`.refine(...)`on`createLessonTypeSchema`.
 
 ---
 
@@ -470,7 +492,7 @@ Mirror via Drizzle `check()`.
 
 **Where:** `apps/web/app/api/webhooks/stripe/[clubId]/route.ts:140-151`
 
-**Finding:** Cross-account check requires both `event.providerAccountId` and `account.externalAccountId` populated AND disagree. Comment acknowledges that in direct-keys mode `event.account` is never set, so the guard short-circuits in production. URL-bound clubId + per-club `whsec_…` is the only binding signal. Correct given Cavaliq is not a Connect platform — but depends on operators using *distinct* `whsec_…` per club. Connect form doesn't validate the secret hasn't been pasted by another club.
+**Finding:** Cross-account check requires both `event.providerAccountId` and `account.externalAccountId` populated AND disagree. Comment acknowledges that in direct-keys mode `event.account` is never set, so the guard short-circuits in production. URL-bound clubId + per-club `whsec_…` is the only binding signal. Correct given Cavaliq is not a Connect platform — but depends on operators using _distinct_ `whsec_…` per club. Connect form doesn't validate the secret hasn't been pasted by another club.
 
 **Why it matters:** A copy-paste mistake (one operator using same `whsec_…` for two clubs because they configured both clubs in one Stripe dashboard) defeats URL-binding: a Club A webhook landing on `/stripe/<clubB-id>` verifies against Club B's identical secret, then fails at booking-resolution (`findBookingByProviderPaymentId(…, clubId)`). System fails closed but operators have no signal at config time.
 
@@ -603,9 +625,16 @@ Mirror via Drizzle `check()`.
 **Where:** `packages/db/src/queries/horse-health.ts:325-331`
 
 **Finding:**
+
 ```ts
-db.select().from(horseMedicationLogs).where(where).orderBy(desc(horseMedicationLogs.administeredAt)).limit(pageSize).offset(offset)
+db.select()
+  .from(horseMedicationLogs)
+  .where(where)
+  .orderBy(desc(horseMedicationLogs.administeredAt))
+  .limit(pageSize)
+  .offset(offset);
 ```
+
 Every other list query in `horse-health.ts` (health records 109-130, medications 211-232, feeding 367-380, exercise 466-479, documents 564-578) uses explicit projection. Logs is the lone holdout.
 
 **Why it matters:** Inconsistent with the audit pattern. A future schema add (e.g., a PII-laden field) lands in the wire response with no per-row cost analysis.

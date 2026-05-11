@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, text, jsonb, timestamp, index, foreignKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  text,
+  jsonb,
+  timestamp,
+  index,
+  foreignKey,
+} from 'drizzle-orm/pg-core';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 

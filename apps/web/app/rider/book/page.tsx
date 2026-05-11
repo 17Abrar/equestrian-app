@@ -135,10 +135,10 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
-          ? 'ring-2 ring-primary border-primary'
+          ? 'ring-primary border-primary ring-2'
           : isFull
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:shadow-md hover:border-primary/50'
+            ? 'cursor-not-allowed opacity-50'
+            : 'hover:border-primary/50 hover:shadow-md'
       }`}
       onClick={() => !isFull && onSelect()}
     >
@@ -149,12 +149,15 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
               <p className="font-medium">{slot.lessonTypeName}</p>
               <Badge
                 variant="secondary"
-                style={{ backgroundColor: slot.lessonTypeColor ? `${slot.lessonTypeColor}20` : undefined, color: slot.lessonTypeColor ?? undefined }}
+                style={{
+                  backgroundColor: slot.lessonTypeColor ? `${slot.lessonTypeColor}20` : undefined,
+                  color: slot.lessonTypeColor ?? undefined,
+                }}
               >
                 {slot.lessonTypeType}
               </Badge>
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
@@ -165,9 +168,7 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
                   {slot.arenaName}
                 </span>
               )}
-              {slot.coachName && (
-                <span className="text-xs">Coach: {slot.coachName}</span>
-              )}
+              {slot.coachName && <span className="text-xs">Coach: {slot.coachName}</span>}
             </div>
           </div>
 
@@ -175,19 +176,21 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
             <span className="font-semibold">
               {formatPrice(slot.lessonTypePrice, slot.lessonTypeCurrency)}
             </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="text-muted-foreground flex items-center gap-1 text-xs">
               <Users className="h-3 w-3" />
               {isFull ? (
                 <span className="text-destructive font-medium">Full</span>
               ) : (
-                <span>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left</span>
+                <span>
+                  {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
+                </span>
               )}
             </span>
           </div>
         </div>
 
         {isSelected && (
-          <div className="mt-2 flex items-center gap-1 text-xs font-medium text-primary">
+          <div className="text-primary mt-2 flex items-center gap-1 text-xs font-medium">
             <Check className="h-3 w-3" />
             Selected
           </div>
@@ -230,7 +233,13 @@ export default function RiderBookPage() {
   const { data: user } = useCurrentUser();
   const memberId = user?.data?.memberId;
 
-  const { data: slotsData, isLoading, isError, error, refetch } = useBookingSlots({
+  const {
+    data: slotsData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useBookingSlots({
     dateFrom: toDateString(week.start),
     dateTo: toDateString(week.end),
   });
@@ -260,7 +269,9 @@ export default function RiderBookPage() {
       });
       if (json.data.valid && json.data.discount) {
         setCouponDiscount(json.data.discount);
-        toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
+        toast.success(
+          `Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`,
+        );
       } else {
         setCouponError(json.data.error ?? 'Invalid code');
       }
@@ -351,16 +362,16 @@ export default function RiderBookPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Calendar className="text-muted-foreground h-4 w-4" />
               {formatDate(new Date(`${selectedSlot.date}T00:00:00`))}
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Clock className="text-muted-foreground h-4 w-4" />
               {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
             </div>
             {selectedSlot.arenaName && (
               <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <MapPin className="text-muted-foreground h-4 w-4" />
                 {selectedSlot.arenaName}
               </div>
             )}
@@ -369,10 +380,12 @@ export default function RiderBookPage() {
                 Coach: <span className="font-medium">{selectedSlot.coachName}</span>
               </div>
             )}
-            <div className="border-t pt-3 space-y-1">
+            <div className="space-y-1 border-t pt-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Price</span>
-                <span className={`text-lg font-semibold ${couponDiscount > 0 ? 'line-through text-muted-foreground text-base' : ''}`}>
+                <span className="text-muted-foreground text-sm">Price</span>
+                <span
+                  className={`text-lg font-semibold ${couponDiscount > 0 ? 'text-muted-foreground text-base line-through' : ''}`}
+                >
                   {formatPrice(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
                 </span>
               </div>
@@ -380,7 +393,10 @@ export default function RiderBookPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-green-600">After discount</span>
                   <span className="text-lg font-semibold text-green-600">
-                    {formatPrice(selectedSlot.lessonTypePrice - couponDiscount, selectedSlot.lessonTypeCurrency)}
+                    {formatPrice(
+                      selectedSlot.lessonTypePrice - couponDiscount,
+                      selectedSlot.lessonTypeCurrency,
+                    )}
                   </span>
                 </div>
               )}
@@ -395,7 +411,7 @@ export default function RiderBookPage() {
           </label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Ticket className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Ticket className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
               <Input
                 id="coupon"
                 placeholder="Enter promo code"
@@ -418,7 +434,7 @@ export default function RiderBookPage() {
               {couponValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
             </Button>
           </div>
-          {couponError && <p className="text-sm text-destructive">{couponError}</p>}
+          {couponError && <p className="text-destructive text-sm">{couponError}</p>}
           {couponDiscount > 0 && (
             <p className="text-sm text-green-600">
               Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
@@ -431,9 +447,9 @@ export default function RiderBookPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-0.5">
               <Label htmlFor="guest-toggle">Booking this for a guest?</Label>
-              <p className="text-xs text-muted-foreground">
-                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in
-                their name. You can book yourself once AND bring guests on the same slot.
+              <p className="text-muted-foreground text-xs">
+                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in their
+                name. You can book yourself once AND bring guests on the same slot.
               </p>
             </div>
             <Switch
@@ -467,11 +483,7 @@ export default function RiderBookPage() {
                       <FormItem>
                         <FormLabel className="text-xs">Guest email *</FormLabel>
                         <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="guest@example.com"
-                            {...field}
-                          />
+                          <Input type="email" placeholder="guest@example.com" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -484,11 +496,7 @@ export default function RiderBookPage() {
                       <FormItem>
                         <FormLabel className="text-xs">Guest phone *</FormLabel>
                         <FormControl>
-                          <Input
-                            type="tel"
-                            placeholder="+971 50 123 4567"
-                            {...field}
-                          />
+                          <Input type="tel" placeholder="+971 50 123 4567" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -517,7 +525,7 @@ export default function RiderBookPage() {
                     </FormItem>
                   )}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   A horse will be assigned manually by the stable after booking.
                 </p>
               </div>
@@ -527,7 +535,7 @@ export default function RiderBookPage() {
 
         {/* Horse matching info for self-bookings */}
         {!bookingForGuest && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             A horse will be automatically matched to your skill level and preferences.
           </p>
         )}
@@ -574,7 +582,12 @@ export default function RiderBookPage() {
         <span className="text-sm font-medium">
           {formatDate(week.start)} – {formatDate(week.end)}
         </span>
-        <Button variant="outline" size="icon" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Next week">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setWeekOffset((w) => w + 1)}
+          aria-label="Next week"
+        >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -600,7 +613,7 @@ export default function RiderBookPage() {
                 isSelected
                   ? 'border-primary bg-primary text-primary-foreground'
                   : isPast
-                    ? 'opacity-40 cursor-not-allowed'
+                    ? 'cursor-not-allowed opacity-40'
                     : 'hover:border-primary/50'
               }`}
             >
@@ -609,12 +622,14 @@ export default function RiderBookPage() {
               </span>
               <span className="text-lg font-bold">{d.getDate()}</span>
               {daySlots.length > 0 && (
-                <span className={`text-[10px] ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                <span
+                  className={`text-[10px] ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}
+                >
                   {daySlots.length} slot{daySlots.length !== 1 ? 's' : ''}
                 </span>
               )}
               {isToday && !isSelected && (
-                <span className="mt-0.5 h-1 w-1 rounded-full bg-primary" />
+                <span className="bg-primary mt-0.5 h-1 w-1 rounded-full" />
               )}
             </button>
           );
@@ -623,7 +638,7 @@ export default function RiderBookPage() {
 
       {/* Slots for selected date */}
       <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+        <h2 className="text-muted-foreground mb-3 text-sm font-medium">
           Available on {formatDate(new Date(`${selectedDate}T00:00:00`))}
         </h2>
 
@@ -666,7 +681,7 @@ export default function RiderBookPage() {
 
       {/* Continue button */}
       {selectedSlot && (
-        <div className="sticky bottom-20 sm:bottom-0 z-40 bg-background pt-4 pb-4 border-t -mx-4 px-4 sm:mx-0 sm:px-0 sm:border-0 sm:bg-transparent">
+        <div className="bg-background sticky bottom-20 z-40 -mx-4 border-t px-4 pb-4 pt-4 sm:bottom-0 sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0">
           <Button className="w-full" size="lg" onClick={() => setStep('confirm')}>
             Continue with {selectedSlot.lessonTypeName}
             <ArrowRight className="ml-2 h-4 w-4" />

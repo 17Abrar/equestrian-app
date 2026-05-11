@@ -1,8 +1,5 @@
 import { type NextRequest, after } from 'next/server';
-import {
-  manualMarkLiveryInvoicePaid,
-  getLiveryInvoiceForEmail,
-} from '@equestrian/db/queries';
+import { manualMarkLiveryInvoicePaid, getLiveryInvoiceForEmail } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { sendTriggeredEmail } from '@/lib/email';
 import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
@@ -28,18 +25,10 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
       validateUuidParam('invoiceId', invoiceId);
       const paidAt = new Date();
 
-      const invoice = await manualMarkLiveryInvoicePaid(
-        ctx.clubId,
-        invoiceId,
-        paidAt,
-      );
+      const invoice = await manualMarkLiveryInvoicePaid(ctx.clubId, invoiceId, paidAt);
 
       if (!invoice) {
-        return errorResponse(
-          'NOT_PAYABLE',
-          'Invoice not found or not in a payable state',
-          409,
-        );
+        return errorResponse('NOT_PAYABLE', 'Invoice not found or not in a payable state', 409);
       }
 
       void ctx.audit({

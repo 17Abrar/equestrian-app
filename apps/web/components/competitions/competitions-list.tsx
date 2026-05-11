@@ -80,7 +80,7 @@ export function CompetitionsList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Competitions</h1>
-          <p className="mt-1 text-muted-foreground">Manage events, entries, and results</p>
+          <p className="text-muted-foreground mt-1">Manage events, entries, and results</p>
         </div>
         <Button asChild>
           <Link href="/competitions/new">
@@ -145,7 +145,7 @@ export function CompetitionsList() {
           >
             Previous
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-muted-foreground text-sm">
             Page {page} of {pagination.totalPages}
           </span>
           <Button
@@ -174,7 +174,7 @@ function CompetitionCard({ competition }: { competition: Competition }) {
             </Badge>
           </div>
 
-          <div className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+          <div className="text-muted-foreground mt-3 space-y-1.5 text-sm">
             <div className="flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" />
               <span>

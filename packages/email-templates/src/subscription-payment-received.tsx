@@ -1,6 +1,4 @@
-import {
-  Html, Head, Body, Container, Heading, Text, Hr, Section,
-} from '@react-email/components';
+import { Html, Head, Body, Container, Heading, Text, Hr, Section } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 
 interface SubscriptionPaymentReceivedProps {
@@ -44,9 +42,8 @@ export function SubscriptionPaymentReceived({
           <Text style={styles.greeting}>Hi {recipientName},</Text>
 
           <Text style={styles.text}>
-            We&apos;ve received your Cavaliq subscription payment for{' '}
-            <strong>{clubName}</strong>. Your account stays active through{' '}
-            {periodEnd}.
+            We&apos;ve received your Cavaliq subscription payment for <strong>{clubName}</strong>.
+            Your account stays active through {periodEnd}.
           </Text>
 
           <Section style={styles.card}>
@@ -57,9 +54,7 @@ export function SubscriptionPaymentReceived({
             <Text style={styles.value}>{TIER_LABEL[tier]}</Text>
 
             <Text style={styles.label}>Amount paid</Text>
-            <Text style={styles.valueLarge}>
-              {formatCurrency(amountMinorUnits, currency)}
-            </Text>
+            <Text style={styles.valueLarge}>{formatCurrency(amountMinorUnits, currency)}</Text>
 
             <Text style={styles.label}>Paid on</Text>
             <Text style={styles.value}>{paidDate}</Text>
@@ -68,8 +63,8 @@ export function SubscriptionPaymentReceived({
           <Hr style={styles.hr} />
 
           <Text style={styles.footer}>
-            Your next invoice will arrive on the same day next month. You can
-            review every invoice in Settings → Subscription.
+            Your next invoice will arrive on the same day next month. You can review every invoice
+            in Settings → Subscription.
           </Text>
         </Container>
       </Body>
@@ -95,9 +90,20 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px' },
+  label: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+  },
   value: { fontSize: '14px', color: '#111827', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#16a34a', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#16a34a',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   hr: { borderColor: '#e5e7eb', margin: '24px 0' },
   footer: { fontSize: '12px', color: '#9ca3af', lineHeight: '20px' },
 };

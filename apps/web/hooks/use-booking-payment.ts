@@ -1,10 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  type ApiSuccessResponse,
-  type BookingPaymentResult,
-} from '@equestrian/shared/types';
+import { type ApiSuccessResponse, type BookingPaymentResult } from '@equestrian/shared/types';
 import { fetchJson } from '@/lib/fetch-json';
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): `BookingPaymentResult` is now in
@@ -16,10 +13,9 @@ export function usePaymentForBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (bookingId: string) =>
-      fetchJson<ApiSuccessResponse<BookingPaymentResult>>(
-        `/api/v1/bookings/${bookingId}/payment`,
-        { method: 'POST' },
-      ),
+      fetchJson<ApiSuccessResponse<BookingPaymentResult>>(`/api/v1/bookings/${bookingId}/payment`, {
+        method: 'POST',
+      }),
     onSuccess: (_data, bookingId) => {
       // The booking row's payment_provider / provider_payment_id columns
       // were just written — refresh anything that might display them.

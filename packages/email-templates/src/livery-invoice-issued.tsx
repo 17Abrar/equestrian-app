@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { safeHref } from './util/safe-href';
@@ -38,16 +46,16 @@ export function LiveryInvoiceIssued({
 
           <Text style={styles.greeting}>Hi {ownerName},</Text>
 
-          <Text style={styles.text}>
-            Your monthly livery invoice from {clubName} is ready.
-          </Text>
+          <Text style={styles.text}>Your monthly livery invoice from {clubName} is ready.</Text>
 
           <Section style={styles.card}>
             <Text style={styles.label}>Invoice</Text>
             <Text style={styles.value}>{invoiceNumber}</Text>
 
             <Text style={styles.label}>Period</Text>
-            <Text style={styles.value}>{periodStart} → {periodEnd}</Text>
+            <Text style={styles.value}>
+              {periodStart} → {periodEnd}
+            </Text>
 
             <Text style={styles.label}>Amount due</Text>
             <Text style={styles.valueLarge}>{formatCurrency(amountMinorUnits, currency)}</Text>
@@ -99,9 +107,20 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px' },
+  label: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+  },
   value: { fontSize: '14px', color: '#111827', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#8b5cf6', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#8b5cf6',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   button: {
     backgroundColor: '#8b5cf6',
     color: '#ffffff',

@@ -17,8 +17,7 @@ export function reportMutationError(
   error: unknown,
   extra?: Record<string, unknown>,
 ): void {
-  const errorInstance =
-    error instanceof Error ? error : new Error(String(error ?? 'unknown'));
+  const errorInstance = error instanceof Error ? error : new Error(String(error ?? 'unknown'));
 
   Sentry.withScope((scope) => {
     scope.setLevel('error');

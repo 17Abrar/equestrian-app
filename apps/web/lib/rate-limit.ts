@@ -61,10 +61,7 @@ function getLimiter(config: RateLimitConfig): Ratelimit | null {
   return limiter;
 }
 
-async function upstashCheck(
-  key: string,
-  config: RateLimitConfig,
-): Promise<RateLimitResult | null> {
+async function upstashCheck(key: string, config: RateLimitConfig): Promise<RateLimitResult | null> {
   const limiter = getLimiter(config);
   if (!limiter) return null;
   const result = await limiter.limit(key);
@@ -170,27 +167,27 @@ async function tryUpstash(
     const result = await upstashCheck(key, config);
     if (result) return result;
   } catch (err) {
-      // Surface the outage so a sustained Redis problem isn't silent. Logged
-      // at warn so it lights up Sentry without paging.
-      logger.warn('rate_limit_fallback_to_memory', {
-        key,
-        failClosed: !!config.failClosed,
-        error: err instanceof Error ? err.message : 'unknown',
-      });
-      if (config.failClosed) {
-        // Burst-sensitive endpoints opt into this — better to bounce a real
-        // user during a Redis blip than to let an attacker walk through. The
-        // user can retry; abuse protection holds.
-        return {
-          allowed: false,
-          remaining: 0,
-          retryAfterMs: Math.min(config.windowMs, 30_000),
-        };
-      }
-      // Default: fall back to per-isolate in-memory. On Cloudflare Workers
-      // this barely throttles (each isolate has its own counter) but it
-      // beats locking out every customer over a transient outage.
-      return undefined;
+    // Surface the outage so a sustained Redis problem isn't silent. Logged
+    // at warn so it lights up Sentry without paging.
+    logger.warn('rate_limit_fallback_to_memory', {
+      key,
+      failClosed: !!config.failClosed,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+    if (config.failClosed) {
+      // Burst-sensitive endpoints opt into this — better to bounce a real
+      // user during a Redis blip than to let an attacker walk through. The
+      // user can retry; abuse protection holds.
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfterMs: Math.min(config.windowMs, 30_000),
+      };
     }
+    // Default: fall back to per-isolate in-memory. On Cloudflare Workers
+    // this barely throttles (each isolate has its own counter) but it
+    // beats locking out every customer over a transient outage.
+    return undefined;
+  }
   return undefined;
 }

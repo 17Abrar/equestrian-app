@@ -169,12 +169,10 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       }
 
       // Recipient: guest email when isGuestBooking, otherwise rider.
-      const recipientEmail = booking.isGuestBooking
-        ? booking.guestEmail
-        : booking.riderEmail;
+      const recipientEmail = booking.isGuestBooking ? booking.guestEmail : booking.riderEmail;
       const recipientName = booking.isGuestBooking
-        ? booking.guestName ?? 'Guest'
-        : booking.riderName ?? 'there';
+        ? (booking.guestName ?? 'Guest')
+        : (booking.riderName ?? 'there');
       if (!recipientEmail) {
         // Audit LOW (2026-05-06): the previous shape called
         // `markBookingReminderSent` here so the cron wouldn't
@@ -194,10 +192,7 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // claimed this booking, skip without sending. The previous
       // ordering (send → mark) had a small window where a doubled run
       // would double-send.
-      const claimed = await markBookingReminderSent(
-        booking.clubId,
-        booking.bookingId,
-      );
+      const claimed = await markBookingReminderSent(booking.clubId, booking.bookingId);
       if (!claimed) {
         skipped += 1;
         continue;
@@ -216,10 +211,7 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
         // out N round-trips for the same row.
         let coach = coachCache.get(booking.coachMemberId);
         if (coach === undefined) {
-          coach = await getMemberByIdIncludingDeactivated(
-            booking.clubId,
-            booking.coachMemberId,
-          );
+          coach = await getMemberByIdIncludingDeactivated(booking.clubId, booking.coachMemberId);
           coachCache.set(booking.coachMemberId, coach);
         }
         coachName = coach?.displayName ?? undefined;
@@ -262,10 +254,9 @@ async function sendBookingReminders(now: Date): Promise<SendResult> {
       // for the latter and harmless for the former (next pass logs
       // the same error). Without the reversal, a Resend blip during
       // the cron's hourly fire silently swallows the reminder.
-      const unclaimed = await unmarkBookingReminderSent(
-        booking.clubId,
-        booking.bookingId,
-      ).catch(() => null);
+      const unclaimed = await unmarkBookingReminderSent(booking.clubId, booking.bookingId).catch(
+        () => null,
+      );
       logger.error('booking_reminder_send_failed', {
         bookingId: booking.bookingId,
         clubId: booking.clubId,
@@ -295,8 +286,7 @@ function resolveSlotInstant(
   slotStartTime: string,
   timezone: string,
 ): Date | null {
-  const dateIso =
-    typeof slotDate === 'string' ? slotDate : slotDate.toISOString().slice(0, 10);
+  const dateIso = typeof slotDate === 'string' ? slotDate : slotDate.toISOString().slice(0, 10);
   // slotStartTime can be 'HH:MM' or 'HH:MM:SS'.
   const timeMatch = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(slotStartTime);
   if (!timeMatch) return null;
@@ -332,8 +322,7 @@ function getTimeZoneOffsetMs(date: Date, timezone: string): number {
     second: '2-digit',
   });
   const parts = fmt.formatToParts(date);
-  const get = (type: string) =>
-    Number(parts.find((p) => p.type === type)?.value ?? '0');
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? '0');
   const local = Date.UTC(
     get('year'),
     get('month') - 1,

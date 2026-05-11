@@ -41,10 +41,6 @@ export async function POST(request: NextRequest) {
       error: err instanceof Error ? err.message : 'unknown',
       stack: err instanceof Error ? err.stack : undefined,
     });
-    return errorResponse(
-      'INTERNAL_ERROR',
-      'Audit prune failed. See structured logs.',
-      500,
-    );
+    return errorResponse('INTERNAL_ERROR', 'Audit prune failed. See structured logs.', 500);
   }
 }

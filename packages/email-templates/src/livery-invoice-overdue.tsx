@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { safeHref } from './util/safe-href';
@@ -44,8 +52,8 @@ export function LiveryInvoiceOverdue({
           <Text style={styles.greeting}>Hi {ownerName},</Text>
 
           <Text style={styles.text}>
-            {horseName}&apos;s livery invoice from {clubName} is past due.
-            Please settle it at your earliest convenience.
+            {horseName}&apos;s livery invoice from {clubName} is past due. Please settle it at your
+            earliest convenience.
           </Text>
 
           <Section style={styles.card}>
@@ -70,8 +78,8 @@ export function LiveryInvoiceOverdue({
           )}
 
           <Text style={styles.text}>
-            If you&apos;ve already paid, please disregard this reminder. For
-            any questions, reach out to {clubName} directly.
+            If you&apos;ve already paid, please disregard this reminder. For any questions, reach
+            out to {clubName} directly.
           </Text>
 
           <Hr style={styles.hr} />
@@ -101,9 +109,21 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#991b1b', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px', fontWeight: '600' as const },
+  label: {
+    fontSize: '11px',
+    color: '#991b1b',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+    fontWeight: '600' as const,
+  },
   value: { fontSize: '14px', color: '#7f1d1d', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#b91c1c', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#b91c1c',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   button: {
     backgroundColor: '#b91c1c',
     color: '#ffffff',

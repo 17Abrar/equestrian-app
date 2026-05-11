@@ -55,7 +55,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
@@ -151,13 +157,7 @@ function ClassesListSkeleton({ rows = 3 }: { rows?: number }) {
 }
 
 // Skeleton for the entries / results tabs — 5/6 col table.
-function CompetitionTableSkeleton({
-  rows = 4,
-  cols = 5,
-}: {
-  rows?: number;
-  cols?: number;
-}) {
+function CompetitionTableSkeleton({ rows = 4, cols = 5 }: { rows?: number; cols?: number }) {
   return (
     <Table>
       <TableHeader>
@@ -242,13 +242,15 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
               </Badge>
             </div>
             {competition.description && (
-              <p className="mt-1 text-muted-foreground">{competition.description}</p>
+              <p className="text-muted-foreground mt-1">{competition.description}</p>
             )}
           </div>
         </div>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="sm">Delete</Button>
+            <Button variant="destructive" size="sm">
+              Delete
+            </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -269,9 +271,9 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <Calendar className="h-5 w-5 text-muted-foreground" />
+            <Calendar className="text-muted-foreground h-5 w-5" />
             <div>
-              <p className="text-sm text-muted-foreground">Dates</p>
+              <p className="text-muted-foreground text-sm">Dates</p>
               <p className="font-medium">
                 {competition.startDate}
                 {competition.endDate !== competition.startDate && ` – ${competition.endDate}`}
@@ -282,9 +284,9 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
         {competition.location && (
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
-              <MapPin className="h-5 w-5 text-muted-foreground" />
+              <MapPin className="text-muted-foreground h-5 w-5" />
               <div>
-                <p className="text-sm text-muted-foreground">Location</p>
+                <p className="text-muted-foreground text-sm">Location</p>
                 <p className="font-medium">{competition.location}</p>
               </div>
             </CardContent>
@@ -292,9 +294,9 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
         )}
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <Trophy className="h-5 w-5 text-muted-foreground" />
+            <Trophy className="text-muted-foreground h-5 w-5" />
             <div>
-              <p className="text-sm text-muted-foreground">Classes</p>
+              <p className="text-muted-foreground text-sm">Classes</p>
               <p className="font-medium">{classes.length}</p>
             </div>
           </CardContent>
@@ -302,9 +304,9 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
         {competition.entryFee !== null && competition.entryFee > 0 && (
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
-              <Users className="h-5 w-5 text-muted-foreground" />
+              <Users className="text-muted-foreground h-5 w-5" />
               <div>
-                <p className="text-sm text-muted-foreground">Entry Fee</p>
+                <p className="text-muted-foreground text-sm">Entry Fee</p>
                 <p className="font-medium">
                   {formatMoney(competition.entryFee, competition.currency)}
                 </p>
@@ -339,10 +341,7 @@ export function CompetitionDetail({ competitionId }: CompetitionDetailProps) {
           {classesQuery.isLoading && <ClassesListSkeleton />}
 
           {classesQuery.isError && (
-            <ErrorState
-              message="Failed to load classes"
-              onRetry={() => classesQuery.refetch()}
-            />
+            <ErrorState message="Failed to load classes" onRetry={() => classesQuery.refetch()} />
           )}
 
           {!classesQuery.isLoading && !classesQuery.isError && classes.length === 0 && (
@@ -403,19 +402,15 @@ function ClassRow({
       <div className="flex items-center justify-between">
         <div>
           <p className="font-semibold">{cls.name}</p>
-          <div className="mt-1 flex gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground mt-1 flex gap-2 text-sm">
             {cls.discipline && <span>{cls.discipline}</span>}
             {cls.level && <span>{cls.level}</span>}
           </div>
         </div>
         <div className="text-right text-sm">
-          {cls.maxEntries && (
-            <p className="text-muted-foreground">Max {cls.maxEntries} entries</p>
-          )}
+          {cls.maxEntries && <p className="text-muted-foreground">Max {cls.maxEntries} entries</p>}
           {cls.entryFee !== null && cls.entryFee > 0 && (
-            <p className="font-medium">
-              {formatMoney(cls.entryFee, cls.currency)}
-            </p>
+            <p className="font-medium">{formatMoney(cls.entryFee, cls.currency)}</p>
           )}
         </div>
       </div>
@@ -452,35 +447,35 @@ function EntriesSection({ competitionId, classId }: { competitionId: string; cla
         />
       ) : (
         <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Rider</TableHead>
-          <TableHead>Horse</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Payment</TableHead>
-          <TableHead>Registered</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {entries.map((entry) => (
-          <TableRow key={entry.id}>
-            <TableCell className="font-medium">{entry.riderName ?? 'Unknown'}</TableCell>
-            <TableCell>{entry.horseName ?? 'TBD'}</TableCell>
-            <TableCell>
-              <Badge className={COMPETITION_ENTRY_STATUS_COLORS[entry.status] ?? ''}>
-                {entry.status}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <Badge variant="outline">{entry.paymentStatus}</Badge>
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatDate(entry.registeredAt)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Rider</TableHead>
+              <TableHead>Horse</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Payment</TableHead>
+              <TableHead>Registered</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map((entry) => (
+              <TableRow key={entry.id}>
+                <TableCell className="font-medium">{entry.riderName ?? 'Unknown'}</TableCell>
+                <TableCell>{entry.horseName ?? 'TBD'}</TableCell>
+                <TableCell>
+                  <Badge className={COMPETITION_ENTRY_STATUS_COLORS[entry.status] ?? ''}>
+                    {entry.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{entry.paymentStatus}</Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(entry.registeredAt)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );
@@ -519,37 +514,39 @@ function ResultsSection({ competitionId, classId }: { competitionId: string; cla
       ) : (
         <Table>
           <TableHeader>
-        <TableRow>
-          <TableHead className="w-16">Place</TableHead>
-          <TableHead>Rider</TableHead>
-          <TableHead>Horse</TableHead>
-          <TableHead>Time</TableHead>
-          <TableHead>Faults</TableHead>
-          <TableHead>Notes</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {results.map((result) => (
-          <TableRow key={result.id}>
-            <TableCell className="font-bold">
-              {result.placing ? `#${result.placing}` : '—'}
-            </TableCell>
-            <TableCell className="font-medium">{result.riderName ?? 'Unknown'}</TableCell>
-            <TableCell>{result.horseName ?? '—'}</TableCell>
-            <TableCell>
-              {result.timeSeconds ? (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  {Number(result.timeSeconds).toFixed(2)}s
-                </span>
-              ) : '—'}
-            </TableCell>
-            <TableCell>{result.faults > 0 ? result.faults : '0'}</TableCell>
-            <TableCell className="max-w-[200px] truncate text-muted-foreground">
-              {result.notes ?? '—'}
-            </TableCell>
-          </TableRow>
-        ))}
+            <TableRow>
+              <TableHead className="w-16">Place</TableHead>
+              <TableHead>Rider</TableHead>
+              <TableHead>Horse</TableHead>
+              <TableHead>Time</TableHead>
+              <TableHead>Faults</TableHead>
+              <TableHead>Notes</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {results.map((result) => (
+              <TableRow key={result.id}>
+                <TableCell className="font-bold">
+                  {result.placing ? `#${result.placing}` : '—'}
+                </TableCell>
+                <TableCell className="font-medium">{result.riderName ?? 'Unknown'}</TableCell>
+                <TableCell>{result.horseName ?? '—'}</TableCell>
+                <TableCell>
+                  {result.timeSeconds ? (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {Number(result.timeSeconds).toFixed(2)}s
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell>{result.faults > 0 ? result.faults : '0'}</TableCell>
+                <TableCell className="text-muted-foreground max-w-[200px] truncate">
+                  {result.notes ?? '—'}
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       )}
@@ -598,30 +595,85 @@ function AddClassForm({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Class</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Class
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Competition Class</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Competition Class</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Class Name *</FormLabel><FormControl><Input placeholder="e.g. Novice Show Jumping 80cm" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Class Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Novice Show Jumping 80cm" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="discipline" render={({ field }) => (
-                <FormItem><FormLabel>Discipline</FormLabel><FormControl><Input placeholder="e.g. Show Jumping" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="level" render={({ field }) => (
-                <FormItem><FormLabel>Level</FormLabel><FormControl><Input placeholder="e.g. 80cm" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="discipline"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Discipline</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Show Jumping" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="level"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Level</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 80cm" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="maxEntries" render={({ field }) => (
-                <FormItem><FormLabel>Max Entries</FormLabel><FormControl><NumberInput placeholder="Unlimited" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="entryFee" render={({ field }) => (
-                <FormItem><FormLabel>Entry Fee</FormLabel><FormControl><NumberInput placeholder="e.g. 150" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="maxEntries"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Entries</FormLabel>
+                    <FormControl>
+                      <NumberInput placeholder="Unlimited" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="entryFee"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Entry Fee</FormLabel>
+                    <FormControl>
+                      <NumberInput placeholder="e.g. 150" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={createClass.isPending}>
               {createClass.isPending ? 'Adding...' : 'Add Class'}
@@ -679,41 +731,69 @@ function AddEntryForm({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Entry</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Entry
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Competition Entry</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Competition Entry</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="riderMemberId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Rider *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select rider" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {riders.map((r) => (
-                      <SelectItem key={r.memberId} value={r.memberId}>{r.displayName ?? r.email ?? 'Unnamed'}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="horseId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Horse (optional)</FormLabel>
-                <Select onValueChange={(v) => field.onChange(v === '__none__' ? undefined : v)} value={field.value ?? '__none__'}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Auto-assign or select" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="__none__">No horse selected</SelectItem>
-                    {horsesList.map((h) => (
-                      <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="riderMemberId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Rider *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select rider" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {riders.map((r) => (
+                        <SelectItem key={r.memberId} value={r.memberId}>
+                          {r.displayName ?? r.email ?? 'Unnamed'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="horseId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Horse (optional)</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(v === '__none__' ? undefined : v)}
+                    value={field.value ?? '__none__'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Auto-assign or select" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">No horse selected</SelectItem>
+                      {horsesList.map((h) => (
+                        <SelectItem key={h.id} value={h.id}>
+                          {h.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={createEntry.isPending}>
               {createEntry.isPending ? 'Registering...' : 'Register Entry'}
             </Button>
@@ -765,40 +845,96 @@ function AddResultForm({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Result</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Result
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Result</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Result</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="entryId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Entry *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select entry" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {entries.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>{e.riderName ?? 'Unknown'}{e.horseName ? ` on ${e.horseName}` : ''}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="entryId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Entry *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select entry" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {entries.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.riderName ?? 'Unknown'}
+                          {e.horseName ? ` on ${e.horseName}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid grid-cols-3 gap-4">
-              <FormField control={form.control} name="placing" render={({ field }) => (
-                <FormItem><FormLabel>Placing</FormLabel><FormControl><NumberInput placeholder="#" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="timeSeconds" render={({ field }) => (
-                <FormItem><FormLabel>Time (sec)</FormLabel><FormControl><NumberInput step="0.01" placeholder="e.g. 45.23" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="faults" render={({ field }) => (
-                <FormItem><FormLabel>Faults</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="placing"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Placing</FormLabel>
+                    <FormControl>
+                      <NumberInput placeholder="#" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="timeSeconds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Time (sec)</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" placeholder="e.g. 45.23" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="faults"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Faults</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <FormField control={form.control} name="notes" render={({ field }) => (
-              <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Optional notes..." {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Optional notes..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={createResult.isPending}>
               {createResult.isPending ? 'Saving...' : 'Save Result'}
             </Button>

@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Section, Img,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Section,
+  Img,
 } from '@react-email/components';
 
 /**
@@ -83,24 +91,35 @@ export function HorseCareReminder({
           <Text style={styles.text}>{headline}</Text>
 
           <Section style={styles.detailsBox}>
-            <Text style={styles.detailRow}><strong>Horse:</strong> {horseName}</Text>
-            <Text style={styles.detailRow}><strong>Type:</strong> {careTypeLabel}</Text>
-            <Text style={styles.detailRow}><strong>Due:</strong> {dueDate}</Text>
-            <Text style={styles.detailRow}><strong>Status:</strong> {status}</Text>
-            {detail && <Text style={styles.detailRow}><strong>Detail:</strong> {detail}</Text>}
+            <Text style={styles.detailRow}>
+              <strong>Horse:</strong> {horseName}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Type:</strong> {careTypeLabel}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Due:</strong> {dueDate}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Status:</strong> {status}
+            </Text>
+            {detail && (
+              <Text style={styles.detailRow}>
+                <strong>Detail:</strong> {detail}
+              </Text>
+            )}
           </Section>
 
           <Text style={styles.text}>
-            Open the horse&apos;s profile in the dashboard to log the
-            visit, update the next-due date, or attach receipts.
+            Open the horse&apos;s profile in the dashboard to log the visit, update the next-due
+            date, or attach receipts.
           </Text>
 
           <Hr style={styles.hr} />
 
           <Text style={styles.footer}>
-            You&apos;re receiving this because horse care reminders are
-            on for {clubName}. Toggle them off in Settings →
-            Notifications if your team uses an external calendar.
+            You&apos;re receiving this because horse care reminders are on for {clubName}. Toggle
+            them off in Settings → Notifications if your team uses an external calendar.
           </Text>
 
           <Text style={styles.clubName}>{clubName}</Text>
@@ -111,11 +130,7 @@ export function HorseCareReminder({
   );
 }
 
-function headlineFor(
-  kind: HorseCareReminderKind,
-  daysUntil: number,
-  horseName: string,
-): string {
+function headlineFor(kind: HorseCareReminderKind, daysUntil: number, horseName: string): string {
   const when =
     daysUntil < 0
       ? 'is past due'
@@ -158,5 +173,9 @@ const styles = {
   hr: { borderColor: '#e5e7eb', margin: '24px 0' },
   footer: { fontSize: '12px', color: '#9ca3af', lineHeight: '20px' },
   clubName: { fontSize: '12px', color: '#9ca3af', fontWeight: '600' as const, marginTop: '16px' },
-  dashboardPath: { fontSize: '11px', color: '#9ca3af', fontFamily: 'ui-monospace, SFMono-Regular, monospace' },
+  dashboardPath: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+  },
 };

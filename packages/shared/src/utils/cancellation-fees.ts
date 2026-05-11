@@ -113,14 +113,10 @@ export function calculateNoShowFee(params: NoShowFeeParams): number {
 export function coerceFeePercent(value: string | number, columnName: string): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   if (Number.isNaN(parsed)) {
-    throw new Error(
-      `coerceFeePercent: ${columnName} parsed to NaN from ${JSON.stringify(value)}`,
-    );
+    throw new Error(`coerceFeePercent: ${columnName} parsed to NaN from ${JSON.stringify(value)}`);
   }
   if (parsed < 0 || parsed > 100) {
-    throw new Error(
-      `coerceFeePercent: ${columnName}=${parsed} out of range [0, 100]`,
-    );
+    throw new Error(`coerceFeePercent: ${columnName}=${parsed} out of range [0, 100]`);
   }
   return parsed;
 }

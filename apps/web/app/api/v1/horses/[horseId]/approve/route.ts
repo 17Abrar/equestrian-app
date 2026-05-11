@@ -1,11 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { approveHorseOwnershipSchema } from '@equestrian/shared/schemas';
+import { approveHorseOwnership, getHorseById, getClubById } from '@equestrian/db/queries';
 import {
-  approveHorseOwnership,
-  getHorseById,
-  getClubById,
-} from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { HorseRegistrationApproved } from '@equestrian/email-templates/horse-registration-approved';
 
@@ -36,11 +38,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         // so a missing row means either: (a) wrong club, (b) already approved
         // or declined, or (c) doesn't exist. 409 covers the common "already
         // reviewed" case; 404 is reserved for truly missing.
-        return errorResponse(
-          'NOT_PENDING',
-          'Horse not found or is not pending approval',
-          409,
-        );
+        return errorResponse('NOT_PENDING', 'Horse not found or is not pending approval', 409);
       }
 
       void ctx.audit({

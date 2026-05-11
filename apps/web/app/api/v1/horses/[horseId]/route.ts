@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { updateHorseSchema } from '@equestrian/shared/schemas';
 import { getHorseById, updateHorse, softDeleteHorse } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {

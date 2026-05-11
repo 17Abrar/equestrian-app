@@ -28,7 +28,11 @@ describe('upsertRiderProfileByMember', () => {
 
     const [club] = await testDb.db
       .insert(clubs)
-      .values({ name: 'Test Club', slug: `t-${Date.now()}-${Math.random().toString(36).slice(2)}`, clerkOrgId: `org_${Date.now()}` })
+      .values({
+        name: 'Test Club',
+        slug: `t-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        clerkOrgId: `org_${Date.now()}`,
+      })
       .returning();
     if (!club) throw new Error('club insert returned no row');
 

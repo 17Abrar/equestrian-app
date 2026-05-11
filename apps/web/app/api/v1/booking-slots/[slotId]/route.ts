@@ -10,7 +10,13 @@ import {
   getArenaById,
 } from '@equestrian/db/queries';
 import { BookingCancellation } from '@equestrian/email-templates/booking-cancellation';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { sendTriggeredEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
@@ -90,11 +96,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           activeOnly: true,
         });
         if (!arena) {
-          return errorResponse(
-            'INVALID_ARENA',
-            'Arena not found, or has been deactivated.',
-            400,
-          );
+          return errorResponse('INVALID_ARENA', 'Arena not found, or has been deactivated.', 400);
         }
       }
       if (data.coachMemberId) {
@@ -162,9 +164,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         clubId: ctx.clubId,
         reasonProvided: reason.length > 0,
         bookingsCancelled: cancelledBookings.length,
-        paidBookingsNeedingRefund: cancelledBookings.filter(
-          (b) => b.paymentStatus === 'paid',
-        ).length,
+        paidBookingsNeedingRefund: cancelledBookings.filter((b) => b.paymentStatus === 'paid')
+          .length,
       });
 
       void ctx.audit({
@@ -218,8 +219,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
                   logger.error('slot_cancellation_email_failed', {
                     bookingId: booking.id,
                     clubId: ctx.clubId,
-                    error:
-                      emailErr instanceof Error ? emailErr.message : String(emailErr),
+                    error: emailErr instanceof Error ? emailErr.message : String(emailErr),
                   });
                 }
               }),

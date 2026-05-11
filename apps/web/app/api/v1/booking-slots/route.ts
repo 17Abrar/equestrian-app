@@ -51,25 +51,24 @@ const bookingSlotFiltersSchema = z
   );
 
 export async function GET(request: NextRequest) {
-  return withAuth(
-    async (ctx) => {
-      const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const filters = validateInput(bookingSlotFiltersSchema, searchParams);
+  return withAuth(async (ctx) => {
+    const searchParams = Object.fromEntries(request.nextUrl.searchParams);
+    const filters = validateInput(bookingSlotFiltersSchema, searchParams);
 
-      // Riders can view available slots (needed to book), staff can view all
-      const canViewSlots = hasPermission(ctx.orgRole, 'bookings:read')
-        || hasPermission(ctx.orgRole, 'bookings:create')
-        || hasPermission(ctx.orgRole, 'bookings:read_own');
+    // Riders can view available slots (needed to book), staff can view all
+    const canViewSlots =
+      hasPermission(ctx.orgRole, 'bookings:read') ||
+      hasPermission(ctx.orgRole, 'bookings:create') ||
+      hasPermission(ctx.orgRole, 'bookings:read_own');
 
-      if (!canViewSlots) {
-        return errorResponse('FORBIDDEN', 'You do not have permission to view booking slots', 403);
-      }
+    if (!canViewSlots) {
+      return errorResponse('FORBIDDEN', 'You do not have permission to view booking slots', 403);
+    }
 
-      const data = await getBookingSlotsByClub(ctx.clubId, filters);
+    const data = await getBookingSlotsByClub(ctx.clubId, filters);
 
-      return successResponse(data);
-    },
-  );
+    return successResponse(data);
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -82,11 +81,7 @@ export async function POST(request: NextRequest) {
       const timezone = (await getClubTimezone(ctx.clubId)) ?? 'Asia/Dubai';
 
       if (isDateInPast(data.date, timezone)) {
-        return errorResponse(
-          'INVALID_DATE',
-          'Cannot create booking slots for past dates',
-          422,
-        );
+        return errorResponse('INVALID_DATE', 'Cannot create booking slots for past dates', 422);
       }
 
       // lessonTypeId / arenaId / coachMemberId reference tables that have no
@@ -113,11 +108,7 @@ export async function POST(request: NextRequest) {
           activeOnly: true,
         });
         if (!arena) {
-          return errorResponse(
-            'INVALID_ARENA',
-            'Arena not found, or has been deactivated.',
-            400,
-          );
+          return errorResponse('INVALID_ARENA', 'Arena not found, or has been deactivated.', 400);
         }
       }
       if (data.coachMemberId) {

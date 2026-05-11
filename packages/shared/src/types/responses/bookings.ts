@@ -7,11 +7,7 @@
  * web typed the precise enum, and any added column only landed in one place.
  */
 
-import type {
-  BookingStatus,
-  PaymentStatus,
-  PaymentMethod,
-} from '../index';
+import type { BookingStatus, PaymentStatus, PaymentMethod } from '../index';
 
 export interface Arena {
   id: string;

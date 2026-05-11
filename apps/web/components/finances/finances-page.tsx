@@ -6,16 +6,30 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus, TrendingUp, TrendingDown, AlertCircle, Pencil, Trash2 } from 'lucide-react';
 import {
-  createExpenseSchema, updateExpenseSchema, createCouponSchema,
-  type CreateExpenseFormValues, type CreateExpenseInput,
-  type UpdateExpenseFormValues, type UpdateExpenseInput,
-  type CreateCouponFormValues, type CreateCouponInput,
+  createExpenseSchema,
+  updateExpenseSchema,
+  createCouponSchema,
+  type CreateExpenseFormValues,
+  type CreateExpenseInput,
+  type UpdateExpenseFormValues,
+  type UpdateExpenseInput,
+  type CreateCouponFormValues,
+  type CreateCouponInput,
 } from '@equestrian/shared/schemas';
 import { formatMoney, toMajorUnits, formatDate } from '@equestrian/shared/utils';
 import {
-  useFinanceOverview, useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense,
-  usePayments, useInvoices, useCoupons, useCreateCoupon, useUpdateCoupon,
-  type Expense, type Coupon,
+  useFinanceOverview,
+  useExpenses,
+  useCreateExpense,
+  useUpdateExpense,
+  useDeleteExpense,
+  usePayments,
+  useInvoices,
+  useCoupons,
+  useCreateCoupon,
+  useUpdateCoupon,
+  type Expense,
+  type Coupon,
 } from '@/hooks/use-finances';
 import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
@@ -26,14 +40,47 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
@@ -46,7 +93,7 @@ export function FinancesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Finances</h1>
-        <p className="mt-1 text-muted-foreground">Revenue, expenses, invoices, and coupons</p>
+        <p className="text-muted-foreground mt-1">Revenue, expenses, invoices, and coupons</p>
       </div>
 
       <Tabs defaultValue="overview">
@@ -58,11 +105,21 @@ export function FinancesPage() {
           <TabsTrigger value="coupons">Coupons</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-6"><OverviewTab /></TabsContent>
-        <TabsContent value="invoices" className="mt-6"><InvoicesTab /></TabsContent>
-        <TabsContent value="payments" className="mt-6"><PaymentsTab /></TabsContent>
-        <TabsContent value="expenses" className="mt-6"><ExpensesTab /></TabsContent>
-        <TabsContent value="coupons" className="mt-6"><CouponsTab /></TabsContent>
+        <TabsContent value="overview" className="mt-6">
+          <OverviewTab />
+        </TabsContent>
+        <TabsContent value="invoices" className="mt-6">
+          <InvoicesTab />
+        </TabsContent>
+        <TabsContent value="payments" className="mt-6">
+          <PaymentsTab />
+        </TabsContent>
+        <TabsContent value="expenses" className="mt-6">
+          <ExpensesTab />
+        </TabsContent>
+        <TabsContent value="coupons" className="mt-6">
+          <CouponsTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -79,8 +136,20 @@ function OverviewTab() {
   const homeCurrency = settingsQuery.data?.data.currency ?? 'AED';
 
   if (isLoading || settingsQuery.isLoading)
-    return <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load overview'} onRetry={() => refetch()} />;
+    return (
+      <div className="grid gap-4 md:grid-cols-3">
+        <Skeleton className="h-28" />
+        <Skeleton className="h-28" />
+        <Skeleton className="h-28" />
+      </div>
+    );
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load overview'}
+        onRetry={() => refetch()}
+      />
+    );
   if (settingsQuery.isError)
     return (
       <ErrorState
@@ -98,19 +167,22 @@ function OverviewTab() {
 
   // Empty-state: no rows in any currency yet → render zero cards in
   // the home currency so the dashboard isn't blank.
-  const totals = overview.totalsByCurrency.length > 0
-    ? [...overview.totalsByCurrency].sort((a, b) => {
-        // Home currency first, then alphabetical.
-        if (a.currency === homeCurrency.toUpperCase()) return -1;
-        if (b.currency === homeCurrency.toUpperCase()) return 1;
-        return a.currency.localeCompare(b.currency);
-      })
-    : [{
-        currency: homeCurrency.toUpperCase(),
-        totalRevenue: 0,
-        totalExpenses: 0,
-        outstandingBalance: 0,
-      }];
+  const totals =
+    overview.totalsByCurrency.length > 0
+      ? [...overview.totalsByCurrency].sort((a, b) => {
+          // Home currency first, then alphabetical.
+          if (a.currency === homeCurrency.toUpperCase()) return -1;
+          if (b.currency === homeCurrency.toUpperCase()) return 1;
+          return a.currency.localeCompare(b.currency);
+        })
+      : [
+          {
+            currency: homeCurrency.toUpperCase(),
+            totalRevenue: 0,
+            totalExpenses: 0,
+            outstandingBalance: 0,
+          },
+        ];
 
   return (
     <div className="space-y-6">
@@ -120,7 +192,7 @@ function OverviewTab() {
               than one currency. Keeps single-currency clubs visually
               identical to the pre-D13 dashboard. */}
           {totals.length > 1 && (
-            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground">
+            <h2 className="text-muted-foreground text-sm font-semibold tracking-wide">
               {row.currency}
             </h2>
           )}
@@ -131,8 +203,10 @@ function OverviewTab() {
                   <TrendingUp className="h-6 w-6 text-green-700" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold">{formatMoney(row.totalRevenue, row.currency)}</p>
+                  <p className="text-muted-foreground text-sm">Total Revenue</p>
+                  <p className="text-2xl font-bold">
+                    {formatMoney(row.totalRevenue, row.currency)}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -142,8 +216,10 @@ function OverviewTab() {
                   <TrendingDown className="h-6 w-6 text-red-700" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Expenses</p>
-                  <p className="text-2xl font-bold">{formatMoney(row.totalExpenses, row.currency)}</p>
+                  <p className="text-muted-foreground text-sm">Total Expenses</p>
+                  <p className="text-2xl font-bold">
+                    {formatMoney(row.totalExpenses, row.currency)}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -153,8 +229,10 @@ function OverviewTab() {
                   <AlertCircle className="h-6 w-6 text-yellow-700" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Outstanding</p>
-                  <p className="text-2xl font-bold">{formatMoney(row.outstandingBalance, row.currency)}</p>
+                  <p className="text-muted-foreground text-sm">Outstanding</p>
+                  <p className="text-2xl font-bold">
+                    {formatMoney(row.outstandingBalance, row.currency)}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -164,7 +242,9 @@ function OverviewTab() {
 
       {overview.paymentMethodBreakdown.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Payment Methods</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Payment Methods</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {overview.paymentMethodBreakdown.map((pm) => (
@@ -175,13 +255,11 @@ function OverviewTab() {
                   <span className="text-sm capitalize">
                     {pm.method.replace('_', ' ')}
                     {totals.length > 1 && (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {pm.currency}
-                      </span>
+                      <span className="text-muted-foreground ml-2 text-xs">{pm.currency}</span>
                     )}
                   </span>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground">{pm.count} transactions</span>
+                    <span className="text-muted-foreground text-sm">{pm.count} transactions</span>
                     <span className="font-medium">{formatMoney(pm.total, pm.currency)}</span>
                   </div>
                 </div>
@@ -209,7 +287,7 @@ function PaginationControls({
       <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>
         Previous
       </Button>
-      <span className="text-sm text-muted-foreground">
+      <span className="text-muted-foreground text-sm">
         Page {page} of {totalPages}
       </span>
       <Button
@@ -233,13 +311,10 @@ function FinanceRowListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center justify-between rounded-lg border bg-card p-4"
-        >
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div key={i} className="bg-card flex items-center justify-between rounded-lg border p-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="min-w-0 flex-1 space-y-1.5">
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-3 w-48" />
             </div>
@@ -253,10 +328,19 @@ function FinanceRowListSkeleton({ rows = 6 }: { rows?: number }) {
 
 function InvoicesTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error, refetch } = useInvoices({ page, pageSize: DEFAULT_PAGE_SIZE });
+  const { data, isLoading, isError, error, refetch } = useInvoices({
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
 
   if (isLoading) return <FinanceRowListSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const invoices = data?.data ?? [];
 
@@ -290,23 +374,38 @@ function InvoicesTab() {
               <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
               <TableCell>{inv.memberName ?? 'Unknown'}</TableCell>
               <TableCell>{formatMoney(inv.totalAmount, inv.currency)}</TableCell>
-              <TableCell><Badge variant="outline">{inv.status}</Badge></TableCell>
+              <TableCell>
+                <Badge variant="outline">{inv.status}</Badge>
+              </TableCell>
               <TableCell className="text-muted-foreground">{inv.dueDate ?? '—'}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-      <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+      <PaginationControls
+        page={page}
+        totalPages={data?.pagination.totalPages ?? 1}
+        onChange={setPage}
+      />
     </div>
   );
 }
 
 function PaymentsTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error, refetch } = usePayments({ page, pageSize: DEFAULT_PAGE_SIZE });
+  const { data, isLoading, isError, error, refetch } = usePayments({
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
 
   if (isLoading) return <FinanceRowListSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const payments = data?.data ?? [];
 
@@ -340,13 +439,21 @@ function PaymentsTab() {
               <TableCell className="font-medium">{p.memberName ?? 'Unknown'}</TableCell>
               <TableCell>{formatMoney(p.amount, p.currency)}</TableCell>
               <TableCell className="capitalize">{p.paymentMethod?.replace('_', ' ')}</TableCell>
-              <TableCell><Badge className={PAYMENT_STATUS_COLORS[p.status] ?? ''}>{p.status}</Badge></TableCell>
-              <TableCell className="text-muted-foreground">{p.paidAt ? formatDate(p.paidAt) : '—'}</TableCell>
+              <TableCell>
+                <Badge className={PAYMENT_STATUS_COLORS[p.status] ?? ''}>{p.status}</Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {p.paidAt ? formatDate(p.paidAt) : '—'}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-      <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+      <PaginationControls
+        page={page}
+        totalPages={data?.pagination.totalPages ?? 1}
+        onChange={setPage}
+      />
     </div>
   );
 }
@@ -355,10 +462,19 @@ function ExpensesTab() {
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
   const [addOpen, setAddOpen] = useState(false);
-  const { data, isLoading, isError, error, refetch } = useExpenses({ page, pageSize: DEFAULT_PAGE_SIZE });
+  const { data, isLoading, isError, error, refetch } = useExpenses({
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
 
   if (isLoading) return <FinanceRowListSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const expenses = data?.data ?? [];
 
@@ -391,7 +507,11 @@ function ExpensesTab() {
               {expenses.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell>{e.date}</TableCell>
-                  <TableCell><Badge variant="outline" className="capitalize">{e.category}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize">
+                      {e.category}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="max-w-[200px] truncate">{e.description}</TableCell>
                   <TableCell className="text-muted-foreground">{e.vendorName ?? '—'}</TableCell>
                   <TableCell className="font-medium">{formatMoney(e.amount, e.currency)}</TableCell>
@@ -405,7 +525,11 @@ function ExpensesTab() {
               ))}
             </TableBody>
           </Table>
-          <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+          <PaginationControls
+            page={page}
+            totalPages={data?.pagination.totalPages ?? 1}
+            onChange={setPage}
+          />
         </>
       )}
     </div>
@@ -460,51 +584,91 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Edit Expense</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="category" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="feed">Feed</SelectItem>
-                    <SelectItem value="vet">Vet</SelectItem>
-                    <SelectItem value="farrier">Farrier</SelectItem>
-                    <SelectItem value="equipment">Equipment</SelectItem>
-                    <SelectItem value="utilities">Utilities</SelectItem>
-                    <SelectItem value="wages">Wages</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="amount" render={({ field }) => (
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount</FormLabel>
+                  <FormLabel>Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="feed">Feed</SelectItem>
+                      <SelectItem value="vet">Vet</SelectItem>
+                      <SelectItem value="farrier">Farrier</SelectItem>
+                      <SelectItem value="equipment">Equipment</SelectItem>
+                      <SelectItem value="utilities">Utilities</SelectItem>
+                      <SelectItem value="wages">Wages</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <NumberInput step="0.01" {...field} />
+                    <Textarea {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )} />
-              <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem><FormLabel>Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              )}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <FormField control={form.control} name="vendorName" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Vendor</FormLabel>
-                <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="vendorName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Vendor</FormLabel>
+                  <FormControl>
+                    <Input {...field} value={field.value ?? ''} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={updateExpense.isPending}>
               {updateExpense.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
@@ -540,7 +704,8 @@ function DeleteExpenseButton({ expense }: { expense: Expense }) {
           <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
           <AlertDialogDescription>
             {formatMoney(expense.amount, expense.currency)} — {expense.description}
-            <br />This cannot be undone.
+            <br />
+            This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -565,7 +730,12 @@ function AddExpenseDialog({
 
   const form = useForm<CreateExpenseFormValues, unknown, CreateExpenseInput>({
     resolver: zodResolver(createExpenseSchema),
-    defaultValues: { category: 'feed', description: '', date: new Date().toISOString().split('T')[0], currency: 'AED' },
+    defaultValues: {
+      category: 'feed',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      currency: 'AED',
+    },
   });
 
   async function onSubmit(data: CreateExpenseInput) {
@@ -582,43 +752,98 @@ function AddExpenseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Expense</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Expense
+        </Button>
+      </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Expense</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Expense</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="category" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="feed">Feed</SelectItem>
-                    <SelectItem value="vet">Vet</SelectItem>
-                    <SelectItem value="farrier">Farrier</SelectItem>
-                    <SelectItem value="equipment">Equipment</SelectItem>
-                    <SelectItem value="utilities">Utilities</SelectItem>
-                    <SelectItem value="wages">Wages</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description *</FormLabel><FormControl><Textarea placeholder="What was this expense for?" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="feed">Feed</SelectItem>
+                      <SelectItem value="vet">Vet</SelectItem>
+                      <SelectItem value="farrier">Farrier</SelectItem>
+                      <SelectItem value="equipment">Equipment</SelectItem>
+                      <SelectItem value="utilities">Utilities</SelectItem>
+                      <SelectItem value="wages">Wages</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description *</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="What was this expense for?" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="amount" render={({ field }) => (
-                <FormItem><FormLabel>Amount *</FormLabel><FormControl><NumberInput step="0.01" placeholder="e.g. 500" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem><FormLabel>Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount *</FormLabel>
+                    <FormControl>
+                      <NumberInput step="0.01" placeholder="e.g. 500" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <FormField control={form.control} name="vendorName" render={({ field }) => (
-              <FormItem><FormLabel>Vendor</FormLabel><FormControl><Input placeholder="e.g. Farm Supply Co." {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="vendorName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Vendor</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Farm Supply Co." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={createExpense.isPending}>
               {createExpense.isPending ? 'Adding...' : 'Add Expense'}
             </Button>
@@ -638,10 +863,19 @@ function CouponsTab() {
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
   const [addOpen, setAddOpen] = useState(false);
-  const { data, isLoading, isError, error, refetch } = useCoupons({ page, pageSize: DEFAULT_PAGE_SIZE });
+  const { data, isLoading, isError, error, refetch } = useCoupons({
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
 
   if (isLoading || settingsQuery.isLoading) return <FinanceRowListSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed'}
+        onRetry={() => refetch()}
+      />
+    );
   if (settingsQuery.isError)
     return (
       <ErrorState
@@ -693,11 +927,20 @@ function CouponsTab() {
                 <TableRow key={c.id}>
                   <TableCell className="font-mono font-bold">{c.code}</TableCell>
                   <TableCell>
-                    {c.discountType === 'percentage' ? `${c.discountValue}%` : formatMoney(c.discountValue, currency)}
+                    {c.discountType === 'percentage'
+                      ? `${c.discountValue}%`
+                      : formatMoney(c.discountValue, currency)}
                   </TableCell>
-                  <TableCell>{c.usageCount}{c.maxUses ? ` / ${c.maxUses}` : ''}</TableCell>
-                  <TableCell><Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground">{c.expiresAt ? formatDate(c.expiresAt) : 'Never'}</TableCell>
+                  <TableCell>
+                    {c.usageCount}
+                    {c.maxUses ? ` / ${c.maxUses}` : ''}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={COUPON_STATUS_COLORS[c.status] ?? ''}>{c.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {c.expiresAt ? formatDate(c.expiresAt) : 'Never'}
+                  </TableCell>
                   <TableCell className="text-right">
                     <CouponStatusActions coupon={c} />
                   </TableCell>
@@ -705,7 +948,11 @@ function CouponsTab() {
               ))}
             </TableBody>
           </Table>
-          <PaginationControls page={page} totalPages={data?.pagination.totalPages ?? 1} onChange={setPage} />
+          <PaginationControls
+            page={page}
+            totalPages={data?.pagination.totalPages ?? 1}
+            onChange={setPage}
+          />
         </>
       )}
     </div>
@@ -731,7 +978,7 @@ function CouponStatusActions({ coupon }: { coupon: Coupon }) {
 
   // Already-expired and exhausted coupons cannot be reactivated.
   if (coupon.status === 'expired' || coupon.status === 'exhausted') {
-    return <span className="text-xs text-muted-foreground">—</span>;
+    return <span className="text-muted-foreground text-xs">—</span>;
   }
 
   return (
@@ -765,8 +1012,8 @@ function CouponStatusActions({ coupon }: { coupon: Coupon }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Expire coupon {coupon.code}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The code will stop working for new bookings. Existing usages stay
-              attached to past bookings. This cannot be undone.
+              The code will stop working for new bookings. Existing usages stay attached to past
+              bookings. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -792,7 +1039,12 @@ function AddCouponDialog({
 
   const form = useForm<CreateCouponFormValues, unknown, CreateCouponInput>({
     resolver: zodResolver(createCouponSchema),
-    defaultValues: { code: '', discountType: 'percentage', firstTimeOnly: false, isStackable: false },
+    defaultValues: {
+      code: '',
+      discountType: 'percentage',
+      firstTimeOnly: false,
+      isStackable: false,
+    },
   });
 
   async function onSubmit(data: CreateCouponInput) {
@@ -809,55 +1061,155 @@ function AddCouponDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Create Coupon</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Create Coupon
+        </Button>
+      </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Create Coupon</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Create Coupon</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="code" render={({ field }) => (
-              <FormItem><FormLabel>Code *</FormLabel><FormControl><Input placeholder="e.g. SUMMER25" className="font-mono uppercase" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="discountType" render={({ field }) => (
+            <FormField
+              control={form.control}
+              name="code"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Type *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="percentage">Percentage</SelectItem>
-                      <SelectItem value="fixed">Fixed Amount</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Code *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. SUMMER25" className="font-mono uppercase" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
-              )} />
-              <FormField control={form.control} name="discountValue" render={({ field }) => (
-                <FormItem><FormLabel>{form.watch('discountType') === 'percentage' ? 'Percentage *' : 'Amount *'}</FormLabel><FormControl><NumberInput placeholder={form.watch('discountType') === 'percentage' ? 'e.g. 25' : 'e.g. 50'} {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              )}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="discountType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="percentage">Percentage</SelectItem>
+                        <SelectItem value="fixed">Fixed Amount</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="discountValue"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {form.watch('discountType') === 'percentage' ? 'Percentage *' : 'Amount *'}
+                    </FormLabel>
+                    <FormControl>
+                      <NumberInput
+                        placeholder={
+                          form.watch('discountType') === 'percentage' ? 'e.g. 25' : 'e.g. 50'
+                        }
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="maxUses" render={({ field }) => (
-                <FormItem><FormLabel>Max Total Uses</FormLabel><FormControl><NumberInput placeholder="Unlimited" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="maxUsesPerRider" render={({ field }) => (
-                <FormItem><FormLabel>Max Per Rider</FormLabel><FormControl><NumberInput placeholder="Unlimited" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="maxUses"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Total Uses</FormLabel>
+                    <FormControl>
+                      <NumberInput placeholder="Unlimited" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxUsesPerRider"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Per Rider</FormLabel>
+                    <FormControl>
+                      <NumberInput placeholder="Unlimited" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="startsAt" render={({ field }) => (
-                <FormItem><FormLabel>Starts</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="expiresAt" render={({ field }) => (
-                <FormItem><FormLabel>Expires</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="startsAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Starts</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="expiresAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Expires</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="flex gap-6">
-              <FormField control={form.control} name="firstTimeOnly" render={({ field }) => (
-                <FormItem className="flex items-center gap-2"><FormLabel>First-time riders only</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="isStackable" render={({ field }) => (
-                <FormItem className="flex items-center gap-2"><FormLabel>Stackable</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="firstTimeOnly"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2">
+                    <FormLabel>First-time riders only</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isStackable"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2">
+                    <FormLabel>Stackable</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={createCoupon.isPending}>
               {createCoupon.isPending ? 'Creating...' : 'Create Coupon'}

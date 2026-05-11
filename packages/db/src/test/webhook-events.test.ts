@@ -36,9 +36,7 @@ afterEach(async () => {
 
 describe('claimWebhookEvent', () => {
   it('first-time claim returns { status: "claimed", attempt: 1 }', async () => {
-    const result = await withTestDb(testDb.db, () =>
-      claimWebhookEvent('stripe', 'evt_test_1'),
-    );
+    const result = await withTestDb(testDb.db, () => claimWebhookEvent('stripe', 'evt_test_1'));
     expect(result).toEqual({ status: 'claimed', attempt: 1 });
   });
 
@@ -86,9 +84,7 @@ describe('claimWebhookEvent', () => {
     // serialise so exactly one worker does the work.
     await withTestDb(testDb.db, async () => {
       const claims = await Promise.all(
-        Array.from({ length: 20 }, () =>
-          claimWebhookEvent('stripe', 'evt_concurrent'),
-        ),
+        Array.from({ length: 20 }, () => claimWebhookEvent('stripe', 'evt_concurrent')),
       );
       const winners = claims.filter((c) => c.status === 'claimed');
       const losers = claims.filter((c) => c.status === 'in_flight');

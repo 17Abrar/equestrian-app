@@ -74,11 +74,7 @@ export async function POST(request: NextRequest) {
       if (!horse) {
         // The query returns null when the user isn't an active member of the
         // target club. 403 rather than 404 to make the auth failure explicit.
-        return errorResponse(
-          'NOT_A_MEMBER',
-          'You are not a member of this stable',
-          403,
-        );
+        return errorResponse('NOT_A_MEMBER', 'You are not a member of this stable', 403);
       }
 
       // Audit on the TARGET club, not ctx.clubId (they may differ). Calling

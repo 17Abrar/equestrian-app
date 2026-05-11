@@ -228,7 +228,7 @@ describe('upsertPaymentAccount — burned webhook hashes (D-1, audit pass-2)', (
     expect(burnedRows[0]?.clubId).toBe(clubA);
   });
 
-  it('refuses a club to paste another club\'s previously-retired secret', async () => {
+  it("refuses a club to paste another club's previously-retired secret", async () => {
     const { clubA, clubB } = await seedTwoClubs(testDb.db);
     const sharedHash = hash('whsec_clubA_then_retired');
 

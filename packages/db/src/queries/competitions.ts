@@ -63,10 +63,7 @@ interface CompetitionFilters {
 // ─── Competitions ─────────────────────────────────────────────────────
 
 export async function getCompetitionsByClub(clubId: string, filters: CompetitionFilters) {
-  const conditions: SQL[] = [
-    eq(competitions.clubId, clubId),
-    eq(competitions.isActive, true),
-  ];
+  const conditions: SQL[] = [eq(competitions.clubId, clubId), eq(competitions.isActive, true)];
 
   if (filters.status) {
     conditions.push(sql`${competitions.status} = ${filters.status}`);
@@ -137,7 +134,11 @@ export async function createCompetition(clubId: string, data: CompetitionCreate)
   return result[0];
 }
 
-export async function updateCompetition(clubId: string, competitionId: string, data: CompetitionUpdate) {
+export async function updateCompetition(
+  clubId: string,
+  competitionId: string,
+  data: CompetitionUpdate,
+) {
   const values = { ...toCompetitionValues(data), updatedAt: new Date() } as Partial<NewCompetition>;
 
   // `cancelled` and `completed` are terminal — once entries are finalised
@@ -147,10 +148,7 @@ export async function updateCompetition(clubId: string, competitionId: string, d
   // withdrawn entries, with no rebroadcast to the riders who were
   // refunded. Editing a name / location / sponsorship blurb on a
   // cancelled comp still works.
-  const conditions = [
-    eq(competitions.id, competitionId),
-    eq(competitions.clubId, clubId),
-  ];
+  const conditions = [eq(competitions.id, competitionId), eq(competitions.clubId, clubId)];
   if (values.status !== undefined) {
     conditions.push(sql`${competitions.status} NOT IN ('cancelled', 'completed')`);
   }
@@ -235,7 +233,10 @@ export async function getCompetitionClassById(clubId: string, classId: string) {
 }
 
 export async function createCompetitionClass(clubId: string, data: ClassCreate) {
-  const result = await db.insert(competitionClasses).values({ ...data, clubId }).returning();
+  const result = await db
+    .insert(competitionClasses)
+    .values({ ...data, clubId })
+    .returning();
   return result[0];
 }
 
@@ -256,9 +257,7 @@ export async function updateCompetitionClass(clubId: string, classId: string, da
 export class CompetitionClassHasEntriesError extends Error {
   public readonly code = 'CLASS_HAS_ENTRIES';
   constructor() {
-    super(
-      'Cannot delete a class with active registrations. Withdraw all entries first.',
-    );
+    super('Cannot delete a class with active registrations. Withdraw all entries first.');
     this.name = 'CompetitionClassHasEntriesError';
   }
 }
@@ -298,10 +297,7 @@ export async function getCompetitionEntries(
   { page, pageSize }: { page: number; pageSize: number },
 ) {
   const offset = (page - 1) * pageSize;
-  const where = and(
-    eq(competitionEntries.clubId, clubId),
-    eq(competitionEntries.classId, classId),
-  );
+  const where = and(eq(competitionEntries.clubId, clubId), eq(competitionEntries.classId, classId));
   const [items, count] = await Promise.all([
     db
       .select({
@@ -371,12 +367,7 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
         currency: competitionClasses.currency,
       })
       .from(competitionClasses)
-      .where(
-        and(
-          eq(competitionClasses.id, data.classId),
-          eq(competitionClasses.clubId, clubId),
-        ),
-      )
+      .where(and(eq(competitionClasses.id, data.classId), eq(competitionClasses.clubId, clubId)))
       .for('update')
       .limit(1);
 
@@ -390,12 +381,7 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
     const rider = await tx
       .select({ id: clubMembers.id })
       .from(clubMembers)
-      .where(
-        and(
-          eq(clubMembers.id, data.riderMemberId),
-          eq(clubMembers.clubId, clubId),
-        ),
-      )
+      .where(and(eq(clubMembers.id, data.riderMemberId), eq(clubMembers.clubId, clubId)))
       .limit(1);
     if (!rider[0]) {
       throw new Error('RIDER_NOT_IN_CLUB');
@@ -412,11 +398,7 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
         })
         .from(horses)
         .where(
-          and(
-            eq(horses.id, data.horseId),
-            eq(horses.clubId, clubId),
-            isNull(horses.deletedAt),
-          ),
+          and(eq(horses.id, data.horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)),
         )
         .limit(1);
 
@@ -425,8 +407,7 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
         throw new Error('HORSE_NOT_FOUND');
       }
       const isRidersHorse = h.ownerMemberId === data.riderMemberId;
-      const isAvailableSchoolHorse =
-        h.ownerMemberId === null && h.status === 'available';
+      const isAvailableSchoolHorse = h.ownerMemberId === null && h.status === 'available';
       if (!isRidersHorse && !isAvailableSchoolHorse) {
         throw new Error('HORSE_NOT_AVAILABLE_FOR_RIDER');
       }
@@ -442,7 +423,10 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
     // ("EVERY query MUST include the club_id tenant scope") applies
     // even when an upstream FK happens to enforce it.
     const comp = await tx
-      .select({ registrationDeadline: competitions.registrationDeadline, status: competitions.status })
+      .select({
+        registrationDeadline: competitions.registrationDeadline,
+        status: competitions.status,
+      })
       .from(competitions)
       .where(and(eq(competitions.id, cls.competitionId), eq(competitions.clubId, clubId)))
       .limit(1);
@@ -513,11 +497,7 @@ export async function getCompetitionEntryById(clubId: string, entryId: string) {
   return result[0] ?? null;
 }
 
-export async function withdrawCompetitionEntry(
-  clubId: string,
-  entryId: string,
-  reason: string,
-) {
+export async function withdrawCompetitionEntry(clubId: string, entryId: string, reason: string) {
   // Don't overwrite a `withdrawn` or `scratched` row — the latter is a
   // judge's call (e.g. failed check-in) and idempotently re-applying
   // withdrawal would replace the scratch reason with the rider's. See
@@ -545,47 +525,44 @@ export async function withdrawCompetitionEntry(
 // ─── Competition Results ──────────────────────────────────────────────
 
 export async function getCompetitionResults(clubId: string, classId: string) {
-  return db
-    .select({
-      id: competitionResults.id,
-      entryId: competitionResults.entryId,
-      placing: competitionResults.placing,
-      timeSeconds: competitionResults.timeSeconds,
-      faults: competitionResults.faults,
-      notes: competitionResults.notes,
-      riderName: clubMembers.displayName,
-      horseName: horses.name,
-    })
-    .from(competitionResults)
-    .innerJoin(
-      competitionEntries,
-      and(
-        eq(competitionResults.entryId, competitionEntries.id),
-        eq(competitionEntries.clubId, clubId),
-      ),
-    )
-    .innerJoin(
-      clubMembers,
-      and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
-    )
-    // Hide tombstoned horses' names in the results list — F-2.
-    .leftJoin(
-      horses,
-      and(
-        eq(competitionEntries.horseId, horses.id),
-        eq(horses.clubId, clubId),
-        isNull(horses.deletedAt),
-      ),
-    )
-    .where(
-      and(
-        eq(competitionResults.clubId, clubId),
-        eq(competitionEntries.classId, classId),
-      ),
-    )
-    .orderBy(asc(competitionResults.placing))
-    // Defensive cap (audit G-10).
-    .limit(500);
+  return (
+    db
+      .select({
+        id: competitionResults.id,
+        entryId: competitionResults.entryId,
+        placing: competitionResults.placing,
+        timeSeconds: competitionResults.timeSeconds,
+        faults: competitionResults.faults,
+        notes: competitionResults.notes,
+        riderName: clubMembers.displayName,
+        horseName: horses.name,
+      })
+      .from(competitionResults)
+      .innerJoin(
+        competitionEntries,
+        and(
+          eq(competitionResults.entryId, competitionEntries.id),
+          eq(competitionEntries.clubId, clubId),
+        ),
+      )
+      .innerJoin(
+        clubMembers,
+        and(eq(competitionEntries.riderMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
+      // Hide tombstoned horses' names in the results list — F-2.
+      .leftJoin(
+        horses,
+        and(
+          eq(competitionEntries.horseId, horses.id),
+          eq(horses.clubId, clubId),
+          isNull(horses.deletedAt),
+        ),
+      )
+      .where(and(eq(competitionResults.clubId, clubId), eq(competitionEntries.classId, classId)))
+      .orderBy(asc(competitionResults.placing))
+      // Defensive cap (audit G-10).
+      .limit(500)
+  );
 }
 
 export async function createCompetitionResult(clubId: string, data: ResultCreate) {
@@ -601,33 +578,35 @@ export async function createCompetitionResult(clubId: string, data: ResultCreate
 // ─── Calendar Integration ─────────────────────────────────────────────
 
 export async function getCompetitionsForCalendar(clubId: string, dateFrom: string, dateTo: string) {
-  return db
-    .select({
-      id: competitions.id,
-      name: competitions.name,
-      startDate: competitions.startDate,
-      endDate: competitions.endDate,
-      status: competitions.status,
-      location: competitions.location,
-    })
-    .from(competitions)
-    .where(
-      and(
-        eq(competitions.clubId, clubId),
-        eq(competitions.isActive, true),
-        // Audit F-68 (2026-05-07 r4 — informational): these LOOK like
-        // raw concatenations but Drizzle parameterizes `${dateTo}` /
-        // `${dateFrom}` — they're bound parameters, not string interp.
-        // No SQL injection. Kept as `sql` template (rather than the
-        // typed `lte()`/`gte()` helpers) only because Drizzle's helpers
-        // would emit `IS NULL` for the optional case the route already
-        // guarantees is non-null.
-        sql`${competitions.startDate} <= ${dateTo}`,
-        sql`${competitions.endDate} >= ${dateFrom}`,
-      ),
-    )
-    .orderBy(asc(competitions.startDate))
-    // Defensive cap (audit G-9). The route's Zod refine caps the date
-    // window at 90 days; this cap survives a future schema relaxation.
-    .limit(500);
+  return (
+    db
+      .select({
+        id: competitions.id,
+        name: competitions.name,
+        startDate: competitions.startDate,
+        endDate: competitions.endDate,
+        status: competitions.status,
+        location: competitions.location,
+      })
+      .from(competitions)
+      .where(
+        and(
+          eq(competitions.clubId, clubId),
+          eq(competitions.isActive, true),
+          // Audit F-68 (2026-05-07 r4 — informational): these LOOK like
+          // raw concatenations but Drizzle parameterizes `${dateTo}` /
+          // `${dateFrom}` — they're bound parameters, not string interp.
+          // No SQL injection. Kept as `sql` template (rather than the
+          // typed `lte()`/`gte()` helpers) only because Drizzle's helpers
+          // would emit `IS NULL` for the optional case the route already
+          // guarantees is non-null.
+          sql`${competitions.startDate} <= ${dateTo}`,
+          sql`${competitions.endDate} >= ${dateFrom}`,
+        ),
+      )
+      .orderBy(asc(competitions.startDate))
+      // Defensive cap (audit G-9). The route's Zod refine caps the date
+      // window at 90 days; this cap survives a future schema relaxation.
+      .limit(500)
+  );
 }

@@ -1,11 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { declineHorseOwnershipSchema } from '@equestrian/shared/schemas';
+import { declineHorseOwnership, getHorseById, getClubById } from '@equestrian/db/queries';
 import {
-  declineHorseOwnership,
-  getHorseById,
-  getClubById,
-} from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { HorseRegistrationDeclined } from '@equestrian/email-templates/horse-registration-declined';
 
@@ -28,11 +30,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const horse = await declineHorseOwnership(ctx.clubId, horseId, data.reason);
 
       if (!horse) {
-        return errorResponse(
-          'NOT_PENDING',
-          'Horse not found or is not pending approval',
-          409,
-        );
+        return errorResponse('NOT_PENDING', 'Horse not found or is not pending approval', 409);
       }
 
       void ctx.audit({

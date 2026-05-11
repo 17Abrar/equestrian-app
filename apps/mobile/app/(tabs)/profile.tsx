@@ -33,9 +33,7 @@ export default function ProfileScreen() {
         {/* Avatar + Name */}
         <View className="mt-6 items-center">
           <View className="h-20 w-20 items-center justify-center rounded-full bg-gray-900">
-            <Text className="text-2xl font-bold text-white">
-              {initials.toUpperCase() || '?'}
-            </Text>
+            <Text className="text-2xl font-bold text-white">{initials.toUpperCase() || '?'}</Text>
           </View>
           <Text className="mt-3 text-xl font-semibold text-gray-900">{fullName}</Text>
           <Text className="mt-1 text-sm text-gray-500">{email}</Text>

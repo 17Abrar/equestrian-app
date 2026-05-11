@@ -8,7 +8,13 @@ import { toast } from 'sonner';
 import { createArenaSchema, type CreateArenaInput } from '@equestrian/shared/schemas';
 import { type z } from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { useArenas, useCreateArena, useUpdateArena, useDeleteArena, type Arena } from '@/hooks/use-bookings';
+import {
+  useArenas,
+  useCreateArena,
+  useUpdateArena,
+  useDeleteArena,
+  type Arena,
+} from '@/hooks/use-bookings';
 
 type ArenaFormValues = z.input<typeof createArenaSchema>;
 import { Button } from '@/components/ui/button';
@@ -109,7 +115,7 @@ export function ArenasList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Arenas</h1>
-          <p className="mt-1 text-muted-foreground">Manage your riding arenas and facilities</p>
+          <p className="text-muted-foreground mt-1">Manage your riding arenas and facilities</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -227,7 +233,7 @@ export function ArenasList() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-semibold">{arena.name}</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-muted-foreground text-sm">
                       {arena.surfaceType ?? 'No surface specified'}
                     </p>
                   </div>
@@ -235,7 +241,7 @@ export function ArenasList() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-muted-foreground"
+                      className="text-muted-foreground h-8 w-8"
                       aria-label={`Edit ${arena.name}`}
                       onClick={() => setEditingArena(arena)}
                     >
@@ -243,24 +249,29 @@ export function ArenasList() {
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label={`Delete ${arena.name}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground h-8 w-8"
+                          aria-label={`Delete ${arena.name}`}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remove {arena.name}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will deactivate the arena. Existing bookings will not be affected.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleDelete(arena.id)}>
-                          Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remove {arena.name}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will deactivate the arena. Existing bookings will not be affected.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(arena.id)}>
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
                     </AlertDialog>
                   </div>
                 </div>
@@ -272,9 +283,13 @@ export function ArenasList() {
                   )}
                   <Badge variant="outline" className="text-xs">
                     {arena.isIndoor ? (
-                      <><Moon className="mr-1 h-3 w-3" /> Indoor</>
+                      <>
+                        <Moon className="mr-1 h-3 w-3" /> Indoor
+                      </>
                     ) : (
-                      <><Sun className="mr-1 h-3 w-3" /> Outdoor</>
+                      <>
+                        <Sun className="mr-1 h-3 w-3" /> Outdoor
+                      </>
                     )}
                   </Badge>
                   {arena.hasLighting && (
@@ -294,14 +309,24 @@ export function ArenasList() {
         <EditArenaDialog
           arena={editingArena}
           open={!!editingArena}
-          onOpenChange={(open) => { if (!open) setEditingArena(null); }}
+          onOpenChange={(open) => {
+            if (!open) setEditingArena(null);
+          }}
         />
       )}
     </div>
   );
 }
 
-function EditArenaDialog({ arena, open, onOpenChange }: { arena: Arena; open: boolean; onOpenChange: (open: boolean) => void }) {
+function EditArenaDialog({
+  arena,
+  open,
+  onOpenChange,
+}: {
+  arena: Arena;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const updateArena = useUpdateArena(arena.id);
   const queryClient = useQueryClient();
 

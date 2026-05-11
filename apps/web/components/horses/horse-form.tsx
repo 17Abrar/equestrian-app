@@ -4,7 +4,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { createHorseSchema, type CreateHorseFormValues, type CreateHorseInput } from '@equestrian/shared/schemas';
+import {
+  createHorseSchema,
+  type CreateHorseFormValues,
+  type CreateHorseInput,
+} from '@equestrian/shared/schemas';
 import {
   useCreateHorse,
   useUpdateHorse,
@@ -114,8 +118,14 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
         router.push('/horses');
       }
     } catch (error) {
-      reportMutationError(isEditing ? 'horse.update' : 'horse.create', error, { horseId: horse?.id });
-      toast.error(error instanceof Error ? error.message : `Failed to ${isEditing ? 'update' : 'create'} horse`);
+      reportMutationError(isEditing ? 'horse.update' : 'horse.create', error, {
+        horseId: horse?.id,
+      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Failed to ${isEditing ? 'update' : 'create'} horse`,
+      );
     }
   }
 
@@ -428,12 +438,18 @@ export function HorseForm({ horse, onSuccess }: HorseFormProps) {
         {/* Submit */}
         <div className="flex gap-3">
           <Button type="submit" disabled={isPending}>
-            {isPending ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Horse')}
+            {isPending
+              ? isEditing
+                ? 'Saving...'
+                : 'Adding...'
+              : isEditing
+                ? 'Save Changes'
+                : 'Add Horse'}
           </Button>
           <Button
             type="button"
             variant="outline"
-            onClick={() => onSuccess ? onSuccess() : router.push('/horses')}
+            onClick={() => (onSuccess ? onSuccess() : router.push('/horses'))}
           >
             Cancel
           </Button>

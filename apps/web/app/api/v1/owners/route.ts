@@ -3,7 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createOwnerSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { getOwnersByClub, createMember } from '@equestrian/db/queries';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  paginatedResponse,
+  errorResponse,
+  validateInput,
+  parseRequiredBody,
+} from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 
 // Reuse `paginationSchema` (caps `pageSize` at 100). The previous

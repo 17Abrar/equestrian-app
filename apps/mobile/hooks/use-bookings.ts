@@ -38,8 +38,7 @@ export function useBookingSlots(filters: { dateFrom?: string; dateTo?: string } 
   // is correct here.
   return useQuery({
     queryKey: ['bookingSlots', filters],
-    queryFn: () =>
-      api.get<BookingSlot[]>(`/api/v1/booking-slots?${params.toString()}`),
+    queryFn: () => api.get<BookingSlot[]>(`/api/v1/booking-slots?${params.toString()}`),
   });
 }
 

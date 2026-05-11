@@ -59,11 +59,11 @@ export default function RootLayout() {
               <AuthGuard />
               <StatusBar style="auto" />
               {/* Audit F-55 (2026-05-08 Sigma-bis): non-blocking toast for
-                * mutation success / warning paths. `Alert.alert` stays for
-                * terminal failures that need explicit user acknowledgement
-                * (per CLAUDE.md UX standards). Mounted at the root after
-                * SafeAreaProvider so the toast respects the safe-area
-                * insets and renders above every screen. */}
+               * mutation success / warning paths. `Alert.alert` stays for
+               * terminal failures that need explicit user acknowledgement
+               * (per CLAUDE.md UX standards). Mounted at the root after
+               * SafeAreaProvider so the toast respects the safe-area
+               * insets and renders above every screen. */}
               <Toast />
             </SafeAreaProvider>
           </GestureHandlerRootView>

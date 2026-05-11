@@ -1,6 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { createCompetitionClassSchema } from '@equestrian/shared/schemas';
-import { getCompetitionClasses, createCompetitionClass, getCompetitionById } from '@equestrian/db/queries';
+import {
+  getCompetitionClasses,
+  createCompetitionClass,
+  getCompetitionById,
+} from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,

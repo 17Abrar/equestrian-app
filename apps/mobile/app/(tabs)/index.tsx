@@ -51,7 +51,9 @@ function BookingCard({ booking, isNext }: { booking: Booking; isNext?: boolean }
   const colors = STATUS_COLORS[booking.status] ?? { bg: 'bg-gray-100', text: 'text-gray-700' };
 
   return (
-    <View className={`rounded-2xl border p-4 ${isNext ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+    <View
+      className={`rounded-2xl border p-4 ${isNext ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-white'}`}
+    >
       {isNext && (
         <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
           Next Lesson
@@ -59,9 +61,7 @@ function BookingCard({ booking, isNext }: { booking: Booking; isNext?: boolean }
       )}
       <View className="flex-row items-start justify-between">
         <View className="flex-1">
-          <Text className="text-base font-semibold text-gray-900">
-            {booking.lessonTypeName}
-          </Text>
+          <Text className="text-base font-semibold text-gray-900">{booking.lessonTypeName}</Text>
           <Text className="mt-1 text-sm text-gray-500">
             {formatDate(booking.slotDate)} at {formatTime(booking.slotStartTime)}
           </Text>
@@ -120,11 +120,7 @@ export default function HomeScreen() {
     const dd = String(now.getDate()).padStart(2, '0');
     const today = `${yyyy}-${mm}-${dd}`;
     return bookings
-      .filter(
-        (b) =>
-          (b.status === 'confirmed' || b.status === 'pending') &&
-          b.slotDate >= today,
-      )
+      .filter((b) => (b.status === 'confirmed' || b.status === 'pending') && b.slotDate >= today)
       .sort((a, b) => {
         const dateCompare = a.slotDate.localeCompare(b.slotDate);
         if (dateCompare !== 0) return dateCompare;
@@ -140,12 +136,10 @@ export default function HomeScreen() {
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* Header */}
-        <View className="px-6 pt-4 pb-2">
+        <View className="px-6 pb-2 pt-4">
           <Text className="text-2xl font-bold text-gray-900">
             {getGreeting()}, {firstName}
           </Text>

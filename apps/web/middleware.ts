@@ -167,10 +167,7 @@ export default clerkMiddleware(async (auth, request) => {
 
   // Handle CORS preflight — OPTIONS requests carry no auth token,
   // so they must be answered before auth.protect() runs.
-  if (
-    request.method === 'OPTIONS' &&
-    request.nextUrl.pathname.startsWith('/api/v1/')
-  ) {
+  if (request.method === 'OPTIONS' && request.nextUrl.pathname.startsWith('/api/v1/')) {
     const origin = request.headers.get('origin');
     const preflightHeaders: Record<string, string> = {
       'x-request-id': requestId,

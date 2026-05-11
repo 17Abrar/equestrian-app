@@ -4,20 +4,28 @@ import { calculateCouponDiscount } from './coupon-discount';
 describe('calculateCouponDiscount — percentage path', () => {
   it('33% off a round amount rounds half-up (Math.round)', () => {
     // 100 fils * 0.33 = 33 fils
-    expect(calculateCouponDiscount({ amount: 100, discountType: 'percentage', discountValue: 33 })).toBe(33);
+    expect(
+      calculateCouponDiscount({ amount: 100, discountType: 'percentage', discountValue: 33 }),
+    ).toBe(33);
   });
 
   it('50% off splits cleanly', () => {
-    expect(calculateCouponDiscount({ amount: 25000, discountType: 'percentage', discountValue: 50 })).toBe(12500);
+    expect(
+      calculateCouponDiscount({ amount: 25000, discountType: 'percentage', discountValue: 50 }),
+    ).toBe(12500);
   });
 
   it('100% off equals the order total', () => {
-    expect(calculateCouponDiscount({ amount: 12345, discountType: 'percentage', discountValue: 100 })).toBe(12345);
+    expect(
+      calculateCouponDiscount({ amount: 12345, discountType: 'percentage', discountValue: 100 }),
+    ).toBe(12345);
   });
 
   it('rounds half-away-from-zero at the half-fil boundary (.5 → up)', () => {
     // 1 fil * 0.5 = 0.5 → 1 (Math.round)
-    expect(calculateCouponDiscount({ amount: 1, discountType: 'percentage', discountValue: 50 })).toBe(1);
+    expect(
+      calculateCouponDiscount({ amount: 1, discountType: 'percentage', discountValue: 50 }),
+    ).toBe(1);
   });
 
   it('honours maxDiscount when the % calc exceeds it', () => {
@@ -46,17 +54,23 @@ describe('calculateCouponDiscount — percentage path', () => {
 
   it('caps discount at the order total even when percent calc would exceed', () => {
     // 200% (mis-configured coupon) clamps to amount
-    expect(calculateCouponDiscount({ amount: 100, discountType: 'percentage', discountValue: 200 })).toBe(100);
+    expect(
+      calculateCouponDiscount({ amount: 100, discountType: 'percentage', discountValue: 200 }),
+    ).toBe(100);
   });
 });
 
 describe('calculateCouponDiscount — fixed path', () => {
   it('returns the literal discountValue when below order total', () => {
-    expect(calculateCouponDiscount({ amount: 10_000, discountType: 'fixed', discountValue: 500 })).toBe(500);
+    expect(
+      calculateCouponDiscount({ amount: 10_000, discountType: 'fixed', discountValue: 500 }),
+    ).toBe(500);
   });
 
   it('clamps to the order total when discountValue exceeds it', () => {
-    expect(calculateCouponDiscount({ amount: 100, discountType: 'fixed', discountValue: 500 })).toBe(100);
+    expect(
+      calculateCouponDiscount({ amount: 100, discountType: 'fixed', discountValue: 500 }),
+    ).toBe(100);
   });
 
   it('ignores maxDiscount on fixed-type coupons (intentional — caller policy)', () => {

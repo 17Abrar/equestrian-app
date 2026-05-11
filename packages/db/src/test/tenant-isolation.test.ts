@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb, withTestDb } from './harness';
-import {
-  getBookingById,
-  findBookingByIdForWebhook,
-} from '../queries';
+import { getBookingById, findBookingByIdForWebhook } from '../queries';
 import { bookings, bookingSlots, lessonTypes } from '../schema/bookings';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
@@ -146,17 +143,13 @@ async function seedTwoClubs(db: typeof testDb.db): Promise<Seeded> {
 describe('tenant isolation — bookings', () => {
   it('getBookingById(clubA, bookingA) returns the booking', async () => {
     const seeded = await seedTwoClubs(testDb.db);
-    const result = await withTestDb(testDb.db, () =>
-      getBookingById(seeded.clubA, seeded.bookingA),
-    );
+    const result = await withTestDb(testDb.db, () => getBookingById(seeded.clubA, seeded.bookingA));
     expect(result?.id).toBe(seeded.bookingA);
   });
 
   it('getBookingById(clubA, bookingB) returns null — cross-tenant read blocked', async () => {
     const seeded = await seedTwoClubs(testDb.db);
-    const result = await withTestDb(testDb.db, () =>
-      getBookingById(seeded.clubA, seeded.bookingB),
-    );
+    const result = await withTestDb(testDb.db, () => getBookingById(seeded.clubA, seeded.bookingB));
     expect(result).toBeNull();
   });
 

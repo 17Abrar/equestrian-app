@@ -53,16 +53,8 @@ export function successResponse<T>(data: T, status = 200) {
   return NextResponse.json({ success: true, data }, { status });
 }
 
-export function errorResponse(
-  code: string,
-  message: string,
-  status: number,
-  details?: unknown,
-) {
-  return NextResponse.json(
-    { success: false, error: { code, message, details } },
-    { status },
-  );
+export function errorResponse(code: string, message: string, status: number, details?: unknown) {
+  return NextResponse.json({ success: false, error: { code, message, details } }, { status });
 }
 
 export function paginatedResponse<T>(
@@ -119,10 +111,7 @@ export function paginatedListResponse<T>(
  * which includes defaults applied by `.default()` modifiers.
  * Throws ValidationError with flattened details on failure.
  */
-export function validateInput<S extends ZodTypeAny>(
-  schema: S,
-  data: unknown,
-): S['_output'] {
+export function validateInput<S extends ZodTypeAny>(schema: S, data: unknown): S['_output'] {
   const result = schema.safeParse(data);
   if (!result.success) {
     throw new ValidationError(result.error);
@@ -391,18 +380,17 @@ export async function withAuth(
         windowMs: rateLimitConfig.windowMs,
       });
       return NextResponse.json(
-        { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' } },
+        {
+          success: false,
+          error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
+        },
         { status: 429, headers: { 'Retry-After': String(retryAfter), 'x-request-id': requestId } },
       );
     }
 
     if (options?.requiredPermission) {
       if (!hasPermission(tenantCtx.orgRole, options.requiredPermission)) {
-        return errorResponse(
-          'FORBIDDEN',
-          'You do not have permission to perform this action',
-          403,
-        );
+        return errorResponse('FORBIDDEN', 'You do not have permission to perform this action', 403);
       }
     }
 
@@ -481,10 +469,6 @@ export async function withAuth(
       stack: error instanceof Error ? error.stack : undefined,
     });
 
-    return errorResponse(
-      'INTERNAL_ERROR',
-      'Something went wrong. Please try again.',
-      500,
-    );
+    return errorResponse('INTERNAL_ERROR', 'Something went wrong. Please try again.', 500);
   }
 }

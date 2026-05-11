@@ -87,16 +87,8 @@ export async function POST(request: NextRequest) {
     );
 
     const totals = {
-      sent:
-        dueDates.sent +
-        followUps.sent +
-        insurance.sent +
-        medicationEnds.sent,
-      skipped:
-        dueDates.skipped +
-        followUps.skipped +
-        insurance.skipped +
-        medicationEnds.skipped,
+      sent: dueDates.sent + followUps.sent + insurance.sent + medicationEnds.sent,
+      skipped: dueDates.skipped + followUps.skipped + insurance.skipped + medicationEnds.skipped,
       considered:
         dueDates.considered +
         followUps.considered +
@@ -144,10 +136,7 @@ interface KindResult {
 async function processKind(
   kind: HorseCareReminderKind,
   utcToday: string,
-  fetcher: (args: {
-    todayIso: string;
-    lookAheadDays: number;
-  }) => Promise<CareReminderCandidate[]>,
+  fetcher: (args: { todayIso: string; lookAheadDays: number }) => Promise<CareReminderCandidate[]>,
 ): Promise<KindResult> {
   const thresholds = KIND_THRESHOLDS[kind];
   const lookAheadDays = thresholds[0]!;

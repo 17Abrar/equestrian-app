@@ -152,11 +152,16 @@ export default function RiderHorsesPage() {
       {isLoading && <HorsesSkeleton />}
 
       {isError && !isLoading && (
-        <ErrorState message={error instanceof Error ? error.message : undefined} onRetry={refetch} />
+        <ErrorState
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={refetch}
+        />
       )}
 
-      {!isLoading && !isError && horses.length === 0 && (
-        canRegister ? (
+      {!isLoading &&
+        !isError &&
+        horses.length === 0 &&
+        (canRegister ? (
           <EmptyState
             title="No horses yet"
             description="Own a horse? Register them at your stable to track livery and keep records in one place."
@@ -168,8 +173,7 @@ export default function RiderHorsesPage() {
             description="You need to be a member of a stable before you can register a horse there."
             action={{ label: 'Find a stable', href: '/discover' }}
           />
-        )
-      )}
+        ))}
 
       {!isLoading && !isError && horses.length > 0 && (
         <div className="space-y-8">
@@ -209,8 +213,8 @@ export default function RiderHorsesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Retire {retiring?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This stops livery billing going forward. Your stable can reactivate the
-              ownership if needed — just message them.
+              This stops livery billing going forward. Your stable can reactivate the ownership if
+              needed — just message them.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -270,7 +274,7 @@ function Section({ title, count, horses, onRetire }: SectionProps) {
   return (
     <section>
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-muted-foreground text-sm font-semibold uppercase tracking-wide">
           {title}
         </h2>
         <Badge variant="secondary">{count}</Badge>
@@ -294,7 +298,7 @@ function HorseCard({
   return (
     <Card className="overflow-hidden">
       <CardContent className="flex gap-4 p-4">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-muted">
+        <div className="bg-muted relative h-20 w-20 shrink-0 overflow-hidden rounded-lg">
           {horse.primaryPhotoUrl ? (
             <Image
               src={horse.primaryPhotoUrl}
@@ -304,7 +308,7 @@ function HorseCard({
               sizes="80px"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            <div className="text-muted-foreground flex h-full w-full items-center justify-center">
               <Rabbit className="h-8 w-8" />
             </div>
           )}
@@ -314,21 +318,18 @@ function HorseCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate font-semibold">{horse.name}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {[horse.breed, horse.color].filter(Boolean).join(' · ') || 'No details yet'}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">at {horse.clubName}</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">at {horse.clubName}</p>
             </div>
             <StatusBadge status={horse.ownershipStatus} />
           </div>
 
           {horse.ownershipStatus === 'pending' && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Submitted{' '}
-              {horse.ownershipSubmittedAt
-                ? formatDate(horse.ownershipSubmittedAt)
-                : '—'}
-              . Waiting for the stable to review.
+            <p className="text-muted-foreground mt-2 text-xs">
+              Submitted {horse.ownershipSubmittedAt ? formatDate(horse.ownershipSubmittedAt) : '—'}.
+              Waiting for the stable to review.
             </p>
           )}
 
@@ -351,9 +352,7 @@ function HorseCard({
           )}
 
           {horse.ownershipStatus === 'retired' && horse.liveryEndDate && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Retired on {horse.liveryEndDate}
-            </p>
+            <p className="text-muted-foreground mt-2 text-xs">Retired on {horse.liveryEndDate}</p>
           )}
 
           {horse.ownershipStatus === 'active' && onRetire && (
@@ -361,7 +360,7 @@ function HorseCard({
               type="button"
               variant="ghost"
               size="sm"
-              className="mt-2 h-8 px-2 text-xs text-muted-foreground"
+              className="text-muted-foreground mt-2 h-8 px-2 text-xs"
               onClick={() => onRetire(horse)}
             >
               <Archive className="mr-1 h-3.5 w-3.5" />

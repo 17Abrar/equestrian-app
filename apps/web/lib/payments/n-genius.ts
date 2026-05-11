@@ -264,8 +264,7 @@ function extractOrderFields(order: unknown): {
     };
   };
   const payment = o._embedded?.payment?.[0];
-  const refunds =
-    payment?._embedded?.['cnp:refund'] ?? payment?._embedded?.refund ?? [];
+  const refunds = payment?._embedded?.['cnp:refund'] ?? payment?._embedded?.refund ?? [];
 
   // Sum of all successful (or pending) refund amounts on the payment leg.
   // N-Genius surfaces this via `payment.refundedAmount.value` on some
@@ -387,9 +386,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         redirectUrl: input.returnUrl,
         cancelUrl: input.returnUrl,
         skipConfirmationPage: true,
-        ...(cavaliqDescription
-          ? { cavaliqDescription }
-          : {}),
+        ...(cavaliqDescription ? { cavaliqDescription } : {}),
       },
       emailAddress: input.metadata?.riderEmail,
       orderReference,
@@ -485,11 +482,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // caller, prefer the entry whose `amount.value` matches (split-
     // tender disambiguation). Falls back to the most-recent eligible
     // entry when no exact match exists. Throws if nothing matches.
-    const ELIGIBLE_PAYMENT_STATES = new Set([
-      'CAPTURED',
-      'PURCHASED',
-      'PURCHASE',
-    ]);
+    const ELIGIBLE_PAYMENT_STATES = new Set(['CAPTURED', 'PURCHASED', 'PURCHASE']);
     const eligiblePayments = (order._embedded?.payment ?? []).filter(
       (p) => p?._id && p?.amount && p.state && ELIGIBLE_PAYMENT_STATES.has(p.state),
     );
@@ -503,22 +496,15 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // matches (split-tender disambiguation: $30 + $20 captures, refund
     // request for $20 should hit the $20 leg, not the $30).
     const explicitMatch = input.amountMinorUnits
-      ? eligiblePayments.find(
-          (p) => p.amount?.value === input.amountMinorUnits,
-        )
+      ? eligiblePayments.find((p) => p.amount?.value === input.amountMinorUnits)
       : undefined;
     // Fall back to the LAST eligible entry — newest-first per N-Genius
     // documented retry-after-decline behavior, where the array grows
     // over time. Belt-and-braces: if the array is mid-mutation server-
     // side, the last entry is the most-recently committed one.
-    const payment =
-      explicitMatch ??
-      eligiblePayments[eligiblePayments.length - 1];
+    const payment = explicitMatch ?? eligiblePayments[eligiblePayments.length - 1];
     if (!payment || !payment._id || !payment.amount) {
-      throw new PaymentProviderError(
-        'NO_PAYMENT_LEG',
-        'N-Genius order has no capturable payment',
-      );
+      throw new PaymentProviderError('NO_PAYMENT_LEG', 'N-Genius order has no capturable payment');
     }
     const preRefundOutstanding =
       typeof order.outstandingAmount?.value === 'number'
@@ -721,8 +707,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     providedBuf.copy(providedPadded);
 
     const equal =
-      timingSafeEqual(expectedPadded, providedPadded) &&
-      expectedBuf.length === providedBuf.length;
+      timingSafeEqual(expectedPadded, providedPadded) && expectedBuf.length === providedBuf.length;
 
     if (!equal) {
       logger.warn('n_genius_webhook_header_mismatch');
@@ -825,9 +810,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         fields.lastRefundAmountMinor ?? '',
         fields.refundedTotalMinor ?? '',
       ].join('|');
-      derivedEventId =
-        'ng_' +
-        createHash('sha256').update(composite).digest('hex').slice(0, 24);
+      derivedEventId = 'ng_' + createHash('sha256').update(composite).digest('hex').slice(0, 24);
       logger.warn('n_genius_event_id_derived', {
         outletId: payload.outletId,
         reference: fields.reference,
@@ -859,9 +842,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // `refundAmountMinor`, which the helper treated as a delta and
     // double-counted on the second partial refund.
     const isRefundStatus = status === 'partial_refunded' || status === 'refunded';
-    const refundAmountMinor = isRefundStatus
-      ? fields.lastRefundAmountMinor
-      : undefined;
+    const refundAmountMinor = isRefundStatus ? fields.lastRefundAmountMinor : undefined;
     const refundCumulativeMinor =
       isRefundStatus && fields.lastRefundAmountMinor === undefined
         ? fields.refundedTotalMinor

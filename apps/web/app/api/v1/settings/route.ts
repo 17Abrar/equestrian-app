@@ -86,9 +86,7 @@ export async function PATCH(request: NextRequest) {
         ...(lateCancellationFeePercent !== undefined
           ? { lateCancellationFeePercent: String(lateCancellationFeePercent) }
           : {}),
-        ...(noShowFeePercent !== undefined
-          ? { noShowFeePercent: String(noShowFeePercent) }
-          : {}),
+        ...(noShowFeePercent !== undefined ? { noShowFeePercent: String(noShowFeePercent) } : {}),
       };
 
       const club = await updateClubSettings(ctx.clubId, dbUpdate);

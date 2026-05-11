@@ -9,11 +9,7 @@ export const horseStatusEnum = pgEnum('horse_status', [
   'sold',
 ]);
 
-export const skillLevelEnum = pgEnum('skill_level', [
-  'beginner',
-  'intermediate',
-  'advanced',
-]);
+export const skillLevelEnum = pgEnum('skill_level', ['beginner', 'intermediate', 'advanced']);
 
 export const bookingStatusEnum = pgEnum('booking_status', [
   'pending',
@@ -67,10 +63,7 @@ export const couponStatusEnum = pgEnum('coupon_status', [
   'exhausted',
 ]);
 
-export const couponDiscountTypeEnum = pgEnum('coupon_discount_type', [
-  'percentage',
-  'fixed',
-]);
+export const couponDiscountTypeEnum = pgEnum('coupon_discount_type', ['percentage', 'fixed']);
 
 export const invoiceStatusEnum = pgEnum('invoice_status', [
   'draft',
@@ -94,12 +87,7 @@ export const taskStatusEnum = pgEnum('task_status', [
   'skipped',
 ]);
 
-export const postTypeEnum = pgEnum('post_type', [
-  'discussion',
-  'photo',
-  'video',
-  'poll',
-]);
+export const postTypeEnum = pgEnum('post_type', ['discussion', 'photo', 'video', 'poll']);
 
 export const fileCategoryEnum = pgEnum('file_category', [
   'medical_report',
@@ -133,11 +121,7 @@ export const liveryInvoiceStatusEnum = pgEnum('livery_invoice_status', [
   'cancelled',
 ]);
 
-export const paymentProviderEnum = pgEnum('payment_provider', [
-  'stripe',
-  'n_genius',
-  'ziina',
-]);
+export const paymentProviderEnum = pgEnum('payment_provider', ['stripe', 'n_genius', 'ziina']);
 
 export const paymentAccountStatusEnum = pgEnum('payment_account_status', [
   'pending',
@@ -170,11 +154,7 @@ export const subscriptionTierEnum = pgEnum('subscription_tier', [
   'professional',
 ]);
 
-export const joinPolicyEnum = pgEnum('join_policy', [
-  'open',
-  'invite_only',
-  'approval',
-]);
+export const joinPolicyEnum = pgEnum('join_policy', ['open', 'invite_only', 'approval']);
 
 export const joinRequestStatusEnum = pgEnum('join_request_status', [
   'pending',

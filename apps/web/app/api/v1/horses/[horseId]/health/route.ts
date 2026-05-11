@@ -1,13 +1,21 @@
 import { type NextRequest } from 'next/server';
 import { createHealthRecordSchema } from '@equestrian/shared/schemas';
-import { getClubById, getHealthRecords, createHealthRecord, getHorseById } from '@equestrian/db/queries';
+import {
+  getClubById,
+  getHealthRecords,
+  createHealthRecord,
+  getHorseById,
+} from '@equestrian/db/queries';
 import { toMinorUnits } from '@equestrian/shared/utils';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 

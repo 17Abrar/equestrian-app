@@ -19,28 +19,30 @@ import { logger } from '@/lib/logger';
  * shape — the form is in `components/payments/payments-panel.tsx`.
  */
 
-const connectSchema = z.object({
-  /** Stripe secret key — `sk_live_…` or `sk_test_…`. */
-  secretKey: z
-    .string()
-    .min(1, 'Secret key is required')
-    .max(255)
-    .refine((v) => v.startsWith('sk_'), 'Secret key must start with "sk_"'),
-  /** Stripe publishable key — `pk_live_…` or `pk_test_…`. */
-  publishableKey: z
-    .string()
-    .min(1, 'Publishable key is required')
-    .max(255)
-    .refine((v) => v.startsWith('pk_'), 'Publishable key must start with "pk_"'),
-  /** Optional. From the merchant's webhook endpoint config in Stripe. */
-  webhookSigningSecret: z
-    .string()
-    .min(1)
-    .max(255)
-    .refine((v) => v.startsWith('whsec_'), 'Webhook secret must start with "whsec_"')
-    .optional(),
-  makeActive: z.boolean().default(true),
-}).strict();
+const connectSchema = z
+  .object({
+    /** Stripe secret key — `sk_live_…` or `sk_test_…`. */
+    secretKey: z
+      .string()
+      .min(1, 'Secret key is required')
+      .max(255)
+      .refine((v) => v.startsWith('sk_'), 'Secret key must start with "sk_"'),
+    /** Stripe publishable key — `pk_live_…` or `pk_test_…`. */
+    publishableKey: z
+      .string()
+      .min(1, 'Publishable key is required')
+      .max(255)
+      .refine((v) => v.startsWith('pk_'), 'Publishable key must start with "pk_"'),
+    /** Optional. From the merchant's webhook endpoint config in Stripe. */
+    webhookSigningSecret: z
+      .string()
+      .min(1)
+      .max(255)
+      .refine((v) => v.startsWith('whsec_'), 'Webhook secret must start with "whsec_"')
+      .optional(),
+    makeActive: z.boolean().default(true),
+  })
+  .strict();
 
 export async function POST(request: NextRequest) {
   return withAuth(

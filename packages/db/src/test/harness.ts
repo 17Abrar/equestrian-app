@@ -39,10 +39,7 @@ async function applyMigrations(client: PGlite): Promise<void> {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const migrationsDir = path.resolve(here, '..', '..', 'migrations');
 
-  const journalRaw = await readFile(
-    path.join(migrationsDir, 'meta', '_journal.json'),
-    'utf8',
-  );
+  const journalRaw = await readFile(path.join(migrationsDir, 'meta', '_journal.json'), 'utf8');
   const journal = JSON.parse(journalRaw) as Journal;
   const ordered = [...journal.entries].sort((a, b) => a.idx - b.idx);
 
@@ -99,9 +96,6 @@ export async function createTestDb() {
  * routes through the test db — the Proxy in `index.ts` dispatches by
  * the ambient AsyncLocalStorage executor.
  */
-export function withTestDb<T>(
-  testDb: unknown,
-  fn: () => Promise<T>,
-): Promise<T> {
+export function withTestDb<T>(testDb: unknown, fn: () => Promise<T>): Promise<T> {
   return __runWithExecutorForTest(testDb, fn);
 }
