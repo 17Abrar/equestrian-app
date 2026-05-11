@@ -294,6 +294,12 @@ async function handlePost(request: Request) {
       case 'organization.deleted': {
         const orgData = (event as OrganizationEvent).data;
 
+        const club = await db
+          .select({ id: clubs.id })
+          .from(clubs)
+          .where(eq(clubs.clerkOrgId, orgData.id))
+          .limit(1);
+
         await db
           .update(clubs)
           .set({
@@ -302,6 +308,16 @@ async function handlePost(request: Request) {
             updatedAt: new Date(),
           })
           .where(eq(clubs.clerkOrgId, orgData.id));
+
+        if (club[0]) {
+          await db
+            .update(clubMembers)
+            .set({
+              isActive: false,
+              updatedAt: new Date(),
+            })
+            .where(eq(clubMembers.clubId, club[0].id));
+        }
 
         logger.info('club_deleted_from_webhook', { clerkOrgId: orgData.id });
         break;
