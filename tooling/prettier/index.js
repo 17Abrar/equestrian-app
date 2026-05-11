@@ -5,7 +5,7 @@ const config = {
   trailingComma: 'all',
   printWidth: 100,
   tabWidth: 2,
-  plugins: ['prettier-plugin-tailwindcss'],
+  plugins: [require.resolve('prettier-plugin-tailwindcss')],
 };
 
 module.exports = config;

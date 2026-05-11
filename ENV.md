@@ -114,7 +114,7 @@ OAuth flow. Audit AI-* (2026-05-04 pivot from Connect).
 - **When:** dev/prod
 - **Why:** Same as N-Genius — single host, per-club routing via API
   key.
-- **Prod value:** `https://api-v2.ziina.com`
+- **Prod value:** `https://api-v2.ziina.com/api`
 
 ### `PLATFORM_ZIINA_API_KEY`
 - **Where:** Worker (Round 6 platform-billing cron + payment-link
@@ -237,8 +237,8 @@ OAuth flow. Audit AI-* (2026-05-04 pivot from Connect).
 
 ### `ENCRYPTION_KEY`
 - **Where:** Worker (`lib/crypto.ts`)
-- **When:** required in dev and prod (must be exactly 32 bytes,
-  base64-encoded). Audit F-62 (2026-05-07 r5): the
+- **When:** required in dev and prod (must decode to exactly 32 bytes:
+  64 hex chars or 44 base64 chars). Audit F-62 (2026-05-07 r5): the
   `assertEncryptionKeyConfigured` boot probe is enforced at request
   time, NOT at instrumentation startup — leaving this unset locally
   doesn't crash the dev server, but the first request that touches
@@ -273,6 +273,14 @@ OAuth flow. Audit AI-* (2026-05-04 pivot from Connect).
 ---
 
 ## CI-only
+
+### `CLOUDFLARE_API_TOKEN`
+- **Where:** GitHub Actions deploy workflow, or a gitignored local env
+  file when running `wrangler` manually
+- **When:** required for automated or local production deploys; not read
+  by the Worker runtime
+- **Why:** authenticates Cloudflare deploy automation. Scope it to the
+  deployed Worker only and keep the real value out of committed files.
 
 ### `NEON_PROJECT_ID`
 - **Where:** GitHub Actions (`scripts/test-neon-smoke.mjs`)
