@@ -31,7 +31,10 @@ test.describe('public endpoints', () => {
     expect(body.data.subsystems.redis).toBeDefined();
     // If status is 503, fail loudly so the cron alerts.
     if (res.status() === 503) {
-      console.error('deep probe degraded:', JSON.stringify(body, null, 2));
+      await test.info().attach('deep-probe-degraded.json', {
+        body: JSON.stringify(body, null, 2),
+        contentType: 'application/json',
+      });
       throw new Error(`Deep health probe returned 503 — subsystem(s) down`);
     }
   });
