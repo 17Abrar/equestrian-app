@@ -3,18 +3,18 @@ import { z } from 'zod';
 import { createDocumentSchema } from '@equestrian/shared/schemas';
 import { getDocuments, createDocument, getHorseById } from '@equestrian/db/queries';
 import { fileCategoryEnum } from '@equestrian/db/schema';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   validateInput,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
-import {
-  extractR2KeyFromUrl,
-  requireVerifiedR2Object,
-} from '@/lib/upload-verify-cache';
+import { extractR2KeyFromUrl, requireVerifiedR2Object } from '@/lib/upload-verify-cache';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;

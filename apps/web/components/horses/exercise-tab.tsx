@@ -5,17 +5,44 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus, Trash2, Dumbbell } from 'lucide-react';
-import { createExerciseScheduleSchema, type CreateExerciseScheduleFormValues, type CreateExerciseScheduleInput } from '@equestrian/shared/schemas';
-import { useExerciseSchedules, useCreateExerciseSchedule, useDeleteExerciseSchedule } from '@/hooks/use-horse-health';
+import {
+  createExerciseScheduleSchema,
+  type CreateExerciseScheduleFormValues,
+  type CreateExerciseScheduleInput,
+} from '@equestrian/shared/schemas';
+import {
+  useExerciseSchedules,
+  useCreateExerciseSchedule,
+  useDeleteExerciseSchedule,
+} from '@/hooks/use-horse-health';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +77,13 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
   const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) return <ExerciseScheduleSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load exercise schedules'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load exercise schedules'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const schedules = data?.data ?? [];
 
@@ -75,7 +108,7 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <Dumbbell className="h-5 w-5 text-muted-foreground" />
+          <Dumbbell className="text-muted-foreground h-5 w-5" />
           <CardTitle>Exercise Schedule</CardTitle>
         </div>
         <AddExerciseDialog horseId={horseId} open={addOpen} onOpenChange={setAddOpen} />
@@ -95,7 +128,7 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
                 <div key={i} className="rounded-lg border p-3">
                   <p className="mb-2 text-sm font-semibold">{day}</p>
                   {daySchedules.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Rest day</p>
+                    <p className="text-muted-foreground text-xs">Rest day</p>
                   ) : (
                     <div className="space-y-2">
                       {daySchedules.map((s) => (
@@ -103,8 +136,18 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
                           <div>
                             <p className="text-sm font-medium">{s.exerciseType}</p>
                             <div className="flex items-center gap-1">
-                              {s.durationMinutes && <span className="text-xs text-muted-foreground">{s.durationMinutes} min</span>}
-                              {s.intensity && <Badge className={`text-[10px] ${INTENSITY_COLORS[s.intensity] ?? ''}`}>{s.intensity}</Badge>}
+                              {s.durationMinutes && (
+                                <span className="text-muted-foreground text-xs">
+                                  {s.durationMinutes} min
+                                </span>
+                              )}
+                              {s.intensity && (
+                                <Badge
+                                  className={`text-[10px] ${INTENSITY_COLORS[s.intensity] ?? ''}`}
+                                >
+                                  {s.intensity}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                           {/* Audit F-27 (2026-05-07 r5): wrap the delete in
@@ -114,7 +157,12 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
                               delete-confirmation pattern. */}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                aria-label="Remove"
+                              >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </AlertDialogTrigger>
@@ -122,12 +170,15 @@ export function ExerciseTab({ horseId }: ExerciseTabProps) {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Remove {s.exerciseType}?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This will delete the exercise from {DAYS[s.dayOfWeek] ?? 'this day'}&apos;s schedule.
+                                  This will delete the exercise from{' '}
+                                  {DAYS[s.dayOfWeek] ?? 'this day'}&apos;s schedule.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(s.id)}>Delete</AlertDialogAction>
+                                <AlertDialogAction onClick={() => handleDelete(s.id)}>
+                                  Delete
+                                </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
@@ -176,49 +227,107 @@ function AddExerciseDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Exercise</Button>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Exercise
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Exercise</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Exercise</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Day *</FormLabel>
-                <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value)}>
-                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="exerciseType" render={({ field }) => (
-              <FormItem><FormLabel>Type *</FormLabel><FormControl><Input placeholder="e.g. Flatwork, Jumping, Lunging, Hacking" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="durationMinutes" render={({ field }) => (
-                <FormItem><FormLabel>Duration (min)</FormLabel><FormControl><NumberInput placeholder="e.g. 45" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="intensity" render={({ field }) => (
+            <FormField
+              control={form.control}
+              name="dayOfWeek"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Intensity</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                  <FormLabel>Day *</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(Number(v))}
+                    value={String(field.value)}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
                     <SelectContent>
-                      <SelectItem value="light">Light</SelectItem>
-                      <SelectItem value="moderate">Moderate</SelectItem>
-                      <SelectItem value="intense">Intense</SelectItem>
+                      {DAYS.map((d, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {d}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
-              )} />
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="exerciseType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Type *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Flatwork, Jumping, Lunging, Hacking" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (min)</FormLabel>
+                    <FormControl>
+                      <NumberInput placeholder="e.g. 45" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="intensity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Intensity</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="moderate">Moderate</SelectItem>
+                        <SelectItem value="intense">Intense</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <FormField control={form.control} name="notes" render={({ field }) => (
-              <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <Textarea rows={2} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={createSchedule.isPending}>
               {createSchedule.isPending ? 'Adding...' : 'Add Exercise'}
             </Button>

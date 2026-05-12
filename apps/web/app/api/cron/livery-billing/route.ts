@@ -213,7 +213,7 @@ async function createPayIntent(args: {
             horseId: args.horseId,
             reference: args.reference,
           },
-          // Audit AI-21 — read from env so dev/staging redirects land on the
+          // Audit QA-21 — read from env so dev/staging redirects land on the
           // right host. Defaults to cavaliq.com in production via the runtime
           // secret; falls back here only if NEXT_PUBLIC_APP_URL is misconfigured.
           returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'}/rider/invoices`,

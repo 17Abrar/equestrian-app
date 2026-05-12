@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { safeHref } from './util/safe-href';
@@ -23,9 +31,10 @@ export function HorseRegistrationApproved({
   liveryStartDate,
   portalUrl,
 }: HorseRegistrationApprovedProps) {
-  const feeDisplay = monthlyLiveryFeeMinor === 0
-    ? 'No livery fee'
-    : formatCurrency(monthlyLiveryFeeMinor, clubCurrency);
+  const feeDisplay =
+    monthlyLiveryFeeMinor === 0
+      ? 'No livery fee'
+      : formatCurrency(monthlyLiveryFeeMinor, clubCurrency);
 
   return (
     <Html>
@@ -37,8 +46,8 @@ export function HorseRegistrationApproved({
           <Text style={styles.greeting}>Hi {ownerName},</Text>
 
           <Text style={styles.text}>
-            Good news — {clubName} has approved {horseName}&apos;s registration.
-            Your horse is now officially stabled with them.
+            Good news — {clubName} has approved {horseName}&apos;s registration. Your horse is now
+            officially stabled with them.
           </Text>
 
           <Section style={styles.card}>
@@ -51,8 +60,8 @@ export function HorseRegistrationApproved({
 
           {monthlyLiveryFeeMinor > 0 && (
             <Text style={styles.text}>
-              You&apos;ll receive a monthly invoice from {clubName} for the
-              livery fee starting {liveryStartDate}.
+              You&apos;ll receive a monthly invoice from {clubName} for the livery fee starting{' '}
+              {liveryStartDate}.
             </Text>
           )}
 
@@ -64,9 +73,7 @@ export function HorseRegistrationApproved({
 
           <Hr style={styles.hr} />
 
-          <Text style={styles.footer}>
-            Any questions? Reach out to {clubName} directly.
-          </Text>
+          <Text style={styles.footer}>Any questions? Reach out to {clubName} directly.</Text>
         </Container>
       </Body>
     </Html>
@@ -91,9 +98,20 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px' },
+  label: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+  },
   value: { fontSize: '14px', color: '#111827', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#8b5cf6', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#8b5cf6',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   button: {
     backgroundColor: '#8b5cf6',
     color: '#ffffff',

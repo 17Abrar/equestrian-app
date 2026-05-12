@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { couponBaseSchema, couponPercentageRefine } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
 import { updateCoupon, getClubTimezone } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
@@ -30,7 +36,7 @@ interface RouteParams {
 // PATCH could rewrite clubId / usageCount / createdByMemberId by
 // piggybacking on Drizzle's spread into SET. The percentage refine is
 // re-applied so a partial update from {discountType:'percentage'} →
-// discountValue:250 still 422s. Audit AI-21.
+// discountValue:250 still 422s. Audit QA-21.
 //
 // Audit F-52 (2026-05-07 r4): allow operator-driven status transitions
 // (active ↔ paused, both → expired). The DB enum also includes

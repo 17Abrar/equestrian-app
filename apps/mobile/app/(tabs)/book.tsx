@@ -82,15 +82,11 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
     >
       <View className="flex-row items-start justify-between">
         <View className="flex-1">
-          <Text className="text-base font-semibold text-gray-900">
-            {slot.lessonTypeName}
-          </Text>
+          <Text className="text-base font-semibold text-gray-900">{slot.lessonTypeName}</Text>
           <Text className="mt-1 text-sm text-gray-500">
             {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
           </Text>
-          {slot.arenaName && (
-            <Text className="mt-0.5 text-xs text-gray-400">{slot.arenaName}</Text>
-          )}
+          {slot.arenaName && <Text className="mt-0.5 text-xs text-gray-400">{slot.arenaName}</Text>}
           {slot.coachName && (
             <Text className="mt-0.5 text-xs text-gray-400">Coach: {slot.coachName}</Text>
           )}
@@ -105,7 +101,7 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
         </View>
       </View>
       {isSelected && (
-        <View className="mt-2 rounded-full bg-blue-500 px-3 py-1 self-start">
+        <View className="mt-2 self-start rounded-full bg-blue-500 px-3 py-1">
           <Text className="text-xs font-medium text-white">Selected</Text>
         </View>
       )}
@@ -140,8 +136,7 @@ export default function BookScreen() {
     isLoading,
     refetch: refetchSlots,
   } = useBookingSlots({ dateFrom, dateTo });
-  const slotsErrorMessage =
-    slotsData && !slotsData.success ? slotsData.error.message : null;
+  const slotsErrorMessage = slotsData && !slotsData.success ? slotsData.error.message : null;
   const createBooking = useCreateBooking();
   const { pay, isPaying } = usePayBooking();
 
@@ -238,20 +233,21 @@ export default function BookScreen() {
             </Text>
             <View className="mt-3 gap-2">
               <Text className="text-sm text-gray-500">
-                📅  {new Date(`${selectedSlot.date}T00:00:00`).toLocaleDateString('en-US', {
+                📅{' '}
+                {new Date(`${selectedSlot.date}T00:00:00`).toLocaleDateString('en-US', {
                   weekday: 'long',
                   month: 'long',
                   day: 'numeric',
                 })}
               </Text>
               <Text className="text-sm text-gray-500">
-                🕐  {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
+                🕐 {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
               </Text>
               {selectedSlot.arenaName && (
-                <Text className="text-sm text-gray-500">📍  {selectedSlot.arenaName}</Text>
+                <Text className="text-sm text-gray-500">📍 {selectedSlot.arenaName}</Text>
               )}
               {selectedSlot.coachName && (
-                <Text className="text-sm text-gray-500">👤  Coach: {selectedSlot.coachName}</Text>
+                <Text className="text-sm text-gray-500">👤 Coach: {selectedSlot.coachName}</Text>
               )}
             </View>
             <View className="mt-4 border-t border-gray-100 pt-4">
@@ -296,7 +292,7 @@ export default function BookScreen() {
     <SafeAreaView className="flex-1 bg-gray-50">
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Header */}
-        <View className="px-6 pt-4 pb-2">
+        <View className="px-6 pb-2 pt-4">
           <Text className="text-2xl font-bold text-gray-900">Book a Lesson</Text>
           <Text className="mt-1 text-base text-gray-500">Choose a date and time</Text>
         </View>
@@ -351,10 +347,14 @@ export default function BookScreen() {
                 }`}
                 style={{ minWidth: 64 }}
               >
-                <Text className={`text-[10px] uppercase ${isSelected ? 'text-gray-400' : 'text-gray-400'}`}>
+                <Text
+                  className={`text-[10px] uppercase ${isSelected ? 'text-gray-400' : 'text-gray-400'}`}
+                >
                   {d.toLocaleDateString('en-US', { weekday: 'short' })}
                 </Text>
-                <Text className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                <Text
+                  className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}
+                >
                   {d.getDate()}
                 </Text>
                 {daySlots.length > 0 && (
@@ -391,9 +391,7 @@ export default function BookScreen() {
           {!isLoading && slotsErrorMessage && (
             <View className="items-center gap-3 py-8">
               <Text className="text-base text-rose-500">Couldn't load slots</Text>
-              <Text className="text-center text-sm text-gray-400">
-                {slotsErrorMessage}
-              </Text>
+              <Text className="text-center text-sm text-gray-400">{slotsErrorMessage}</Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => {

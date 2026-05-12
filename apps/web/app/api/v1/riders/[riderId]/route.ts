@@ -1,10 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { updateRiderProfileSchema } from '@equestrian/shared/schemas';
 import { getRiderById, updateRiderProfile } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
-  parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ riderId: string }>;

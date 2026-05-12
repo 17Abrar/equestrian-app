@@ -62,10 +62,7 @@ export async function getLessonTypeById(
   lessonTypeId: string,
   options: { activeOnly?: boolean } = {},
 ) {
-  const conditions = [
-    eq(lessonTypes.id, lessonTypeId),
-    eq(lessonTypes.clubId, clubId),
-  ];
+  const conditions = [eq(lessonTypes.id, lessonTypeId), eq(lessonTypes.clubId, clubId)];
   if (options.activeOnly) {
     conditions.push(eq(lessonTypes.isActive, true));
   }
@@ -80,11 +77,18 @@ export async function getLessonTypeById(
 }
 
 export async function createLessonType(clubId: string, data: LessonTypeCreate) {
-  const result = await db.insert(lessonTypes).values({ ...data, clubId }).returning();
+  const result = await db
+    .insert(lessonTypes)
+    .values({ ...data, clubId })
+    .returning();
   return result[0];
 }
 
-export async function updateLessonType(clubId: string, lessonTypeId: string, data: LessonTypeUpdate) {
+export async function updateLessonType(
+  clubId: string,
+  lessonTypeId: string,
+  data: LessonTypeUpdate,
+) {
   const result = await db
     .update(lessonTypes)
     .set({ ...data, updatedAt: new Date() })

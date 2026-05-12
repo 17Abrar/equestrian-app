@@ -221,11 +221,7 @@ function shouldForwardToSentry(level: string, event: string): boolean {
   return true;
 }
 
-function forwardToSentry(
-  level: 'error' | 'warning',
-  event: string,
-  data: Record<string, unknown>,
-) {
+function forwardToSentry(level: 'error' | 'warning', event: string, data: Record<string, unknown>) {
   // Skip when Sentry isn't configured — avoids meaningless traffic in dev.
   if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) return;
   if (!shouldForwardToSentry(level, event)) return;

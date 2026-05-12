@@ -259,11 +259,7 @@ export async function applyPaymentWebhook({
     currency: string;
   } | null = null;
   if (event.providerPaymentId) {
-    bookingRef = await findBookingByProviderPaymentId(
-      event.providerPaymentId,
-      provider,
-      clubId,
-    );
+    bookingRef = await findBookingByProviderPaymentId(event.providerPaymentId, provider, clubId);
     if (!clubId) clubId = bookingRef?.clubId;
   }
 
@@ -637,17 +633,8 @@ export async function applyPaymentWebhook({
     };
   }
 
-  if (
-    isRefundEvent &&
-    event.refundStatus === 'succeeded' &&
-    explicitDelta &&
-    explicitDelta > 0
-  ) {
-    const recorded = await recordBookingRefund(
-      clubId,
-      bookingRef.bookingId,
-      explicitDelta,
-    );
+  if (isRefundEvent && event.refundStatus === 'succeeded' && explicitDelta && explicitDelta > 0) {
+    const recorded = await recordBookingRefund(clubId, bookingRef.bookingId, explicitDelta);
     if (recorded) {
       logger.info('booking_refund_recorded_from_webhook', {
         clubId,
@@ -701,9 +688,7 @@ export async function applyPaymentWebhook({
     return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
-  const nextStatus = isRefundEvent
-    ? 'refunded'
-    : toBookingPaymentStatus(event.status);
+  const nextStatus = isRefundEvent ? 'refunded' : toBookingPaymentStatus(event.status);
 
   if (!nextStatus) {
     // Nothing to update.
@@ -713,10 +698,7 @@ export async function applyPaymentWebhook({
   // Don't downgrade from a terminal state back to `pending` — webhooks
   // can arrive out of order.
   const terminal = new Set(['paid', 'partial', 'refunded']);
-  if (
-    terminal.has(bookingRef.currentPaymentStatus) &&
-    !terminal.has(nextStatus)
-  ) {
+  if (terminal.has(bookingRef.currentPaymentStatus) && !terminal.has(nextStatus)) {
     logger.info('webhook_skipping_status_downgrade', {
       clubId,
       bookingId: bookingRef.bookingId,
@@ -739,7 +721,7 @@ export async function applyPaymentWebhook({
     return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
 
-  // Booking-status guard (audit AI-24). A payment_intent.succeeded landing
+  // Booking-status guard (audit QA-24). A payment_intent.succeeded landing
   // for a cancelled or no-show booking must NOT flip paymentStatus='paid'
   // — that would silently re-charge the rider for a lesson that's already
   // settled. Log loudly so an operator can refund / reattach manually.
@@ -776,7 +758,7 @@ export async function applyPaymentWebhook({
     };
   }
 
-  // Amount/currency reconciliation (audit AI-21). Without this guard, a
+  // Amount/currency reconciliation (audit QA-21). Without this guard, a
   // crafted low-amount PaymentIntent on the connected account with
   // metadata.bookingId set would mark any booking paid. Refund-flow
   // events (isRefundEvent) bypass this check — they have their own
@@ -999,7 +981,7 @@ export async function applyLiveryInvoiceWebhook({
   // with no automatic settlement path — admin cancelled the invoice
   // before the webhook arrived. Rider has paid; invoice is voided;
   // someone has to manually refund or reconcile. Surface this as
-  // `permanently_failed` (mirror booking-flow audit AI-24) so
+  // `permanently_failed` (mirror booking-flow audit QA-24) so
   // operators see it in the alert pipeline. The receiver routes
   // (`stripe`, `ziina`, `n-genius`) check the
   // `permanentFailureReason` field and mark the dedup row
@@ -1025,7 +1007,7 @@ export async function applyLiveryInvoiceWebhook({
   }
 
   // Audit F-1 (2026-05-06 round 2). Mirror the booking-flow
-  // amount/currency reconciliation (audit AI-21). Without this guard,
+  // amount/currency reconciliation (audit QA-21). Without this guard,
   // a legitimately-signed event for a different invoice or a different
   // amount on the same connected account silently marks the wrong
   // invoice paid — e.g. a misrouted Ziina/N-Genius webhook can settle
@@ -1134,10 +1116,7 @@ export async function applyLiveryInvoiceWebhook({
       clubMembers,
       and(eq(clubMembers.id, invoice.ownerMemberId), eq(clubMembers.clubId, invoice.clubId)),
     )
-    .innerJoin(
-      horses,
-      and(eq(horses.id, invoice.horseId), eq(horses.clubId, invoice.clubId)),
-    )
+    .innerJoin(horses, and(eq(horses.id, invoice.horseId), eq(horses.clubId, invoice.clubId)))
     .where(eq(clubs.id, invoice.clubId))
     .limit(1);
 

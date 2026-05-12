@@ -73,10 +73,7 @@ export async function getFinanceOverview(clubId: string): Promise<FinanceOvervie
       })
       .from(bookings)
       .where(
-        and(
-          eq(bookings.clubId, clubId),
-          sql`${bookings.paymentStatus} IN ('paid', 'partial')`,
-        ),
+        and(eq(bookings.clubId, clubId), sql`${bookings.paymentStatus} IN ('paid', 'partial')`),
       )
       .groupBy(bookings.currency),
     db
@@ -85,9 +82,7 @@ export async function getFinanceOverview(clubId: string): Promise<FinanceOvervie
         total: sql<number>`coalesce(sum(${liveryInvoices.amountMinorUnits}), 0)::int`,
       })
       .from(liveryInvoices)
-      .where(
-        and(eq(liveryInvoices.clubId, clubId), eq(liveryInvoices.status, 'paid')),
-      )
+      .where(and(eq(liveryInvoices.clubId, clubId), eq(liveryInvoices.status, 'paid')))
       .groupBy(liveryInvoices.currency),
     db
       .select({
@@ -167,9 +162,7 @@ export async function getFinanceOverview(clubId: string): Promise<FinanceOvervie
   for (const row of liveryOutstandingRows) bump(row.currency, 'outstandingBalance', row.total);
 
   return {
-    totalsByCurrency: [...byCurrency.values()].sort((a, b) =>
-      a.currency.localeCompare(b.currency),
-    ),
+    totalsByCurrency: [...byCurrency.values()].sort((a, b) => a.currency.localeCompare(b.currency)),
     paymentMethodBreakdown: bookingMethodBreakdown
       .filter((b) => b.method != null)
       .map((b) => ({
@@ -184,7 +177,10 @@ export async function getFinanceOverview(clubId: string): Promise<FinanceOvervie
 // ─── Expenses ─────────────────────────────────────────────────────────
 
 type NewExpense = typeof expenses.$inferInsert;
-type ExpenseCreate = Omit<NewExpense, 'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'createdByMemberId'>;
+type ExpenseCreate = Omit<
+  NewExpense,
+  'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'createdByMemberId'
+>;
 
 interface ExpenseFilters {
   category?: string;
@@ -236,7 +232,10 @@ export async function getExpensesByClub(clubId: string, filters: ExpenseFilters)
       .orderBy(desc(expenses.date))
       .limit(filters.pageSize)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(expenses).where(where),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(expenses)
+      .where(where),
   ]);
 
   return { data, total: countResult[0]?.count ?? 0 };
@@ -272,11 +271,14 @@ export async function getExpenseById(clubId: string, expenseId: string) {
 }
 
 export async function createExpense(clubId: string, data: ExpenseCreate, memberId?: string) {
-  const result = await db.insert(expenses).values({
-    ...data,
-    clubId,
-    createdByMemberId: memberId ?? null,
-  }).returning();
+  const result = await db
+    .insert(expenses)
+    .values({
+      ...data,
+      clubId,
+      createdByMemberId: memberId ?? null,
+    })
+    .returning();
   return result[0];
 }
 
@@ -294,7 +296,10 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(clubId: string, expenseId: string) {
-  const result = await db.delete(expenses).where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId))).returning({ id: expenses.id });
+  const result = await db
+    .delete(expenses)
+    .where(and(eq(expenses.id, expenseId), eq(expenses.clubId, clubId)))
+    .returning({ id: expenses.id });
   return result[0] ?? null;
 }
 
@@ -355,7 +360,10 @@ export async function getPaymentsByClub(clubId: string, filters: PaymentFilters)
       .orderBy(desc(bookings.createdAt))
       .limit(filters.pageSize)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(bookings).where(where),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .where(where),
   ]);
 
   return { data, total: countResult[0]?.count ?? 0 };
@@ -411,21 +419,30 @@ export async function getCouponsByClub(clubId: string, filters: CouponFilters) {
       .orderBy(desc(coupons.createdAt))
       .limit(filters.pageSize)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(coupons).where(where),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(coupons)
+      .where(where),
   ]);
 
   return { data, total: countResult[0]?.count ?? 0 };
 }
 
 type NewCoupon = typeof coupons.$inferInsert;
-type CouponCreate = Omit<NewCoupon, 'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'usageCount' | 'createdByMemberId'>;
+type CouponCreate = Omit<
+  NewCoupon,
+  'id' | 'clubId' | 'createdAt' | 'updatedAt' | 'usageCount' | 'createdByMemberId'
+>;
 
 export async function createCoupon(clubId: string, data: CouponCreate, memberId?: string) {
-  const result = await db.insert(coupons).values({
-    ...data,
-    clubId,
-    createdByMemberId: memberId ?? null,
-  }).returning();
+  const result = await db
+    .insert(coupons)
+    .values({
+      ...data,
+      clubId,
+      createdByMemberId: memberId ?? null,
+    })
+    .returning();
   return result[0];
 }
 
@@ -473,12 +490,7 @@ export async function getCouponByCode(clubId: string, code: string) {
       updatedAt: coupons.updatedAt,
     })
     .from(coupons)
-    .where(
-      and(
-        eq(coupons.clubId, clubId),
-        sql`UPPER(${coupons.code}) = UPPER(${code})`,
-      ),
-    )
+    .where(and(eq(coupons.clubId, clubId), sql`UPPER(${coupons.code}) = UPPER(${code})`))
     .limit(1);
   return result[0] ?? null;
 }
@@ -489,7 +501,7 @@ interface ValidateCouponParams {
   amount: number;
   /** Required for the minimum-spend message — currency-aware formatting
    * (KWD has 3 decimals, JPY has 0). Defaults to AED when omitted so the
-   * legacy callers stay correct for the dominant tenant. Audit AI-21. */
+   * legacy callers stay correct for the dominant tenant. Audit QA-21. */
   currency?: string;
   riderMemberId: string;
   lessonType?: string;
@@ -527,10 +539,7 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
   // this gate. `params.currency` defaults to AED upstream when
   // omitted (legacy callers); the comparison uppercases both sides
   // for tolerance.
-  if (
-    params.currency &&
-    coupon.currency.toUpperCase() !== params.currency.toUpperCase()
-  ) {
+  if (params.currency && coupon.currency.toUpperCase() !== params.currency.toUpperCase()) {
     return {
       valid: false,
       discount: 0,
@@ -563,7 +572,7 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
   }
 
   if (coupon.minimumAmount != null && params.amount < coupon.minimumAmount) {
-    // Currency-aware formatting (audit AI-21). The previous /100 .toFixed(2)
+    // Currency-aware formatting (audit QA-21). The previous /100 .toFixed(2)
     // was wrong by 10× for KWD/BHD (3-decimal) and 100× for JPY (0-decimal)
     // and never showed the currency code.
     return {
@@ -616,7 +625,7 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
     };
   }
 
-  // Single source of truth for the math (audit AI-9). The shared helper
+  // Single source of truth for the math (audit QA-9). The shared helper
   // also enforces the order-total cap so a percentage coupon can never
   // refund more than was charged.
   const discount = calculateCouponDiscount({
@@ -673,7 +682,10 @@ export async function getInvoicesByClub(clubId: string, filters: InvoiceFilters)
       .orderBy(desc(invoices.createdAt))
       .limit(filters.pageSize)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(invoices).where(where),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(invoices)
+      .where(where),
   ]);
 
   return { data, total: countResult[0]?.count ?? 0 };

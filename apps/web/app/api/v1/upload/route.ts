@@ -88,11 +88,7 @@ export async function POST(request: NextRequest) {
           .limit(1);
 
         if (!membership[0]) {
-          return errorResponse(
-            'NOT_A_MEMBER',
-            'You are not a member of the target stable',
-            403,
-          );
+          return errorResponse('NOT_A_MEMBER', 'You are not a member of the target stable', 403);
         }
         uploadClubId = data.targetClubId;
         effectiveRole = membership[0].role;
@@ -101,10 +97,11 @@ export async function POST(request: NextRequest) {
       // Horses are the one folder where owners (horses:update_own) are valid
       // uploaders even though they lack the cross-club `horses:update` permission.
       const basePermission = UPLOAD_FOLDER_PERMISSIONS[root]!;
-      const allowed = root === 'horses'
-        ? hasPermission(effectiveRole, 'horses:update') ||
-          hasPermission(effectiveRole, 'horses:update_own')
-        : hasPermission(effectiveRole, basePermission);
+      const allowed =
+        root === 'horses'
+          ? hasPermission(effectiveRole, 'horses:update') ||
+            hasPermission(effectiveRole, 'horses:update_own')
+          : hasPermission(effectiveRole, basePermission);
 
       if (!allowed) {
         return errorResponse(

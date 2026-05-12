@@ -76,7 +76,7 @@ const nextConfig = {
       // shape (not the full string — could be sensitive) and falls
       // through to no-pattern, letting the build continue and the
       // operator notice the warning.
-      ...(parseR2PublicUrl(process.env.R2_PUBLIC_URL)),
+      ...parseR2PublicUrl(process.env.R2_PUBLIC_URL),
     ],
   },
   async headers() {

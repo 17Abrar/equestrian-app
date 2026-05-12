@@ -38,11 +38,11 @@ export function WeekView({ weekDates, slots, competitions }: WeekViewProps) {
               <div key={date.toISOString()} className="min-w-0">
                 {/* Day header */}
                 <div className={`border-b p-2 text-center ${isToday ? 'bg-primary/5' : 'bg-card'}`}>
-                  <p className="text-xs text-muted-foreground">{format(date, 'EEE')}</p>
+                  <p className="text-muted-foreground text-xs">{format(date, 'EEE')}</p>
                   <p
                     className={`text-sm font-semibold ${
                       isToday
-                        ? 'rounded-full bg-primary text-primary-foreground mx-auto w-7 h-7 flex items-center justify-center'
+                        ? 'bg-primary text-primary-foreground mx-auto flex h-7 w-7 items-center justify-center rounded-full'
                         : ''
                     }`}
                   >
@@ -51,10 +51,10 @@ export function WeekView({ weekDates, slots, competitions }: WeekViewProps) {
                 </div>
 
                 {/* Content */}
-                <div className="relative min-h-[600px] bg-card">
+                <div className="bg-card relative min-h-[600px]">
                   {daySlots.length === 0 && dayCompetitions.length === 0 && (
                     <div className="flex h-full items-center justify-center p-2">
-                      <p className="text-xs text-muted-foreground/50">No lessons</p>
+                      <p className="text-muted-foreground/50 text-xs">No lessons</p>
                     </div>
                   )}
                   <div className="space-y-1 p-1">
@@ -63,7 +63,7 @@ export function WeekView({ weekDates, slots, competitions }: WeekViewProps) {
                         key={comp.id}
                         className="rounded-md border-2 border-amber-500 bg-amber-50 p-1.5 text-xs"
                       >
-                        <p className="font-semibold text-amber-800 truncate">{comp.name}</p>
+                        <p className="truncate font-semibold text-amber-800">{comp.name}</p>
                       </div>
                     ))}
                     {daySlots.map((slot) => (

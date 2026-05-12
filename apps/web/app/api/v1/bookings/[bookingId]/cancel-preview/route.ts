@@ -6,9 +6,7 @@ import {
   isParentOf,
 } from '@equestrian/db/queries';
 import { calculateCancellationFee, coerceFeePercent } from '@equestrian/shared/utils';
-import { withAuth,
-  successResponse,
-  errorResponse, validateUuidParam } from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -16,109 +14,100 @@ interface RouteParams {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
-  return withAuth(
-    async (ctx) => {
-      const { bookingId } = await params;
-      validateUuidParam('bookingId', bookingId);
+  return withAuth(async (ctx) => {
+    const { bookingId } = await params;
+    validateUuidParam('bookingId', bookingId);
 
-      // Cancel-preview is a precondition to actually cancelling, so the gate
-      // mirrors the DELETE handler in ../route.ts (bookings:cancel_own for
-      // riders/parents, bookings:update for staff with broad cancel rights).
-      // It does NOT match the read gate on the sibling GET — staff who can
-      // read but not cancel (coach, horse_owner) wouldn't act on this data,
-      // so we don't surface it.
-      const canCancelAny = hasPermission(ctx.orgRole, 'bookings:update');
-      const canCancelOwn = hasPermission(ctx.orgRole, 'bookings:cancel_own');
-      // Audit pass-3 follow-up B (2026-05-09): parents who originally
-      // booked on behalf of a child should be able to preview the
-      // cancellation too. Mirrors the DELETE in ../route.ts.
-      const canCancelChild = hasPermission(ctx.orgRole, 'bookings:create_child');
+    // Cancel-preview is a precondition to actually cancelling, so the gate
+    // mirrors the DELETE handler in ../route.ts (bookings:cancel_own for
+    // riders/parents, bookings:update for staff with broad cancel rights).
+    // It does NOT match the read gate on the sibling GET — staff who can
+    // read but not cancel (coach, horse_owner) wouldn't act on this data,
+    // so we don't surface it.
+    const canCancelAny = hasPermission(ctx.orgRole, 'bookings:update');
+    const canCancelOwn = hasPermission(ctx.orgRole, 'bookings:cancel_own');
+    // Audit pass-3 follow-up B (2026-05-09): parents who originally
+    // booked on behalf of a child should be able to preview the
+    // cancellation too. Mirrors the DELETE in ../route.ts.
+    const canCancelChild = hasPermission(ctx.orgRole, 'bookings:create_child');
 
-      if (!canCancelAny && !canCancelOwn && !canCancelChild) {
-        return errorResponse('FORBIDDEN', 'You do not have permission to cancel bookings', 403);
+    if (!canCancelAny && !canCancelOwn && !canCancelChild) {
+      return errorResponse('FORBIDDEN', 'You do not have permission to cancel bookings', 403);
+    }
+
+    const booking = await getBookingById(ctx.clubId, bookingId);
+    if (!booking) {
+      return errorResponse('NOT_FOUND', 'Booking not found', 404);
+    }
+
+    // Riders/parents can only preview cancellation for their own (or
+    // their child's) bookings.
+    if (!canCancelAny) {
+      if (!ctx.memberId) {
+        return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
       }
-
-      const booking = await getBookingById(ctx.clubId, bookingId);
-      if (!booking) {
-        return errorResponse('NOT_FOUND', 'Booking not found', 404);
+      const isSelf = booking.riderMemberId === ctx.memberId;
+      let isGuardian = false;
+      if (!isSelf && canCancelChild) {
+        isGuardian = await isParentOf(ctx.clubId, ctx.memberId, booking.riderMemberId);
       }
-
-      // Riders/parents can only preview cancellation for their own (or
-      // their child's) bookings.
-      if (!canCancelAny) {
-        if (!ctx.memberId) {
-          return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
-        }
-        const isSelf = booking.riderMemberId === ctx.memberId;
-        let isGuardian = false;
-        if (!isSelf && canCancelChild) {
-          isGuardian = await isParentOf(
-            ctx.clubId,
-            ctx.memberId,
-            booking.riderMemberId,
-          );
-        }
-        if (!isSelf && !isGuardian) {
-          return errorResponse('FORBIDDEN', 'You can only cancel your own bookings', 403);
-        }
+      if (!isSelf && !isGuardian) {
+        return errorResponse('FORBIDDEN', 'You can only cancel your own bookings', 403);
       }
+    }
 
-      if (booking.status === 'cancelled') {
-        return errorResponse('ALREADY_CANCELLED', 'Booking is already cancelled', 422);
-      }
+    if (booking.status === 'cancelled') {
+      return errorResponse('ALREADY_CANCELLED', 'Booking is already cancelled', 422);
+    }
 
-      if (booking.status === 'completed' || booking.status === 'no_show') {
-        return errorResponse('NOT_CANCELLABLE', 'This booking cannot be cancelled', 422);
-      }
+    if (booking.status === 'completed' || booking.status === 'no_show') {
+      return errorResponse('NOT_CANCELLABLE', 'This booking cannot be cancelled', 422);
+    }
 
-      // Fetch the slot and club settings
-      const [slot, club] = await Promise.all([
-        getBookingSlotById(ctx.clubId, booking.slotId),
-        getClubById(ctx.clubId),
-      ]);
+    // Fetch the slot and club settings
+    const [slot, club] = await Promise.all([
+      getBookingSlotById(ctx.clubId, booking.slotId),
+      getClubById(ctx.clubId),
+    ]);
 
-      if (!slot || !club) {
-        return errorResponse('NOT_FOUND', 'Slot or club not found', 404);
-      }
+    if (!slot || !club) {
+      return errorResponse('NOT_FOUND', 'Slot or club not found', 404);
+    }
 
-      // Audit CRIT-2 (2026-05-05): preview must compute against the same
-      // base the actual cancel will charge — `booking.amount` is the NET
-      // amount stored after coupon discount (see bookings POST line 252:
-      // `netAmount = grossAmount - discountAmount`). Falling back to the
-      // sticker price only when amount is null preserves behaviour for
-      // ancient rows. The Math.min cap mirrors the DELETE handler in
-      // ../route.ts so a misconfigured fee percent can never exceed
-      // what the rider actually paid.
-      const feeBase = booking.amount ?? slot.lessonTypePrice;
-      // Audit F-59 (2026-05-08 r6): see no-show route for rationale.
-      const feeResult = calculateCancellationFee({
-        slotDate: slot.date,
-        slotStartTime: slot.startTime,
-        timezone: club.timezone,
-        cancellationNoticeHours: club.cancellationNoticeHours,
-        lateCancellationFeePercent: coerceFeePercent(
-          club.lateCancellationFeePercent ?? '0',
-          'lateCancellationFeePercent',
-        ),
-        lessonPrice: feeBase,
-      });
-      const fee =
-        booking.amount != null
-          ? Math.min(feeResult.fee, booking.amount)
-          : feeResult.fee;
+    // Audit CRIT-2 (2026-05-05): preview must compute against the same
+    // base the actual cancel will charge — `booking.amount` is the NET
+    // amount stored after coupon discount (see bookings POST line 252:
+    // `netAmount = grossAmount - discountAmount`). Falling back to the
+    // sticker price only when amount is null preserves behaviour for
+    // ancient rows. The Math.min cap mirrors the DELETE handler in
+    // ../route.ts so a misconfigured fee percent can never exceed
+    // what the rider actually paid.
+    const feeBase = booking.amount ?? slot.lessonTypePrice;
+    // Audit F-59 (2026-05-08 r6): see no-show route for rationale.
+    const feeResult = calculateCancellationFee({
+      slotDate: slot.date,
+      slotStartTime: slot.startTime,
+      timezone: club.timezone,
+      cancellationNoticeHours: club.cancellationNoticeHours,
+      lateCancellationFeePercent: coerceFeePercent(
+        club.lateCancellationFeePercent ?? '0',
+        'lateCancellationFeePercent',
+      ),
+      lessonPrice: feeBase,
+    });
+    const fee = booking.amount != null ? Math.min(feeResult.fee, booking.amount) : feeResult.fee;
 
-      return successResponse({
-        bookingId: booking.id,
-        isLate: feeResult.isLate,
-        fee,
-        currency: booking.currency,
-        cutoffTime: feeResult.cutoffTime,
-        hoursUntilSlot: Math.round(feeResult.hoursUntilSlot * 10) / 10,
-        cancellationNoticeHours: club.cancellationNoticeHours,
-        // Surface what the rider would actually be charged AGAINST so
-        // the dashboard can render "fee X of Y" accurately.
-        lessonPrice: feeBase,
-      });
-    },
-  );
+    return successResponse({
+      bookingId: booking.id,
+      isLate: feeResult.isLate,
+      fee,
+      currency: booking.currency,
+      cutoffTime: feeResult.cutoffTime,
+      hoursUntilSlot: Math.round(feeResult.hoursUntilSlot * 10) / 10,
+      cancellationNoticeHours: club.cancellationNoticeHours,
+      // Surface what the rider would actually be charged AGAINST so
+      // the dashboard can render "fee X of Y" accurately.
+      lessonPrice: feeBase,
+    });
+  });
 }

@@ -102,9 +102,9 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
       signal: requestSignal.signal,
     };
     const res = await fetch(url, initWithCsrf);
-    const data = (await res.json().catch(() => null)) as
-      | { error?: { message?: string; code?: string } }
-      | null;
+    const data = (await res.json().catch(() => null)) as {
+      error?: { message?: string; code?: string };
+    } | null;
 
     if (!res.ok) {
       throw new Error(data?.error?.message ?? 'Request failed');

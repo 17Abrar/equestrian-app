@@ -9,6 +9,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 ## Direct Competitors (Closest to Your Idea)
 
 ### Equo App (equoapp.com)
+
 - US/Europe focused
 - Rider-facing: find trainers, book lessons, track progress
 - No stable management, no feed tracking, no horse fatigue monitoring
@@ -17,6 +18,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Threat level: LOW — different angle entirely
 
 ### Equilab (equilab.horse)
+
 - GPS ride tracking app (like Strava for horses)
 - Tracks speed, gait, distance during rides
 - No booking, no stable management, no feed
@@ -24,6 +26,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Threat level: LOW — complementary, not competing
 
 ### StableSecretary (stablesecretary.com)
+
 - Stable management software (US market)
 - Tracks horse records, vet visits, farrier schedules
 - Some billing/invoicing for boarders
@@ -32,11 +35,13 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Threat level: LOW — legacy software, different market
 
 ### Hippo Manager (hippomanager.com)
+
 - Practice management for equine vets
 - Not for clubs or riders at all
 - Threat level: NONE
 
 ### Riding Club Pro / BookRides (UK)
+
 - Booking systems for UK riding schools
 - Basic: pick a time, book a slot
 - No horse assignment intelligence, no matching by level
@@ -48,12 +53,14 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 ## Adjacent Tools (Stable Management Only)
 
 ### Pragmasoft (pragmasoft.com.au)
+
 - Australian stable management
 - Feed charts, horse profiles, task management
 - No booking, no rider-facing features
 - Desktop software, not cloud/mobile
 
 ### BarnManager (barnmanager.com)
+
 - US-based, horse record keeping
 - Tracks feed, vet, farrier, daily notes
 - No booking, no rider matching
@@ -61,6 +68,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Closest to your feed tracking feature, but no client-facing side
 
 ### Ponyapp / HorseLinc
+
 - Social networks for equestrians
 - Marketplace for buying/selling horses
 - No management, no booking
@@ -71,6 +79,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 ## GCC / Middle East Specifically
 
 ### What exists:
+
 - Literally nothing purpose-built
 - Clubs use WhatsApp groups + paper logs + Excel
 - Some use generic booking tools (Calendly, Fresha) hacked together
@@ -78,6 +87,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Saudi clubs (Nofa, Diriyah) — same story
 
 ### What this means:
+
 - ZERO digital competition in your primary market
 - First-mover advantage is massive
 - Arabic language support alone is a differentiator
@@ -94,6 +104,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Generic booking tools (Fresha, Timely): $30-80/month
 
 ### Your pricing opportunity:
+
 - Club subscription: AED 500-2,000/month (depends on size)
 - Per-horse add-on for feed tracking: AED 50-100/horse/month
 - Rider app: FREE (this drives adoption and makes clubs want to be on the platform)
@@ -121,6 +132,7 @@ Nobody is doing what you're building. Not fully. The market has fragments — bo
 - Data entry burden: someone has to input all the horses, feed schedules, etc.
 
 ### Mitigation:
+
 - Offer white-glove onboarding (you literally set it up for them)
 - Start with 2-3 clubs in Dubai as proof of concept
 - Make the rider app so good that riders REQUEST their club to use it (bottom-up adoption)

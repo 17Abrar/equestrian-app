@@ -1,14 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import {
-  format,
-  startOfMonth,
-  startOfWeek,
-  addDays,
-  isSameMonth,
-  isSameDay,
-} from 'date-fns';
+import { format, startOfMonth, startOfWeek, addDays, isSameMonth, isSameDay } from 'date-fns';
 import { CalendarSlotCard } from './calendar-slot-card';
 import { type BookingSlot } from '@/hooks/use-bookings';
 import { type CalendarCompetition } from '@/hooks/use-competitions';
@@ -88,7 +81,7 @@ export function MonthView({ currentDate, slots, competitions, onDayClick }: Mont
         {/* Header row */}
         <div className="grid grid-cols-7 border-b">
           {WEEKDAYS.map((d) => (
-            <div key={d} className="p-2 text-center text-xs font-medium text-muted-foreground">
+            <div key={d} className="text-muted-foreground p-2 text-center text-xs font-medium">
               {d}
             </div>
           ))}
@@ -109,7 +102,7 @@ export function MonthView({ currentDate, slots, competitions, onDayClick }: Mont
                   type="button"
                   key={d.toISOString()}
                   onClick={() => onDayClick(d)}
-                  className={`min-h-[100px] p-1.5 text-left transition-colors hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset ${
+                  className={`hover:bg-accent/50 focus:ring-ring min-h-[100px] p-1.5 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-inset ${
                     !isCurrentMonth ? 'opacity-40' : ''
                   }`}
                   aria-label={`${format(d, 'MMMM d')}, ${slotCount} lessons${dayCompetitions.length > 0 ? `, ${dayCompetitions.length} competitions` : ''}`}
@@ -126,7 +119,7 @@ export function MonthView({ currentDate, slots, competitions, onDayClick }: Mont
                     {dayCompetitions.map((comp) => (
                       <div
                         key={comp.id}
-                        className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800 truncate"
+                        className="truncate rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800"
                       >
                         {comp.name}
                       </div>
@@ -135,7 +128,7 @@ export function MonthView({ currentDate, slots, competitions, onDayClick }: Mont
                       <CalendarSlotCard key={slot.id} slot={slot} compact />
                     ))}
                     {daySlots.length > 3 && (
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-muted-foreground text-[10px]">
                         +{daySlots.length - 3} more
                       </p>
                     )}

@@ -30,7 +30,14 @@
       "- fast-uri: GHSA-q3j6-qgpj-74h6 (high path-traversal). Reaches us",
       "  via @sentry/nextjs > @sentry/webpack-plugin > webpack > schema-",
       "  utils > ajv > fast-uri. Patched in >=3.1.1; ajv 8.x bundles an",
-      "  older fast-uri. Pin direct."
+      "  older fast-uri. Pin direct.",
+      "- postcss: GHSA-qx2v-qp2m-jg93 (moderate XSS in CSS stringify).",
+      "  Reaches us through Next, Expo, and Tailwind. Pin to patched 8.5.x.",
+      "- uuid: GHSA-w5hq-g745-h8pq (moderate bounds check). Reaches us via",
+      "  Clerk Expo's Solana/RPC websocket transitive tree. Pin to patched",
+      "  11.1.x without crossing a major boundary.",
+      "- fast-xml-parser: GHSA-gh4j-gqv2-49f6 (moderate XML delimiter",
+      "  injection). Reaches us via AWS SDK XML builder. Pin to patched 5.x."
     ],
     "packageExtensions": {
       "drizzle-orm": {
@@ -43,7 +50,10 @@
       "@xmldom/xmldom": ">=0.8.13",
       "@stripe/stripe-js": "^9.2.0",
       "fast-xml-builder": ">=1.1.7",
-      "fast-uri": ">=3.1.1"
+      "fast-uri": ">=3.1.1",
+      "fast-xml-parser": "5.7.0",
+      "postcss": "8.5.12",
+      "uuid": "11.1.1"
     }
   },
   "scripts": {

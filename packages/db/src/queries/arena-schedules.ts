@@ -1,4 +1,4 @@
-// Audit F-55 (2026-05-08 r6): stub for the `arena_schedules` table.
+// Query module reserved for the `arena_schedules` table.
 //
 // The schema is fully wired (composite FK `arena_schedules_arena_club_fk`,
 // row-level columns for `dayOfWeek`, `openTime`, `closeTime`,

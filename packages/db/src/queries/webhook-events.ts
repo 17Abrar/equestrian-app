@@ -71,10 +71,7 @@ const STALE_AFTER_MS = resolveStaleAfterMs();
  * `markWebhookEventFailed`; otherwise the row stays `received` and
  * blocks re-deliveries until the stale threshold elapses.
  */
-export async function claimWebhookEvent(
-  provider: string,
-  eventId: string,
-): Promise<WebhookClaim> {
+export async function claimWebhookEvent(provider: string, eventId: string): Promise<WebhookClaim> {
   const inserted = await db
     .insert(webhookEvents)
     .values({ provider, eventId, status: 'received', attemptCount: 1 })
@@ -95,12 +92,7 @@ export async function claimWebhookEvent(
       lastAttemptedAt: webhookEvents.lastAttemptedAt,
     })
     .from(webhookEvents)
-    .where(
-      and(
-        eq(webhookEvents.provider, provider),
-        eq(webhookEvents.eventId, eventId),
-      ),
-    )
+    .where(and(eq(webhookEvents.provider, provider), eq(webhookEvents.eventId, eventId)))
     .limit(1);
 
   const row = existing[0];
@@ -133,19 +125,13 @@ export async function claimWebhookEvent(
     await db
       .update(webhookEvents)
       .set({ status: 'permanently_failed', lastAttemptedAt: new Date() })
-      .where(
-        and(
-          eq(webhookEvents.provider, provider),
-          eq(webhookEvents.eventId, eventId),
-        ),
-      );
+      .where(and(eq(webhookEvents.provider, provider), eq(webhookEvents.eventId, eventId)));
     return { status: 'permanently_failed' };
   }
 
   const staleCutoff = new Date(Date.now() - STALE_AFTER_MS);
   const isStale =
-    row.status === 'failed' ||
-    (row.status === 'received' && row.lastAttemptedAt < staleCutoff);
+    row.status === 'failed' || (row.status === 'received' && row.lastAttemptedAt < staleCutoff);
 
   if (!isStale) {
     return { status: 'in_flight' };
@@ -180,10 +166,7 @@ export async function claimWebhookEvent(
   return { status: 'claimed', attempt: reclaimedRow.attemptCount };
 }
 
-export async function markWebhookEventProcessed(
-  provider: string,
-  eventId: string,
-): Promise<void> {
+export async function markWebhookEventProcessed(provider: string, eventId: string): Promise<void> {
   await db
     .update(webhookEvents)
     .set({
@@ -191,12 +174,7 @@ export async function markWebhookEventProcessed(
       processedAt: new Date(),
       lastError: null,
     })
-    .where(
-      and(
-        eq(webhookEvents.provider, provider),
-        eq(webhookEvents.eventId, eventId),
-      ),
-    );
+    .where(and(eq(webhookEvents.provider, provider), eq(webhookEvents.eventId, eventId)));
 }
 
 /**
@@ -219,12 +197,7 @@ export async function attachWebhookEventClub(
   await db
     .update(webhookEvents)
     .set({ clubId })
-    .where(
-      and(
-        eq(webhookEvents.provider, provider),
-        eq(webhookEvents.eventId, eventId),
-      ),
-    );
+    .where(and(eq(webhookEvents.provider, provider), eq(webhookEvents.eventId, eventId)));
 }
 
 export async function markWebhookEventFailed(
@@ -244,12 +217,7 @@ export async function markWebhookEventFailed(
       lastError: errorMessage.slice(0, 1000),
       lastAttemptedAt: new Date(),
     })
-    .where(
-      and(
-        eq(webhookEvents.provider, provider),
-        eq(webhookEvents.eventId, eventId),
-      ),
-    );
+    .where(and(eq(webhookEvents.provider, provider), eq(webhookEvents.eventId, eventId)));
 }
 
 /**
@@ -272,10 +240,5 @@ export async function markWebhookEventPermanentlyFailed(
       lastError: errorMessage.slice(0, 1000),
       lastAttemptedAt: new Date(),
     })
-    .where(
-      and(
-        eq(webhookEvents.provider, provider),
-        eq(webhookEvents.eventId, eventId),
-      ),
-    );
+    .where(and(eq(webhookEvents.provider, provider), eq(webhookEvents.eventId, eventId)));
 }

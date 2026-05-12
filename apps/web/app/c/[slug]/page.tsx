@@ -17,8 +17,7 @@ export async function generateMetadata({ params }: PageProps) {
   if (!club) return { title: 'Club not found' };
   return {
     title: `${club.name} — Cavaliq`,
-    description:
-      club.shortDescription ?? club.description ?? `Join ${club.name} on Cavaliq.`,
+    description: club.shortDescription ?? club.description ?? `Join ${club.name} on Cavaliq.`,
     openGraph: {
       title: club.name,
       description: club.shortDescription ?? club.description ?? undefined,

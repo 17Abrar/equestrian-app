@@ -6,12 +6,15 @@ import {
   createCompetitionEntry,
   isParentOf,
 } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -96,11 +99,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const isSelf = data.riderMemberId === ctx.memberId;
       if (!isSelf) {
         if (!canRegisterAny && !canRegisterChild) {
-          return errorResponse(
-            'FORBIDDEN',
-            'You can only register yourself for competitions',
-            403,
-          );
+          return errorResponse('FORBIDDEN', 'You can only register yourself for competitions', 403);
         }
         if (!canRegisterAny) {
           // Parent-only path — verify the target rider is recorded as
@@ -141,7 +140,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 422,
               );
             case 'COMPETITION_NOT_AVAILABLE':
-              return errorResponse('NOT_AVAILABLE', 'Competition is not available for registration', 422);
+              return errorResponse(
+                'NOT_AVAILABLE',
+                'Competition is not available for registration',
+                422,
+              );
             case 'REGISTRATION_DEADLINE_PASSED':
               return errorResponse('DEADLINE_PASSED', 'Registration deadline has passed', 422);
             case 'CLASS_FULL':

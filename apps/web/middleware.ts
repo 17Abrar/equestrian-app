@@ -167,10 +167,7 @@ export default clerkMiddleware(async (auth, request) => {
 
   // Handle CORS preflight — OPTIONS requests carry no auth token,
   // so they must be answered before auth.protect() runs.
-  if (
-    request.method === 'OPTIONS' &&
-    request.nextUrl.pathname.startsWith('/api/v1/')
-  ) {
+  if (request.method === 'OPTIONS' && request.nextUrl.pathname.startsWith('/api/v1/')) {
     const origin = request.headers.get('origin');
     const preflightHeaders: Record<string, string> = {
       'x-request-id': requestId,
@@ -208,7 +205,7 @@ export default clerkMiddleware(async (auth, request) => {
   // isolate parses anything. Webhooks have their own per-provider caps
   // in `lib/payments/webhook-body.ts` (smaller than this default).
   //
-  // Audit AI-10: Cloudflare Workers buffers the request body and sets
+  // Audit QA-10: Cloudflare Workers buffers the request body and sets
   // `Content-Length` before invoking the worker, so chunked-transfer
   // requests don't reach this middleware in practice. We still reject
   // them explicitly here as defense in depth — a future runtime change

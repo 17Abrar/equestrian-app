@@ -45,9 +45,10 @@ export default function SignUpScreen() {
       setPendingVerification(true);
     } catch (err: unknown) {
       const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
-      const message = clerkError.errors?.[0]?.longMessage
-        ?? clerkError.errors?.[0]?.message
-        ?? 'Failed to create account. Please try again.';
+      const message =
+        clerkError.errors?.[0]?.longMessage ??
+        clerkError.errors?.[0]?.message ??
+        'Failed to create account. Please try again.';
       setError(message);
     } finally {
       setLoading(false);
@@ -72,9 +73,10 @@ export default function SignUpScreen() {
       }
     } catch (err: unknown) {
       const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
-      const message = clerkError.errors?.[0]?.longMessage
-        ?? clerkError.errors?.[0]?.message
-        ?? 'Invalid verification code.';
+      const message =
+        clerkError.errors?.[0]?.longMessage ??
+        clerkError.errors?.[0]?.message ??
+        'Invalid verification code.';
       setError(message);
     } finally {
       setLoading(false);
@@ -94,9 +96,7 @@ export default function SignUpScreen() {
 
           <View className="gap-4">
             <View>
-              <Text className="mb-1.5 text-sm font-medium text-gray-700">
-                Verification Code
-              </Text>
+              <Text className="mb-1.5 text-sm font-medium text-gray-700">Verification Code</Text>
               <TextInput
                 className="rounded-xl border border-gray-300 bg-gray-50 px-4 py-3.5 text-center text-xl tracking-widest text-gray-900"
                 placeholder="000000"
@@ -123,9 +123,7 @@ export default function SignUpScreen() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text className="text-center text-base font-semibold text-white">
-                  Verify Email
-                </Text>
+                <Text className="text-center text-base font-semibold text-white">Verify Email</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -144,9 +142,7 @@ export default function SignUpScreen() {
           <View className="mb-10">
             <CavaliqLogo height={36} style={{ marginBottom: 24 }} />
             <Text className="text-3xl font-bold text-gray-900">Create account</Text>
-            <Text className="mt-2 text-base text-gray-500">
-              Join your stable on Cavaliq
-            </Text>
+            <Text className="mt-2 text-base text-gray-500">Join your stable on Cavaliq</Text>
           </View>
 
           <View className="gap-4">

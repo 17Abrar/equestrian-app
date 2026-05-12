@@ -30,17 +30,15 @@ import { Input } from '@/components/ui/input';
 // can spread `{...field}` directly without a cast. The internal logic
 // narrows to `number | string | null | undefined` at runtime; anything
 // else renders as the empty string (the safe fallback).
-interface NumberInputProps
-  extends Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'type'> {
+interface NumberInputProps extends Omit<
+  React.ComponentProps<'input'>,
+  'value' | 'onChange' | 'type'
+> {
   value: unknown;
   onChange: (value: number | undefined) => void;
 }
 
-export function NumberInput({
-  value,
-  onChange,
-  ...rest
-}: NumberInputProps) {
+export function NumberInput({ value, onChange, ...rest }: NumberInputProps) {
   // Coerce the loose `unknown` from RHF into a string the input can
   // render. `''` renders as empty (necessary for RHF controlled-input
   // semantics — see comment at the top of the file).

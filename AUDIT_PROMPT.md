@@ -15,6 +15,7 @@ You are not optimizing for finding the maximum number of issues. You are optimiz
 ## Scope
 
 **In scope**
+
 - `apps/web/**` — Next.js 15 App Router on Cloudflare Workers via OpenNext
 - `apps/mobile/**` — Expo / React Native
 - `packages/db/**` — Drizzle schema + migrations on Neon Postgres
@@ -25,6 +26,7 @@ You are not optimizing for finding the maximum number of issues. You are optimiz
 - Cron handlers, webhook handlers, payment adapters
 
 **Out of scope**
+
 - Style nits that don't affect behavior (let the formatter handle them)
 - Suggestions to swap libraries without a concrete trigger
 - Speculative refactors (these are hidden in the NIT bucket if at all)
@@ -55,6 +57,7 @@ These are bugs that have already shipped on this codebase. Treat any new instanc
 For each category, the auditor scans the relevant files, lists findings, and assigns a severity per the rubric below. Cite `file:line` for every finding. Don't paraphrase code — quote it.
 
 ### A. Authentication & authorization
+
 - Every API route uses `withAuth` (or a documented exception)
 - Role / permission check before every mutating action
 - Webhook routes verify provider signature before parsing body
@@ -63,6 +66,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - No `auth.userId` trusted as foreign key — always resolve to internal `club_members.id`
 
 ### B. Multi-tenancy & data isolation
+
 - Every query against a tenant-scoped table includes `.where(eq(table.clubId, ctx.clubId))`
 - Every FK to a tenant-scoped parent (`horses`, `club_members`, `bookings`) is a composite `(col, club_id) → parent(id, club_id)` — not a bare single-column FK
 - Composite FK delete behavior matches the audit table:
@@ -73,6 +77,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - No client-controllable `clubId` parameters — always from `ctx`
 
 ### C. Input validation & mass assignment
+
 - Every API route parses input through a Zod schema with `.strict()` so unknown keys 422 instead of silently dropping
 - File upload routes verify magic bytes, not just extension; size cap enforced
 - LIKE queries escape `%` and `_` from user input
@@ -80,6 +85,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - HTML-bearing fields go through DOMPurify
 
 ### D. Database integrity
+
 - Every table has `id`, `club_id`, `created_at`, `updated_at` (or a documented exception)
 - UNIQUE / CHECK / NOT NULL constraints at the SQL level, not just Zod
 - Indexes on every WHERE / JOIN column; composite indexes match query patterns
@@ -89,6 +95,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - Race-prone writes (capacity counters, rate limits, dedupe rows) use a single atomic SQL or a UNIQUE constraint, not check-then-insert
 
 ### E. Payments & money
+
 - Cents/minor-units handled at every boundary (Stripe, N-Genius, Ziina, display)
 - Currency code stored on every monetary row; never assumed
 - Idempotency keys on every payment-mutating call
@@ -98,6 +105,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - No direct card data on Cavaliq servers — Stripe Elements / N-Genius / Ziina hosted fields only
 
 ### F. Reliability & error handling
+
 - Every API route has the 7-step pattern (auth → validate → authorize → tenant → logic → response → error)
 - Errors logged server-side with full stack; sanitized message returned to client
 - No empty `catch {}` blocks; no swallowed errors
@@ -106,6 +114,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - Background jobs idempotent — re-running mid-flight produces the same outcome
 
 ### G. Observability
+
 - All logging through `apps/web/lib/logger.ts` (never raw `console.log` in route code)
 - Logger PII redaction covers conventional keys AND scrubs string values for emails / phones
 - Sentry events tagged with `clubId`, `requestId`, `userId` where available
@@ -114,6 +123,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - No PII in logs, audit trails, or notifications data payloads — even fields that "look safe" (description, note) get scrubbed at the logger layer
 
 ### H. Frontend state coverage
+
 - Every data-fetching component handles loading + error + empty + success
 - Loading uses skeletons matching content shape, not spinners
 - Error state has a retry action that actually retries
@@ -124,6 +134,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - Every `<img>` is `next/image`; remote hosts in `next.config.js`
 
 ### I. Type safety
+
 - No `any` in shipped code (escape hatch: documented `as` cast with a comment explaining why)
 - No `Record<string, unknown>` outside genuinely-free-form payloads (audit log changes, jsonb metadata)
 - Discriminated unions over boolean flags for state machines
@@ -131,6 +142,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - Every API response shape exported from `packages/shared` and consumed by `packages/api-client`
 
 ### J. Performance
+
 - No `SELECT *` returning rows we don't display
 - Pagination on every list endpoint (default 25)
 - N+1 queries flagged: every loop containing a `db.…select(…)` is a finding
@@ -140,6 +152,7 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - No expensive computation re-running on every render — `useMemo` / `useCallback` for non-trivial work
 
 ### K. Operational hygiene
+
 - All secrets in env vars / Wrangler secrets, not in code
 - `.env.example` lists every required variable; CI fails on missing
 - Cloudflare-bound resources (KV, D1, Hyperdrive, queues) declared in `wrangler.jsonc`
@@ -148,18 +161,21 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 - No commits with `--no-verify` or `--no-gpg-sign`
 
 ### L. Code quality
+
 - No dead code paths, dead exports, or `// removed` comments left behind
 - No `TODO` / `FIXME` in shipped code (must be either resolved or moved to a tracked issue)
 - No magic numbers (constants in `packages/shared/constants/`)
 - No half-finished implementations — every code path either works or is gated behind a feature flag with a clear ship plan
 
 ### M. Compliance & PII
+
 - Encrypted-at-rest fields (medical notes, vet records) wrapped through the `crypto.encryptField` helper, never stored plaintext
 - Encrypted fields not logged, not in audit trails, not in notification data payloads
 - Audit trail covers who did what + when for every mutating action on tenant data
 - Soft-delete vs hard-delete decisions per table documented (currently: bookings + invoices + payments soft, members hard with cascade)
 
 ### N. AI-pathology (the original audit's focus, kept here for completeness)
+
 - No hallucinated APIs / library functions
 - No mock-data fallthroughs that ship to prod
 - No invented config keys not declared anywhere
@@ -170,13 +186,13 @@ For each category, the auditor scans the relevant files, lists findings, and ass
 
 ## Severity rubric
 
-| Severity | Definition | Example |
-|---|---|---|
-| **CRITICAL** | Active in prod right now, exploitable, will hurt soon. Stop other work. | Cross-tenant data leak; payment double-charge; webhook bypass; raw card data on server |
-| **HIGH** | Latent but plausibly triggerable; one user action away from CRITICAL. | Race condition under load; missing rate limit on abuse-bounded route; webhook signature unverified |
-| **MED** | Defense-in-depth gap or robustness issue. Won't trigger on the happy path. | Single-column FK where composite is the pattern; missing input validation that's caught upstream by Zod elsewhere; PII landing in logs via a non-conventional key |
-| **LOW** | Code quality, ergonomics, hardening that will pay off but isn't urgent. | `.strict()` missing on a schema; `Record<string, unknown>` that could be tighter; missing index that the DB hasn't complained about yet |
-| **NIT** | Stylistic, advisory. Mention but don't expect action. | Comment could be clearer; could extract a helper |
+| Severity     | Definition                                                                 | Example                                                                                                                                                           |
+| ------------ | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CRITICAL** | Active in prod right now, exploitable, will hurt soon. Stop other work.    | Cross-tenant data leak; payment double-charge; webhook bypass; raw card data on server                                                                            |
+| **HIGH**     | Latent but plausibly triggerable; one user action away from CRITICAL.      | Race condition under load; missing rate limit on abuse-bounded route; webhook signature unverified                                                                |
+| **MED**      | Defense-in-depth gap or robustness issue. Won't trigger on the happy path. | Single-column FK where composite is the pattern; missing input validation that's caught upstream by Zod elsewhere; PII landing in logs via a non-conventional key |
+| **LOW**      | Code quality, ergonomics, hardening that will pay off but isn't urgent.    | `.strict()` missing on a schema; `Record<string, unknown>` that could be tighter; missing index that the DB hasn't complained about yet                           |
+| **NIT**      | Stylistic, advisory. Mention but don't expect action.                      | Comment could be clearer; could extract a helper                                                                                                                  |
 
 If you're unsure between two levels, pick the higher and explain. Severity inflation is recoverable; severity deflation hides issues until they ship.
 
@@ -196,16 +212,16 @@ The audit produces a single Markdown file with this structure:
 ## Summary
 
 | Severity | Count |
-|---|---|
-| CRITICAL | N |
-| HIGH | N |
-| MED | N |
-| LOW | N |
-| NIT | N |
+| -------- | ----- |
+| CRITICAL | N     |
+| HIGH     | N     |
+| MED      | N     |
+| LOW      | N     |
+| NIT      | N     |
 
 ## Findings
 
-### F-1 — <one-line title>  [SEVERITY]
+### F-1 — <one-line title> [SEVERITY]
 
 **Where:** `path/to/file.ts:LINE-LINE`
 
@@ -221,6 +237,7 @@ The audit produces a single Markdown file with this structure:
 ```
 
 **Conventions**
+
 - `F-1`, `F-2`, … in order of severity (CRITICAL first, then HIGH, …); within a severity group, by category letter A→N
 - Every finding has a `**Where:**` with `file:line` — auditor that doesn't cite a line gets sent back
 - Quote the offending code in a fenced block; don't paraphrase
@@ -244,6 +261,7 @@ If any of those fail, the auditor fixes them before submitting — same self-che
 ## How the implementer uses this report
 
 The implementer:
+
 1. Reads the report top-to-bottom, treating CRITICALs as ship-blockers
 2. Closes each finding by writing code AND verifying the close — type-check is not enough; for DB findings, the implementer probes prod with `pg_constraint` queries to confirm migration applied; for runtime findings, traces the actual execution path
 3. Commits one logical group of fixes per PR with a body listing the F-N references closed

@@ -1,6 +1,4 @@
-import {
-  Html, Head, Body, Container, Heading, Text, Hr, Section,
-} from '@react-email/components';
+import { Html, Head, Body, Container, Heading, Text, Hr, Section } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 
 interface LiveryPaymentReceivedProps {
@@ -47,15 +45,13 @@ export function LiveryPaymentReceived({
           </Section>
 
           <Text style={styles.text}>
-            Keep this email as your receipt. Your next livery invoice will
-            arrive on {horseName}&apos;s regular billing anniversary.
+            Keep this email as your receipt. Your next livery invoice will arrive on {horseName}
+            &apos;s regular billing anniversary.
           </Text>
 
           <Hr style={styles.hr} />
 
-          <Text style={styles.footer}>
-            Cavaliq — {clubName}
-          </Text>
+          <Text style={styles.footer}>Cavaliq — {clubName}</Text>
         </Container>
       </Body>
     </Html>
@@ -80,7 +76,14 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#166534', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px', fontWeight: '600' as const },
+  label: {
+    fontSize: '11px',
+    color: '#166534',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+    fontWeight: '600' as const,
+  },
   value: { fontSize: '14px', color: '#064e3b', fontWeight: '500' as const, margin: '0 0 12px' },
   hr: { borderColor: '#e5e7eb', margin: '24px 0' },
   footer: { fontSize: '12px', color: '#9ca3af', lineHeight: '20px' },

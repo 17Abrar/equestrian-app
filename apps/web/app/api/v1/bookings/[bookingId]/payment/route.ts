@@ -20,7 +20,13 @@ import {
   isParentOf,
   setBookingPaymentRef,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseOptionalBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -92,11 +98,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const canPayForChild = !!ctx.memberId && hasPermission(ctx.orgRole, 'bookings:create_child');
       let isGuardianOfRider = false;
       if (canPayForChild && ctx.memberId && !isOwnBooking) {
-        isGuardianOfRider = await isParentOf(
-          ctx.clubId,
-          ctx.memberId,
-          booking.riderMemberId,
-        );
+        isGuardianOfRider = await isParentOf(ctx.clubId, ctx.memberId, booking.riderMemberId);
       }
       if (!canActForAny && !isOwnBooking && !isGuardianOfRider) {
         return errorResponse('FORBIDDEN', 'You can only pay for your own bookings', 403);
@@ -128,11 +130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       // 4. Amount sanity — no point hitting a provider for a zero-amount row.
       if (!booking.amount || booking.amount <= 0) {
-        return errorResponse(
-          'NO_AMOUNT',
-          'Booking has no amount to charge',
-          422,
-        );
+        return errorResponse('NO_AMOUNT', 'Booking has no amount to charge', 422);
       }
 
       // 5. Resolve the active provider. No provider = club hasn't connected one.
@@ -164,9 +162,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // change that stores `defaultCurrency` as object/null silently
       // skips the currency-mismatch guard. The `.optional()` keeps
       // the soft-fail posture.
-      const accountCurrency = paymentAccountMetadataSchema.safeParse(
-        account.metadata ?? null,
-      ).data?.defaultCurrency?.toUpperCase() ?? null;
+      const accountCurrency =
+        paymentAccountMetadataSchema
+          .safeParse(account.metadata ?? null)
+          .data?.defaultCurrency?.toUpperCase() ?? null;
       if (accountCurrency && booking.currency.toUpperCase() !== accountCurrency) {
         logger.warn('booking_payment_currency_mismatch', {
           bookingId,
@@ -346,9 +345,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             retryable: err.retryable,
           });
           const status =
-            err.code === 'ACCOUNT_NOT_CONNECTED' ? 422 :
-            err.code === 'AUTH_FAILED' ? 502 :
-            err.retryable ? 503 : 502;
+            err.code === 'ACCOUNT_NOT_CONNECTED'
+              ? 422
+              : err.code === 'AUTH_FAILED'
+                ? 502
+                : err.retryable
+                  ? 503
+                  : 502;
           return errorResponse(err.code, err.message, status);
         }
         throw err;
@@ -359,10 +362,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // parents who pay for child bookings under `bookings:create_child`.
       // The inline check authorizes staff, the rider themselves, and the
       // rider's recorded guardian.
-      // Audit AI-22 — payment-init creates real Stripe/N-Genius/Ziina
+      // Audit QA-22 — payment-init creates real Stripe/N-Genius/Ziina
       // PaymentIntents (real money in observability). Tighten from the
       // default 60/min so a runaway client or replay loop can't flood
-      // the provider with intents. failClosed (audit AI-45) — an Upstash
+      // the provider with intents. failClosed (audit QA-45) — an Upstash
       // outage must NOT lift the cap on a money-moving endpoint.
       rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
       routeKey: 'booking_payment_init',

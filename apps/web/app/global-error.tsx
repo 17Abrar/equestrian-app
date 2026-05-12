@@ -17,19 +17,19 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
 
   return (
     <html lang="en">
-      <body className="flex min-h-screen items-center justify-center bg-background font-sans">
+      <body className="bg-background flex min-h-screen items-center justify-center font-sans">
         <div role="alert" className="mx-auto max-w-md text-center">
           <h1 className="text-2xl font-bold">Something went wrong</h1>
-          <p className="mt-2 text-muted-foreground">
+          <p className="text-muted-foreground mt-2">
             An unexpected error occurred. Please try again.
           </p>
           {error.digest && (
-            <p className="mt-1 text-xs text-muted-foreground">Error ID: {error.digest}</p>
+            <p className="text-muted-foreground mt-1 text-xs">Error ID: {error.digest}</p>
           )}
           <button
             type="button"
             onClick={reset}
-            className="mt-6 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 mt-6 rounded-lg px-4 py-2 text-sm font-medium"
           >
             Try again
           </button>

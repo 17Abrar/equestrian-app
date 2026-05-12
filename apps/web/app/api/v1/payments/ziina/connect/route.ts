@@ -7,17 +7,19 @@ import { ziinaAdapter } from '@/lib/payments/ziina';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { logger } from '@/lib/logger';
 
-const connectSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
-  // Audit L-2: minimum 32 chars matches the N-Genius header secret floor.
-  // A merchant who pastes a single-char value into the Ziina form would
-  // otherwise let an attacker forge webhooks trivially.
-  webhookSigningSecret: z
-    .string()
-    .min(32, 'Webhook signing secret must be at least 32 characters')
-    .optional(),
-  makeActive: z.boolean().default(true),
-}).strict();
+const connectSchema = z
+  .object({
+    apiKey: z.string().min(1, 'API key is required'),
+    // Audit L-2: minimum 32 chars matches the N-Genius header secret floor.
+    // A merchant who pastes a single-char value into the Ziina form would
+    // otherwise let an attacker forge webhooks trivially.
+    webhookSigningSecret: z
+      .string()
+      .min(32, 'Webhook signing secret must be at least 32 characters')
+      .optional(),
+    makeActive: z.boolean().default(true),
+  })
+  .strict();
 
 export async function POST(request: NextRequest) {
   return withAuth(

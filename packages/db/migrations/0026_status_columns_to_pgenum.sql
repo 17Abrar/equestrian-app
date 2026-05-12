@@ -1,4 +1,4 @@
--- Audit AI-36 — promote varchar(20) status columns to pgEnum so the DB
+-- Audit QA-36 — promote varchar(20) status columns to pgEnum so the DB
 -- rejects unknown values at write time. The application layer already
 -- gates these via Zod, but DB-level enforcement is defence-in-depth and
 -- saves a future bad query/migration from silently planting an invalid

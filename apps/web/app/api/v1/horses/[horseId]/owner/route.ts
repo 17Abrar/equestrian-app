@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { transferHorseOwnerSchema } from '@equestrian/shared/schemas';
 import { getHorseById, getMemberById, updateHorse } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -40,11 +46,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (data.ownerMemberId !== null) {
         const owner = await getMemberById(ctx.clubId, data.ownerMemberId);
         if (!owner) {
-          return errorResponse(
-            'INVALID_OWNER',
-            'Owner is not a member of this club',
-            400,
-          );
+          return errorResponse('INVALID_OWNER', 'Owner is not a member of this club', 400);
         }
         // Mirror the role check on POST /horses (audit A-5) — only
         // horse_owners and riders are valid owners. Coach/groom assignment

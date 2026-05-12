@@ -222,7 +222,8 @@ export const COMPETITION_ENTRY_STATUS = {
   Scratched: 'scratched',
 } as const;
 
-export type CompetitionEntryStatus = (typeof COMPETITION_ENTRY_STATUS)[keyof typeof COMPETITION_ENTRY_STATUS];
+export type CompetitionEntryStatus =
+  (typeof COMPETITION_ENTRY_STATUS)[keyof typeof COMPETITION_ENTRY_STATUS];
 
 export const POST_TYPE = {
   Discussion: 'discussion',

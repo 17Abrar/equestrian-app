@@ -10,9 +10,25 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { LESSON_TYPE_COLORS } from '@/lib/ui-constants';
 import { getCapacityInfo, CAPACITY_BADGE_CLASSES, CAPACITY_DOT_CLASSES } from '@/lib/capacity';
 import { useUpdateBookingSlot, useCancelBookingSlot, type BookingSlot } from '@/hooks/use-bookings';
@@ -49,11 +65,13 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
   if (compact) {
     return (
       <div
-        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-white truncate"
+        className="flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white"
         style={{ backgroundColor: bgColor, opacity: capacity.isFull ? 0.5 : 1 }}
         title={`${slot.lessonTypeName} ${slot.startTime.slice(0, 5)} — ${capacity.label}`}
       >
-        <span className={`inline-block h-1.5 w-1.5 rounded-full ${CAPACITY_DOT_CLASSES[capacity.color]}`} />
+        <span
+          className={`inline-block h-1.5 w-1.5 rounded-full ${CAPACITY_DOT_CLASSES[capacity.color]}`}
+        />
         {slot.lessonTypeName}
       </div>
     );
@@ -64,11 +82,11 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="w-full rounded-md p-2 text-white text-xs text-left cursor-pointer hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+          className="focus:ring-ring w-full cursor-pointer rounded-md p-2 text-left text-xs text-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1"
           style={{ backgroundColor: bgColor, opacity: capacity.isFull ? 0.6 : 1 }}
           aria-label={`${slot.lessonTypeName} at ${slot.startTime.slice(0, 5)} - ${slot.endTime.slice(0, 5)}, ${capacity.label}`}
         >
-          <p className="font-semibold truncate">{slot.lessonTypeName}</p>
+          <p className="truncate font-semibold">{slot.lessonTypeName}</p>
           <p className="flex items-center gap-1 opacity-90">
             <Clock className="h-3 w-3" />
             {slot.startTime.slice(0, 5)} - {slot.endTime.slice(0, 5)}
@@ -90,9 +108,7 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
               {capacity.isFull ? 'FULL' : `${capacity.spotsLeft} left`}
             </Badge>
           </div>
-          {slot.coachName && (
-            <p className="mt-0.5 truncate opacity-75">{slot.coachName}</p>
-          )}
+          {slot.coachName && <p className="mt-0.5 truncate opacity-75">{slot.coachName}</p>}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
@@ -131,7 +147,7 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
       {/* Slot details */}
       <div className="border-b p-3">
         <p className="font-semibold">{slot.lessonTypeName}</p>
-        <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+        <div className="text-muted-foreground mt-2 space-y-1 text-sm">
           <p className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
             {slot.date} · {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
@@ -144,7 +160,9 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
           )}
           <p className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
-            <Badge className={`text-xs ${CAPACITY_BADGE_CLASSES[capacity.color]}`}>{capacity.label}</Badge>
+            <Badge className={`text-xs ${CAPACITY_BADGE_CLASSES[capacity.color]}`}>
+              {capacity.label}
+            </Badge>
           </p>
           {slot.coachName && <p>Coach: {slot.coachName}</p>}
         </div>
@@ -152,11 +170,21 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
 
       {/* Actions */}
       <div className="flex flex-col gap-1 p-2">
-        <Button variant="ghost" size="sm" className="justify-start" onClick={() => setEditOpen(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-start"
+          onClick={() => setEditOpen(true)}
+        >
           <Pencil className="mr-2 h-4 w-4" />
           Reschedule
         </Button>
-        <Button variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={() => setCancelOpen(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive justify-start"
+          onClick={() => setCancelOpen(true)}
+        >
           <X className="mr-2 h-4 w-4" />
           Cancel Slot
         </Button>
@@ -194,7 +222,9 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
       {/* Edit/Reschedule dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Reschedule Slot</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Reschedule Slot</DialogTitle>
+          </DialogHeader>
           <RescheduleForm slot={slot} onSuccess={() => setEditOpen(false)} />
         </DialogContent>
       </Dialog>
@@ -228,20 +258,50 @@ function RescheduleForm({ slot, onSuccess }: { slot: BookingSlot; onSuccess: () 
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <p className="mb-2 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mb-2 text-sm">
             {slot.lessonTypeName} · {slot.currentRiders} rider(s) booked
           </p>
         </div>
-        <FormField control={form.control} name="date" render={({ field }) => (
-          <FormItem><FormLabel>Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
+        <FormField
+          control={form.control}
+          name="date"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Date</FormLabel>
+              <FormControl>
+                <Input type="date" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="startTime" render={({ field }) => (
-            <FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="endTime" render={({ field }) => (
-            <FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="startTime"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Start Time</FormLabel>
+                <FormControl>
+                  <Input type="time" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="endTime"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>End Time</FormLabel>
+                <FormControl>
+                  <Input type="time" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
         <Button type="submit" className="w-full" disabled={updateSlot.isPending}>
           {updateSlot.isPending ? 'Saving...' : 'Save Changes'}

@@ -5,10 +5,7 @@ import {
   setPlatformInvoiceProviderRef,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
-import {
-  createPlatformPaymentIntent,
-  PlatformZiinaError,
-} from '@/lib/billing/platform-ziina';
+import { createPlatformPaymentIntent, PlatformZiinaError } from '@/lib/billing/platform-ziina';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { withProviderRetry } from '@/lib/payments/retry';
 import { logger } from '@/lib/logger';
@@ -107,9 +104,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       } catch (err) {
         if (err instanceof PlatformZiinaError || err instanceof PaymentProviderError) {
           const status =
-            err.code === 'PROVIDER_NOT_CONFIGURED' ? 503 :
-            err.code === 'AUTH_FAILED' ? 502 :
-            err.retryable ? 503 : 502;
+            err.code === 'PROVIDER_NOT_CONFIGURED'
+              ? 503
+              : err.code === 'AUTH_FAILED'
+                ? 502
+                : err.retryable
+                  ? 503
+                  : 502;
           return errorResponse(err.code, err.message, status);
         }
         throw err;

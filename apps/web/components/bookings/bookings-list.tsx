@@ -1,15 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import {
-  Calendar,
-  Clock,
-  MoreHorizontal,
-  XCircle,
-  CheckCircle2,
-  UserX,
-  Undo2,
-} from 'lucide-react';
+import { Calendar, Clock, MoreHorizontal, XCircle, CheckCircle2, UserX, Undo2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -77,16 +69,21 @@ interface RefundBookingResult {
   remainingRefundableMinor: number;
 }
 
-const ACTION_CONFIG: Record<ActionType, { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }> = {
+const ACTION_CONFIG: Record<
+  ActionType,
+  { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }
+> = {
   cancel: {
     title: 'Cancel Booking',
-    description: 'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
+    description:
+      'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
     confirmLabel: 'Cancel Booking',
     variant: 'destructive',
   },
   no_show: {
     title: 'Mark as No-Show',
-    description: 'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
+    description:
+      'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
     confirmLabel: 'Mark No-Show',
     variant: 'destructive',
   },
@@ -98,7 +95,8 @@ const ACTION_CONFIG: Record<ActionType, { title: string; description: string; co
   },
   refund: {
     title: 'Refund Payment',
-    description: 'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
+    description:
+      'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
     confirmLabel: 'Issue Refund',
     variant: 'destructive',
   },
@@ -194,7 +192,9 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
           throw new Error(refundResult.error.message);
         }
         if (refundResult.data.status === 'pending') {
-          toast.warning('Refund requested. Booking ledger will update after provider confirmation.');
+          toast.warning(
+            'Refund requested. Booking ledger will update after provider confirmation.',
+          );
         } else {
           toast.success('Refund issued');
         }
@@ -202,7 +202,10 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       setReason('');
       onClose();
     } catch (err) {
-      reportMutationError('booking.action', err, { type: state?.type, bookingId: state?.booking.id });
+      reportMutationError('booking.action', err, {
+        type: state?.type,
+        bookingId: state?.booking.id,
+      });
       toast.error(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setIsSubmitting(false);
@@ -226,15 +229,21 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{config.title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {config.description}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{config.description}</AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-2 text-sm">
-          <p><strong>Lesson:</strong> {state.booking.lessonTypeName}</p>
-          <p><strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}</p>
-          {state.booking.riderName && <p><strong>Rider:</strong> {state.booking.riderName}</p>}
+          <p>
+            <strong>Lesson:</strong> {state.booking.lessonTypeName}
+          </p>
+          <p>
+            <strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}
+          </p>
+          {state.booking.riderName && (
+            <p>
+              <strong>Rider:</strong> {state.booking.riderName}
+            </p>
+          )}
         </div>
 
         {state.type === 'cancel' && (
@@ -268,14 +277,8 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isSubmitting}>
-            Keep Booking
-          </AlertDialogCancel>
-          <Button
-            variant={config.variant}
-            onClick={handleConfirm}
-            disabled={isSubmitting}
-          >
+          <AlertDialogCancel disabled={isSubmitting}>Keep Booking</AlertDialogCancel>
+          <Button variant={config.variant} onClick={handleConfirm} disabled={isSubmitting}>
             {isSubmitting ? 'Processing...' : config.confirmLabel}
           </Button>
         </AlertDialogFooter>
@@ -351,7 +354,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="mt-1 text-muted-foreground">View and manage lesson bookings</p>
+          <p className="text-muted-foreground mt-1">View and manage lesson bookings</p>
         </div>
         {canCreate && <AddBookingDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
@@ -359,7 +362,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[180px]">
-          <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Calendar className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
             type="date"
             value={date}
@@ -414,9 +417,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
           title="No bookings yet"
           description="Bookings will appear here once riders start booking lessons"
           action={
-            canCreate
-              ? { label: 'Create booking', onClick: () => setAddOpen(true) }
-              : undefined
+            canCreate ? { label: 'Create booking', onClick: () => setAddOpen(true) } : undefined
           }
         />
       )}
@@ -431,16 +432,14 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
                 <Card key={booking.id} className="transition-shadow hover:shadow-md">
                   <CardContent className="flex items-center gap-4 p-4">
                     <div
-                      className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-white text-xs font-bold"
+                      className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
                       style={{ backgroundColor: '#6366f1' }}
                     >
                       {booking.lessonTypeType.slice(0, 3).toUpperCase()}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="truncate font-semibold">
-                          {booking.lessonTypeName}
-                        </h3>
+                        <h3 className="truncate font-semibold">{booking.lessonTypeName}</h3>
                         <Badge
                           variant="secondary"
                           className={BOOKING_STATUS_COLORS[booking.status] ?? ''}
@@ -448,7 +447,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
                           {booking.status.replace('_', ' ')}
                         </Badge>
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5" />
                           {booking.slotDate}
@@ -540,7 +539,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-muted-foreground text-sm">
                 Page {page} of {data.pagination.totalPages}
               </span>
               <Button
@@ -557,10 +556,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
       )}
 
       {/* Confirmation Dialog */}
-      <BookingActionDialog
-        state={actionDialog}
-        onClose={() => setActionDialog(null)}
-      />
+      <BookingActionDialog state={actionDialog} onClose={() => setActionDialog(null)} />
     </div>
   );
 }

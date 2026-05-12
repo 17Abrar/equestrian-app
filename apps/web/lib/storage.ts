@@ -22,14 +22,12 @@ const ALLOWED_CONTENT_TYPES = [
 // Hard cap to block terabyte uploads via a leaked presigned URL. Documents
 // per CLAUDE.md go up to 25 MB; images are capped at 15 MB. Anything larger
 // is rejected outright at the API boundary, before R2 is even told about
-// the request. Audit AI-29.
+// the request. Audit QA-29.
 export const MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
 export const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
 
 export function maxUploadSizeFor(contentType: string): number {
-  return contentType.startsWith('image/')
-    ? MAX_IMAGE_SIZE_BYTES
-    : MAX_DOCUMENT_SIZE_BYTES;
+  return contentType.startsWith('image/') ? MAX_IMAGE_SIZE_BYTES : MAX_DOCUMENT_SIZE_BYTES;
 }
 
 // Folder names: lowercase letters/numbers/underscores, slash-separated segments.
@@ -63,7 +61,9 @@ function getR2Client() {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
-    throw new Error('R2 storage is not configured. Set R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY.');
+    throw new Error(
+      'R2 storage is not configured. Set R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY.',
+    );
   }
 
   return new S3Client({
@@ -95,7 +95,9 @@ export async function getUploadUrl(params: {
   const { clubId, folder, fileName, contentType, fileSizeBytes } = params;
 
   if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
-    throw new Error(`File type "${contentType}" is not allowed. Allowed: ${ALLOWED_CONTENT_TYPES.join(', ')}`);
+    throw new Error(
+      `File type "${contentType}" is not allowed. Allowed: ${ALLOWED_CONTENT_TYPES.join(', ')}`,
+    );
   }
 
   if (folder.length > 100 || !ALLOWED_FOLDER_PATTERN.test(folder)) {
@@ -110,7 +112,7 @@ export async function getUploadUrl(params: {
     throw new Error('File size must be a positive integer.');
   }
 
-  // Branch the cap by content type (audit AI-29). 15 MB for images,
+  // Branch the cap by content type (audit QA-29). 15 MB for images,
   // 25 MB for documents — matches CLAUDE.md.
   const maxBytes = maxUploadSizeFor(contentType);
   if (fileSizeBytes > maxBytes) {
@@ -126,9 +128,7 @@ export async function getUploadUrl(params: {
   }
 
   // Sanitize filename: remove special chars, keep extension
-  const safeName = fileName
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .toLowerCase();
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase();
 
   const key = `${clubId}/${folder}/${Date.now()}-${safeName}`;
 
@@ -181,11 +181,7 @@ const MAGIC_SIGNATURES: MagicSignature[] = [
   {
     contentType: 'image/webp',
     // "RIFF" then 4 size bytes (wildcard) then "WEBP"
-    bytes: [
-      0x52, 0x49, 0x46, 0x46,
-      null, null, null, null,
-      0x57, 0x45, 0x42, 0x50,
-    ],
+    bytes: [0x52, 0x49, 0x46, 0x46, null, null, null, null, 0x57, 0x45, 0x42, 0x50],
   },
   // GIF87a / GIF89a share the first 6 bytes only on positions 0-3; the
   // version byte differs. Use the shared prefix "GIF8".
@@ -198,8 +194,7 @@ const MAGIC_SIGNATURES: MagicSignature[] = [
   },
   // .docx is a ZIP container (PK\x03\x04).
   {
-    contentType:
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     bytes: [0x50, 0x4b, 0x03, 0x04],
   },
 ];
@@ -304,9 +299,7 @@ export async function deleteR2Object(key: string): Promise<void> {
   if (!bucketName) return;
   const client = getR2Client();
   try {
-    await client.send(
-      new DeleteObjectCommand({ Bucket: bucketName, Key: key }),
-    );
+    await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
   } catch (err) {
     logger.warn('r2_delete_failed', {
       key,

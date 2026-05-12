@@ -85,7 +85,7 @@ export interface PaymentStatusResult {
    * non-terminal state (pending/requires_action) — a future booking-
    * reconciliation path that compares this against booking.amount would
    * otherwise treat requires_action as "0 received" and downgrade the
-   * booking ledger. Audit AI-32e. */
+   * booking ledger. Audit QA-32e. */
   amountReceivedMinorUnits: number | undefined;
 }
 
@@ -144,7 +144,7 @@ export interface WebhookEvent {
    * against booking.currency in webhook-helpers.ts before flipping
    * paymentStatus='paid'. Required on succeeded events for stripe/ziina/
    * n_genius adapters; undefined on refund-only charge.refund.updated
-   * events. Audit AI-21.
+   * events. Audit QA-21.
    */
   currency?: string;
   /**
@@ -208,7 +208,9 @@ export interface PaymentProviderAdapter {
    * Session). Mobile clients call this so they can open in a WebBrowser.
    * If not implemented, callers should fall back to `createPayment`.
    */
-  createHostedCheckout?(input: CreatePaymentInput): Promise<CreatePaymentResult & { flow: 'redirect' }>;
+  createHostedCheckout?(
+    input: CreatePaymentInput,
+  ): Promise<CreatePaymentResult & { flow: 'redirect' }>;
   refund(input: RefundInput): Promise<RefundResult>;
   getPaymentStatus(input: PaymentStatusInput): Promise<PaymentStatusResult>;
   verifyWebhook(input: VerifyWebhookInput): Promise<WebhookEvent>;
@@ -272,7 +274,10 @@ const PROVIDER_BODY_PII_PATTERNS: ReadonlyArray<{ regex: RegExp; replacement: st
   // Cardholder name labels — common shapes in N-Genius / Ziina error
   // bodies. Conservative: only triggers when the label is present
   // (won't strip a plain "John Doe" mid-sentence).
-  { regex: /(cardholder(?:Name)?\s*[:=]\s*)["']?[A-Za-z][\w\s.'-]{1,80}/gi, replacement: '$1[REDACTED-NAME]' },
+  {
+    regex: /(cardholder(?:Name)?\s*[:=]\s*)["']?[A-Za-z][\w\s.'-]{1,80}/gi,
+    replacement: '$1[REDACTED-NAME]',
+  },
   { regex: /(name\s*[:=]\s*)["']?[A-Z][a-z]+\s+[A-Z][a-z]+/g, replacement: '$1[REDACTED-NAME]' },
   // Audit F-74 (2026-05-07 r4): bare 13-19 digit runs (PAN length range,
   // optionally space- or dash-grouped). N-Genius edge cases have been

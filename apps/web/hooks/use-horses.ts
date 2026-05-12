@@ -1,7 +1,11 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type HorseFiltersInput, type CreateHorseInput, type UpdateHorseInput } from '@equestrian/shared/schemas';
+import {
+  type HorseFiltersInput,
+  type CreateHorseInput,
+  type UpdateHorseInput,
+} from '@equestrian/shared/schemas';
 import {
   type ApiResponse,
   type PaginatedResponse,
@@ -35,7 +39,8 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
     // affect a single horse). Mass invalidations that need both can hit
     // `['horses']` to evict everything.
     queryKey: ['horses', 'list', filters],
-    queryFn: () => fetchJson<PaginatedResponse<HorseListItem>>(`/api/v1/horses?${params.toString()}`),
+    queryFn: () =>
+      fetchJson<PaginatedResponse<HorseListItem>>(`/api/v1/horses?${params.toString()}`),
     staleTime: STALE_TIME_FREQUENT,
   });
 }

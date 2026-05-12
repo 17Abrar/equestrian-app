@@ -41,11 +41,9 @@ export default async function RiderLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <RiderNav />
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        {children}
-      </main>
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>
     </div>
   );
 }

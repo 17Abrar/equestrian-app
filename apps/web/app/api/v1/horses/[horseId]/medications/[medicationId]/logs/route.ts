@@ -6,12 +6,15 @@ import {
   getMedicationByIds,
   getMemberById,
 } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const data = await parseRequiredBody(request, createMedicationLogSchema);
 
-      // Mass-assignment guard (audit AI-19). The body's optional
+      // Mass-assignment guard (audit QA-19). The body's optional
       // administeredByMemberId is a UUID — without verification a caller
       // could log doses against any UUID, which doesn't compromise
       // tenant isolation today (the FK references club_members(id) which
@@ -82,8 +85,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // attribute the dose to the wrong member if they happen to be in
       // another club. Force ctx.memberId unless the supplied UUID
       // matches an active member of this club.
-      let administeredByMemberId: string | null | undefined =
-        ctx.memberId;
+      let administeredByMemberId: string | null | undefined = ctx.memberId;
       if (data.administeredByMemberId) {
         const member = await getMemberById(ctx.clubId, data.administeredByMemberId);
         if (!member || !member.isActive) {

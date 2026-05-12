@@ -37,7 +37,7 @@ the deployed database is the runtime authority.
 
 1. Pick the next `NNNN_short_snake_case_summary.sql` tag.
 2. Write the `.sql` file with a top-of-file comment block explaining
-   the *why* (audit reference, incident, schema drift, etc.) and any
+   the _why_ (audit reference, incident, schema drift, etc.) and any
    ordering constraints (`SET LOCAL statement_timeout`, advisory locks,
    `IF NOT EXISTS` for idempotency on partial reapplies).
 3. Append a matching entry to `meta/_journal.json` with a synthetic

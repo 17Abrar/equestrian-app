@@ -11,6 +11,7 @@ These rules govern how you (Claude Code) behave as an agent on this project. Fol
 ### 1. ALWAYS Read Before You Write
 
 Before writing ANY code, you MUST:
+
 - Read ARCHITECTURE.md, DATABASE.md, and product-plan.md
 - Read the existing code in the file(s) you are about to modify
 - Read related files (if editing a component, read the hook it uses, the API route it calls, the types it imports)
@@ -21,6 +22,7 @@ DO NOT write code based on assumptions. If a file exists that's relevant, read i
 ### 2. ALWAYS Check and Fix Your Own Work
 
 After writing code, you MUST:
+
 - Re-read the code you just wrote and verify it follows EVERY rule in this file
 - Check for TypeScript errors (run `tsc --noEmit` or check the file for obvious type issues)
 - Verify all imports exist and are correct
@@ -32,6 +34,7 @@ After writing code, you MUST:
 
 **CRITICAL — GO BEYOND TypeScript COMPILATION:**
 TypeScript passing (`tsc --noEmit` = 0 errors) does NOT mean the code is correct. You MUST ALSO verify:
+
 - **Runtime correctness**: Will this actually work when a real user triggers it? Think through the full execution path.
 - **Database driver compatibility**: Are you using `db.transaction()` with the right driver? (neon-http does NOT support transactions — use neon-serverless with WebSocket for transactions, or restructure as sequential queries)
 - **Foreign key compatibility**: Are you passing the right ID types? Clerk user IDs are strings like `user_xxx`, NOT UUIDs. If a column expects a UUID foreign key, you cannot store a Clerk ID there — you must look up the internal UUID first.
@@ -56,6 +59,7 @@ This is critical. If you are unsure about ANY of the following, you MUST search 
 **How to research**: Use your web search tool. Check official documentation sites first (e.g., nextjs.org/docs, clerk.com/docs, orm.drizzle.team, stripe.com/docs). Then check GitHub issues and Stack Overflow if needed.
 
 **DO NOT:**
+
 - Guess at API signatures
 - Use deprecated methods
 - Hallucinate function names that don't exist
@@ -65,6 +69,7 @@ This is critical. If you are unsure about ANY of the following, you MUST search 
 ### 4. ALWAYS Verify Existing Patterns Before Creating New Ones
 
 Before creating a new component, hook, utility, API route, or schema:
+
 1. Search the codebase to see if something similar already exists
 2. If it exists, reuse it or extend it — do NOT create a duplicate
 3. If you're creating something new, follow the exact same patterns used in existing code (file structure, naming, imports, error handling shape)
@@ -81,6 +86,7 @@ Before creating a new component, hook, utility, API route, or schema:
 ### 6. ASK When Requirements Are Ambiguous
 
 If the task description is vague, unclear, or could be interpreted multiple ways:
+
 - Ask me to clarify BEFORE writing code
 - Do NOT guess what I want and build the wrong thing
 - It's better to ask one question than to rewrite an entire feature
@@ -88,6 +94,7 @@ If the task description is vague, unclear, or could be interpreted multiple ways
 ### 7. PROACTIVELY Identify and Report Issues
 
 If while working on a task you notice:
+
 - A bug in existing code → tell me and fix it
 - A security vulnerability → tell me and fix it immediately
 - Missing error handling in related code → tell me and fix it
@@ -99,11 +106,13 @@ Do NOT silently ignore problems you find. This project must be production-qualit
 ### 8. NEVER Say "All Clean" Unless You've ACTUALLY Verified Everything
 
 This has been a recurring problem. Do NOT claim the code is bug-free based on:
+
 - TypeScript compilation passing (it misses runtime bugs)
 - "It looks right to me" (trace the actual execution)
 - Fixing the obvious issues and assuming nothing else is wrong
 
 Instead:
+
 - If you've only checked types: say "TypeScript compiles clean, but I haven't verified runtime behavior for X, Y, Z"
 - If you're not 100% sure something works: say "I'm not sure about X — let me verify" and then actually verify it
 - If you fixed issues: assume there are more. Look harder. Check related code paths.
@@ -114,6 +123,7 @@ Instead:
 ### 9. ALWAYS Run Lint and Type Checks
 
 After making changes, run:
+
 ```bash
 # Type check
 npx turbo typecheck
@@ -374,16 +384,17 @@ Response shapes (ALWAYS use these exact shapes):
 ```
 
 HTTP status codes (use the correct one, not just 200 and 500):
-  - 200: Success
-  - 201: Created
-  - 400: Bad request (validation error)
-  - 401: Unauthorized (not logged in)
-  - 403: Forbidden (logged in but wrong role)
-  - 404: Not found
-  - 409: Conflict (e.g., double booking)
-  - 422: Unprocessable entity (business rule violation)
-  - 429: Rate limited
-  - 500: Internal server error (log full error, return sanitized message)
+
+- 200: Success
+- 201: Created
+- 400: Bad request (validation error)
+- 401: Unauthorized (not logged in)
+- 403: Forbidden (logged in but wrong role)
+- 404: Not found
+- 409: Conflict (e.g., double booking)
+- 422: Unprocessable entity (business rule violation)
+- 429: Rate limited
+- 500: Internal server error (log full error, return sanitized message)
 
 ### Error Handling
 
@@ -396,7 +407,7 @@ export async function POST(request: Request) {
     if (!userId || !orgId) {
       return NextResponse.json(
         { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -405,8 +416,15 @@ export async function POST(request: Request) {
     const parsed = createBookingSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: parsed.error.flatten() } },
-        { status: 400 }
+        {
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid input',
+            details: parsed.error.flatten(),
+          },
+        },
+        { status: 400 },
       );
     }
 
@@ -414,8 +432,11 @@ export async function POST(request: Request) {
     const hasPermission = await checkPermission(userId, orgId, 'bookings:create');
     if (!hasPermission) {
       return NextResponse.json(
-        { success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to create bookings' } },
-        { status: 403 }
+        {
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You do not have permission to create bookings' },
+        },
+        { status: 403 },
       );
     }
 
@@ -426,7 +447,6 @@ export async function POST(request: Request) {
 
     // 5. Return success
     return NextResponse.json({ success: true, data: result }, { status: 201 });
-
   } catch (error) {
     // 6. Log full error, return sanitized message
     logger.error('booking_creation_failed', {
@@ -435,8 +455,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' } },
-      { status: 500 }
+      {
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' },
+      },
+      { status: 500 },
     );
   }
 }
@@ -496,7 +519,13 @@ Every API route and page MUST check the user's role before allowing access:
 const PERMISSIONS = {
   club_admin: ['*'], // all permissions
   club_manager: ['bookings:*', 'horses:*', 'riders:*', 'staff:read', 'finances:read', 'emails:*'],
-  coach: ['bookings:read', 'bookings:update_own', 'horses:read', 'riders:read', 'riders:update_notes'],
+  coach: [
+    'bookings:read',
+    'bookings:update_own',
+    'horses:read',
+    'riders:read',
+    'riders:update_notes',
+  ],
   horse_owner: ['horses:read_own', 'horses:update_own', 'bookings:read_own'],
   rider: ['bookings:create', 'bookings:read_own', 'profile:*'],
   parent: ['bookings:create_child', 'bookings:read_child', 'profile:*', 'payments:*'],
@@ -560,6 +589,7 @@ const PERMISSIONS = {
 ### Loading States
 
 Every component that fetches data MUST show ALL FOUR of these states. NO EXCEPTIONS:
+
 - **Loading**: Skeleton loaders (not spinners) that match the shape of the content
 - **Error**: Clear error message with retry button
 - **Empty**: Friendly empty state with illustration and action button ("No horses yet. Add your first horse.")

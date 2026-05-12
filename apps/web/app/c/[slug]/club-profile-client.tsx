@@ -8,16 +8,7 @@ import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
-import {
-  ArrowLeft,
-  MapPin,
-  Globe,
-  Instagram,
-  Facebook,
-  Users,
-  LogIn,
-  Loader2,
-} from 'lucide-react';
+import { ArrowLeft, MapPin, Globe, Instagram, Facebook, Users, LogIn, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -89,7 +80,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
   const joinCta = club.joinPolicy === 'open' ? 'Join stable' : 'Invite only';
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <header className="border-b">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/discover" className="flex items-center gap-2 text-sm font-medium">
@@ -118,7 +109,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
         <div className="relative -mt-16 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-end gap-4">
             {club.logoUrl ? (
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border-4 border-background bg-background shadow-md">
+              <div className="border-background bg-background h-24 w-24 shrink-0 overflow-hidden rounded-xl border-4 shadow-md">
                 <Image
                   src={club.logoUrl}
                   alt={`${club.name} logo`}
@@ -130,13 +121,13 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
               </div>
             ) : (
               <div
-                className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border-4 border-background text-3xl font-bold text-white shadow-md"
+                className="border-background flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border-4 text-3xl font-bold text-white shadow-md"
                 style={{ backgroundColor: primary }}
               >
                 {club.name[0]}
               </div>
             )}
-            <div className="pb-2 text-white drop-shadow-md sm:text-foreground sm:drop-shadow-none">
+            <div className="sm:text-foreground pb-2 text-white drop-shadow-md sm:drop-shadow-none">
               <h1 className="text-2xl font-bold sm:text-3xl">{club.name}</h1>
               {(club.city || club.country) && (
                 <p className="mt-1 flex items-center gap-1 text-sm">
@@ -152,11 +143,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
               size="lg"
               disabled={club.joinPolicy === 'invite_only' || joining}
               onClick={openJoinFlow}
-              style={
-                club.joinPolicy !== 'invite_only'
-                  ? { backgroundColor: primary }
-                  : undefined
-              }
+              style={club.joinPolicy !== 'invite_only' ? { backgroundColor: primary } : undefined}
             >
               {joining ? (
                 <>
@@ -183,7 +170,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
         <div className="mt-8 grid gap-6 md:grid-cols-[1fr_260px]">
           <div className="space-y-4">
             {club.shortDescription && (
-              <p className="text-lg text-muted-foreground">{club.shortDescription}</p>
+              <p className="text-muted-foreground text-lg">{club.shortDescription}</p>
             )}
             {club.description && (
               <Card>
@@ -198,19 +185,13 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
             <Card>
               <CardContent className="space-y-3 pt-6 text-sm">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Joining
-                  </p>
+                  <p className="text-muted-foreground text-xs uppercase tracking-wide">Joining</p>
                   <p className="mt-1 font-medium">
-                    {club.joinPolicy === 'open'
-                      ? 'Open — anyone can join'
-                      : 'Invitation only'}
+                    {club.joinPolicy === 'open' ? 'Open — anyone can join' : 'Invitation only'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Timezone
-                  </p>
+                  <p className="text-muted-foreground text-xs uppercase tracking-wide">Timezone</p>
                   <p className="mt-1 font-medium">{club.timezone}</p>
                 </div>
 
@@ -272,14 +253,13 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
       </main>
 
       <footer className="mt-20 border-t">
-        <div className="mx-auto max-w-5xl px-4 py-8 text-sm text-muted-foreground sm:px-6">
+        <div className="text-muted-foreground mx-auto max-w-5xl px-4 py-8 text-sm sm:px-6">
           Powered by{' '}
           <Link href="/" className="text-foreground underline-offset-4 hover:underline">
             Cavaliq
           </Link>
         </div>
       </footer>
-
     </div>
   );
 }

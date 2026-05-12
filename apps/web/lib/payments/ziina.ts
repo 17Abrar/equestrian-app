@@ -264,7 +264,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
     // Ziina doesn't expose `amount_received`; treat `amount` as received only
     // once the intent reaches a terminal success state. `undefined` for
     // non-terminal so callers don't conflate it with a 0-amount capture
-    // (audit AI-32e).
+    // (audit QA-32e).
     const amountReceived = status === 'succeeded' ? (json.amount ?? 0) : undefined;
 
     return { status, amountReceivedMinorUnits: amountReceived };

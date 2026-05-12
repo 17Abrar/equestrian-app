@@ -75,7 +75,10 @@ export async function getArenaById(
 }
 
 export async function createArena(clubId: string, data: ArenaCreate) {
-  const result = await db.insert(arenas).values({ ...data, clubId }).returning();
+  const result = await db
+    .insert(arenas)
+    .values({ ...data, clubId })
+    .returning();
   return result[0];
 }
 

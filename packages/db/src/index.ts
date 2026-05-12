@@ -13,7 +13,7 @@ if (!process.env.DATABASE_URL) {
 // Workers the native `globalThis.WebSocket` is used by `@neondatabase/
 // serverless`; the `ws` module must not be statically referenced there (it
 // pulls in node:net/tls which the Workers bundler cannot satisfy). Audit
-// AI-32j — switched from `require('ws')` to a lazy dynamic import inside
+// QA-32j — switched from `require('ws')` to a lazy dynamic import inside
 // the runtime guard so bundlers can tree-shake it out cleanly. The
 // `webSocketConstructor` only matters for `writeTransaction` (the WS
 // driver), which is async and awaits `wsPolyfillReady` before connecting.
@@ -106,26 +106,29 @@ export const db = new Proxy({} as HttpDb, {
  * keep this path narrow — most routes don't need it and use `db` over
  * HTTP instead.
  */
-export async function writeTransaction<T>(
-  fn: (tx: WsTx) => Promise<T>,
-): Promise<T> {
+export async function writeTransaction<T>(fn: (tx: WsTx) => Promise<T>): Promise<T> {
   // When a test harness has installed an ambient executor (via
   // `__runWithExecutorForTest`), join its transaction instead of opening
   // a real Postgres connection. The pglite-backed test executor exposes
   // the same `.transaction()` shape, and this lets us test
   // writeTransaction-wrapped queries (createBooking, cancelBooking, etc.)
-  // without a live Neon pool. Audit AI-22.
+  // without a live Neon pool. Audit QA-22.
   const testExecutor = executorStore.getStore();
-  if (testExecutor && typeof (testExecutor as { transaction?: unknown }).transaction === 'function') {
-    const txFn = (testExecutor as {
-      transaction: (cb: (tx: unknown) => Promise<T>) => Promise<T>;
-    }).transaction;
+  if (
+    testExecutor &&
+    typeof (testExecutor as { transaction?: unknown }).transaction === 'function'
+  ) {
+    const txFn = (
+      testExecutor as {
+        transaction: (cb: (tx: unknown) => Promise<T>) => Promise<T>;
+      }
+    ).transaction;
     return txFn.call(testExecutor, (tx: unknown) => {
       return executorStore.run(tx as AnyExecutor, () => fn(tx as WsTx));
     });
   }
 
-  // Audit AI-32j — the ws polyfill is needed before Pool tries to connect
+  // Audit QA-32j — the ws polyfill is needed before Pool tries to connect
   // (Node < 22 only). On Workers `globalThis.WebSocket` exists and this
   // resolves to a no-op on first call.
   await ensureWsPolyfill();
@@ -180,10 +183,7 @@ export type PoolDatabase = WsDb;
  * dispatches by method name at runtime, so any drizzle-like object
  * with the same surface works.
  */
-export function __runWithExecutorForTest<T>(
-  executor: unknown,
-  fn: () => Promise<T>,
-): Promise<T> {
+export function __runWithExecutorForTest<T>(executor: unknown, fn: () => Promise<T>): Promise<T> {
   return executorStore.run(executor as AnyExecutor, () =>
     rawExecutorStore.run(executor as AnyExecutor, fn),
   );

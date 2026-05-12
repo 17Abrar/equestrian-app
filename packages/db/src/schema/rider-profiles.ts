@@ -1,4 +1,15 @@
-import { pgTable, uuid, date, numeric, text, integer, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  date,
+  numeric,
+  text,
+  integer,
+  timestamp,
+  index,
+  uniqueIndex,
+  foreignKey,
+} from 'drizzle-orm/pg-core';
 import { skillLevelEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';

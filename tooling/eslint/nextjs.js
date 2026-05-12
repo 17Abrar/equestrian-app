@@ -1,4 +1,5 @@
 const base = require('./base');
+const nextPlugin = require('@next/eslint-plugin-next');
 const reactPlugin = require('eslint-plugin-react');
 const reactHooksPlugin = require('eslint-plugin-react-hooks');
 
@@ -7,10 +8,13 @@ module.exports = [
   ...base,
   {
     plugins: {
+      '@next/next': nextPlugin,
       react: reactPlugin,
       'react-hooks': reactHooksPlugin,
     },
     rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
       ...reactHooksPlugin.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',

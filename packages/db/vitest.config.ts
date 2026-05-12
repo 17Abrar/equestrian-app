@@ -9,10 +9,8 @@ export default defineConfig({
     // DATABASE_URL is set to something.
     env: {
       DATABASE_URL: 'postgres://test:test@localhost:5432/test',
-      DATABASE_URL_UNPOOLED:
-        'postgres://test:test@localhost:5432/test',
-      ENCRYPTION_KEY:
-        '0000000000000000000000000000000000000000000000000000000000000000',
+      DATABASE_URL_UNPOOLED: 'postgres://test:test@localhost:5432/test',
+      ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000',
     },
     // One WASM Postgres per test file keeps memory predictable; pglite
     // instances are ~20MB each and accumulate across tests otherwise.

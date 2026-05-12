@@ -33,11 +33,7 @@ const PAID_EVENTS = new Set([
 const FAILED_EVENTS = new Set(['DECLINED', 'FAILED', 'REVERSED', 'CANCELLED']);
 const REFUND_EVENTS = new Set(['REFUNDED', 'PARTIALLY_REFUNDED']);
 
-const HANDLED_EVENTS = new Set<string>([
-  ...PAID_EVENTS,
-  ...FAILED_EVENTS,
-  ...REFUND_EVENTS,
-]);
+const HANDLED_EVENTS = new Set<string>([...PAID_EVENTS, ...FAILED_EVENTS, ...REFUND_EVENTS]);
 
 interface NGeniusPayload {
   outletId?: string;
@@ -102,7 +98,7 @@ async function handlePost(request: NextRequest) {
   try {
     parsed = JSON.parse(body) as NGeniusPayload;
   } catch (err) {
-    // Audit AI-32g — only log the length, not the body. N-Genius
+    // Audit QA-32g — only log the length, not the body. N-Genius
     // payloads include cardholderName / last4 and a 200-char preview
     // could leak partial PII to log aggregators.
     logger.warn('n_genius_webhook_invalid_json', {
@@ -292,17 +288,15 @@ async function handlePost(request: NextRequest) {
     } else if (
       // Audit F-13 (2026-05-08 r6): livery flow now signals
       // permanentFailureReason (e.g. paid for a cancelled invoice).
-      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+      invoiceResult?.kind === 'matched' &&
+      invoiceResult.permanentFailureReason
     ) {
       await markWebhookEventPermanentlyFailed(
         'n_genius',
         event.eventId,
         invoiceResult.permanentFailureReason,
       );
-    } else if (
-      bookingMissed &&
-      (!invoiceResult || invoiceResult.kind === 'no_target')
-    ) {
+    } else if (bookingMissed && (!invoiceResult || invoiceResult.kind === 'no_target')) {
       await markWebhookEventPermanentlyFailed(
         'n_genius',
         event.eventId,

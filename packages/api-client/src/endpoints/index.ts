@@ -107,44 +107,32 @@ function toQuery<F extends object>(filters: F | undefined): string {
 export function createEndpoints(api: ApiClient) {
   return {
     horses: {
-      list: (
-        filters?: HorseListFilters,
-      ): Promise<PaginatedApiResponse<HorseListItem>> =>
+      list: (filters?: HorseListFilters): Promise<PaginatedApiResponse<HorseListItem>> =>
         api.getPaginated<HorseListItem>(`/api/v1/horses${toQuery(filters)}`),
       get: (horseId: string): Promise<ApiResponse<Horse>> =>
         api.get<Horse>(`/api/v1/horses/${horseId}`),
     },
     bookings: {
-      list: (
-        filters?: BookingListFilters,
-      ): Promise<PaginatedApiResponse<Booking>> =>
+      list: (filters?: BookingListFilters): Promise<PaginatedApiResponse<Booking>> =>
         api.getPaginated<Booking>(`/api/v1/bookings${toQuery(filters)}`),
       get: (bookingId: string): Promise<ApiResponse<Booking>> =>
         api.get<Booking>(`/api/v1/bookings/${bookingId}`),
     },
     bookingSlots: {
       // Non-paginated route (90-day window cap) — see use-bookings.ts.
-      list: (
-        filters?: BookingSlotFilters,
-      ): Promise<ApiResponse<BookingSlot[]>> =>
+      list: (filters?: BookingSlotFilters): Promise<ApiResponse<BookingSlot[]>> =>
         api.get<BookingSlot[]>(`/api/v1/booking-slots${toQuery(filters)}`),
     },
     arenas: {
-      list: (
-        filters?: ListFilters,
-      ): Promise<PaginatedApiResponse<Arena>> =>
+      list: (filters?: ListFilters): Promise<PaginatedApiResponse<Arena>> =>
         api.getPaginated<Arena>(`/api/v1/arenas${toQuery(filters)}`),
     },
     lessonTypes: {
-      list: (
-        filters?: ListFilters,
-      ): Promise<PaginatedApiResponse<LessonType>> =>
+      list: (filters?: ListFilters): Promise<PaginatedApiResponse<LessonType>> =>
         api.getPaginated<LessonType>(`/api/v1/lesson-types${toQuery(filters)}`),
     },
     riders: {
-      list: (
-        filters?: RiderListFilters,
-      ): Promise<PaginatedApiResponse<Rider>> =>
+      list: (filters?: RiderListFilters): Promise<PaginatedApiResponse<Rider>> =>
         api.getPaginated<Rider>(`/api/v1/riders${toQuery(filters)}`),
       get: (riderId: string): Promise<ApiResponse<Rider>> =>
         api.get<Rider>(`/api/v1/riders/${riderId}`),
@@ -156,9 +144,7 @@ export function createEndpoints(api: ApiClient) {
         api.getPaginated<ClubMember>(`/api/v1/members${toQuery(filters)}`),
     },
     competitions: {
-      list: (
-        filters?: CompetitionFilters,
-      ): Promise<PaginatedApiResponse<Competition>> =>
+      list: (filters?: CompetitionFilters): Promise<PaginatedApiResponse<Competition>> =>
         api.getPaginated<Competition>(`/api/v1/competitions${toQuery(filters)}`),
       get: (competitionId: string): Promise<ApiResponse<Competition>> =>
         api.get<Competition>(`/api/v1/competitions/${competitionId}`),
@@ -182,37 +168,27 @@ export function createEndpoints(api: ApiClient) {
             `/api/v1/competitions/${competitionId}/classes/${classId}/results`,
           ),
       },
-      calendar: (
-        dateFrom: string,
-        dateTo: string,
-      ): Promise<ApiResponse<CalendarCompetition[]>> =>
+      calendar: (dateFrom: string, dateTo: string): Promise<ApiResponse<CalendarCompetition[]>> =>
         api.get<CalendarCompetition[]>(
           `/api/v1/competitions/calendar?dateFrom=${dateFrom}&dateTo=${dateTo}`,
         ),
     },
     settings: {
-      get: (): Promise<ApiResponse<ClubSettings>> =>
-        api.get<ClubSettings>('/api/v1/settings'),
+      get: (): Promise<ApiResponse<ClubSettings>> => api.get<ClubSettings>('/api/v1/settings'),
     },
     finances: {
       overview: (): Promise<ApiResponse<FinanceOverview>> =>
         api.get<FinanceOverview>('/api/v1/finances/overview'),
       coupons: {
-        list: (
-          filters?: FinanceListFilters,
-        ): Promise<PaginatedApiResponse<Coupon>> =>
+        list: (filters?: FinanceListFilters): Promise<PaginatedApiResponse<Coupon>> =>
           api.getPaginated<Coupon>(`/api/v1/finances/coupons${toQuery(filters)}`),
       },
       invoices: {
-        list: (
-          filters?: FinanceListFilters,
-        ): Promise<PaginatedApiResponse<Invoice>> =>
+        list: (filters?: FinanceListFilters): Promise<PaginatedApiResponse<Invoice>> =>
           api.getPaginated<Invoice>(`/api/v1/finances/invoices${toQuery(filters)}`),
       },
       payments: {
-        list: (
-          filters?: FinanceListFilters,
-        ): Promise<PaginatedApiResponse<Payment>> =>
+        list: (filters?: FinanceListFilters): Promise<PaginatedApiResponse<Payment>> =>
           api.getPaginated<Payment>(`/api/v1/finances/payments${toQuery(filters)}`),
       },
       expenses: {
@@ -224,29 +200,18 @@ export function createEndpoints(api: ApiClient) {
     },
     horseHealth: {
       records: {
-        list: (
-          horseId: string,
-          recordType?: string,
-        ): Promise<ApiResponse<HealthRecord[]>> =>
+        list: (horseId: string, recordType?: string): Promise<ApiResponse<HealthRecord[]>> =>
           api.get<HealthRecord[]>(
             `/api/v1/horses/${horseId}/health${recordType ? `?recordType=${recordType}` : ''}`,
           ),
       },
       medications: {
-        list: (
-          horseId: string,
-          activeOnly?: boolean,
-        ): Promise<ApiResponse<Medication[]>> =>
+        list: (horseId: string, activeOnly?: boolean): Promise<ApiResponse<Medication[]>> =>
           api.get<Medication[]>(
             `/api/v1/horses/${horseId}/medications${activeOnly ? '?activeOnly=true' : ''}`,
           ),
-        logs: (
-          horseId: string,
-          medicationId: string,
-        ): Promise<ApiResponse<MedicationLog[]>> =>
-          api.get<MedicationLog[]>(
-            `/api/v1/horses/${horseId}/medications/${medicationId}/logs`,
-          ),
+        logs: (horseId: string, medicationId: string): Promise<ApiResponse<MedicationLog[]>> =>
+          api.get<MedicationLog[]>(`/api/v1/horses/${horseId}/medications/${medicationId}/logs`),
       },
       feeding: {
         list: (horseId: string): Promise<ApiResponse<FeedingPlan[]>> =>
@@ -257,10 +222,7 @@ export function createEndpoints(api: ApiClient) {
           api.get<ExerciseSchedule[]>(`/api/v1/horses/${horseId}/exercise`),
       },
       documents: {
-        list: (
-          horseId: string,
-          category?: string,
-        ): Promise<ApiResponse<HorseDocument[]>> =>
+        list: (horseId: string, category?: string): Promise<ApiResponse<HorseDocument[]>> =>
           api.get<HorseDocument[]>(
             `/api/v1/horses/${horseId}/documents${category ? `?category=${category}` : ''}`,
           ),

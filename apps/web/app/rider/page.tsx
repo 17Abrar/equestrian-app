@@ -45,13 +45,13 @@ export default async function RiderHomePage() {
 function NoClubEmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center sm:py-20">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-        <Compass className="h-8 w-8 text-primary" />
+      <div className="bg-primary/10 flex h-16 w-16 items-center justify-center rounded-full">
+        <Compass className="text-primary h-8 w-8" />
       </div>
       <h1 className="mt-6 text-2xl font-bold sm:text-3xl">Find a stable to ride at</h1>
-      <p className="mt-2 max-w-md text-muted-foreground">
-        You&apos;re signed in but haven&apos;t joined a stable yet. Browse the directory to
-        find one near you — you can join as many as you like.
+      <p className="text-muted-foreground mt-2 max-w-md">
+        You&apos;re signed in but haven&apos;t joined a stable yet. Browse the directory to find one
+        near you — you can join as many as you like.
       </p>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -67,8 +67,8 @@ function NoClubEmptyState() {
       </div>
 
       <Card className="mt-10 w-full max-w-xl text-left">
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">How this works</p>
+        <CardContent className="text-muted-foreground p-6 text-sm">
+          <p className="text-foreground font-medium">How this works</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Browse public stables on the directory.</li>
             <li>Tap &ldquo;Join&rdquo; on any open stable to become a member instantly.</li>

@@ -108,22 +108,13 @@ const ROLES: readonly RoleInfo[] = [
     role: 'groom',
     label: 'Groom',
     description: 'Daily horse care. Reads horses, manages care tasks.',
-    permissions: [
-      'dashboard:read',
-      'horses:read',
-      'tasks:*',
-      'horses:update_care',
-    ],
+    permissions: ['dashboard:read', 'horses:read', 'tasks:*', 'horses:update_care'],
   },
   {
     role: 'veterinarian',
     label: 'Veterinarian',
     description: 'Reads horses and updates medical records.',
-    permissions: [
-      'horses:read',
-      'horses:read_medical',
-      'horses:update_medical',
-    ],
+    permissions: ['horses:read', 'horses:read_medical', 'horses:update_medical'],
   },
 ];
 
@@ -141,7 +132,15 @@ const CAPABILITIES: readonly Capability[] = [
   { label: 'Staff', tokens: ['staff:*'] },
   { label: 'Owners', tokens: ['owners:*'] },
   { label: 'Finances', tokens: ['finances:*', 'payments:*'] },
-  { label: 'Competitions', tokens: ['competitions:*', 'competitions:read', 'competitions:register', 'competitions:register_child'] },
+  {
+    label: 'Competitions',
+    tokens: [
+      'competitions:*',
+      'competitions:read',
+      'competitions:register',
+      'competitions:register_child',
+    ],
+  },
   { label: 'Emails', tokens: ['emails:*'] },
   { label: 'Reports', tokens: ['reports:*', 'reports:read'] },
   { label: 'Settings', tokens: ['settings:*'] },
@@ -165,8 +164,8 @@ export function PermissionsMatrix() {
         <CardHeader>
           <CardTitle>Role Permissions</CardTitle>
           <CardDescription>
-            What each role can access across your club. Roles are assigned in Clerk when you
-            invite a staff member or approve a rider. Custom role editing is on the roadmap.
+            What each role can access across your club. Roles are assigned in Clerk when you invite
+            a staff member or approve a rider. Custom role editing is on the roadmap.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -175,7 +174,9 @@ export function PermissionsMatrix() {
               <TableRow>
                 <TableHead className="w-[220px]">Role</TableHead>
                 {CAPABILITIES.map((cap) => (
-                  <TableHead key={cap.label} className="text-center">{cap.label}</TableHead>
+                  <TableHead key={cap.label} className="text-center">
+                    {cap.label}
+                  </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -185,7 +186,7 @@ export function PermissionsMatrix() {
                   <TableCell>
                     <div className="space-y-0.5">
                       <p className="font-medium">{role.label}</p>
-                      <p className="text-xs text-muted-foreground">{role.description}</p>
+                      <p className="text-muted-foreground text-xs">{role.description}</p>
                     </div>
                   </TableCell>
                   {CAPABILITIES.map((cap) => (
@@ -193,7 +194,10 @@ export function PermissionsMatrix() {
                       {hasCapability(role, cap) ? (
                         <Check className="mx-auto h-4 w-4 text-green-600" aria-label="allowed" />
                       ) : (
-                        <X className="mx-auto h-4 w-4 text-muted-foreground/40" aria-label="not allowed" />
+                        <X
+                          className="text-muted-foreground/40 mx-auto h-4 w-4"
+                          aria-label="not allowed"
+                        />
                       )}
                     </TableCell>
                   ))}
@@ -208,16 +212,16 @@ export function PermissionsMatrix() {
         <CardHeader>
           <CardTitle>How roles are assigned</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
+        <CardContent className="text-muted-foreground space-y-3 text-sm">
           <p>
             Staff roles (Manager, Coach, Groom, Veterinarian) are set when you invite someone from
             the <Badge variant="outline">Staff</Badge> page. Horse Owners are added from the{' '}
-            <Badge variant="outline">Owners</Badge> page and get automatic access to the horses
-            they own. Riders and Parents self-sign-up and receive the default rider/parent role.
+            <Badge variant="outline">Owners</Badge> page and get automatic access to the horses they
+            own. Riders and Parents self-sign-up and receive the default rider/parent role.
           </p>
           <p>
-            To change someone&apos;s role, remove and re-invite them from the relevant page. A
-            full role-reassignment UI is planned for a later release.
+            To change someone&apos;s role, remove and re-invite them from the relevant page. A full
+            role-reassignment UI is planned for a later release.
           </p>
         </CardContent>
       </Card>

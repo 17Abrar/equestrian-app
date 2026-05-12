@@ -30,9 +30,7 @@ import { safeHref } from '@/lib/safe-href';
 // `isPublicListing` on save so the two stay in sync.
 const discoveryFormSchema = z.object({
   isPublicListing: z.boolean(),
-  shortDescription: z
-    .string()
-    .max(280, 'Up to 280 characters'),
+  shortDescription: z.string().max(280, 'Up to 280 characters'),
 });
 type DiscoveryFormValues = z.infer<typeof discoveryFormSchema>;
 
@@ -91,22 +89,18 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
                 control={form.control}
                 name="isPublicListing"
                 render={({ field }) => (
-                  <FormItem className="flex items-start justify-between gap-4 rounded-lg border p-4 space-y-0">
+                  <FormItem className="flex items-start justify-between gap-4 space-y-0 rounded-lg border p-4">
                     <div className="space-y-1">
                       <FormLabel>Let riders discover and join instantly</FormLabel>
                       <FormDescription>
                         Your club appears on the public stable directory at{' '}
-                        <code className="rounded bg-muted px-1">/discover</code>,
-                        and any signed-in rider can join with one tap — no
-                        approval step. Turn this off to keep the club
-                        invite-only.
+                        <code className="bg-muted rounded px-1">/discover</code>, and any signed-in
+                        rider can join with one tap — no approval step. Turn this off to keep the
+                        club invite-only.
                       </FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -129,7 +123,7 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
                         {...field}
                       />
                     </FormControl>
-                    <p className="text-right text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-right text-xs">
                       {shortDescription.length} / 280
                     </p>
                     <FormMessage />
@@ -137,10 +131,10 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
                 )}
               />
 
-              <div className="flex items-center justify-between rounded-lg bg-muted/30 p-4">
+              <div className="bg-muted/30 flex items-center justify-between rounded-lg p-4">
                 <div>
                   <p className="text-sm font-medium">Your public URL</p>
-                  <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                  <p className="text-muted-foreground mt-0.5 font-mono text-xs">
                     cavaliq.com{publicUrl}
                   </p>
                 </div>
@@ -166,15 +160,15 @@ export function DiscoveryForm({ settings }: { settings: ClubSettings }) {
         <CardHeader>
           <CardTitle>Sharing tips</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
+        <CardContent className="text-muted-foreground space-y-2 text-sm">
           <p>
-            Turn discovery on before sharing your profile link on Instagram, Facebook, or
-            WhatsApp. Posts with your club&apos;s logo and cover photo drive the most joins.
+            Turn discovery on before sharing your profile link on Instagram, Facebook, or WhatsApp.
+            Posts with your club&apos;s logo and cover photo drive the most joins.
           </p>
           <p>
             Keep public discovery on while you&apos;re launching — friction kills conversion. Turn
-            it off to make the club <span className="font-medium">Invite only</span> when you
-            want to vet riders manually before they can book.
+            it off to make the club <span className="font-medium">Invite only</span> when you want
+            to vet riders manually before they can book.
           </p>
         </CardContent>
       </Card>

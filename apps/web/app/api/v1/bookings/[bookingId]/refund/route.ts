@@ -8,7 +8,13 @@ import {
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
 import { bookings as bookingsTable } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, parseOptionalBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseOptionalBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { withProviderRetry } from '@/lib/payments/retry';
@@ -94,16 +100,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (booking.amount == null) {
-        return errorResponse(
-          'NO_BOOKING_AMOUNT',
-          'Booking has no captured amount to refund.',
-          422,
-        );
+        return errorResponse('NO_BOOKING_AMOUNT', 'Booking has no captured amount to refund.', 422);
       }
 
       const refundedSoFar = booking.refundedAmountMinor ?? 0;
       // Cancellation/no-show fees are owed to the club out of the original
-      // amount and must NOT be returned to the rider on refund. Audit AI-24.
+      // amount and must NOT be returned to the rider on refund. Audit QA-24.
       const cancellationFee = booking.cancellationFee ?? 0;
       const remaining = booking.amount - refundedSoFar - cancellationFee;
 
@@ -171,12 +173,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               cancellationFee: bookingsTable.cancellationFee,
             })
             .from(bookingsTable)
-            .where(
-              and(
-                eq(bookingsTable.id, bookingId),
-                eq(bookingsTable.clubId, ctx.clubId),
-              ),
-            )
+            .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.clubId, ctx.clubId)))
             .for('update')
             .limit(1);
           const locked = lockedRows[0];
@@ -420,10 +417,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     },
     {
       requiredPermission: 'bookings:update',
-      // Audit AI-22 — refunds call the provider's refund API and write
+      // Audit QA-22 — refunds call the provider's refund API and write
       // the booking ledger; tighten from the default 60/min so a runaway
       // admin script can't drain the provider's idempotency space.
-      // failClosed (audit AI-45) — money-moving endpoint, an Upstash
+      // failClosed (audit QA-45) — money-moving endpoint, an Upstash
       // outage must not lift the cap.
       rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
       routeKey: 'booking_refund',

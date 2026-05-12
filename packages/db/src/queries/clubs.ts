@@ -2,7 +2,9 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../index';
 import { clubs } from '../schema/clubs';
 
-type ClubUpdate = Partial<Omit<typeof clubs.$inferInsert, 'id' | 'createdAt' | 'updatedAt' | 'clerkOrgId'>>;
+type ClubUpdate = Partial<
+  Omit<typeof clubs.$inferInsert, 'id' | 'createdAt' | 'updatedAt' | 'clerkOrgId'>
+>;
 
 // `deleted_at` is set by the Clerk `organization.deleted` webhook. Filtering
 // it out here means downstream callers (cron emails, fee calculations, brand

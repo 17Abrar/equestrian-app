@@ -18,10 +18,7 @@ import {
   Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  type CreateArenaInput,
-  type CreateLessonTypeInput,
-} from '@equestrian/shared/schemas';
+import { type CreateArenaInput, type CreateLessonTypeInput } from '@equestrian/shared/schemas';
 import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
 import { formatMoney } from '@equestrian/shared/utils';
 import { useUpdateSettings } from '@/hooks/use-settings';
@@ -126,15 +123,11 @@ function StepIndicator({ currentStep }: StepIndicatorProps) {
                     : 'bg-muted text-muted-foreground'
               }`}
             >
-              {isCompleted ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Icon className="h-4 w-4" />
-              )}
+              {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
               <span className="hidden sm:inline">{step.label}</span>
             </div>
             {index < STEPS.length - 1 && (
-              <ChevronRight className="mx-1 h-4 w-4 text-muted-foreground" />
+              <ChevronRight className="text-muted-foreground mx-1 h-4 w-4" />
             )}
           </div>
         );
@@ -184,7 +177,8 @@ function WelcomeStep({ onNext }: WelcomeStepProps) {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Welcome to Cavaliq</CardTitle>
         <CardDescription>
-          Let&apos;s set up your club in a few quick steps. You can always change these later in Settings.
+          Let&apos;s set up your club in a few quick steps. You can always change these later in
+          Settings.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -240,11 +234,7 @@ function WelcomeStep({ onNext }: WelcomeStepProps) {
               )}
             />
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={updateSettings.isPending}
-            >
+            <Button type="submit" className="w-full" disabled={updateSettings.isPending}>
               {updateSettings.isPending ? 'Saving...' : 'Continue'}
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
@@ -297,9 +287,7 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
     <Card className="mx-auto max-w-lg">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Add Your Arenas</CardTitle>
-        <CardDescription>
-          Where do your lessons take place? Add at least one arena.
-        </CardDescription>
+        <CardDescription>Where do your lessons take place? Add at least one arena.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Existing arenas */}
@@ -311,7 +299,7 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
                 className="flex items-center justify-between rounded-lg border px-4 py-2"
               >
                 <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <MapPin className="text-muted-foreground h-4 w-4" />
                   <span className="font-medium">{arena.name}</span>
                 </div>
                 <div className="flex gap-1">
@@ -383,17 +371,13 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
             <ChevronLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
-          <Button
-            onClick={onNext}
-            className="flex-1"
-            disabled={arenas.length === 0}
-          >
+          <Button onClick={onNext} className="flex-1" disabled={arenas.length === 0}>
             Continue
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
         {arenas.length === 0 && (
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-center text-xs">
             Add at least one arena to continue
           </p>
         )}
@@ -500,7 +484,7 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
                   />
                   <span className="font-medium">{lt.name}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="text-muted-foreground flex items-center gap-2 text-sm">
                   <span>{lt.durationMinutes}min</span>
                   <span>{formatMoney(lt.price, lt.currency)}</span>
                   <span>max {lt.maxRiders}</span>
@@ -513,13 +497,13 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
         {/* Quick-start suggestions */}
         {availableSuggestions.length > 0 && (
           <div>
-            <p className="mb-2 text-sm font-medium text-muted-foreground">Quick start:</p>
+            <p className="text-muted-foreground mb-2 text-sm font-medium">Quick start:</p>
             <div className="flex flex-wrap gap-2">
               {availableSuggestions.map((s) => (
                 <Badge
                   key={s}
                   variant="outline"
-                  className="cursor-pointer hover:bg-primary/10"
+                  className="hover:bg-primary/10 cursor-pointer"
                   onClick={() => selectSuggestion(s)}
                 >
                   <Plus className="mr-1 h-3 w-3" />
@@ -626,17 +610,13 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
             <ChevronLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
-          <Button
-            onClick={onNext}
-            className="flex-1"
-            disabled={lessonTypes.length === 0}
-          >
+          <Button onClick={onNext} className="flex-1" disabled={lessonTypes.length === 0}>
             Continue
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
         {lessonTypes.length === 0 && (
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-center text-xs">
             Add at least one lesson type to continue
           </p>
         )}
@@ -660,18 +640,18 @@ function PaymentsStep({ onNext, onBack }: PaymentsStepProps) {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Accept Payments</CardTitle>
         <CardDescription>
-          Connect a payment processor so riders can pay for lessons online. You can finish
-          setup without this and add it later.
+          Connect a payment processor so riders can pay for lessons online. You can finish setup
+          without this and add it later.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <p>
-            Stripe uses an OAuth redirect — clicking &ldquo;Connect Stripe&rdquo; will leave
-            the wizard. If you&apos;d rather finish onboarding first, pick Stripe from{' '}
-            <span className="font-medium">Settings &rarr; Payments</span> after setup. N-Genius
-            and Ziina connect inline here without leaving.
+            Stripe uses an OAuth redirect — clicking &ldquo;Connect Stripe&rdquo; will leave the
+            wizard. If you&apos;d rather finish onboarding first, pick Stripe from{' '}
+            <span className="font-medium">Settings &rarr; Payments</span> after setup. N-Genius and
+            Ziina connect inline here without leaving.
           </p>
         </div>
 
@@ -687,7 +667,7 @@ function PaymentsStep({ onNext, onBack }: PaymentsStepProps) {
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
-        <p className="text-center text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-center text-xs">
           Payments are optional at setup — you can connect a processor any time.
         </p>
       </CardContent>
@@ -765,7 +745,7 @@ function StaffStep({ onComplete, onBack }: StaffStepProps) {
               >
                 <div>
                   <span className="font-medium">{member.displayName}</span>
-                  <span className="ml-2 text-sm text-muted-foreground">{member.email}</span>
+                  <span className="text-muted-foreground ml-2 text-sm">{member.email}</span>
                 </div>
                 <Badge variant="secondary">{member.role.replace('_', ' ')}</Badge>
               </div>
@@ -826,12 +806,7 @@ function StaffStep({ onComplete, onBack }: StaffStepProps) {
                 </FormItem>
               )}
             />
-            <Button
-              type="submit"
-              variant="outline"
-              className="w-full"
-              disabled={isSubmitting}
-            >
+            <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting}>
               <Plus className="mr-2 h-4 w-4" />
               {isSubmitting ? 'Adding...' : 'Add Staff Member'}
             </Button>
@@ -876,30 +851,30 @@ export default function OnboardingPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
+    <div className="from-background to-muted/30 min-h-screen bg-gradient-to-b">
       <div className="mx-auto max-w-3xl px-4 py-12">
         {/* Step indicator */}
         <div className="mb-10">
           <StepIndicator currentStep={step} />
         </div>
 
-        {/* Loading overlay for completion. Audit AI-32d — skeleton card
+        {/* Loading overlay for completion. Audit QA-32d — skeleton card
             previewing the next dashboard view rather than a generic
             spinner; CLAUDE.md mandates skeleton-over-spinner. */}
         {completing && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4">
-            <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-md">
+          <div className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div className="bg-card w-full max-w-md rounded-xl border p-6 shadow-md">
               <div className="space-y-3">
-                <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
-                <div className="h-3 w-full animate-pulse rounded bg-muted" />
-                <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+                <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
+                <div className="bg-muted h-3 w-full animate-pulse rounded" />
+                <div className="bg-muted h-3 w-4/5 animate-pulse rounded" />
                 <div className="grid grid-cols-3 gap-3 pt-2">
-                  <div className="h-16 animate-pulse rounded bg-muted" />
-                  <div className="h-16 animate-pulse rounded bg-muted" />
-                  <div className="h-16 animate-pulse rounded bg-muted" />
+                  <div className="bg-muted h-16 animate-pulse rounded" />
+                  <div className="bg-muted h-16 animate-pulse rounded" />
+                  <div className="bg-muted h-16 animate-pulse rounded" />
                 </div>
               </div>
-              <p className="mt-4 text-center text-sm text-muted-foreground">
+              <p className="text-muted-foreground mt-4 text-center text-sm">
                 Setting up your dashboard...
               </p>
             </div>

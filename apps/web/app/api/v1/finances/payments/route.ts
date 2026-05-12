@@ -6,7 +6,7 @@ import { withAuth, paginatedResponse, validateInput } from '@/lib/api-utils';
 
 // Reuse `paginationSchema` (caps `pageSize` at MAX_PAGE_SIZE) so this
 // route can't be coerced into pulling the full payment ledger via
-// `?pageSize=999999999`. Audit AI-32f — status restricted to the actual
+// `?pageSize=999999999`. Audit QA-32f — status restricted to the actual
 // enum values; date fields locked to YYYY-MM-DD so a malformed value
 // 500s with a 400 instead of crashing the SQL `>=`.
 const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

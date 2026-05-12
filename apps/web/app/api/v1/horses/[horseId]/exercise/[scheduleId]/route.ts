@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { updateExerciseScheduleSchema } from '@equestrian/shared/schemas';
 import { updateExerciseSchedule, deleteExerciseSchedule } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ horseId: string; scheduleId: string }>;

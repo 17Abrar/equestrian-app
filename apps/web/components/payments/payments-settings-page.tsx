@@ -66,28 +66,28 @@ export function PaymentsSettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-        <p className="mt-1 text-muted-foreground">
-          Connect a payment processor so riders can pay online. Only one provider is active at
-          a time — new bookings route through the active one.
+        <p className="text-muted-foreground mt-1">
+          Connect a payment processor so riders can pay online. Only one provider is active at a
+          time — new bookings route through the active one.
         </p>
       </div>
 
       <PaymentsPanel />
 
-      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">Which provider should I pick?</p>
+      <div className="bg-muted/30 text-muted-foreground rounded-lg border p-4 text-sm">
+        <p className="text-foreground font-medium">Which provider should I pick?</p>
         <ul className="mt-2 space-y-1 text-xs leading-relaxed">
           <li>
-            <span className="font-medium">Stripe</span> — widest card support, Apple Pay/Google
-            Pay out of the box, strong fraud tooling. Best if you accept international riders.
+            <span className="font-medium">Stripe</span> — widest card support, Apple Pay/Google Pay
+            out of the box, strong fraud tooling. Best if you accept international riders.
           </li>
           <li>
-            <span className="font-medium">N-Genius</span> — UAE-native, works with Mada and
-            local bank cards. Best if most of your riders pay in AED with local cards.
+            <span className="font-medium">N-Genius</span> — UAE-native, works with Mada and local
+            bank cards. Best if most of your riders pay in AED with local cards.
           </li>
           <li>
-            <span className="font-medium">Ziina</span> — fast onboarding, low-friction Ziina
-            wallet and card payments for UAE customers.
+            <span className="font-medium">Ziina</span> — fast onboarding, low-friction Ziina wallet
+            and card payments for UAE customers.
           </li>
         </ul>
       </div>

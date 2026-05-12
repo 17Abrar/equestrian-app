@@ -9,9 +9,7 @@ export async function GET() {
     // fall back to a direct fetch in that case.
     const [club, memberships] = await Promise.all([
       getClubById(ctx.clubId),
-      ctx.memberships
-        ? Promise.resolve(ctx.memberships)
-        : getActiveMembershipsForUser(ctx.userId),
+      ctx.memberships ? Promise.resolve(ctx.memberships) : getActiveMembershipsForUser(ctx.userId),
     ]);
 
     return successResponse({
@@ -19,9 +17,7 @@ export async function GET() {
       memberId: ctx.memberId,
       orgId: ctx.orgId,
       role: ctx.orgRole,
-      activeClub: club
-        ? { id: club.id, name: club.name, slug: club.slug }
-        : null,
+      activeClub: club ? { id: club.id, name: club.name, slug: club.slug } : null,
       memberships,
     });
   });

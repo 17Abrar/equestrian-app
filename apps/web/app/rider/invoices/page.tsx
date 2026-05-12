@@ -67,8 +67,7 @@ function InvoicesListSkeleton({ rows = 3 }: { rows?: number }) {
 function useMyLiveryInvoices() {
   return useQuery({
     queryKey: ['me', 'livery-invoices'],
-    queryFn: () =>
-      fetchJson<ApiSuccessResponse<MyLiveryInvoice[]>>('/api/v1/me/livery-invoices'),
+    queryFn: () => fetchJson<ApiSuccessResponse<MyLiveryInvoice[]>>('/api/v1/me/livery-invoices'),
     staleTime: STALE_TIME_FREQUENT,
   });
 }
@@ -77,9 +76,7 @@ export default function RiderInvoicesPage() {
   const { data, isLoading, isError, error, refetch } = useMyLiveryInvoices();
   const invoices = data?.data ?? [];
 
-  const outstanding = invoices.filter(
-    (i) => i.status === 'pending' || i.status === 'overdue',
-  );
+  const outstanding = invoices.filter((i) => i.status === 'pending' || i.status === 'overdue');
   const settled = invoices.filter((i) => i.status === 'paid');
   const cancelled = invoices.filter((i) => i.status === 'cancelled');
 
@@ -118,17 +115,11 @@ export default function RiderInvoicesPage() {
   );
 }
 
-function Section({
-  title,
-  invoices,
-}: {
-  title: string;
-  invoices: MyLiveryInvoice[];
-}) {
+function Section({ title, invoices }: { title: string; invoices: MyLiveryInvoice[] }) {
   return (
     <section>
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-muted-foreground text-sm font-semibold uppercase tracking-wide">
           {title}
         </h2>
         <Badge variant="secondary">{invoices.length}</Badge>
@@ -147,8 +138,8 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
   return (
     <Card>
       <CardContent className="flex flex-wrap items-start gap-4 p-4">
-        <div className="rounded-md bg-muted p-3">
-          <Receipt className="h-5 w-5 text-muted-foreground" />
+        <div className="bg-muted rounded-md p-3">
+          <Receipt className="text-muted-foreground h-5 w-5" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -156,10 +147,10 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
             <p className="truncate font-semibold">{invoice.horseName}</p>
             <StatusBadge status={invoice.status} />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             {invoice.clubName} · {invoice.invoiceNumber}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-xs">
             {invoice.periodStart} → {invoice.periodEnd}
           </p>
         </div>
@@ -169,33 +160,23 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
             {formatCurrency(invoice.amountMinorUnits, invoice.currency)}
           </p>
           {invoice.status === 'paid' && invoice.paidAt && (
-            <p className="text-xs text-muted-foreground">
-              Paid {formatDate(invoice.paidAt)}
-            </p>
+            <p className="text-muted-foreground text-xs">Paid {formatDate(invoice.paidAt)}</p>
           )}
-          {payable && (
-            <p className="text-xs text-muted-foreground">Due {invoice.dueDate}</p>
-          )}
+          {payable && <p className="text-muted-foreground text-xs">Due {invoice.dueDate}</p>}
           {payable && invoice.payLink && (
             <Button size="sm" asChild className="mt-1">
               {/* Audit F-18 (2026-05-06): server-stored URL still goes
                   through safeHref — defense-in-depth at the render
                   boundary. Mirrors the helper's adoption in
                   livery-tab.tsx, subscription-panel.tsx, etc. */}
-              <a
-                href={safeHref(invoice.payLink)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={safeHref(invoice.payLink)} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                 Pay now
               </a>
             </Button>
           )}
           {payable && !invoice.payLink && (
-            <p className="text-xs text-muted-foreground">
-              Pay link coming from {invoice.clubName}
-            </p>
+            <p className="text-muted-foreground text-xs">Pay link coming from {invoice.clubName}</p>
           )}
         </div>
       </CardContent>

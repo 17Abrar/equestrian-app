@@ -39,85 +39,86 @@ import { NextResponse } from 'next/server';
 import { BookingConfirmation } from '@equestrian/email-templates/booking-confirmation';
 
 export async function GET(request: NextRequest) {
-  return withAuth(
-    async (ctx) => {
-      const searchParams = Object.fromEntries(request.nextUrl.searchParams);
-      const filters = validateInput(bookingFiltersSchema, searchParams);
+  return withAuth(async (ctx) => {
+    const searchParams = Object.fromEntries(request.nextUrl.searchParams);
+    const filters = validateInput(bookingFiltersSchema, searchParams);
 
-      const canReadAll = hasPermission(ctx.orgRole, 'bookings:read');
-      const canReadOwn = hasPermission(ctx.orgRole, 'bookings:read_own');
-      const canReadChild = hasPermission(ctx.orgRole, 'bookings:read_child');
+    const canReadAll = hasPermission(ctx.orgRole, 'bookings:read');
+    const canReadOwn = hasPermission(ctx.orgRole, 'bookings:read_own');
+    const canReadChild = hasPermission(ctx.orgRole, 'bookings:read_child');
 
-      if (!canReadAll && !canReadOwn && !canReadChild) {
-        return errorResponse('FORBIDDEN', 'You do not have permission to view bookings', 403);
+    if (!canReadAll && !canReadOwn && !canReadChild) {
+      return errorResponse('FORBIDDEN', 'You do not have permission to view bookings', 403);
+    }
+
+    // Riders MUST be scoped to their own memberId; parents may also query
+    // any rider whose `rider_profiles.parent_member_id` points at them.
+    // The parent-child relation lives on rider_profiles (audit H-7), not
+    // club_members, so the audit's earlier "schema doesn't model it" note
+    // missed this column.
+    let riderMemberIdFilter = filters.riderMemberId;
+    let riderMemberIdsFilter: string[] | undefined;
+
+    if (!canReadAll) {
+      if (!ctx.memberId) {
+        return errorResponse(
+          'NO_MEMBER',
+          'Member profile not found. Contact your club admin.',
+          403,
+        );
       }
 
-      // Riders MUST be scoped to their own memberId; parents may also query
-      // any rider whose `rider_profiles.parent_member_id` points at them.
-      // The parent-child relation lives on rider_profiles (audit H-7), not
-      // club_members, so the audit's earlier "schema doesn't model it" note
-      // missed this column.
-      let riderMemberIdFilter = filters.riderMemberId;
-      let riderMemberIdsFilter: string[] | undefined;
-
-      if (!canReadAll) {
-        if (!ctx.memberId) {
-          return errorResponse('NO_MEMBER', 'Member profile not found. Contact your club admin.', 403);
-        }
-
-        if (filters.riderMemberId) {
-          const isSelf = filters.riderMemberId === ctx.memberId;
-          if (!isSelf) {
-            const isDependent =
-              canReadChild &&
-              (await isParentOf(ctx.clubId, ctx.memberId, filters.riderMemberId));
-            if (!isDependent) {
-              // Audit F-22 (2026-05-08 r6): return 200 + empty list
-              // instead of 403. The previous 403-vs-200 split let a
-              // tenant member iterate `?riderMemberId=<arbitrary>` and
-              // distinguish "exists but not yours" from "no bookings"
-              // — a within-tenant info-disclosure surface. Empty list
-              // collapses both cases. Rider members are still
-              // rate-limited at 60/min, so this isn't a probing tool;
-              // dropping the discriminator just removes free signal.
-              return paginatedResponse([], {
-                page: filters.page,
-                pageSize: filters.pageSize,
-                total: 0,
-              });
-            }
+      if (filters.riderMemberId) {
+        const isSelf = filters.riderMemberId === ctx.memberId;
+        if (!isSelf) {
+          const isDependent =
+            canReadChild && (await isParentOf(ctx.clubId, ctx.memberId, filters.riderMemberId));
+          if (!isDependent) {
+            // Audit F-22 (2026-05-08 r6): return 200 + empty list
+            // instead of 403. The previous 403-vs-200 split let a
+            // tenant member iterate `?riderMemberId=<arbitrary>` and
+            // distinguish "exists but not yours" from "no bookings"
+            // — a within-tenant info-disclosure surface. Empty list
+            // collapses both cases. Rider members are still
+            // rate-limited at 60/min, so this isn't a probing tool;
+            // dropping the discriminator just removes free signal.
+            return paginatedResponse([], {
+              page: filters.page,
+              pageSize: filters.pageSize,
+              total: 0,
+            });
           }
-          // riderMemberIdFilter passes through unchanged.
-        } else if (canReadChild) {
-          // Parent without a specific filter — expand to (self + dependents)
-          // so a single GET surfaces every booking the parent is responsible
-          // for. Riders/owners (no read_child grant) fall through to the
-          // self-only branch below.
-          const dependents = await getDependentMemberIds(ctx.clubId, ctx.memberId);
-          riderMemberIdsFilter = [ctx.memberId, ...dependents];
-          riderMemberIdFilter = undefined;
-        } else {
-          riderMemberIdFilter = ctx.memberId;
         }
+        // riderMemberIdFilter passes through unchanged.
+      } else if (canReadChild) {
+        // Parent without a specific filter — expand to (self + dependents)
+        // so a single GET surfaces every booking the parent is responsible
+        // for. Riders/owners (no read_child grant) fall through to the
+        // self-only branch below.
+        const dependents = await getDependentMemberIds(ctx.clubId, ctx.memberId);
+        riderMemberIdsFilter = [ctx.memberId, ...dependents];
+        riderMemberIdFilter = undefined;
+      } else {
+        riderMemberIdFilter = ctx.memberId;
       }
+    }
 
-      const effectiveFilters = {
-        ...filters,
-        riderMemberId: riderMemberIdFilter,
-        riderMemberIds: riderMemberIdsFilter,
-        page: filters.page,
-        pageSize: filters.pageSize,
-      };
+    const effectiveFilters = {
+      ...filters,
+      riderMemberId: riderMemberIdFilter,
+      riderMemberIds: riderMemberIdsFilter,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    };
 
-      const { data, total } = await getBookingsByClub(ctx.clubId, effectiveFilters);
+    const { data, total } = await getBookingsByClub(ctx.clubId, effectiveFilters);
 
-      return paginatedResponse(data, {
-        page: filters.page,
-        pageSize: filters.pageSize,
-        total,
-      });
-    },
-  );
+    return paginatedResponse(data, {
+      page: filters.page,
+      pageSize: filters.pageSize,
+      total,
+    });
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -206,8 +207,7 @@ export async function POST(request: NextRequest) {
       // club. Pure `bookings:create` (rider role) only authorizes self
       // bookings — guests are attached to the booker's row, not booked
       // under a fresh memberId.
-      const canBookForAnyone =
-        canCreateAny && hasPermission(ctx.orgRole, 'bookings:read');
+      const canBookForAnyone = canCreateAny && hasPermission(ctx.orgRole, 'bookings:read');
 
       if (!isSelf) {
         if (!canBookForAnyone && !canCreateChild) {
@@ -258,11 +258,7 @@ export async function POST(request: NextRequest) {
       if (data.horseId) {
         const horse = await getHorseById(ctx.clubId, data.horseId);
         if (!horse) {
-          return errorResponse(
-            'HORSE_NOT_FOUND',
-            'Horse is not in this club',
-            404,
-          );
+          return errorResponse('HORSE_NOT_FOUND', 'Horse is not in this club', 404);
         }
       }
 
@@ -290,10 +286,7 @@ export async function POST(request: NextRequest) {
           );
 
           const age = rider.dateOfBirth
-            ? Math.floor(
-                (Date.now() - new Date(rider.dateOfBirth).getTime()) /
-                  MS_PER_YEAR_AVG,
-              )
+            ? Math.floor((Date.now() - new Date(rider.dateOfBirth).getTime()) / MS_PER_YEAR_AVG)
             : 18;
 
           const matches = matchHorsesToRider({
@@ -418,11 +411,7 @@ export async function POST(request: NextRequest) {
             );
           }
           if (err.message === 'COUPON_RIDER_MAX_USES_REACHED') {
-            return errorResponse(
-              'INVALID_COUPON',
-              'You have already used this promo code',
-              422,
-            );
+            return errorResponse('INVALID_COUPON', 'You have already used this promo code', 422);
           }
         }
         // Catch unique-index violations from idx_bookings_unique_rider_slot
@@ -551,7 +540,7 @@ export async function POST(request: NextRequest) {
       // the success/failure on the booking — see audit B-23. 30/min lets
       // legitimate burst-booking through (e.g. an admin batch-creating)
       // while still capping the brute-force surface. failClosed (audit
-      // AI-45) — bookings consume slot capacity; must not be lifted on a
+      // QA-45) — bookings consume slot capacity; must not be lifted on a
       // limiter outage.
       rateLimit: { maxRequests: 30, windowMs: 60_000, failClosed: true },
       routeKey: 'bookings:create',

@@ -49,10 +49,7 @@ const approveFormSchema = z.object({
   feeMajorUnits: z
     .union([z.literal(''), z.coerce.number().min(0, 'Enter a valid fee (0 or more)')])
     .refine((v) => v !== '', { message: 'Enter a fee (0 or more)' }),
-  liveryStartDate: z
-    .string()
-    .min(1, 'Pick a start date')
-    .max(50),
+  liveryStartDate: z.string().min(1, 'Pick a start date').max(50),
 });
 type ApproveFormValues = z.input<typeof approveFormSchema>;
 type ApproveFormOutput = z.output<typeof approveFormSchema>;
@@ -78,7 +75,7 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
     <>
       <Card>
         <CardContent className="flex gap-4 p-4">
-          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
+          <div className="bg-muted relative h-24 w-24 shrink-0 overflow-hidden rounded-lg">
             {horse.primaryPhotoUrl ? (
               <Image
                 src={horse.primaryPhotoUrl}
@@ -88,7 +85,7 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
                 sizes="96px"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <div className="text-muted-foreground flex h-full w-full items-center justify-center">
                 <Rabbit className="h-10 w-10" />
               </div>
             )}
@@ -98,26 +95,23 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="font-semibold">{horse.name}</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {[horse.breed, horse.color, horse.gender].filter(Boolean).join(' · ') ||
                     'No details'}
                 </p>
                 {horse.ownerName && (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="text-muted-foreground mt-0.5 text-xs">
                     Submitted by{' '}
-                    <span className="font-medium text-foreground">{horse.ownerName}</span>
+                    <span className="text-foreground font-medium">{horse.ownerName}</span>
                   </p>
                 )}
               </div>
-              <Badge
-                variant="secondary"
-                className="bg-amber-100 text-amber-800 hover:bg-amber-100"
-              >
+              <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
                 Pending
               </Badge>
             </div>
 
-            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <div className="text-muted-foreground mt-2 flex flex-wrap gap-2 text-xs">
               <Badge variant="outline" className="text-xs">
                 {horse.skillLevel}
               </Badge>
@@ -132,15 +126,12 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
                 </Badge>
               )}
               {horse.ownershipSubmittedAt && (
-                <span className="text-xs">
-                  Submitted{' '}
-                  {formatDate(horse.ownershipSubmittedAt)}
-                </span>
+                <span className="text-xs">Submitted {formatDate(horse.ownershipSubmittedAt)}</span>
               )}
             </div>
 
             {horse.notes && (
-              <p className="mt-2 rounded-md bg-muted p-2 text-xs text-muted-foreground whitespace-pre-wrap">
+              <p className="bg-muted text-muted-foreground mt-2 whitespace-pre-wrap rounded-md p-2 text-xs">
                 {horse.notes}
               </p>
             )}
@@ -150,11 +141,7 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
                 <Check className="mr-1.5 h-3.5 w-3.5" />
                 Approve
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setDeclineOpen(true)}
-              >
+              <Button size="sm" variant="outline" onClick={() => setDeclineOpen(true)}>
                 <X className="mr-1.5 h-3.5 w-3.5" />
                 Decline
               </Button>
@@ -163,16 +150,8 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
         </CardContent>
       </Card>
 
-      <ApproveDialog
-        horse={horse}
-        open={approveOpen}
-        onOpenChange={setApproveOpen}
-      />
-      <DeclineDialog
-        horse={horse}
-        open={declineOpen}
-        onOpenChange={setDeclineOpen}
-      />
+      <ApproveDialog horse={horse} open={approveOpen} onOpenChange={setApproveOpen} />
+      <DeclineDialog horse={horse} open={declineOpen} onOpenChange={setDeclineOpen} />
     </>
   );
 }
@@ -198,9 +177,10 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
   async function onSubmit(values: ApproveFormOutput) {
     // `feeMajorUnits` is `number | ''` post-resolver; the refine above
     // ensures non-empty, so the cast is safe at this point.
-    const feeNumber = typeof values.feeMajorUnits === 'number'
-      ? values.feeMajorUnits
-      : Number(values.feeMajorUnits);
+    const feeNumber =
+      typeof values.feeMajorUnits === 'number'
+        ? values.feeMajorUnits
+        : Number(values.feeMajorUnits);
     try {
       await approve.mutateAsync({
         // User enters AED major units; DB stores minor units (fils).
@@ -247,8 +227,7 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
                     />
                   </FormControl>
                   <FormDescription>
-                    Enter 0 if you&apos;re housing the horse gratis or billing
-                    off-platform.
+                    Enter 0 if you&apos;re housing the horse gratis or billing off-platform.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -315,8 +294,8 @@ function DeclineDialog({ horse, open, onOpenChange }: DialogProps) {
         <DialogHeader>
           <DialogTitle>Decline {horse.name}</DialogTitle>
           <DialogDescription>
-            The owner will receive an email with this reason. Be specific — it
-            helps them understand what, if anything, they can change.
+            The owner will receive an email with this reason. Be specific — it helps them understand
+            what, if anything, they can change.
           </DialogDescription>
         </DialogHeader>
 
@@ -351,11 +330,7 @@ function DeclineDialog({ horse, open, onOpenChange }: DialogProps) {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={decline.isPending}
-              >
+              <Button type="submit" variant="destructive" disabled={decline.isPending}>
                 {decline.isPending ? 'Declining…' : 'Decline'}
               </Button>
             </DialogFooter>

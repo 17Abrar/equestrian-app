@@ -42,107 +42,101 @@ const KEY_PATTERN = /^[0-9a-f-]{36}\/[a-z][a-z0-9_/-]*\/\d+-[a-z0-9._-]+$/;
  * — the save-path in the calling feature is the gate, not this route.
  */
 export async function POST(request: NextRequest) {
-  return withAuth(
-    async (ctx) => {
-      const data = await parseRequiredBody(request, verifyRequestSchema);
+  return withAuth(async (ctx) => {
+    const data = await parseRequiredBody(request, verifyRequestSchema);
 
-      // Keys look like "<clubId>/<folder>/<ts>-<name>". Validate shape
-      // before we go near the S3 API so a malformed key can't be weaponised
-      // (e.g. a key with `..` that would otherwise 404).
-      if (!KEY_PATTERN.test(data.key)) {
-        return errorResponse('INVALID_KEY', 'Unrecognised object key', 400);
-      }
+    // Keys look like "<clubId>/<folder>/<ts>-<name>". Validate shape
+    // before we go near the S3 API so a malformed key can't be weaponised
+    // (e.g. a key with `..` that would otherwise 404).
+    if (!KEY_PATTERN.test(data.key)) {
+      return errorResponse('INVALID_KEY', 'Unrecognised object key', 400);
+    }
 
-      // Prefix-bind the key to a club the caller is a member of. Without
-      // this, any authenticated user could probe / delete any other club's
-      // uploads by guessing keys.
-      const keyClubId = data.key.split('/')[0]!;
-      if (keyClubId !== ctx.clubId) {
-        const membership = await db
-          .select({ id: clubMembers.id })
-          .from(clubMembers)
-          .where(
-            and(
-              eq(clubMembers.clubId, keyClubId),
-              eq(clubMembers.clerkUserId, ctx.userId),
-              eq(clubMembers.isActive, true),
-            ),
-          )
-          .limit(1);
-        if (!membership[0]) {
-          // Audit F-9 (2026-05-05): emit a structured warn so a flood of
-          // cross-stable rejections from one userId — i.e., someone
-          // probing other clubs' R2 keys — surfaces in observability
-          // alongside the standard 403. Sentry forwards `warn` per
-          // logger.ts's level mapping.
-          logger.warn('upload_verify_cross_stable_blocked', {
-            ctxClubId: ctx.clubId,
-            keyClubId,
-            userId: ctx.userId,
-            keyPrefix: data.key.slice(0, 80),
-          });
-          return errorResponse(
-            'FORBIDDEN',
-            'You do not have access to this upload',
-            403,
-          );
-        }
-      }
-
-      let result;
-      try {
-        result = await verifyObjectMagicBytes(data.key, data.contentType);
-      } catch (err) {
-        logger.warn('upload_verify_failed', {
-          clubId: ctx.clubId,
-          key: data.key,
-          error: err instanceof Error ? err.message : 'unknown',
+    // Prefix-bind the key to a club the caller is a member of. Without
+    // this, any authenticated user could probe / delete any other club's
+    // uploads by guessing keys.
+    const keyClubId = data.key.split('/')[0]!;
+    if (keyClubId !== ctx.clubId) {
+      const membership = await db
+        .select({ id: clubMembers.id })
+        .from(clubMembers)
+        .where(
+          and(
+            eq(clubMembers.clubId, keyClubId),
+            eq(clubMembers.clerkUserId, ctx.userId),
+            eq(clubMembers.isActive, true),
+          ),
+        )
+        .limit(1);
+      if (!membership[0]) {
+        // Audit F-9 (2026-05-05): emit a structured warn so a flood of
+        // cross-stable rejections from one userId — i.e., someone
+        // probing other clubs' R2 keys — surfaces in observability
+        // alongside the standard 403. Sentry forwards `warn` per
+        // logger.ts's level mapping.
+        logger.warn('upload_verify_cross_stable_blocked', {
+          ctxClubId: ctx.clubId,
+          keyClubId,
+          userId: ctx.userId,
+          keyPrefix: data.key.slice(0, 80),
         });
-        return errorResponse(
-          'VERIFY_FAILED',
-          'Could not verify uploaded file. Please try uploading again.',
-          502,
-        );
+        return errorResponse('FORBIDDEN', 'You do not have access to this upload', 403);
       }
+    }
 
-      if (!result.ok) {
-        logger.warn('upload_magic_byte_mismatch', {
-          clubId: ctx.clubId,
-          key: data.key,
-          declaredType: result.declaredType,
-          detectedType: result.detectedType ?? 'unknown',
-        });
+    let result;
+    try {
+      result = await verifyObjectMagicBytes(data.key, data.contentType);
+    } catch (err) {
+      logger.warn('upload_verify_failed', {
+        clubId: ctx.clubId,
+        key: data.key,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
+      return errorResponse(
+        'VERIFY_FAILED',
+        'Could not verify uploaded file. Please try uploading again.',
+        502,
+      );
+    }
 
-        // Fire-and-forget delete — keeping the mis-typed object around is
-        // worse than a failed delete (storage cost + abuse surface).
-        await deleteR2Object(data.key);
+    if (!result.ok) {
+      logger.warn('upload_magic_byte_mismatch', {
+        clubId: ctx.clubId,
+        key: data.key,
+        declaredType: result.declaredType,
+        detectedType: result.detectedType ?? 'unknown',
+      });
 
-        void ctx.audit({
-          action: 'file.upload_rejected',
-          resourceType: 'file',
-          changes: {
-            key: { from: null, to: data.key },
-            declaredType: { from: null, to: result.declaredType },
-            detectedType: { from: null, to: result.detectedType ?? 'unknown' },
-          },
-        });
+      // Fire-and-forget delete — keeping the mis-typed object around is
+      // worse than a failed delete (storage cost + abuse surface).
+      await deleteR2Object(data.key);
 
-        return errorResponse(
-          'FILE_TYPE_MISMATCH',
-          result.detectedType
-            ? `File contents (${result.detectedType}) do not match declared type (${result.declaredType}).`
-            : `File does not match any allowed type — expected ${result.declaredType}.`,
-          422,
-        );
-      }
+      void ctx.audit({
+        action: 'file.upload_rejected',
+        resourceType: 'file',
+        changes: {
+          key: { from: null, to: data.key },
+          declaredType: { from: null, to: result.declaredType },
+          detectedType: { from: null, to: result.detectedType ?? 'unknown' },
+        },
+      });
 
-      // Audit F-8 (2026-05-08 r6): cache the successful verification so
-      // the persist-side gate (e.g. `documents` POST) can short-circuit
-      // a second round-trip to R2. TTL bound — verified state expires
-      // before any plausible upload session could go stale.
-      await markR2KeyVerified(data.key, data.contentType);
+      return errorResponse(
+        'FILE_TYPE_MISMATCH',
+        result.detectedType
+          ? `File contents (${result.detectedType}) do not match declared type (${result.declaredType}).`
+          : `File does not match any allowed type — expected ${result.declaredType}.`,
+        422,
+      );
+    }
 
-      return successResponse({ ok: true });
-    },
-  );
+    // Audit F-8 (2026-05-08 r6): cache the successful verification so
+    // the persist-side gate (e.g. `documents` POST) can short-circuit
+    // a second round-trip to R2. TTL bound — verified state expires
+    // before any plausible upload session could go stale.
+    await markR2KeyVerified(data.key, data.contentType);
+
+    return successResponse({ ok: true });
+  });
 }

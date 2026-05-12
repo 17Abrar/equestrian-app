@@ -10,13 +10,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -65,8 +59,7 @@ const WEBHOOK_POLL_TIMEOUT_MS = 30_000;
 export default function StartClubPage() {
   const router = useRouter();
   const { isLoaded: userLoaded } = useUser();
-  const { isLoaded: orgsLoaded, createOrganization, setActive } =
-    useOrganizationList();
+  const { isLoaded: orgsLoaded, createOrganization, setActive } = useOrganizationList();
   const [stage, setStage] = useState<'idle' | 'creating' | 'syncing'>('idle');
 
   const form = useForm<CreateClubInput, unknown, CreateClubOutput>({
@@ -109,9 +102,7 @@ export default function StartClubPage() {
     } catch (err) {
       reportMutationError('start_club.create', err, { name: data.name });
       toast.error(
-        err instanceof Error
-          ? err.message
-          : 'Could not create your club — please try again.',
+        err instanceof Error ? err.message : 'Could not create your club — please try again.',
       );
       setStage('idle');
     }
@@ -121,7 +112,7 @@ export default function StartClubPage() {
   const submitting = stage !== 'idle';
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <header className="border-b">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
           <CavaliqLogo height={32} priority />
@@ -133,8 +124,8 @@ export default function StartClubPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Start your club</CardTitle>
             <CardDescription>
-              We&apos;ll set up a workspace for your stable. You can change the
-              name and other details later in Settings.
+              We&apos;ll set up a workspace for your stable. You can change the name and other
+              details later in Settings.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -159,11 +150,7 @@ export default function StartClubPage() {
                   )}
                 />
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={submitting || !ready}
-                >
+                <Button type="submit" className="w-full" disabled={submitting || !ready}>
                   {stage === 'creating' && (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -184,9 +171,9 @@ export default function StartClubPage() {
                   )}
                 </Button>
 
-                <p className="text-center text-xs text-muted-foreground">
-                  By creating a club you become its admin. You&apos;ll be billed
-                  on a 14-day trial — no card required up front.
+                <p className="text-muted-foreground text-center text-xs">
+                  By creating a club you become its admin. You&apos;ll be billed on a 14-day trial —
+                  no card required up front.
                 </p>
               </form>
             </Form>

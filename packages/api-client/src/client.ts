@@ -179,10 +179,10 @@ export function createApiClient(config: ApiClientConfig) {
       const raw: unknown = await response.json().catch(() => null);
       const envelope = parseEnvelope<T>(raw);
       if (!response.ok) {
-        config.onError?.(
-          new Error(`HTTP ${response.status} from ${path}`),
-          { code: `HTTP_${response.status}`, path },
-        );
+        config.onError?.(new Error(`HTTP ${response.status} from ${path}`), {
+          code: `HTTP_${response.status}`,
+          path,
+        });
         if (envelope) return envelope;
         return {
           success: false,
@@ -193,10 +193,10 @@ export function createApiClient(config: ApiClientConfig) {
         };
       }
       if (!envelope) {
-        config.onError?.(
-          new Error(`Invalid response shape from ${path}`),
-          { code: 'INVALID_RESPONSE', path },
-        );
+        config.onError?.(new Error(`Invalid response shape from ${path}`), {
+          code: 'INVALID_RESPONSE',
+          path,
+        });
         return {
           success: false,
           error: {
@@ -279,10 +279,10 @@ export function createApiClient(config: ApiClientConfig) {
       const raw: unknown = await response.json().catch(() => null);
       const envelope = parsePaginatedEnvelope<T>(raw);
       if (!response.ok) {
-        config.onError?.(
-          new Error(`HTTP ${response.status} from ${path}`),
-          { code: `HTTP_${response.status}`, path },
-        );
+        config.onError?.(new Error(`HTTP ${response.status} from ${path}`), {
+          code: `HTTP_${response.status}`,
+          path,
+        });
         if (envelope) return envelope;
         return {
           success: false,
@@ -293,10 +293,10 @@ export function createApiClient(config: ApiClientConfig) {
         };
       }
       if (!envelope) {
-        config.onError?.(
-          new Error(`Invalid paginated response shape from ${path}`),
-          { code: 'INVALID_RESPONSE', path },
-        );
+        config.onError?.(new Error(`Invalid paginated response shape from ${path}`), {
+          code: 'INVALID_RESPONSE',
+          path,
+        });
         return {
           success: false,
           error: {

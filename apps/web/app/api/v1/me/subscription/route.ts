@@ -32,8 +32,7 @@ export async function GET() {
         // Snapshot of the current tier's monthly price so the dashboard
         // can show "next bill: AED 300 on YYYY-MM-DD" without each
         // tenant having to know about the constant.
-        currentTierPriceMinor:
-          PLATFORM_TIER_PRICES_MINOR[club.subscriptionTier],
+        currentTierPriceMinor: PLATFORM_TIER_PRICES_MINOR[club.subscriptionTier],
         currency: club.currency,
         outstanding,
         history,

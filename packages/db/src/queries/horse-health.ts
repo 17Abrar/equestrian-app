@@ -22,7 +22,7 @@ import { decryptFields, encryptFields } from '../crypto';
 // list wastes CPU. Detail GETs continue to read + decrypt the full row.
 
 /**
- * Soft-delete gate for every read/write in this file (audit AI-22 / KP-1).
+ * Soft-delete gate for every read/write in this file (audit QA-22 / KP-1).
  * After softDeleteHorse, the horse_health_records / medications / etc. rows
  * remain on disk but must not be reachable via any horse-scoped GET or POST
  * — the buyer of a transferred horse, or a GDPR-style deletion request,
@@ -36,13 +36,7 @@ async function isHorseActiveInClub(clubId: string, horseId: string): Promise<boo
   const rows = await db
     .select({ id: horses.id })
     .from(horses)
-    .where(
-      and(
-        eq(horses.id, horseId),
-        eq(horses.clubId, clubId),
-        isNull(horses.deletedAt),
-      ),
-    )
+    .where(and(eq(horses.id, horseId), eq(horses.clubId, clubId), isNull(horses.deletedAt)))
     .limit(1);
   return rows.length > 0;
 }
@@ -84,16 +78,25 @@ const EXERCISE_SCHEDULE_ENCRYPTED_FIELDS = ['notes'] as const;
 // ─── Types ────────────────────────────────────────────────────────────
 
 type NewHealthRecord = typeof horseHealthRecords.$inferInsert;
-type HealthRecordCreate = Omit<NewHealthRecord, 'id' | 'clubId' | 'horseId' | 'createdAt' | 'updatedAt'>;
+type HealthRecordCreate = Omit<
+  NewHealthRecord,
+  'id' | 'clubId' | 'horseId' | 'createdAt' | 'updatedAt'
+>;
 
 type NewMedication = typeof horseMedications.$inferInsert;
-type MedicationCreate = Omit<NewMedication, 'id' | 'clubId' | 'horseId' | 'createdAt' | 'updatedAt'>;
+type MedicationCreate = Omit<
+  NewMedication,
+  'id' | 'clubId' | 'horseId' | 'createdAt' | 'updatedAt'
+>;
 
 type NewMedicationLog = typeof horseMedicationLogs.$inferInsert;
 type MedicationLogCreate = Omit<NewMedicationLog, 'id' | 'clubId' | 'horseId' | 'createdAt'>;
 
 type NewFeedingPlan = typeof horseFeedingPlans.$inferInsert;
-type DrizzleFeedingCreate = Omit<NewFeedingPlan, 'id' | 'clubId' | 'horseId' | 'createdAt' | 'updatedAt'>;
+type DrizzleFeedingCreate = Omit<
+  NewFeedingPlan,
+  'id' | 'clubId' | 'horseId' | 'createdAt' | 'updatedAt'
+>;
 
 /** Accepts number for quantityKg — converts to string for Drizzle numeric column */
 interface FeedingPlanCreate extends Omit<DrizzleFeedingCreate, 'quantityKg'> {
@@ -114,7 +117,7 @@ export async function getHealthRecords(
   recordType: string | undefined,
   { page, pageSize }: { page: number; pageSize: number },
 ) {
-  // Soft-delete gate (audit AI-22). Returns empty rather than null so
+  // Soft-delete gate (audit QA-22). Returns empty rather than null so
   // route handlers don't need to special-case the deleted-horse path.
   if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
 
@@ -179,7 +182,11 @@ export async function getHealthRecords(
  */
 export type HealthRecordListItem = Awaited<ReturnType<typeof getHealthRecords>>['items'][number];
 
-export async function createHealthRecord(clubId: string, horseId: string, data: HealthRecordCreate) {
+export async function createHealthRecord(
+  clubId: string,
+  horseId: string,
+  data: HealthRecordCreate,
+) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const encrypted = encryptFields(data, HEALTH_ENCRYPTED_FIELDS);
   const result = await db
@@ -392,7 +399,11 @@ export async function getMedicationLogs(
 /** List-row shape for `getMedicationLogs` (audit F-44). */
 export type MedicationLogListItem = Awaited<ReturnType<typeof getMedicationLogs>>['items'][number];
 
-export async function createMedicationLog(clubId: string, horseId: string, data: MedicationLogCreate) {
+export async function createMedicationLog(
+  clubId: string,
+  horseId: string,
+  data: MedicationLogCreate,
+) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const encrypted = encryptFields(data, MEDICATION_LOG_ENCRYPTED_FIELDS);
   const result = await db
@@ -411,10 +422,7 @@ export async function getFeedingPlans(
   { page, pageSize }: { page: number; pageSize: number },
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
-  const where = and(
-    eq(horseFeedingPlans.clubId, clubId),
-    eq(horseFeedingPlans.horseId, horseId),
-  );
+  const where = and(eq(horseFeedingPlans.clubId, clubId), eq(horseFeedingPlans.horseId, horseId));
   const offset = (page - 1) * pageSize;
   // Audit F-32: explicit projection mirroring feeding-tab.tsx
   // consumption (mealName, feedType, quantityKg, supplements, notes,
@@ -573,9 +581,15 @@ export async function getExerciseSchedules(
 }
 
 /** List-row shape for `getExerciseSchedules` (audit F-32). */
-export type ExerciseScheduleListItem = Awaited<ReturnType<typeof getExerciseSchedules>>['items'][number];
+export type ExerciseScheduleListItem = Awaited<
+  ReturnType<typeof getExerciseSchedules>
+>['items'][number];
 
-export async function createExerciseSchedule(clubId: string, horseId: string, data: ExerciseCreate) {
+export async function createExerciseSchedule(
+  clubId: string,
+  horseId: string,
+  data: ExerciseCreate,
+) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   const encrypted = encryptFields(data, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS);
   const result = await db

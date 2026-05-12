@@ -1,12 +1,15 @@
 import { type NextRequest } from 'next/server';
 import { createMedicationSchema } from '@equestrian/shared/schemas';
 import { getMedications, createMedication, getHorseById } from '@equestrian/db/queries';
-import { withAuth,
+import {
+  withAuth,
   successResponse,
   errorResponse,
   parseRequiredBody,
   parsePagination,
-  paginatedListResponse, validateUuidParam } from '@/lib/api-utils';
+  paginatedListResponse,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -56,11 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       hasPermission(ctx.orgRole, 'horses:update') ||
       hasPermission(ctx.orgRole, 'horses:update_medical');
     if (!allowed) {
-      return errorResponse(
-        'FORBIDDEN',
-        'You do not have permission to create medications',
-        403,
-      );
+      return errorResponse('FORBIDDEN', 'You do not have permission to create medications', 403);
     }
 
     const { horseId } = await params;

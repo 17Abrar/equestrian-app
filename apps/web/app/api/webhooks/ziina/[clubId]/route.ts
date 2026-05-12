@@ -27,10 +27,7 @@ import { logger } from '@/lib/logger';
  */
 
 const REFUND_EVENTS = new Set(['refund.status.updated']);
-const HANDLED_EVENTS = new Set<string>([
-  'payment_intent.status.updated',
-  'refund.status.updated',
-]);
+const HANDLED_EVENTS = new Set<string>(['payment_intent.status.updated', 'refund.status.updated']);
 
 const clubIdSchema = z.string().uuid();
 
@@ -104,7 +101,7 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
   // fields, never the Ziina API key. A future logger.error here can't
   // accidentally surface the API key into observability.
   //
-  // Audit AI-15: a webhook URL that returns 200 when no account is
+  // Audit QA-15: a webhook URL that returns 200 when no account is
   // connected and 401 when an invalid signature is presented lets an
   // attacker probe whether a clubId has Ziina connected. clubIds are
   // UUIDs (not enumerable) but the asymmetry was unintentional. Unify
@@ -234,17 +231,15 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
     } else if (
       // Audit F-13 (2026-05-08 r6): livery flow now signals
       // permanentFailureReason (e.g. paid for a cancelled invoice).
-      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+      invoiceResult?.kind === 'matched' &&
+      invoiceResult.permanentFailureReason
     ) {
       await markWebhookEventPermanentlyFailed(
         'ziina',
         event.eventId,
         invoiceResult.permanentFailureReason,
       );
-    } else if (
-      bookingMissed &&
-      (!invoiceResult || invoiceResult.kind === 'no_target')
-    ) {
+    } else if (bookingMissed && (!invoiceResult || invoiceResult.kind === 'no_target')) {
       await markWebhookEventPermanentlyFailed(
         'ziina',
         event.eventId,

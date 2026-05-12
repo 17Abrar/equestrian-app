@@ -28,13 +28,13 @@ function StatCard({
     <Link href={href}>
       <Card className="transition-shadow hover:shadow-md">
         <CardContent className="flex items-center gap-4 p-6">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <Icon className="h-6 w-6 text-primary" />
+          <div className="bg-primary/10 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg">
+            <Icon className="text-primary h-6 w-6" />
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
+            <p className="text-muted-foreground text-sm">{title}</p>
             <p className="text-2xl font-bold">{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+            {subtitle && <p className="text-muted-foreground text-xs">{subtitle}</p>}
           </div>
         </CardContent>
       </Card>
@@ -95,7 +95,7 @@ export function DashboardOverview() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="text-muted-foreground mt-1">
           Welcome to your equestrian club management dashboard.
         </p>
       </div>
@@ -155,10 +155,8 @@ export function DashboardOverview() {
                   className="flex items-center justify-between rounded-lg border p-3"
                 >
                   <div>
-                    <p className="font-medium">
-                      {booking.riderName ?? 'Unknown Rider'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="font-medium">{booking.riderName ?? 'Unknown Rider'}</p>
+                    <p className="text-muted-foreground text-sm">
                       {booking.slotDate} at {booking.slotStartTime}
                     </p>
                   </div>

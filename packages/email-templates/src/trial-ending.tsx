@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { safeHref } from './util/safe-href';
@@ -48,9 +56,7 @@ export function TrialEnding({
   settingsUrl,
 }: TrialEndingProps) {
   const headline =
-    daysUntilEnd === 1
-      ? 'Your Cavaliq trial ends tomorrow'
-      : 'Your Cavaliq trial ends in 3 days';
+    daysUntilEnd === 1 ? 'Your Cavaliq trial ends tomorrow' : 'Your Cavaliq trial ends in 3 days';
 
   return (
     <Html>
@@ -62,11 +68,10 @@ export function TrialEnding({
           <Text style={styles.greeting}>Hi {recipientName},</Text>
 
           <Text style={styles.text}>
-            {clubName}&apos;s 14-day Cavaliq trial ends on{' '}
-            <strong>{trialEndDate}</strong>. After that the platform will
-            issue your first monthly subscription invoice; nothing
-            interrupts in the meantime, and you keep every booking,
-            horse, and rider record you&apos;ve added during the trial.
+            {clubName}&apos;s 14-day Cavaliq trial ends on <strong>{trialEndDate}</strong>. After
+            that the platform will issue your first monthly subscription invoice; nothing interrupts
+            in the meantime, and you keep every booking, horse, and rider record you&apos;ve added
+            during the trial.
           </Text>
 
           {selectedTier && tierPriceMinor != null ? (
@@ -78,19 +83,16 @@ export function TrialEnding({
               <Text style={styles.value}>{formatCurrency(tierPriceMinor, currency)}</Text>
 
               <Text style={styles.text}>
-                We&apos;ll email the first invoice on {trialEndDate} with
-                a Ziina pay link. No card-on-file — every month is a
-                fresh hosted-page click.
+                We&apos;ll email the first invoice on {trialEndDate} with a Ziina pay link. No
+                card-on-file — every month is a fresh hosted-page click.
               </Text>
             </Section>
           ) : (
             <Section style={styles.card}>
               <Text style={styles.text}>
-                <strong>Pick a tier</strong> in Settings → Subscription
-                so we know which plan to bill on {trialEndDate}. Starter
-                / Growing / Professional all include unlimited riders;
-                they differ on the staff seat count and a few advanced
-                features.
+                <strong>Pick a tier</strong> in Settings → Subscription so we know which plan to
+                bill on {trialEndDate}. Starter / Growing / Professional all include unlimited
+                riders; they differ on the staff seat count and a few advanced features.
               </Text>
             </Section>
           )}
@@ -128,9 +130,21 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px', fontWeight: '600' as const },
+  label: {
+    fontSize: '11px',
+    color: '#6b7280',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+    fontWeight: '600' as const,
+  },
   value: { fontSize: '14px', color: '#374151', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#1f2937', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#1f2937',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   button: {
     backgroundColor: '#6366f1',
     color: '#ffffff',

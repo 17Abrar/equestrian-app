@@ -53,7 +53,21 @@ const ALL_NAV_ITEMS: NavItem[] = [
 /** Which nav items each role can see in the admin dashboard */
 const NAV_BY_ROLE: Record<string, string[]> = {
   club_admin: ALL_NAV_ITEMS.map((item) => item.href),
-  club_manager: ['/', '/calendar', '/bookings', '/horses', '/riders', '/staff', '/owners', '/finances', '/emails', '/competitions', '/arenas', '/reports', '/settings'],
+  club_manager: [
+    '/',
+    '/calendar',
+    '/bookings',
+    '/horses',
+    '/riders',
+    '/staff',
+    '/owners',
+    '/finances',
+    '/emails',
+    '/competitions',
+    '/arenas',
+    '/reports',
+    '/settings',
+  ],
   coach: ['/', '/calendar', '/bookings', '/horses', '/riders', '/competitions'],
   horse_owner: ['/', '/horses', '/bookings', '/competitions'],
   groom: ['/', '/horses', '/calendar'],
@@ -81,9 +95,7 @@ export function Sidebar({ role }: SidebarProps) {
   const pendingHorsesQuery = useHorses(
     canReviewHorses ? { ownershipStatus: 'pending', page: 1, pageSize: 1 } : {},
   );
-  const pendingHorsesCount = canReviewHorses
-    ? pendingHorsesQuery.data?.pagination.total ?? 0
-    : 0;
+  const pendingHorsesCount = canReviewHorses ? (pendingHorsesQuery.data?.pagination.total ?? 0) : 0;
   // Audit F-52 (2026-05-08 r6): distinguish "query failed" from "no
   // pending horses." Without this, an admin would never know there
   // are pending horses if the count fetch errored — silently
@@ -104,7 +116,7 @@ export function Sidebar({ role }: SidebarProps) {
   }
 
   return (
-    <aside className="flex w-64 flex-col border-r bg-card">
+    <aside className="bg-card flex w-64 flex-col border-r">
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/" aria-label="Cavaliq home">
           <CavaliqLogo height={28} priority />
@@ -151,7 +163,7 @@ export function Sidebar({ role }: SidebarProps) {
               {badge.count === 0 && badge.error && (
                 <Badge
                   variant="secondary"
-                  className="h-5 bg-muted px-1.5 text-[11px] text-muted-foreground hover:bg-muted"
+                  className="bg-muted text-muted-foreground hover:bg-muted h-5 px-1.5 text-[11px]"
                   title="Pending count failed to load"
                   aria-label="Pending count unavailable"
                 >

@@ -14,7 +14,7 @@ export default function NewHorsePage() {
         </Button>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Add Horse</h1>
-          <p className="mt-1 text-muted-foreground">Add a new horse to your stable</p>
+          <p className="text-muted-foreground mt-1">Add a new horse to your stable</p>
         </div>
       </div>
       <HorseForm />

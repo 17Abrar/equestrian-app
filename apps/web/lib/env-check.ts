@@ -49,7 +49,8 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
   // entry point to grep on regardless of cron schedule cadence.
   {
     name: 'CRON_SECRET',
-    effect: 'every cron endpoint 503s; livery / platform / booking / horse-care reminders all silently skip',
+    effect:
+      'every cron endpoint 503s; livery / platform / booking / horse-care reminders all silently skip',
   },
   // Audit F-17 (2026-05-08 r6): R2 binding required for every
   // signed-upload + delete path (storage.ts:57). Without these,
@@ -57,7 +58,8 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
   // attempting to verify the R2 object.
   {
     name: 'R2_ENDPOINT',
-    effect: 'signed uploads + deletes 503; horse documents / horse photos / branding / file uploads all fail',
+    effect:
+      'signed uploads + deletes 503; horse documents / horse photos / branding / file uploads all fail',
   },
   {
     name: 'R2_ACCESS_KEY_ID',
@@ -80,7 +82,8 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
   },
   {
     name: 'CLERK_WEBHOOK_SECRET',
-    effect: 'Clerk webhooks cannot verify svix signature; users / orgs / memberships drift between Clerk and DB',
+    effect:
+      'Clerk webhooks cannot verify svix signature; users / orgs / memberships drift between Clerk and DB',
   },
 ];
 

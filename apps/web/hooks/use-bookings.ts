@@ -47,8 +47,7 @@ function defaultMutationErrorReporter(mutationKey: string) {
 export function useArenas() {
   return useQuery({
     queryKey: ['arenas'],
-    queryFn: () =>
-      fetchJson<PaginatedResponse<Arena>>(`/api/v1/arenas?pageSize=${MAX_PAGE_SIZE}`),
+    queryFn: () => fetchJson<PaginatedResponse<Arena>>(`/api/v1/arenas?pageSize=${MAX_PAGE_SIZE}`),
   });
 }
 
@@ -104,9 +103,7 @@ export function useLessonTypes() {
   return useQuery({
     queryKey: ['lessonTypes'],
     queryFn: () =>
-      fetchJson<PaginatedResponse<LessonType>>(
-        `/api/v1/lesson-types?pageSize=${MAX_PAGE_SIZE}`,
-      ),
+      fetchJson<PaginatedResponse<LessonType>>(`/api/v1/lesson-types?pageSize=${MAX_PAGE_SIZE}`),
   });
 }
 
@@ -161,7 +158,15 @@ export function useDeleteLessonType() {
 // Audit F-54 (2026-05-07 r4): the route schema accepts `coachMemberId`
 // but the hook's filter type omitted it, so the per-coach calendar view
 // can't filter slots. Expose it through.
-export function useBookingSlots(filters: { date?: string; dateFrom?: string; dateTo?: string; lessonTypeId?: string; coachMemberId?: string } = {}) {
+export function useBookingSlots(
+  filters: {
+    date?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    lessonTypeId?: string;
+    coachMemberId?: string;
+  } = {},
+) {
   const params = new URLSearchParams();
   if (filters.date) params.set('date', filters.date);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
@@ -196,7 +201,14 @@ export function useUpdateBookingSlot(slotId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { date?: string; startTime?: string; endTime?: string; maxRiders?: number; arenaId?: string; coachMemberId?: string }) =>
+    mutationFn: (data: {
+      date?: string;
+      startTime?: string;
+      endTime?: string;
+      maxRiders?: number;
+      arenaId?: string;
+      coachMemberId?: string;
+    }) =>
       fetchJson<ApiResponse<BookingSlot>>(`/api/v1/booking-slots/${slotId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

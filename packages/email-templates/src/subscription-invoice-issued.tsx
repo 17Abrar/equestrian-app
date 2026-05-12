@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Button, Section,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Button,
+  Section,
 } from '@react-email/components';
 import { formatCurrency } from '@equestrian/shared/utils';
 import { safeHref } from './util/safe-href';
@@ -41,16 +49,13 @@ export function SubscriptionInvoiceIssued({
       <Head />
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Heading style={styles.heading}>
-            Your Cavaliq invoice is ready
-          </Heading>
+          <Heading style={styles.heading}>Your Cavaliq invoice is ready</Heading>
 
           <Text style={styles.greeting}>Hi {recipientName},</Text>
 
           <Text style={styles.text}>
-            This is the monthly Cavaliq subscription invoice for{' '}
-            <strong>{clubName}</strong>. Pay it via the link below to keep your
-            stable&apos;s account active.
+            This is the monthly Cavaliq subscription invoice for <strong>{clubName}</strong>. Pay it
+            via the link below to keep your stable&apos;s account active.
           </Text>
 
           <Section style={styles.card}>
@@ -61,12 +66,12 @@ export function SubscriptionInvoiceIssued({
             <Text style={styles.value}>{TIER_LABEL[tier]}</Text>
 
             <Text style={styles.label}>Period</Text>
-            <Text style={styles.value}>{periodStart} → {periodEnd}</Text>
+            <Text style={styles.value}>
+              {periodStart} → {periodEnd}
+            </Text>
 
             <Text style={styles.label}>Amount due</Text>
-            <Text style={styles.valueLarge}>
-              {formatCurrency(amountMinorUnits, currency)}
-            </Text>
+            <Text style={styles.valueLarge}>{formatCurrency(amountMinorUnits, currency)}</Text>
 
             <Text style={styles.label}>Due by</Text>
             <Text style={styles.value}>{dueDate}</Text>
@@ -82,16 +87,16 @@ export function SubscriptionInvoiceIssued({
 
           {!payLink && (
             <Text style={styles.text}>
-              We&apos;ll follow up with payment instructions shortly. You can
-              also pay any time from Settings → Subscription in your dashboard.
+              We&apos;ll follow up with payment instructions shortly. You can also pay any time from
+              Settings → Subscription in your dashboard.
             </Text>
           )}
 
           <Hr style={styles.hr} />
 
           <Text style={styles.footer}>
-            You can review every past invoice and payment in Settings →
-            Subscription. Reply to this email if anything looks off.
+            You can review every past invoice and payment in Settings → Subscription. Reply to this
+            email if anything looks off.
           </Text>
         </Container>
       </Body>
@@ -117,9 +122,20 @@ const styles = {
     padding: '20px',
     margin: '16px 0',
   },
-  label: { fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 2px' },
+  label: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 2px',
+  },
   value: { fontSize: '14px', color: '#111827', fontWeight: '500' as const, margin: '0 0 12px' },
-  valueLarge: { fontSize: '20px', color: '#8b5cf6', fontWeight: '700' as const, margin: '0 0 12px' },
+  valueLarge: {
+    fontSize: '20px',
+    color: '#8b5cf6',
+    fontWeight: '700' as const,
+    margin: '0 0 12px',
+  },
   button: {
     backgroundColor: '#8b5cf6',
     color: '#ffffff',

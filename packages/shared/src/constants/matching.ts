@@ -13,9 +13,9 @@ export const SKILL_MATCH_BAD_SCORE = -20;
 export const WEIGHT_COMFORT_HIGH_SCORE = 15;
 export const WEIGHT_COMFORT_MED_SCORE = 5;
 export const WEIGHT_COMFORT_LOW_SCORE = -10;
-export const WEIGHT_COMFORT_MARGIN_HIGH = 20;  // kg
-export const WEIGHT_COMFORT_MARGIN_MED = 10;   // kg
-export const WEIGHT_COMFORT_MARGIN_LOW = 5;    // kg
+export const WEIGHT_COMFORT_MARGIN_HIGH = 20; // kg
+export const WEIGHT_COMFORT_MARGIN_MED = 10; // kg
+export const WEIGHT_COMFORT_MARGIN_LOW = 5; // kg
 
 // Workload scores
 export const WORKLOAD_FRESH_SCORE = 10;

@@ -23,9 +23,7 @@ export { hasPermission };
 
 export function assertPermission(role: UserRole, requiredPermission: string): void {
   if (!hasPermission(role, requiredPermission)) {
-    throw new PermissionError(
-      `Role '${role}' does not have permission '${requiredPermission}'`,
-    );
+    throw new PermissionError(`Role '${role}' does not have permission '${requiredPermission}'`);
   }
 }
 

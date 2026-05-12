@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, text, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  text,
+  timestamp,
+  index,
+  uniqueIndex,
+  foreignKey,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { joinRequestStatusEnum } from './enums';
 import { clubs } from './clubs';
@@ -20,7 +29,7 @@ export const clubJoinRequests = pgTable(
     email: varchar('email', { length: 255 }),
     displayName: varchar('display_name', { length: 255 }),
     message: text('message'),
-    // Audit AI-36 — promoted to pgEnum.
+    // Audit QA-36 — promoted to pgEnum.
     status: joinRequestStatusEnum('status').notNull().default('pending'),
     // Audit F-2 (2026-05-06 r3): inline single-column FK dropped in
     // migration 0043; replaced with composite (reviewed_by_member_id,

@@ -11,7 +11,9 @@ import { PaymentProviderError } from './types';
  * across both error families without requiring them to share a base
  * class.
  */
-function isRetryableProviderError(err: unknown): err is { code: string; retryable: boolean; message: string } {
+function isRetryableProviderError(
+  err: unknown,
+): err is { code: string; retryable: boolean; message: string } {
   if (err instanceof PaymentProviderError) return err.retryable;
   if (
     err !== null &&

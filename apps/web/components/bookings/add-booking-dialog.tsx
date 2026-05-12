@@ -299,7 +299,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                     {slotsQuery.isLoading ? (
                       <Skeleton className="h-10" />
                     ) : slots.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-muted-foreground text-sm">
                         No slots available for this date and lesson type.
                       </p>
                     ) : (
@@ -321,9 +321,8 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                             const cap = getCapacityInfo(slot.currentRiders, slot.maxRiders);
                             return (
                               <SelectItem key={slot.id} value={slot.id} disabled={cap.isFull}>
-                                {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
-                                {' '}
-                                ({slot.currentRiders}/{slot.maxRiders} riders)
+                                {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)} (
+                                {slot.currentRiders}/{slot.maxRiders} riders)
                                 {slot.arenaName ? ` • ${slot.arenaName}` : ''}
                                 {cap.isFull ? ' — FULL' : ''}
                               </SelectItem>
@@ -455,9 +454,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                     {couponValidating ? 'Applying…' : 'Apply'}
                   </Button>
                 </div>
-                {couponError && (
-                  <p className="mt-1 text-sm text-destructive">{couponError}</p>
-                )}
+                {couponError && <p className="text-destructive mt-1 text-sm">{couponError}</p>}
                 {couponDiscount > 0 && (
                   <p className="mt-1 text-sm text-green-600">
                     Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
@@ -468,9 +465,9 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
 
             {/* Summary */}
             {selectedSlot && riderMemberId && (
-              <div className="rounded-lg border bg-muted/50 p-3">
+              <div className="bg-muted/50 rounded-lg border p-3">
                 <p className="text-sm font-medium">Booking Summary</p>
-                <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                <div className="text-muted-foreground mt-2 space-y-1 text-sm">
                   <p>{selectedSlot.lessonTypeName}</p>
                   <p>
                     {selectedSlot.date} at {selectedSlot.startTime.slice(0, 5)} –{' '}
@@ -496,11 +493,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
             <Button
               type="submit"
               className="w-full"
-              disabled={
-                createBooking.isPending ||
-                couponValidating ||
-                form.formState.isSubmitting
-              }
+              disabled={createBooking.isPending || couponValidating || form.formState.isSubmitting}
             >
               {createBooking.isPending ? 'Creating...' : 'Create Booking'}
             </Button>

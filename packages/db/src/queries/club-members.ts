@@ -29,10 +29,7 @@ export async function getMembersByRole(
   roles: string[],
   { page, pageSize }: { page: number; pageSize: number },
 ) {
-  const conditions: SQL[] = [
-    eq(clubMembers.clubId, clubId),
-    eq(clubMembers.isActive, true),
-  ];
+  const conditions: SQL[] = [eq(clubMembers.clubId, clubId), eq(clubMembers.isActive, true)];
 
   if (roles.length > 0) {
     // P0 2026-05-06: switched from `sql\`= ANY(${roles})\`` to `inArray`.
@@ -135,7 +132,10 @@ export async function getStaffByClub(clubId: string, filters: StaffFilters) {
 /** List-row shape for `getStaffByClub` (audit F-32). */
 export type StaffListItem = Awaited<ReturnType<typeof getStaffByClub>>['data'][number];
 
-export async function getOwnersByClub(clubId: string, filters: { search?: string; page: number; pageSize: number }) {
+export async function getOwnersByClub(
+  clubId: string,
+  filters: { search?: string; page: number; pageSize: number },
+) {
   const conditions: SQL[] = [
     eq(clubMembers.clubId, clubId),
     eq(clubMembers.isActive, true),
@@ -251,10 +251,7 @@ export async function getMemberById(clubId: string, memberId: string) {
  * (booking POST, horse-owner transfer, coach assignment, etc.) — those
  * must use the strict `getMemberById`.
  */
-export async function getMemberByIdIncludingDeactivated(
-  clubId: string,
-  memberId: string,
-) {
+export async function getMemberByIdIncludingDeactivated(clubId: string, memberId: string) {
   const result = await db
     .select()
     .from(clubMembers)

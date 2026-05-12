@@ -14,7 +14,7 @@
     "cf:typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
     "postinstall": "test -f cloudflare-env.d.ts || pnpm cf:typegen || true",
     "test:e2e": "playwright test",
-    "test:e2e:prod": "PLAYWRIGHT_BASE_URL=https://cavaliq.com playwright test --project=api-smoke"
+    "test:e2e:prod": "env -u NO_COLOR PLAYWRIGHT_BASE_URL=https://cavaliq.com playwright test --project=api-smoke"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",
@@ -40,7 +40,7 @@
     "date-fns": "^3.6.0",
     "drizzle-orm": "0.45.2",
     "lucide-react": "0.487.0",
-    "next": "^15.5.15",
+    "next": "^15.5.16",
     "radix-ui": "^1.4.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

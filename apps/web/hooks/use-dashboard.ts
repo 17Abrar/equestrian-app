@@ -1,10 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import {
-  type ApiSuccessResponse,
-  type DashboardStats,
-} from '@equestrian/shared/types';
+import { type ApiSuccessResponse, type DashboardStats } from '@equestrian/shared/types';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 

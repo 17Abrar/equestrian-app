@@ -11,26 +11,55 @@ import { sanitize, scrubPiiInString, type RedactorConfig } from './log-redactor'
 
 const PRODUCTION_SENSITIVE_KEYS = new Set<string>([
   // Auth / secrets
-  'password', 'token', 'cardnumber', 'secret', 'authorization',
-  'apikey', 'api_key', 'accesstoken', 'access_token',
-  'refreshtoken', 'refresh_token', 'creditcard', 'credit_card',
-  'ssn', 'cvv',
+  'password',
+  'token',
+  'cardnumber',
+  'secret',
+  'authorization',
+  'apikey',
+  'api_key',
+  'accesstoken',
+  'access_token',
+  'refreshtoken',
+  'refresh_token',
+  'creditcard',
+  'credit_card',
+  'ssn',
+  'cvv',
   // PII
-  'email', 'recipient', 'to', 'cc', 'bcc', 'subject',
-  'phone', 'phonenumber', 'phone_number',
-  'dateofbirth', 'date_of_birth',
-  'displayname', 'display_name',
-  'medicalnotes', 'medical_notes',
-  'emergencycontactphone', 'emergency_contact_phone',
-  'emergencycontactname', 'emergency_contact_name',
-  'guestemail', 'guest_email', 'guestphone', 'guest_phone',
-  'guestname', 'guest_name',
+  'email',
+  'recipient',
+  'to',
+  'cc',
+  'bcc',
+  'subject',
+  'phone',
+  'phonenumber',
+  'phone_number',
+  'dateofbirth',
+  'date_of_birth',
+  'displayname',
+  'display_name',
+  'medicalnotes',
+  'medical_notes',
+  'emergencycontactphone',
+  'emergency_contact_phone',
+  'emergencycontactname',
+  'emergency_contact_name',
+  'guestemail',
+  'guest_email',
+  'guestphone',
+  'guest_phone',
+  'guestname',
+  'guest_name',
   // PHI
   ...PHI_KEYS.map((k) => k.toLowerCase()),
   'vet_instructions',
   // Stripe / payment-provider account ids
-  'externalaccountid', 'external_account_id',
-  'provideraccountid', 'provider_account_id',
+  'externalaccountid',
+  'external_account_id',
+  'provideraccountid',
+  'provider_account_id',
 ]);
 
 const PII_PATTERNS = [
@@ -40,7 +69,14 @@ const PII_PATTERNS = [
 ];
 const BARE_GCC_PHONE_PATTERN = /\b0[5-9]\d{8}\b/g;
 const FREE_TEXT_KEYS = new Set([
-  'note', 'message', 'comment', 'reason', 'detail', 'details', 'body', 'text',
+  'note',
+  'message',
+  'comment',
+  'reason',
+  'detail',
+  'details',
+  'body',
+  'text',
 ]);
 
 const config: RedactorConfig = {
@@ -52,7 +88,10 @@ const config: RedactorConfig = {
 
 describe('logger redactor — key-name layer', () => {
   it('redacts password / token / secret / cardnumber at top level', () => {
-    const out = sanitize({ password: 'hunter2', token: 'tok_abc', secret: 's', cardnumber: '4242' }, config);
+    const out = sanitize(
+      { password: 'hunter2', token: 'tok_abc', secret: 's', cardnumber: '4242' },
+      config,
+    );
     expect(out).toEqual({
       password: '[REDACTED]',
       token: '[REDACTED]',
@@ -74,7 +113,10 @@ describe('logger redactor — key-name layer', () => {
     // The production logger merges in PHI_KEYS dynamically; this test
     // pins the contract: every key in that array gets value-redacted.
     for (const key of PHI_KEYS) {
-      const out = sanitize({ [key]: 'sensitive medical detail' }, config) as Record<string, unknown>;
+      const out = sanitize({ [key]: 'sensitive medical detail' }, config) as Record<
+        string,
+        unknown
+      >;
       expect(out[key], `PHI_KEY '${key}' did not redact`).toBe('[REDACTED]');
     }
   });
@@ -98,18 +140,16 @@ describe('logger redactor — key-name layer', () => {
   });
 
   it('redacts at depth — nested object', () => {
-    const out = sanitize(
-      { audit: { changes: { email: 'rider@example.com' } } },
-      config,
-    ) as { audit: { changes: { email: string } } };
+    const out = sanitize({ audit: { changes: { email: 'rider@example.com' } } }, config) as {
+      audit: { changes: { email: string } };
+    };
     expect(out.audit.changes.email).toBe('[REDACTED]');
   });
 
   it('redacts at depth — array element', () => {
-    const out = sanitize(
-      { recipients: [{ email: 'a@b.c' }, { email: 'd@e.f' }] },
-      config,
-    ) as { recipients: { email: string }[] };
+    const out = sanitize({ recipients: [{ email: 'a@b.c' }, { email: 'd@e.f' }] }, config) as {
+      recipients: { email: string }[];
+    };
     expect(out.recipients[0]?.email).toBe('[REDACTED]');
     expect(out.recipients[1]?.email).toBe('[REDACTED]');
   });
@@ -133,28 +173,23 @@ describe('logger redactor — value regex layer', () => {
   // `notes`) hit the key-name layer first and emit `[REDACTED]`
   // wholesale — that's tested in the key-name suite above.
   it('redacts emails embedded in non-sensitive string keys', () => {
-    const out = sanitize(
-      { label: 'reach out at rider@example.com please' },
-      config,
-    ) as { label: string };
+    const out = sanitize({ label: 'reach out at rider@example.com please' }, config) as {
+      label: string;
+    };
     expect(out.label).toContain('[REDACTED-EMAIL]');
     expect(out.label).not.toContain('rider@example.com');
   });
 
   it('redacts international phones (+CC) in non-sensitive string keys', () => {
-    const out = sanitize(
-      { event: 'call +971 50 123 4567 to confirm' },
-      config,
-    ) as { event: string };
+    const out = sanitize({ event: 'call +971 50 123 4567 to confirm' }, config) as {
+      event: string;
+    };
     expect(out.event).toContain('[REDACTED-PHONE]');
     expect(out.event).not.toContain('+971 50 123 4567');
   });
 
   it('redacts parenthesized US-style phones', () => {
-    const out = sanitize(
-      { event: 'office is (212) 555-1234' },
-      config,
-    ) as { event: string };
+    const out = sanitize({ event: 'office is (212) 555-1234' }, config) as { event: string };
     expect(out.event).toContain('[REDACTED-PHONE]');
     expect(out.event).not.toContain('(212) 555-1234');
   });
@@ -207,10 +242,9 @@ describe('logger redactor — depth + parent-key plumbing', () => {
   it('parentKey context propagates through arrays', () => {
     // The note's value is an array of strings; the bare phone in each
     // element should still be redacted because the PARENT key is `note`.
-    const out = sanitize(
-      { note: ['call 0501234567', 'or 0521234567'] },
-      config,
-    ) as { note: string[] };
+    const out = sanitize({ note: ['call 0501234567', 'or 0521234567'] }, config) as {
+      note: string[];
+    };
     expect(out.note[0]).toContain('[REDACTED-PHONE]');
     expect(out.note[1]).toContain('[REDACTED-PHONE]');
   });
@@ -219,10 +253,9 @@ describe('logger redactor — depth + parent-key plumbing', () => {
     // `note.inner` is a sub-object; the bare-phone scrub only fires on
     // free-text PARENT keys, so `inner.id: '0501234567'` (parent is now
     // `id`, not `note`) is NOT redacted. Documents the contract.
-    const out = sanitize(
-      { note: { inner: { id: '0501234567' } } },
-      config,
-    ) as { note: { inner: { id: string } } };
+    const out = sanitize({ note: { inner: { id: '0501234567' } } }, config) as {
+      note: { inner: { id: string } };
+    };
     expect(out.note.inner.id).toBe('0501234567');
   });
 });

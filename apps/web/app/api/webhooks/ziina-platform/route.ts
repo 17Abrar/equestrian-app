@@ -8,10 +8,7 @@ import {
   markWebhookEventPermanentlyFailed,
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
-import {
-  verifyPlatformWebhook,
-  PlatformWebhookError,
-} from '@/lib/billing/platform-ziina';
+import { verifyPlatformWebhook, PlatformWebhookError } from '@/lib/billing/platform-ziina';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { sendEmailAsync } from '@/lib/email';
 import { SubscriptionPaymentReceived } from '@equestrian/email-templates/subscription-payment-received';
@@ -31,7 +28,7 @@ import { getClientIp } from '@/lib/request-ip';
  * signing secret as the `PLATFORM_ZIINA_WEBHOOK_SECRET` env / wrangler
  * secret.
  *
- * Audit AI-15 — every rejection path returns identical 401 so an
+ * Audit QA-15 — every rejection path returns identical 401 so an
  * attacker can't probe the webhook config state via response shape.
  *
  * Idempotency: events are claim-then-process via `webhook_events` keyed
@@ -78,7 +75,7 @@ async function handlePost(request: NextRequest) {
   // Audit F-8 (2026-05-06 r3): hoist the signature-header check
   // BEFORE the body read so a forgery without the header pays
   // constant cost — matches the per-club Ziina route's ordering
-  // (`/api/webhooks/ziina/[clubId]`). Audit AI-15 — return identical
+  // (`/api/webhooks/ziina/[clubId]`). Audit QA-15 — return identical
   // 401 across all rejection paths so the response shape doesn't
   // leak webhook config state.
   const signature = request.headers.get('x-hmac-signature');
@@ -170,11 +167,7 @@ async function handlePost(request: NextRequest) {
     // operator could only spot the gap by tailing logs. Park the dedup
     // row in `permanently_failed` so the alert fires.
     if (permanentFailureReason) {
-      await markWebhookEventPermanentlyFailed(
-        PROVIDER,
-        event.eventId,
-        permanentFailureReason,
-      );
+      await markWebhookEventPermanentlyFailed(PROVIDER, event.eventId, permanentFailureReason);
     } else {
       await markWebhookEventProcessed(PROVIDER, event.eventId);
     }
@@ -224,10 +217,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   // paid. The signature check above already proved the body is from
   // Cavaliq's account, so this is belt-and-braces against a future
   // multi-account confusion.
-  if (
-    args.eventCurrency &&
-    args.eventCurrency.toUpperCase() !== invoice.currency.toUpperCase()
-  ) {
+  if (args.eventCurrency && args.eventCurrency.toUpperCase() !== invoice.currency.toUpperCase()) {
     logger.error('platform_webhook_currency_mismatch', {
       invoiceId: invoice.id,
       clubId: invoice.clubId,
@@ -268,15 +258,12 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   // automatic settlement path — admin cancelled the invoice before the
   // webhook arrived, but the club's card has been charged. Surface this
   // as `permanently_failed` so it lands in the alert pipeline (mirror
-  // livery's F-13 fix and bookings' AI-24 — the third instance of the
+  // livery's F-13 fix and bookings' QA-24 — the third instance of the
   // same shape that the prior audit pass missed). Without this signal
   // the dedup row flips to `processed`, the money sits unreconciled in
   // Cavaliq's Ziina balance, and the operator sees nothing.
   if (invoice.status === 'cancelled') {
-    if (
-      args.eventAmountReceived !== undefined &&
-      args.eventAmountReceived > 0
-    ) {
+    if (args.eventAmountReceived !== undefined && args.eventAmountReceived > 0) {
       logger.error('platform_webhook_paid_for_cancelled_invoice', {
         invoiceId: invoice.id,
         clubId: invoice.clubId,

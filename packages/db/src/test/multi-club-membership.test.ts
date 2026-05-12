@@ -5,7 +5,7 @@ import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 
 /**
- * Integration tests for the multi-club membership resolver — audit AI-22.
+ * Integration tests for the multi-club membership resolver — audit QA-22.
  *
  * Riders can belong to multiple stables; the active club is selected via
  * the `cavaliq_active_club` cookie (resolved in `tenant.ts`). The DB-side
@@ -102,9 +102,7 @@ describe('getActiveMembershipsForUser', () => {
       clubDeleted: true,
     });
 
-    const memberships = await withTestDb(testDb.db, () =>
-      getActiveMembershipsForUser('user_tomb'),
-    );
+    const memberships = await withTestDb(testDb.db, () => getActiveMembershipsForUser('user_tomb'));
 
     expect(memberships).toHaveLength(1);
     expect(memberships[0]?.clubName).toBe('Live Club');

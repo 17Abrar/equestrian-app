@@ -8,7 +8,13 @@ import {
   countAudienceMembers,
   MEMBERS_PREVIEW_CAP,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 // audit M-1 (2026-05-05) — see the matching schema in
 // `app/api/v1/emails/audiences/route.ts` for rationale. The two

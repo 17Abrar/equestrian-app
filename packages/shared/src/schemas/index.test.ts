@@ -74,9 +74,7 @@ describe('transferHorseOwnerSchema', () => {
   });
 
   it('rejects a non-uuid string', () => {
-    expect(() =>
-      transferHorseOwnerSchema.parse({ ownerMemberId: 'not-a-uuid' }),
-    ).toThrow();
+    expect(() => transferHorseOwnerSchema.parse({ ownerMemberId: 'not-a-uuid' })).toThrow();
   });
 });
 

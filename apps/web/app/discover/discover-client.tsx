@@ -63,13 +63,10 @@ export function DiscoverClient() {
   const stables = data?.data ?? [];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link
-            href={isSignedIn ? '/rider' : '/'}
-            aria-label="Cavaliq home"
-          >
+          <Link href={isSignedIn ? '/rider' : '/'} aria-label="Cavaliq home">
             <CavaliqLogo height={32} priority />
           </Link>
           <nav className="flex items-center gap-2">
@@ -97,19 +94,17 @@ export function DiscoverClient() {
         </div>
       </header>
 
-      <section className="border-b bg-gradient-to-b from-background to-muted/30">
+      <section className="from-background to-muted/30 border-b bg-gradient-to-b">
         <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Find a stable.
-          </h1>
-          <p className="mt-3 max-w-2xl text-lg text-muted-foreground">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Find a stable.</h1>
+          <p className="text-muted-foreground mt-3 max-w-2xl text-lg">
             Browse stables near you, see what they offer, and join the ones that fit. Ride at
             multiple stables — your progress follows you.
           </p>
 
           <div className="mt-6 max-w-xl">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
               <Input
                 type="search"
                 placeholder="Search by stable name or city..."
@@ -139,7 +134,7 @@ export function DiscoverClient() {
           <Card>
             <CardContent className="py-12 text-center">
               <h2 className="text-lg font-semibold">No stables yet</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="text-muted-foreground mt-1 text-sm">
                 {/* Audit F-29 (2026-05-07 r5): give riders a CTA when
                     the search yields nothing — clearing the search
                     restores the full listing. The button only renders
@@ -151,11 +146,7 @@ export function DiscoverClient() {
                   : 'Check back soon — more stables are joining every week.'}
               </p>
               {search && (
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => setSearch('')}
-                >
+                <Button variant="outline" className="mt-4" onClick={() => setSearch('')}>
                   Clear search
                 </Button>
               )}
@@ -163,8 +154,9 @@ export function DiscoverClient() {
           </Card>
         ) : (
           <>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {data?.pagination.total} {data?.pagination.total === 1 ? 'stable' : 'stables'} available
+            <p className="text-muted-foreground mb-4 text-sm">
+              {data?.pagination.total} {data?.pagination.total === 1 ? 'stable' : 'stables'}{' '}
+              available
             </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {stables.map((club) => (
@@ -176,7 +168,7 @@ export function DiscoverClient() {
       </main>
 
       <footer className="mt-20 border-t">
-        <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted-foreground sm:px-6">
+        <div className="text-muted-foreground mx-auto max-w-6xl px-4 py-8 text-sm sm:px-6">
           Run your own stable on Cavaliq.{' '}
           <Link
             href="/sign-up?as=stable"
@@ -196,7 +188,7 @@ function ClubCard({ club }: { club: PublicClub }) {
   return (
     <Link
       href={`/c/${club.slug}`}
-      className="group overflow-hidden rounded-xl border bg-card transition-all hover:shadow-lg"
+      className="bg-card group overflow-hidden rounded-xl border transition-all hover:shadow-lg"
     >
       {/*
         Audit LOW (2026-05-05 pass 2): swap inline `backgroundImage:
@@ -207,10 +199,7 @@ function ClubCard({ club }: { club: PublicClub }) {
         carries the brand colour as a fallback and the photo overlays
         when present.
       */}
-      <div
-        className="relative h-32 w-full overflow-hidden"
-        style={{ backgroundColor: accent }}
-      >
+      <div className="relative h-32 w-full overflow-hidden" style={{ backgroundColor: accent }}>
         {club.coverPhotoUrl && (
           <Image
             src={club.coverPhotoUrl}
@@ -222,7 +211,7 @@ function ClubCard({ club }: { club: PublicClub }) {
           />
         )}
         {club.logoUrl && (
-          <div className="absolute bottom-2 left-2 h-12 w-12 overflow-hidden rounded-lg border-2 border-background bg-background shadow-sm">
+          <div className="border-background bg-background absolute bottom-2 left-2 h-12 w-12 overflow-hidden rounded-lg border-2 shadow-sm">
             <Image
               src={club.logoUrl}
               alt={`${club.name} logo`}
@@ -244,17 +233,17 @@ function ClubCard({ club }: { club: PublicClub }) {
           )}
         </div>
         {(club.city || club.country) && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <p className="text-muted-foreground flex items-center gap-1 text-xs">
             <MapPin className="h-3 w-3" />
             {[club.city, club.country].filter(Boolean).join(', ')}
           </p>
         )}
         {(club.shortDescription || club.description) && (
-          <p className="line-clamp-2 text-sm text-muted-foreground">
+          <p className="text-muted-foreground line-clamp-2 text-sm">
             {club.shortDescription ?? club.description}
           </p>
         )}
-        <div className="flex items-center pt-1 text-sm font-medium text-foreground">
+        <div className="text-foreground flex items-center pt-1 text-sm font-medium">
           <span>View club</span>
           <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </div>
@@ -270,10 +259,7 @@ function DiscoverGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="overflow-hidden rounded-xl border bg-card"
-        >
+        <div key={i} className="bg-card overflow-hidden rounded-xl border">
           <Skeleton className="h-32 w-full rounded-none" />
           <div className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">

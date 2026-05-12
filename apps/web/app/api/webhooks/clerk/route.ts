@@ -47,9 +47,10 @@ interface MembershipEvent {
  * an operator filters Sentry by during incident triage. Both event
  * shapes (organization.* and organizationMembership.*) are handled.
  */
-function extractClerkIds(
-  event: OrganizationEvent | MembershipEvent,
-): { clerkOrgId: string | null; clerkUserId: string | null } {
+function extractClerkIds(event: OrganizationEvent | MembershipEvent): {
+  clerkOrgId: string | null;
+  clerkUserId: string | null;
+} {
   if (event.type.startsWith('organizationMembership.')) {
     const m = event as MembershipEvent;
     return {
@@ -129,7 +130,7 @@ async function handlePost(request: Request) {
     // its 5xx retry band (~24h, 5 attempts). The operator already gets
     // paged via the `clerk_webhook_no_secret` error log; the route is
     // operator-actionable, not transient — retrying without the secret
-    // configured just amplifies the alert noise. Mirrors the AI-15
+    // configured just amplifies the alert noise. Mirrors the QA-15
     // unified-rejection pattern.
     return new Response('Webhook secret not configured', { status: 401 });
   }
@@ -294,6 +295,12 @@ async function handlePost(request: Request) {
       case 'organization.deleted': {
         const orgData = (event as OrganizationEvent).data;
 
+        const club = await db
+          .select({ id: clubs.id })
+          .from(clubs)
+          .where(eq(clubs.clerkOrgId, orgData.id))
+          .limit(1);
+
         await db
           .update(clubs)
           .set({
@@ -302,6 +309,16 @@ async function handlePost(request: Request) {
             updatedAt: new Date(),
           })
           .where(eq(clubs.clerkOrgId, orgData.id));
+
+        if (club[0]) {
+          await db
+            .update(clubMembers)
+            .set({
+              isActive: false,
+              updatedAt: new Date(),
+            })
+            .where(eq(clubMembers.clubId, club[0].id));
+        }
 
         logger.info('club_deleted_from_webhook', { clerkOrgId: orgData.id });
         break;
@@ -332,9 +349,8 @@ async function handlePost(request: Request) {
           return new Response('Club not found, retry pending', { status: 503 });
         }
 
-        const displayName = [userData.first_name, userData.last_name]
-          .filter(Boolean)
-          .join(' ') || undefined;
+        const displayName =
+          [userData.first_name, userData.last_name].filter(Boolean).join(' ') || undefined;
 
         await db
           .insert(clubMembers)

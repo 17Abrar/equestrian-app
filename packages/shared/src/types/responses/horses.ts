@@ -17,11 +17,7 @@
  * and let the type-checker catch the consumers.
  */
 
-import type {
-  HorseStatus,
-  SkillLevel,
-  HorseSaleStatus,
-} from '../index';
+import type { HorseStatus, SkillLevel, HorseSaleStatus } from '../index';
 
 // Mirror of `horseOwnershipStatusEnum` — declared inline because the
 // project-wide enum constants don't currently expose this one.

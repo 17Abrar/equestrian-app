@@ -80,10 +80,7 @@ export function SubscriptionPanel() {
         <OutstandingCard invoices={summary.outstanding} />
       )}
 
-      <HistoryCard
-        invoices={summary.history}
-        isTrial={isTrial}
-      />
+      <HistoryCard invoices={summary.history} isTrial={isTrial} />
     </div>
   );
 }
@@ -118,16 +115,16 @@ function SummaryCard({
           <StatusBadge status={status} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-1 pb-4 text-sm text-muted-foreground">
+      <CardContent className="text-muted-foreground space-y-1 pb-4 text-sm">
         {trialEndsAt && status === 'trialing' && (
           <p>
-            Trial ends <span className="font-medium text-foreground">{trialEndsAt}</span>.
-            Your first Cavaliq invoice will arrive on that date.
+            Trial ends <span className="text-foreground font-medium">{trialEndsAt}</span>. Your
+            first Cavaliq invoice will arrive on that date.
           </p>
         )}
         {trialEndsAt && status === 'active' && (
           <p>
-            Billing anchored to <span className="font-medium text-foreground">{trialEndsAt}</span>.
+            Billing anchored to <span className="text-foreground font-medium">{trialEndsAt}</span>.
             Each monthly invoice is issued on that calendar day.
           </p>
         )}
@@ -135,8 +132,8 @@ function SummaryCard({
           <p className="flex items-start gap-2 text-amber-700">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>
-              You have an overdue Cavaliq invoice. Pay below to keep your stable&apos;s
-              account active.
+              You have an overdue Cavaliq invoice. Pay below to keep your stable&apos;s account
+              active.
             </span>
           </p>
         )}
@@ -161,12 +158,20 @@ function StatusBadge({ status }: { status: SubscriptionStatus }) {
     );
   }
   if (status === 'trialing') {
-    return <Badge variant="secondary" className="text-xs">Trialing</Badge>;
+    return (
+      <Badge variant="secondary" className="text-xs">
+        Trialing
+      </Badge>
+    );
   }
   if (status === 'past_due') {
     return <Badge className="bg-amber-600 text-xs hover:bg-amber-700">Past due</Badge>;
   }
-  return <Badge variant="destructive" className="text-xs">Cancelled</Badge>;
+  return (
+    <Badge variant="destructive" className="text-xs">
+      Cancelled
+    </Badge>
+  );
 }
 
 // ─── Outstanding invoices ────────────────────────────────────────────
@@ -176,9 +181,7 @@ function OutstandingCard({ invoices }: { invoices: OutstandingInvoice[] }) {
     <Card className="border-amber-200 bg-amber-50/30">
       <CardHeader>
         <CardTitle className="text-base">Outstanding invoices</CardTitle>
-        <CardDescription>
-          Pay these to keep your subscription active.
-        </CardDescription>
+        <CardDescription>Pay these to keep your subscription active.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {invoices.map((inv) => (
@@ -214,13 +217,13 @@ function OutstandingRow({ invoice }: { invoice: OutstandingInvoice }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background p-3">
+    <div className="bg-background flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <span className="font-medium">{invoice.invoiceNumber}</span>
           <InvoiceStatusBadge status={invoice.status} />
         </div>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-muted-foreground text-xs">
           {invoice.periodStart} → {invoice.periodEnd} · Due {invoice.dueDate}
         </div>
       </div>
@@ -252,13 +255,7 @@ function OutstandingRow({ invoice }: { invoice: OutstandingInvoice }) {
 
 // ─── History ─────────────────────────────────────────────────────────
 
-function HistoryCard({
-  invoices,
-  isTrial,
-}: {
-  invoices: SubscriptionInvoice[];
-  isTrial: boolean;
-}) {
+function HistoryCard({ invoices, isTrial }: { invoices: SubscriptionInvoice[]; isTrial: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -271,9 +268,7 @@ function HistoryCard({
       </CardHeader>
       <CardContent className="overflow-x-auto p-0">
         {invoices.length === 0 ? (
-          <div className="px-6 pb-6 pt-2 text-sm text-muted-foreground">
-            No invoices yet.
-          </div>
+          <div className="text-muted-foreground px-6 pb-6 pt-2 text-sm">No invoices yet.</div>
         ) : (
           <Table>
             <TableHeader>
@@ -290,7 +285,7 @@ function HistoryCard({
                 <TableRow key={inv.id}>
                   <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
                   <TableCell>{TIER_LABEL[inv.tier]}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-xs">
                     {inv.periodStart} → {inv.periodEnd}
                   </TableCell>
                   <TableCell>
@@ -319,10 +314,18 @@ function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
     );
   }
   if (status === 'pending') {
-    return <Badge variant="secondary" className="text-xs">Pending</Badge>;
+    return (
+      <Badge variant="secondary" className="text-xs">
+        Pending
+      </Badge>
+    );
   }
   if (status === 'overdue') {
     return <Badge className="bg-amber-600 text-xs hover:bg-amber-700">Overdue</Badge>;
   }
-  return <Badge variant="outline" className="text-xs">Cancelled</Badge>;
+  return (
+    <Badge variant="outline" className="text-xs">
+      Cancelled
+    </Badge>
+  );
 }

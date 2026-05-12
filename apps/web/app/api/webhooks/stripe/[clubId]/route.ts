@@ -27,23 +27,16 @@ import { logger } from '@/lib/logger';
  * the URL's clubId, decrypt, and verify the `Stripe-Signature` header
  * against it.
  *
- * Audit AI-15 — response shape is uniform across the rejection paths
+ * Audit QA-15 — response shape is uniform across the rejection paths
  * (no account / no secret / invalid signature) so an attacker who has a
  * clubId UUID can't probe whether Stripe is connected for that club.
  */
 
 const PAID_EVENTS = new Set(['payment_intent.succeeded']);
-const FAILED_EVENTS = new Set([
-  'payment_intent.payment_failed',
-  'payment_intent.canceled',
-]);
+const FAILED_EVENTS = new Set(['payment_intent.payment_failed', 'payment_intent.canceled']);
 const REFUND_EVENTS = new Set(['charge.refunded', 'charge.refund.updated']);
 
-const HANDLED_EVENTS = new Set<string>([
-  ...PAID_EVENTS,
-  ...FAILED_EVENTS,
-  ...REFUND_EVENTS,
-]);
+const HANDLED_EVENTS = new Set<string>([...PAID_EVENTS, ...FAILED_EVENTS, ...REFUND_EVENTS]);
 
 const clubIdSchema = z.string().uuid();
 
@@ -110,7 +103,7 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
     return new Response('Invalid signature', { status: 401 });
   }
 
-  // Audit B-9 + AI-15: getWebhookConfigByClubProvider returns ONLY the
+  // Audit B-9 + QA-15: getWebhookConfigByClubProvider returns ONLY the
   // webhook fields, never the Stripe secret key. Identical 401 for every
   // rejection path so connect-state isn't leaked via response shape.
   const account = await getWebhookConfigByClubProvider(clubId, 'stripe');
@@ -249,17 +242,15 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
       // Audit F-13 (2026-05-08 r6): livery flow now signals
       // permanentFailureReason (e.g. paid for a cancelled invoice).
       // Same handling as the booking branch.
-      invoiceResult?.kind === 'matched' && invoiceResult.permanentFailureReason
+      invoiceResult?.kind === 'matched' &&
+      invoiceResult.permanentFailureReason
     ) {
       await markWebhookEventPermanentlyFailed(
         'stripe',
         event.eventId,
         invoiceResult.permanentFailureReason,
       );
-    } else if (
-      bookingMissed &&
-      (!invoiceResult || invoiceResult.kind === 'no_target')
-    ) {
+    } else if (bookingMissed && (!invoiceResult || invoiceResult.kind === 'no_target')) {
       // Both the booking AND the livery invoice helpers came up empty
       // — neither side can ever resolve this event. F-19 escalation.
       await markWebhookEventPermanentlyFailed(

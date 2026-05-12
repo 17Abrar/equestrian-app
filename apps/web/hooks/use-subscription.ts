@@ -23,20 +23,14 @@ import { fetchJson } from '@/lib/fetch-json';
 // (distinct from the per-rider booking InvoiceStatus). Re-exported under
 // the original local names so consumers in `subscription-panel.tsx` etc.
 // don't need to change.
-export type {
-  SubscriptionTier,
-  SubscriptionInvoice,
-  OutstandingInvoice,
-  SubscriptionSummary,
-};
+export type { SubscriptionTier, SubscriptionInvoice, OutstandingInvoice, SubscriptionSummary };
 export type SubscriptionStatus = SubscriptionPlatformStatus;
 export type InvoiceStatus = SubscriptionInvoiceStatus;
 
 export function useSubscription() {
   return useQuery({
     queryKey: ['subscription'],
-    queryFn: () =>
-      fetchJson<ApiSuccessResponse<SubscriptionSummary>>('/api/v1/me/subscription'),
+    queryFn: () => fetchJson<ApiSuccessResponse<SubscriptionSummary>>('/api/v1/me/subscription'),
   });
 }
 

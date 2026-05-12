@@ -4,7 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import { type UserRole } from '@equestrian/shared/types';
 import { logger } from './logger';
 
@@ -80,7 +80,7 @@ export async function getTenantContext(): Promise<TenantContext> {
     const club = await db
       .select({ id: clubs.id, onboardingCompletedAt: clubs.onboardingCompletedAt })
       .from(clubs)
-      .where(eq(clubs.clerkOrgId, orgId))
+      .where(and(eq(clubs.clerkOrgId, orgId), eq(clubs.isActive, true), isNull(clubs.deletedAt)))
       .limit(1);
 
     const foundClub = club[0];
@@ -167,6 +167,8 @@ export async function getTenantContext(): Promise<TenantContext> {
       and(
         eq(clubMembers.clerkUserId, userId),
         eq(clubMembers.isActive, true),
+        eq(clubs.isActive, true),
+        isNull(clubs.deletedAt),
       ),
     )
     .orderBy(desc(clubMembers.joinedAt));
@@ -244,9 +246,7 @@ export async function getTenantContext(): Promise<TenantContext> {
   };
 }
 
-export async function withTenantContext<T>(
-  fn: (ctx: TenantContext) => Promise<T>,
-): Promise<T> {
+export async function withTenantContext<T>(fn: (ctx: TenantContext) => Promise<T>): Promise<T> {
   const ctx = await getTenantContext();
   return fn(ctx);
 }

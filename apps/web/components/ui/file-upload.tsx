@@ -51,98 +51,102 @@ export function FileUpload({
 
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
 
-  const handleFile = useCallback(async (file: File) => {
-    setError(null);
+  const handleFile = useCallback(
+    async (file: File) => {
+      setError(null);
 
-    // Client-side size check
-    if (file.size > maxSizeBytes) {
-      setError(`File is too large. Maximum size is ${maxSizeMB}MB.`);
-      return;
-    }
-
-    // Client-side type check
-    if (accept !== '*') {
-      const acceptParts = accept.split(',').map((a) => a.trim());
-      const isAllowed = acceptParts.some((pattern) => {
-        if (pattern === 'image/*') return file.type.startsWith('image/');
-        if (pattern === 'application/pdf' || pattern === '.pdf') return file.type === 'application/pdf';
-        if (pattern.startsWith('.')) return file.name.toLowerCase().endsWith(pattern);
-        return file.type === pattern;
-      });
-
-      if (!isAllowed) {
-        setError(`This file type is not allowed. Accepted: ${accept}`);
+      // Client-side size check
+      if (file.size > maxSizeBytes) {
+        setError(`File is too large. Maximum size is ${maxSizeMB}MB.`);
         return;
       }
-    }
 
-    setUploading(true);
+      // Client-side type check
+      if (accept !== '*') {
+        const acceptParts = accept.split(',').map((a) => a.trim());
+        const isAllowed = acceptParts.some((pattern) => {
+          if (pattern === 'image/*') return file.type.startsWith('image/');
+          if (pattern === 'application/pdf' || pattern === '.pdf')
+            return file.type === 'application/pdf';
+          if (pattern.startsWith('.')) return file.name.toLowerCase().endsWith(pattern);
+          return file.type === pattern;
+        });
 
-    try {
-      // Step 1: Get presigned URL from our API.
-      //
-      // audit L-2 (2026-05-05) — switched from raw fetch + .json() to
-      // fetchJson<T>. Cloudflare workerd types correctly tighten
-      // `Response.json(): Promise<unknown>` (the prior `Promise<any>`
-      // was a lie); fetchJson wraps the validation, surfaces the
-      // server's error message via `throw`, and does the cast in one
-      // place.
-      const presignJson = await fetchJson<{
-        success: true;
-        data: { uploadUrl: string; publicUrl: string; key: string };
-      }>('/api/v1/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type,
-          folder,
-          fileSizeBytes: file.size,
-          ...(targetClubId ? { targetClubId } : {}),
-        }),
-      });
-      const { uploadUrl, publicUrl, key } = presignJson.data;
-
-      // Step 2: Upload directly to R2
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error('Upload to storage failed. Please try again.');
+        if (!isAllowed) {
+          setError(`This file type is not allowed. Accepted: ${accept}`);
+          return;
+        }
       }
 
-      // Step 3: Ask the server to inspect the uploaded bytes. R2 trusts the
-      // client-declared content-type; this catches a file that claims to be
-      // `image/jpeg` but actually contains something else. On mismatch the
-      // server deletes the object, so we never hand a tainted URL to the
-      // form.
-      const verifyRes = await fetch('/api/v1/upload/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, contentType: file.type }),
-      });
-      if (!verifyRes.ok) {
-        const errData = await verifyRes.json().catch(() => ({}));
-        throw new Error(
-          (errData as { error?: { message?: string } }).error?.message ??
-            'Uploaded file could not be verified. Please try again.',
-        );
-      }
+      setUploading(true);
 
-      // Step 4: Pass the public URL back to the form
-      onChange(publicUrl);
-    } catch (err) {
-      reportMutationError('upload.file', err, { folder });
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
-    } finally {
-      setUploading(false);
-    }
-  }, [accept, folder, maxSizeBytes, maxSizeMB, onChange, targetClubId]);
+      try {
+        // Step 1: Get presigned URL from our API.
+        //
+        // audit L-2 (2026-05-05) — switched from raw fetch + .json() to
+        // fetchJson<T>. Cloudflare workerd types correctly tighten
+        // `Response.json(): Promise<unknown>` (the prior `Promise<any>`
+        // was a lie); fetchJson wraps the validation, surfaces the
+        // server's error message via `throw`, and does the cast in one
+        // place.
+        const presignJson = await fetchJson<{
+          success: true;
+          data: { uploadUrl: string; publicUrl: string; key: string };
+        }>('/api/v1/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            folder,
+            fileSizeBytes: file.size,
+            ...(targetClubId ? { targetClubId } : {}),
+          }),
+        });
+        const { uploadUrl, publicUrl, key } = presignJson.data;
+
+        // Step 2: Upload directly to R2
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            'Content-Type': file.type,
+          },
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error('Upload to storage failed. Please try again.');
+        }
+
+        // Step 3: Ask the server to inspect the uploaded bytes. R2 trusts the
+        // client-declared content-type; this catches a file that claims to be
+        // `image/jpeg` but actually contains something else. On mismatch the
+        // server deletes the object, so we never hand a tainted URL to the
+        // form.
+        const verifyRes = await fetch('/api/v1/upload/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, contentType: file.type }),
+        });
+        if (!verifyRes.ok) {
+          const errData = await verifyRes.json().catch(() => ({}));
+          throw new Error(
+            (errData as { error?: { message?: string } }).error?.message ??
+              'Uploaded file could not be verified. Please try again.',
+          );
+        }
+
+        // Step 4: Pass the public URL back to the form
+        onChange(publicUrl);
+      } catch (err) {
+        reportMutationError('upload.file', err, { folder });
+        setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      } finally {
+        setUploading(false);
+      }
+    },
+    [accept, folder, maxSizeBytes, maxSizeMB, onChange, targetClubId],
+  );
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -195,19 +199,13 @@ export function FileUpload({
   if (hasValue && preview && isImage) {
     return (
       <div className={cn('relative', className)}>
-        <div className="relative h-40 w-full overflow-hidden rounded-lg border bg-muted">
-          <Image
-            src={value}
-            alt="Uploaded file"
-            fill
-            className="object-cover"
-            sizes="400px"
-          />
+        <div className="bg-muted relative h-40 w-full overflow-hidden rounded-lg border">
+          <Image src={value} alt="Uploaded file" fill className="object-cover" sizes="400px" />
         </div>
         <button
           type="button"
           onClick={handleRemove}
-          className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full shadow-sm"
           aria-label="Remove file"
         >
           <X className="h-4 w-4" />
@@ -220,20 +218,25 @@ export function FileUpload({
   if (hasValue && !isImage) {
     return (
       <div className={cn('flex items-center gap-3 rounded-lg border p-3', className)}>
-        <FileText className="h-8 w-8 text-muted-foreground" />
-        <div className="flex-1 min-w-0">
+        <FileText className="text-muted-foreground h-8 w-8" />
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{value.split('/').pop()}</p>
           {/* Audit F-19 (2026-05-06): server-returned R2 URL still
               goes through safeHref at the render boundary —
               defense-in-depth, matches documents-tab.tsx pattern. */}
-          <a href={safeHref(value)} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+          <a
+            href={safeHref(value)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary text-xs hover:underline"
+          >
             View file
           </a>
         </div>
         <button
           type="button"
           onClick={handleRemove}
-          className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-muted"
+          className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded-full"
           aria-label="Remove file"
         >
           <X className="h-4 w-4" />
@@ -249,35 +252,39 @@ export function FileUpload({
         role="button"
         tabIndex={0}
         onClick={() => inputRef.current?.click()}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+        }}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         className={cn(
-          'flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors cursor-pointer',
-          dragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-muted-foreground/50',
+          'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors',
+          dragOver
+            ? 'border-primary bg-primary/5'
+            : 'border-muted-foreground/25 hover:border-muted-foreground/50',
           uploading && 'pointer-events-none opacity-60',
         )}
         aria-label={label ?? 'Drop file here or click to browse'}
       >
         {uploading ? (
           <>
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Uploading...</p>
+            <Loader2 className="text-primary h-8 w-8 animate-spin" />
+            <p className="text-muted-foreground text-sm">Uploading...</p>
           </>
         ) : (
           <>
-            <Upload className="h-8 w-8 text-muted-foreground" />
+            <Upload className="text-muted-foreground h-8 w-8" />
             <div className="text-center">
               <p className="text-sm font-medium">{label ?? 'Drop file here or click to browse'}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Max {maxSizeMB}MB</p>
+              <p className="text-muted-foreground mt-1 text-xs">Max {maxSizeMB}MB</p>
             </div>
           </>
         )}
       </div>
 
       {error && (
-        <div className="mt-2 flex items-center gap-1.5 text-sm text-destructive">
+        <div className="text-destructive mt-2 flex items-center gap-1.5 text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <p>{error}</p>
         </div>

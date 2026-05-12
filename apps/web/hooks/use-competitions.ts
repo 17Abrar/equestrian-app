@@ -44,16 +44,19 @@ export function useCompetitions(filters: Partial<CompetitionFiltersInput> = {}) 
   return useQuery({
     queryKey: ['competitions', filters],
     queryFn: () =>
-      fetchJson<{ success: true; data: Competition[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } }>(
-        `/api/v1/competitions?${params.toString()}`,
-      ),
+      fetchJson<{
+        success: true;
+        data: Competition[];
+        pagination: { page: number; pageSize: number; total: number; totalPages: number };
+      }>(`/api/v1/competitions?${params.toString()}`),
   });
 }
 
 export function useCompetition(competitionId: string) {
   return useQuery({
     queryKey: ['competitions', competitionId],
-    queryFn: () => fetchJson<ApiSuccessResponse<Competition>>(`/api/v1/competitions/${competitionId}`),
+    queryFn: () =>
+      fetchJson<ApiSuccessResponse<Competition>>(`/api/v1/competitions/${competitionId}`),
     enabled: !!competitionId,
   });
 }
@@ -121,9 +124,7 @@ export function useCompetitionClasses(competitionId: string) {
         success: true;
         data: CompetitionClass[];
         pagination: { page: number; pageSize: number; total: number; totalPages: number };
-      }>(
-        `/api/v1/competitions/${competitionId}/classes?pageSize=50`,
-      ),
+      }>(`/api/v1/competitions/${competitionId}/classes?pageSize=50`),
     enabled: !!competitionId,
   });
 }
@@ -133,14 +134,11 @@ export function useCreateCompetitionClass(competitionId: string) {
 
   return useMutation({
     mutationFn: (data: CreateCompetitionClassInput) =>
-      fetchJson<ApiResponse<CompetitionClass>>(
-        `/api/v1/competitions/${competitionId}/classes`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        },
-      ),
+      fetchJson<ApiResponse<CompetitionClass>>(`/api/v1/competitions/${competitionId}/classes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['competitions', competitionId, 'classes'] });
     },

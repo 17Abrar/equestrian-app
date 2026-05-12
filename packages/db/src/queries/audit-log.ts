@@ -34,9 +34,7 @@ export interface CreateAuditEntryParams {
 // in the audit log indefinitely while the same payload was redacted in
 // stdout. The keys are now coupled — both lists live in
 // `packages/shared/src/constants` and both writers consume them.
-const REDACTED_KEYS_LOWER = new Set(
-  [...PHI_KEYS, ...PII_KEYS].map((k) => k.toLowerCase()),
-);
+const REDACTED_KEYS_LOWER = new Set([...PHI_KEYS, ...PII_KEYS].map((k) => k.toLowerCase()));
 
 function scrubPhiFromChanges(
   changes: Record<string, { from: unknown; to: unknown }> | undefined,
@@ -150,4 +148,3 @@ export async function pruneAuditLog(retentionDays = 90, limit = 5000) {
     };
   });
 }
-

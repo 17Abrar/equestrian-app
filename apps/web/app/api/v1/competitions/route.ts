@@ -48,11 +48,7 @@ export async function POST(request: NextRequest) {
           activeOnly: true,
         });
         if (!arena) {
-          return errorResponse(
-            'INVALID_ARENA',
-            'Arena not found, or has been deactivated.',
-            400,
-          );
+          return errorResponse('INVALID_ARENA', 'Arena not found, or has been deactivated.', 400);
         }
       }
 

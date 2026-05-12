@@ -15,17 +15,37 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -54,7 +74,11 @@ function StaffSkeleton() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }).map((_, i) => (
-        <Card key={i}><CardContent className="p-4"><Skeleton className="h-20" /></CardContent></Card>
+        <Card key={i}>
+          <CardContent className="p-4">
+            <Skeleton className="h-20" />
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -83,7 +107,13 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
   const deactivateStaff = useDeactivateStaff();
 
   if (isLoading) return <StaffSkeleton />;
-  if (isError) return <ErrorState message={error instanceof Error ? error.message : 'Failed to load staff'} onRetry={() => refetch()} />;
+  if (isError)
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load staff'}
+        onRetry={() => refetch()}
+      />
+    );
 
   const staff = data?.data ?? [];
   const pagination = data?.pagination;
@@ -106,17 +136,31 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Staff & Coaches</h1>
-          <p className="mt-1 text-muted-foreground">Manage your team members</p>
+          <p className="text-muted-foreground mt-1">Manage your team members</p>
         </div>
         {canCreate && <AddStaffDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search staff..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10" />
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <Input
+            placeholder="Search staff..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-10"
+          />
         </div>
-        <Tabs value={roleFilter ?? 'all'} onValueChange={(v) => { setRoleFilter(v === 'all' ? undefined : v); setPage(1); }}>
+        <Tabs
+          value={roleFilter ?? 'all'}
+          onValueChange={(v) => {
+            setRoleFilter(v === 'all' ? undefined : v);
+            setPage(1);
+          }}
+        >
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="club_manager">Managers</TabsTrigger>
@@ -130,11 +174,7 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
         <EmptyState
           title="No staff members yet"
           description="Add your first staff member to get started."
-          action={
-            canCreate
-              ? { label: 'Add Staff', onClick: () => setAddOpen(true) }
-              : undefined
-          }
+          action={canCreate ? { label: 'Add Staff', onClick: () => setAddOpen(true) } : undefined}
         />
       )}
 
@@ -147,28 +187,37 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                        <RoleIcon className="h-5 w-5 text-muted-foreground" />
+                      <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-full">
+                        <RoleIcon className="text-muted-foreground h-5 w-5" />
                       </div>
                       <div>
                         <p className="font-semibold">{member.displayName ?? 'Unnamed'}</p>
-                        <p className="text-sm text-muted-foreground">{member.email}</p>
+                        <p className="text-muted-foreground text-sm">{member.email}</p>
                       </div>
                     </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label={`Remove ${member.displayName}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground h-8 w-8"
+                          aria-label={`Remove ${member.displayName}`}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Remove {member.displayName}?</AlertDialogTitle>
-                          <AlertDialogDescription>This will deactivate their account. They can be reactivated later.</AlertDialogDescription>
+                          <AlertDialogDescription>
+                            This will deactivate their account. They can be reactivated later.
+                          </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeactivate(member.id)}>Remove</AlertDialogAction>
+                          <AlertDialogAction onClick={() => handleDeactivate(member.id)}>
+                            Remove
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -177,7 +226,9 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
                     <Badge className={ROLE_COLORS[member.role] ?? ''}>
                       {ROLE_LABELS[member.role] ?? member.role}
                     </Badge>
-                    {member.phone && <span className="text-sm text-muted-foreground">{member.phone}</span>}
+                    {member.phone && (
+                      <span className="text-muted-foreground text-sm">{member.phone}</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -188,9 +239,25 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
 
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>Previous</Button>
-          <span className="text-sm text-muted-foreground">Page {page} of {pagination.totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= pagination.totalPages}>Next</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+          >
+            Previous
+          </Button>
+          <span className="text-muted-foreground text-sm">
+            Page {page} of {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= pagination.totalPages}
+          >
+            Next
+          </Button>
         </div>
       )}
     </div>
@@ -226,35 +293,78 @@ function AddStaffDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" />Add Staff</Button>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Staff
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Staff Member</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="displayName" render={({ field }) => (
-              <FormItem><FormLabel>Name *</FormLabel><FormControl><Input placeholder="Full name" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="email" render={({ field }) => (
-              <FormItem><FormLabel>Email *</FormLabel><FormControl><Input type="email" placeholder="staff@example.com" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="phone" render={({ field }) => (
-              <FormItem><FormLabel>Phone</FormLabel><FormControl><Input placeholder="+971..." {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="role" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Role *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="coach">Coach</SelectItem>
-                    <SelectItem value="groom">Groom</SelectItem>
-                    <SelectItem value="club_manager">Manager</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="displayName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Full name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email *</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="staff@example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl>
+                    <Input placeholder="+971..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Role *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="coach">Coach</SelectItem>
+                      <SelectItem value="groom">Groom</SelectItem>
+                      <SelectItem value="club_manager">Manager</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type="submit" className="w-full" disabled={createStaff.isPending}>
               {createStaff.isPending ? 'Adding...' : 'Add Staff Member'}
             </Button>

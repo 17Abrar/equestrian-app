@@ -196,9 +196,7 @@ describe('audience filter dead-key sanitisation (M-1 / migration 0032)', () => {
           OR filters ? 'tags'
     `);
 
-    const rows = await testDb.db
-      .select({ filters: audiences.filters })
-      .from(audiences);
+    const rows = await testDb.db.select({ filters: audiences.filters }).from(audiences);
     expect(rows).toHaveLength(1);
     const filters = rows[0]!.filters as Record<string, unknown>;
     expect(filters).toEqual({ skillLevel: 'beginner', minBookings: 1 });
@@ -278,9 +276,7 @@ describe('audience resolver / batch-counter equivalence (M-1)', () => {
     const seed = await seedClub();
     const otherClub = await seedClub();
 
-    const members = await withTestDb(testDb.db, () =>
-      resolveAudienceMembers(seed.clubId, {}),
-    );
+    const members = await withTestDb(testDb.db, () => resolveAudienceMembers(seed.clubId, {}));
     const memberIds = new Set(members.map((m) => m.id));
     expect(memberIds.has(seed.riderActiveBeginner)).toBe(true);
     expect(memberIds.has(seed.riderStaleIntermediate)).toBe(true);

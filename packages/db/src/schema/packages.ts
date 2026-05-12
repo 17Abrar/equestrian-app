@@ -12,84 +12,88 @@ import {
   check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import {
-  couponStatusEnum,
-  couponDiscountTypeEnum,
-  paymentStatusEnum,
-} from './enums';
+import { couponStatusEnum, couponDiscountTypeEnum, paymentStatusEnum } from './enums';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 import { bookings, lessonTypes } from './bookings';
 
-export const packages = pgTable('packages', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clubId: uuid('club_id')
-    .notNull()
-    .references(() => clubs.id, { onDelete: 'cascade' }),
+export const packages = pgTable(
+  'packages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clubId: uuid('club_id')
+      .notNull()
+      .references(() => clubs.id, { onDelete: 'cascade' }),
 
-  name: varchar('name', { length: 255 }).notNull(),
-  description: text('description'),
-  // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
-  // migration 0040; replaced with composite (lesson_type_id, club_id) →
-  // lesson_types(id, club_id) ON DELETE SET NULL in table-extras below.
-  lessonTypeId: uuid('lesson_type_id'),
-  totalCredits: integer('total_credits').notNull(),
-  price: integer('price').notNull(),
-  currency: varchar('currency', { length: 3 }).notNull().default('AED'),
-  validityDays: integer('validity_days').notNull().default(90),
-  isActive: boolean('is_active').notNull().default(true),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
+    // migration 0040; replaced with composite (lesson_type_id, club_id) →
+    // lesson_types(id, club_id) ON DELETE SET NULL in table-extras below.
+    lessonTypeId: uuid('lesson_type_id'),
+    totalCredits: integer('total_credits').notNull(),
+    price: integer('price').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('AED'),
+    validityDays: integer('validity_days').notNull().default(90),
+    isActive: boolean('is_active').notNull().default(true),
 
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [
-  index('idx_packages_club').on(table.clubId),
-  // FK target for composite (package_id, club_id) → packages(id, club_id)
-  // on rider_packages. Migration 0040.
-  unique('packages_id_club_unique').on(table.id, table.clubId),
-  foreignKey({
-    name: 'packages_lesson_type_club_fk',
-    columns: [table.lessonTypeId, table.clubId],
-    foreignColumns: [lessonTypes.id, lessonTypes.clubId],
-  }).onDelete('set null'),
-]);
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_packages_club').on(table.clubId),
+    // FK target for composite (package_id, club_id) → packages(id, club_id)
+    // on rider_packages. Migration 0040.
+    unique('packages_id_club_unique').on(table.id, table.clubId),
+    foreignKey({
+      name: 'packages_lesson_type_club_fk',
+      columns: [table.lessonTypeId, table.clubId],
+      foreignColumns: [lessonTypes.id, lessonTypes.clubId],
+    }).onDelete('set null'),
+  ],
+);
 
-export const riderPackages = pgTable('rider_packages', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clubId: uuid('club_id')
-    .notNull()
-    .references(() => clubs.id, { onDelete: 'cascade' }),
-  // Audit F-8 (2026-05-06 comprehensive): single-column FKs dropped in
-  // migration 0040; replaced with composites in table-extras below.
-  packageId: uuid('package_id').notNull(),
-  riderMemberId: uuid('rider_member_id').notNull(),
+export const riderPackages = pgTable(
+  'rider_packages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clubId: uuid('club_id')
+      .notNull()
+      .references(() => clubs.id, { onDelete: 'cascade' }),
+    // Audit F-8 (2026-05-06 comprehensive): single-column FKs dropped in
+    // migration 0040; replaced with composites in table-extras below.
+    packageId: uuid('package_id').notNull(),
+    riderMemberId: uuid('rider_member_id').notNull(),
 
-  totalCredits: integer('total_credits').notNull(),
-  usedCredits: integer('used_credits').notNull().default(0),
-  purchasedAt: timestamp('purchased_at', { withTimezone: true }).notNull().defaultNow(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
-  stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
+    totalCredits: integer('total_credits').notNull(),
+    usedCredits: integer('used_credits').notNull().default(0),
+    purchasedAt: timestamp('purchased_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
+    stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
 
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [
-  index('idx_rider_packages_rider').on(table.riderMemberId),
-  index('idx_rider_packages_expiry').on(table.expiresAt),
-  // Audit F-4 / F-5 (2026-05-06 r3): FK target for composite
-  // (package_id, club_id) → rider_packages(id, club_id) on bookings
-  // and payments. Migration 0043.
-  unique('rider_packages_id_club_unique').on(table.id, table.clubId),
-  foreignKey({
-    name: 'rider_packages_package_club_fk',
-    columns: [table.packageId, table.clubId],
-    foreignColumns: [packages.id, packages.clubId],
-  }),
-  foreignKey({
-    name: 'rider_packages_rider_member_club_fk',
-    columns: [table.riderMemberId, table.clubId],
-    foreignColumns: [clubMembers.id, clubMembers.clubId],
-  }),
-]);
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_rider_packages_rider').on(table.riderMemberId),
+    index('idx_rider_packages_expiry').on(table.expiresAt),
+    // Audit F-4 / F-5 (2026-05-06 r3): FK target for composite
+    // (package_id, club_id) → rider_packages(id, club_id) on bookings
+    // and payments. Migration 0043.
+    unique('rider_packages_id_club_unique').on(table.id, table.clubId),
+    foreignKey({
+      name: 'rider_packages_package_club_fk',
+      columns: [table.packageId, table.clubId],
+      foreignColumns: [packages.id, packages.clubId],
+    }),
+    foreignKey({
+      name: 'rider_packages_rider_member_club_fk',
+      columns: [table.riderMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
+  ],
+);
 
 export const coupons = pgTable(
   'coupons',
@@ -160,41 +164,45 @@ export const coupons = pgTable(
 // application is recorded once at booking time; refunds/voids leave
 // the row in place so historical reporting stays accurate. No
 // `updated_at` by design — `usedAt` is the lifecycle timestamp.
-export const couponUsages = pgTable('coupon_usages', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clubId: uuid('club_id')
-    .notNull()
-    .references(() => clubs.id, { onDelete: 'cascade' }),
-  // Audit F-8/F-13 (2026-05-06 comprehensive): single-column FKs dropped
-  // in migration 0040; replaced with composites in table-extras below.
-  // `bookingId` ON DELETE behavior tightened from NO ACTION to SET NULL
-  // — preserves the usage ledger row when the linked booking is deleted.
-  couponId: uuid('coupon_id').notNull(),
-  riderMemberId: uuid('rider_member_id').notNull(),
-  bookingId: uuid('booking_id'),
+export const couponUsages = pgTable(
+  'coupon_usages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clubId: uuid('club_id')
+      .notNull()
+      .references(() => clubs.id, { onDelete: 'cascade' }),
+    // Audit F-8/F-13 (2026-05-06 comprehensive): single-column FKs dropped
+    // in migration 0040; replaced with composites in table-extras below.
+    // `bookingId` ON DELETE behavior tightened from NO ACTION to SET NULL
+    // — preserves the usage ledger row when the linked booking is deleted.
+    couponId: uuid('coupon_id').notNull(),
+    riderMemberId: uuid('rider_member_id').notNull(),
+    bookingId: uuid('booking_id'),
 
-  originalAmount: integer('original_amount').notNull(),
-  discountAmount: integer('discount_amount').notNull(),
-  finalAmount: integer('final_amount').notNull(),
-  bookingType: varchar('booking_type', { length: 50 }),
+    originalAmount: integer('original_amount').notNull(),
+    discountAmount: integer('discount_amount').notNull(),
+    finalAmount: integer('final_amount').notNull(),
+    bookingType: varchar('booking_type', { length: 50 }),
 
-  usedAt: timestamp('used_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [
-  index('idx_coupon_usages_coupon').on(table.couponId),
-  index('idx_coupon_usages_rider').on(table.couponId, table.riderMemberId),
-  foreignKey({
-    name: 'coupon_usages_coupon_club_fk',
-    columns: [table.couponId, table.clubId],
-    foreignColumns: [coupons.id, coupons.clubId],
-  }).onDelete('cascade'),
-  foreignKey({
-    name: 'coupon_usages_rider_member_club_fk',
-    columns: [table.riderMemberId, table.clubId],
-    foreignColumns: [clubMembers.id, clubMembers.clubId],
-  }),
-  foreignKey({
-    name: 'coupon_usages_booking_club_fk',
-    columns: [table.bookingId, table.clubId],
-    foreignColumns: [bookings.id, bookings.clubId],
-  }).onDelete('set null'),
-]);
+    usedAt: timestamp('used_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_coupon_usages_coupon').on(table.couponId),
+    index('idx_coupon_usages_rider').on(table.couponId, table.riderMemberId),
+    foreignKey({
+      name: 'coupon_usages_coupon_club_fk',
+      columns: [table.couponId, table.clubId],
+      foreignColumns: [coupons.id, coupons.clubId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'coupon_usages_rider_member_club_fk',
+      columns: [table.riderMemberId, table.clubId],
+      foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }),
+    foreignKey({
+      name: 'coupon_usages_booking_club_fk',
+      columns: [table.bookingId, table.clubId],
+      foreignColumns: [bookings.id, bookings.clubId],
+    }).onDelete('set null'),
+  ],
+);

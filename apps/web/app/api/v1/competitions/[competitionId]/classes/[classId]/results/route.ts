@@ -8,7 +8,13 @@ import {
 } from '@equestrian/db/queries';
 import { db } from '@equestrian/db';
 import { competitionEntries } from '@equestrian/db/schema';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ competitionId: string; classId: string }>;
@@ -68,11 +74,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const pgCode = (err as { code?: string } | null)?.code;
         const msg = err instanceof Error ? err.message : '';
         if (pgCode === '23505' || msg.includes('competition_results_entry_unique')) {
-          return errorResponse(
-            'DUPLICATE_RESULT',
-            'A result already exists for this entry',
-            409,
-          );
+          return errorResponse('DUPLICATE_RESULT', 'A result already exists for this entry', 409);
         }
         throw err;
       }

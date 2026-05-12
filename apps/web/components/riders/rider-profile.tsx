@@ -6,7 +6,11 @@ import { ArrowLeft, Edit, Save, X, Calendar, Clock, MapPin, TrendingUp } from 'l
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { updateRiderProfileSchema, type UpdateRiderProfileFormValues, type UpdateRiderProfileInput } from '@equestrian/shared/schemas';
+import {
+  updateRiderProfileSchema,
+  type UpdateRiderProfileFormValues,
+  type UpdateRiderProfileInput,
+} from '@equestrian/shared/schemas';
 import { useRider, useUpdateRider } from '@/hooks/use-riders';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
 import { formatMoney } from '@equestrian/shared/utils';
@@ -77,7 +81,7 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
   if (value === null || value === undefined || value === '') return null;
   return (
     <div>
-      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-muted-foreground text-sm">{label}</p>
       <p className="font-medium">{value}</p>
     </div>
   );
@@ -147,13 +151,9 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
             <h1 className="text-3xl font-bold tracking-tight">
               {rider.displayName ?? 'Unnamed Rider'}
             </h1>
-            {rider.email && (
-              <p className="text-muted-foreground">{rider.email}</p>
-            )}
+            {rider.email && <p className="text-muted-foreground">{rider.email}</p>}
           </div>
-          <Badge className={SKILL_LEVEL_COLORS[rider.skillLevel] ?? ''}>
-            {rider.skillLevel}
-          </Badge>
+          <Badge className={SKILL_LEVEL_COLORS[rider.skillLevel] ?? ''}>{rider.skillLevel}</Badge>
         </div>
         <div className="flex gap-2">
           {isEditing ? (
@@ -192,12 +192,12 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
         {/* Sidebar */}
         <Card className="lg:col-span-1">
           <CardContent className="p-6">
-            <div className="mb-4 flex h-24 w-24 mx-auto items-center justify-center rounded-full bg-muted text-3xl">
+            <div className="bg-muted mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full text-3xl">
               {(rider.displayName ?? 'R').charAt(0).toUpperCase()}
             </div>
             <div className="space-y-3 text-center">
               <h2 className="text-lg font-semibold">{rider.displayName ?? 'Unnamed Rider'}</h2>
-              {rider.phone && <p className="text-sm text-muted-foreground">{rider.phone}</p>}
+              {rider.phone && <p className="text-muted-foreground text-sm">{rider.phone}</p>}
             </div>
             <div className="mt-6 space-y-3">
               <DetailRow label="Skill Level" value={rider.skillLevel} />
@@ -374,7 +374,7 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
                       <DetailRow label="Phone" value={rider.emergencyContactPhone} />
                       <DetailRow label="Relationship" value={rider.emergencyContactRelation} />
                       {!rider.emergencyContactName && !rider.emergencyContactPhone && (
-                        <p className="text-sm text-muted-foreground sm:col-span-2">
+                        <p className="text-muted-foreground text-sm sm:col-span-2">
                           No emergency contact on file
                         </p>
                       )}
@@ -389,7 +389,7 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
                       {rider.medicalNotes ? (
                         <p className="whitespace-pre-wrap">{rider.medicalNotes}</p>
                       ) : (
-                        <p className="text-sm text-muted-foreground">No medical notes</p>
+                        <p className="text-muted-foreground text-sm">No medical notes</p>
                       )}
                     </CardContent>
                   </Card>
@@ -446,8 +446,8 @@ function RiderBookings({ riderMemberId }: { riderMemberId: string }) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-sm text-muted-foreground">No bookings yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-sm">No bookings yet</p>
+          <p className="text-muted-foreground mt-1 text-xs">
             Bookings this rider makes will show up here.
           </p>
         </CardContent>
@@ -503,7 +503,7 @@ function BookingRow({ booking }: { booking: Booking }) {
       <CardContent className="flex items-center justify-between gap-3 p-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{booking.lessonTypeName}</p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               {booking.slotDate}
@@ -590,9 +590,9 @@ function RiderProgress({ riderMemberId, totalLessonsCompleted, skillLevel }: Pro
           {isLoading ? (
             <Skeleton className="h-32 w-full" />
           ) : isError ? (
-            <p className="text-sm text-muted-foreground">Couldn&apos;t load activity.</p>
+            <p className="text-muted-foreground text-sm">Couldn&apos;t load activity.</p>
           ) : recentMonths.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               No completed lessons yet. Activity will show once the rider finishes lessons.
             </p>
           ) : (
@@ -601,13 +601,13 @@ function RiderProgress({ riderMemberId, totalLessonsCompleted, skillLevel }: Pro
                 <div key={month} className="flex flex-1 flex-col items-center gap-2">
                   <div className="flex h-32 w-full items-end">
                     <div
-                      className="w-full rounded-t-sm bg-primary/80"
+                      className="bg-primary/80 w-full rounded-t-sm"
                       style={{ height: `${(count / maxCount) * 100}%` }}
                       aria-label={`${count} lessons in ${month}`}
                     />
                   </div>
                   <p className="text-xs font-medium">{count}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <p className="text-muted-foreground text-[10px] uppercase tracking-wider">
                     {month.slice(5)}/{month.slice(2, 4)}
                   </p>
                 </div>
@@ -623,11 +623,11 @@ function RiderProgress({ riderMemberId, totalLessonsCompleted, skillLevel }: Pro
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Current level</span>
+            <span className="text-muted-foreground text-sm">Current level</span>
             <Badge className={SKILL_LEVEL_COLORS[skillLevel] ?? ''}>{skillLevel}</Badge>
           </div>
           <SkillLadder current={skillLevel} />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Staff can update skill level from the Overview tab after observing the rider.
           </p>
         </CardContent>
@@ -640,7 +640,7 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <Card>
       <CardContent className="py-5">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-muted-foreground text-xs uppercase tracking-wider">{label}</p>
         <p className="mt-1 text-2xl font-bold">{value}</p>
       </CardContent>
     </Card>
@@ -660,9 +660,7 @@ function SkillLadder({ current }: { current: string }) {
         const active = idx <= currentIndex;
         return (
           <div key={level} className="flex flex-1 flex-col items-center gap-1">
-            <div
-              className={`h-1.5 w-full rounded ${active ? 'bg-primary' : 'bg-muted'}`}
-            />
+            <div className={`h-1.5 w-full rounded ${active ? 'bg-primary' : 'bg-muted'}`} />
             <span
               className={`text-[10px] uppercase tracking-wider ${active ? 'font-semibold' : 'text-muted-foreground'}`}
             >

@@ -7,13 +7,8 @@ import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/l
 // Rider-profile rows model rider-only attributes (skill level, emergency
 // contacts, medical notes). Coaches/grooms/vets shouldn't accidentally
 // create one for themselves and start showing up in rider reports. Audit
-// AI-3.
-const RIDER_PROFILE_ELIGIBLE_ROLES: UserRole[] = [
-  'rider',
-  'parent',
-  'horse_owner',
-  'club_admin',
-];
+// QA-3.
+const RIDER_PROFILE_ELIGIBLE_ROLES: UserRole[] = ['rider', 'parent', 'horse_owner', 'club_admin'];
 
 export async function GET() {
   return withAuth(async (ctx) => {

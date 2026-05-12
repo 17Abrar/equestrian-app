@@ -1,5 +1,13 @@
 import {
-  Html, Head, Body, Container, Heading, Text, Hr, Section, Img,
+  Html,
+  Head,
+  Body,
+  Container,
+  Heading,
+  Text,
+  Hr,
+  Section,
+  Img,
 } from '@react-email/components';
 
 interface BookingCancellationProps {
@@ -49,24 +57,39 @@ export function BookingCancellation({
           <Text style={styles.text}>{bodyText}</Text>
 
           <Section style={styles.detailsBox}>
-            <Text style={styles.detailRow}><strong>Lesson:</strong> {lessonType}</Text>
-            <Text style={styles.detailRow}><strong>Date:</strong> {date}</Text>
-            <Text style={styles.detailRow}><strong>Time:</strong> {time}</Text>
-            <Text style={styles.detailRow}><strong>Arena:</strong> {arena}</Text>
+            <Text style={styles.detailRow}>
+              <strong>Lesson:</strong> {lessonType}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Date:</strong> {date}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Time:</strong> {time}
+            </Text>
+            <Text style={styles.detailRow}>
+              <strong>Arena:</strong> {arena}
+            </Text>
             {reason && (
-              <Text style={styles.detailRow}><strong>Reason:</strong> {reason}</Text>
+              <Text style={styles.detailRow}>
+                <strong>Reason:</strong> {reason}
+              </Text>
             )}
           </Section>
 
           {cancellationFee && (
             <Section style={styles.feeBox}>
               <Text style={styles.feeHeading}>
-                {isNoShow ? 'No-Show Fee' : isLateCancellation ? 'Late Cancellation Fee' : 'Fee Applied'}
+                {isNoShow
+                  ? 'No-Show Fee'
+                  : isLateCancellation
+                    ? 'Late Cancellation Fee'
+                    : 'Fee Applied'}
               </Text>
               <Text style={styles.feeAmount}>{cancellationFee}</Text>
               {isLateCancellation && !isNoShow && (
                 <Text style={styles.feeNote}>
-                  This fee was applied because the booking was cancelled within the cancellation notice period.
+                  This fee was applied because the booking was cancelled within the cancellation
+                  notice period.
                 </Text>
               )}
               {isNoShow && (
@@ -79,7 +102,8 @@ export function BookingCancellation({
 
           {!isNoShow && (
             <Text style={styles.text}>
-              If you&apos;d like to rebook, please visit our booking page or contact the club directly.
+              If you&apos;d like to rebook, please visit our booking page or contact the club
+              directly.
             </Text>
           )}
 

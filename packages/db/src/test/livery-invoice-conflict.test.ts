@@ -69,9 +69,7 @@ async function seedClubMemberAndHorse(
 
 describe('createLiveryInvoice — partial-index ON CONFLICT', () => {
   it('second call for the same (horse, period) returns null instead of throwing', async () => {
-    const { clubId, ownerMemberId, horseId } = await seedClubMemberAndHorse(
-      testDb.db,
-    );
+    const { clubId, ownerMemberId, horseId } = await seedClubMemberAndHorse(testDb.db);
 
     await withTestDb(testDb.db, async () => {
       const first = await createLiveryInvoice({

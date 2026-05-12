@@ -16,11 +16,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       hasPermission(ctx.orgRole, 'horses:update') ||
       hasPermission(ctx.orgRole, 'horses:update_medical');
     if (!allowed) {
-      return errorResponse(
-        'FORBIDDEN',
-        'You do not have permission to delete health records',
-        403,
-      );
+      return errorResponse('FORBIDDEN', 'You do not have permission to delete health records', 403);
     }
 
     const { horseId, recordId } = await params;

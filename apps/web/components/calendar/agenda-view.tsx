@@ -47,7 +47,12 @@ export function AgendaView({ slots, competitions }: AgendaViewProps) {
   ].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   if (items.length === 0) {
-    return <EmptyState title="No upcoming events" description="There are no lessons or competitions scheduled." />;
+    return (
+      <EmptyState
+        title="No upcoming events"
+        description="There are no lessons or competitions scheduled."
+      />
+    );
   }
 
   // Group by date
@@ -63,7 +68,7 @@ export function AgendaView({ slots, competitions }: AgendaViewProps) {
     <div className="space-y-6">
       {Array.from(grouped.entries()).map(([date, dateItems]) => (
         <div key={date}>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+          <h3 className="text-muted-foreground mb-2 text-sm font-semibold">
             {formatDateLabel(date)}
           </h3>
           <div className="space-y-2">
@@ -88,9 +93,9 @@ function SlotAgendaItem({ slot }: { slot: BookingSlot }) {
     <Card>
       <CardContent className="flex items-center gap-4 p-3">
         <div className="h-10 w-1 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-medium">{slot.lessonTypeName}</p>
-          <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
+          <div className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
               {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
@@ -126,14 +131,12 @@ function CompetitionAgendaItem({ competition }: { competition: CalendarCompetiti
     <Card className="border-amber-200">
       <CardContent className="flex items-center gap-4 p-3">
         <div className="h-10 w-1 shrink-0 rounded-full bg-amber-500" />
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-medium">{competition.name}</p>
-            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-              Competition
-            </Badge>
+            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Competition</Badge>
           </div>
-          <div className="mt-0.5 flex gap-4 text-sm text-muted-foreground">
+          <div className="text-muted-foreground mt-0.5 flex gap-4 text-sm">
             {competition.location && (
               <span className="flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5" />

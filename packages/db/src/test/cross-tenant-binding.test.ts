@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb, withTestDb } from './harness';
-import {
-  getHorseById,
-  getMedicationByIds,
-  getCompetitionClassById,
-} from '../queries';
+import { getHorseById, getMedicationByIds, getCompetitionClassById } from '../queries';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
@@ -131,17 +127,13 @@ async function seedTwoClubsWithResources(db: typeof testDb.db): Promise<TwoClubs
 describe('getHorseById — tenant binding', () => {
   it('returns the horse when (clubId, horseId) match', async () => {
     const seeded = await seedTwoClubsWithResources(testDb.db);
-    const result = await withTestDb(testDb.db, () =>
-      getHorseById(seeded.clubA, seeded.horseA),
-    );
+    const result = await withTestDb(testDb.db, () => getHorseById(seeded.clubA, seeded.horseA));
     expect(result?.id).toBe(seeded.horseA);
   });
 
   it('returns null when horse is in another club — guards POST /horses/:id/medications etc', async () => {
     const seeded = await seedTwoClubsWithResources(testDb.db);
-    const result = await withTestDb(testDb.db, () =>
-      getHorseById(seeded.clubB, seeded.horseA),
-    );
+    const result = await withTestDb(testDb.db, () => getHorseById(seeded.clubB, seeded.horseA));
     expect(result).toBeNull();
   });
 
@@ -182,11 +174,7 @@ describe('getMedicationByIds — three-way binding', () => {
   it('returns null for an unknown medicationId', async () => {
     const seeded = await seedTwoClubsWithResources(testDb.db);
     const result = await withTestDb(testDb.db, () =>
-      getMedicationByIds(
-        seeded.clubA,
-        seeded.horseA,
-        '00000000-0000-0000-0000-000000000000',
-      ),
+      getMedicationByIds(seeded.clubA, seeded.horseA, '00000000-0000-0000-0000-000000000000'),
     );
     expect(result).toBeNull();
   });

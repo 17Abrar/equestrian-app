@@ -17,8 +17,7 @@ export type { PaymentAccount, PaymentAccountStatus, PaymentProviderName };
 export function usePaymentAccounts() {
   return useQuery({
     queryKey: ['paymentAccounts'],
-    queryFn: () =>
-      fetchJson<ApiSuccessResponse<PaymentAccount[]>>('/api/v1/payments/accounts'),
+    queryFn: () => fetchJson<ApiSuccessResponse<PaymentAccount[]>>('/api/v1/payments/accounts'),
   });
 }
 
@@ -63,14 +62,11 @@ export function useConnectNGenius() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: NGeniusConnectInput) =>
-      fetchJson<ApiSuccessResponse<PaymentAccount>>(
-        '/api/v1/payments/n-genius/connect',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        },
-      ),
+      fetchJson<ApiSuccessResponse<PaymentAccount>>('/api/v1/payments/n-genius/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
@@ -102,14 +98,11 @@ export function useSetActiveProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (provider: PaymentProviderName) =>
-      fetchJson<ApiSuccessResponse<PaymentAccount>>(
-        '/api/v1/payments/accounts/set-active',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider }),
-        },
-      ),
+      fetchJson<ApiSuccessResponse<PaymentAccount>>('/api/v1/payments/accounts/set-active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
@@ -120,10 +113,9 @@ export function useDisconnectProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (provider: PaymentProviderName) =>
-      fetchJson<ApiSuccessResponse<PaymentAccount>>(
-        `/api/v1/payments/accounts/${provider}`,
-        { method: 'DELETE' },
-      ),
+      fetchJson<ApiSuccessResponse<PaymentAccount>>(`/api/v1/payments/accounts/${provider}`, {
+        method: 'DELETE',
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },

@@ -74,11 +74,7 @@ export async function POST(request: NextRequest) {
       if (!horse) {
         // The query returns null when the user isn't an active member of the
         // target club. 403 rather than 404 to make the auth failure explicit.
-        return errorResponse(
-          'NOT_A_MEMBER',
-          'You are not a member of this stable',
-          403,
-        );
+        return errorResponse('NOT_A_MEMBER', 'You are not a member of this stable', 403);
       }
 
       // Audit on the TARGET club, not ctx.clubId (they may differ). Calling
@@ -133,7 +129,7 @@ export async function POST(request: NextRequest) {
     },
     {
       requiredPermission: 'horses:register_own',
-      // Audit AI-22 — admins must review every pending registration.
+      // Audit QA-22 — admins must review every pending registration.
       // Cap at 5/hour per rider so a runaway form can't backlog the
       // admin queue with hundreds of pending rows.
       // failClosed (audit LOW 2026-05-06) — Upstash outage must NOT

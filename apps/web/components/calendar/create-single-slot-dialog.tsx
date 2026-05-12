@@ -13,13 +13,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import { type z } from 'zod';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
@@ -79,69 +92,144 @@ export function CreateSingleSlotDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline"><Plus className="mr-2 h-4 w-4" />Add Single Slot</Button>
+        <Button size="sm" variant="outline">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Single Slot
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Create Single Slot</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Create Single Slot</DialogTitle>
+        </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="lessonTypeId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Lesson Type *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select lesson type" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {lessonTypes.map((lt) => (
-                      <SelectItem key={lt.id} value={lt.id}>{lt.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="date" render={({ field }) => (
-              <FormItem><FormLabel>Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            <FormField
+              control={form.control}
+              name="lessonTypeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Lesson Type *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select lesson type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {lessonTypes.map((lt) => (
+                        <SelectItem key={lt.id} value={lt.id}>
+                          {lt.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date *</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid grid-cols-3 gap-3">
-              <FormField control={form.control} name="startTime" render={({ field }) => (
-                <FormItem><FormLabel>Start *</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="endTime" render={({ field }) => (
-                <FormItem><FormLabel>End *</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="maxRiders" render={({ field }) => (
-                <FormItem><FormLabel>Max Riders *</FormLabel><FormControl><NumberInput {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="startTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start *</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>End *</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxRiders"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Riders *</FormLabel>
+                    <FormControl>
+                      <NumberInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="arenaId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Arena</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Any arena" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {arenas.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="coachMemberId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Coach</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Any coach" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {coaches.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.displayName ?? c.email ?? 'Unnamed'}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="arenaId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Arena</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Any arena" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {arenas.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coachMemberId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Coach</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Any coach" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {coaches.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.displayName ?? c.email ?? 'Unnamed'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={createSlot.isPending}>
               {createSlot.isPending ? 'Creating...' : 'Create Slot'}

@@ -2,8 +2,8 @@ import { type NextRequest } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { db } from '@equestrian/db';
-import { clubMembers } from '@equestrian/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { clubs, clubMembers } from '@equestrian/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
 import {
   errorResponse,
   successResponse,
@@ -83,21 +83,20 @@ export async function POST(request: NextRequest) {
     const membership = await db
       .select({ id: clubMembers.id })
       .from(clubMembers)
+      .innerJoin(clubs, eq(clubs.id, clubMembers.clubId))
       .where(
         and(
           eq(clubMembers.clubId, data.clubId),
           eq(clubMembers.clerkUserId, userId),
           eq(clubMembers.isActive, true),
+          eq(clubs.isActive, true),
+          isNull(clubs.deletedAt),
         ),
       )
       .limit(1);
 
     if (!membership[0]) {
-      return errorResponse(
-        'NOT_A_MEMBER',
-        'You are not a member of this stable',
-        403,
-      );
+      return errorResponse('NOT_A_MEMBER', 'You are not a member of this stable', 403);
     }
 
     const response = successResponse({ clubId: data.clubId });

@@ -6,7 +6,13 @@ import {
   isParentOf,
   withdrawCompetitionEntry,
 } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
@@ -71,20 +77,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!canWithdrawAny) {
       if (!ctx.memberId) {
-        return errorResponse(
-          'NO_MEMBER',
-          'Your user account is not linked to a club member',
-          400,
-        );
+        return errorResponse('NO_MEMBER', 'Your user account is not linked to a club member', 400);
       }
       const isSelf = existing.riderMemberId === ctx.memberId;
       if (!isSelf) {
         if (!canWithdrawChild) {
-          return errorResponse(
-            'FORBIDDEN',
-            'You can only withdraw your own entries',
-            403,
-          );
+          return errorResponse('FORBIDDEN', 'You can only withdraw your own entries', 403);
         }
         const linked = await isParentOf(ctx.clubId, ctx.memberId, existing.riderMemberId);
         if (!linked) {

@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { updateMedicationSchema } from '@equestrian/shared/schemas';
 import { updateMedication } from '@equestrian/db/queries';
-import { withAuth, successResponse, errorResponse, parseRequiredBody, validateUuidParam } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  errorResponse,
+  parseRequiredBody,
+  validateUuidParam,
+} from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
 interface RouteParams {
@@ -18,11 +24,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       hasPermission(ctx.orgRole, 'horses:update') ||
       hasPermission(ctx.orgRole, 'horses:update_medical');
     if (!allowed) {
-      return errorResponse(
-        'FORBIDDEN',
-        'You do not have permission to update medications',
-        403,
-      );
+      return errorResponse('FORBIDDEN', 'You do not have permission to update medications', 403);
     }
 
     const { horseId, medicationId } = await params;

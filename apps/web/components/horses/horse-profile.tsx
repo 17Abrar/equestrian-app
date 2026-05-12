@@ -73,7 +73,7 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
   if (value === null || value === undefined || value === '') return null;
   return (
     <div>
-      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-muted-foreground text-sm">{label}</p>
       <p className="font-medium">{value}</p>
     </div>
   );
@@ -173,7 +173,7 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
         {/* Sidebar */}
         <Card className="lg:col-span-1">
           <CardContent className="p-6">
-            <div className="relative mb-4 flex h-48 items-center justify-center rounded-lg bg-muted overflow-hidden">
+            <div className="bg-muted relative mb-4 flex h-48 items-center justify-center overflow-hidden rounded-lg">
               {horse.primaryPhotoUrl ? (
                 <Image
                   src={horse.primaryPhotoUrl}
@@ -191,10 +191,16 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
               <DetailRow label="Breed" value={horse.breed} />
               <DetailRow label="Gender" value={horse.gender} />
               <DetailRow label="Color" value={horse.color} />
-              <DetailRow label="Height" value={horse.heightHands ? `${horse.heightHands} hands` : null} />
+              <DetailRow
+                label="Height"
+                value={horse.heightHands ? `${horse.heightHands} hands` : null}
+              />
               <DetailRow label="Weight" value={horse.weightKg ? `${horse.weightKg} kg` : null} />
               <DetailRow label="Skill Level" value={horse.skillLevel} />
-              <DetailRow label="Weight Limit" value={horse.weightLimitKg ? `${horse.weightLimitKg} kg` : null} />
+              <DetailRow
+                label="Weight Limit"
+                value={horse.weightLimitKg ? `${horse.weightLimitKg} kg` : null}
+              />
               <DetailRow label="Max Lessons/Day" value={horse.maxLessonsPerDay} />
               <DetailRow label="Ownership" value={horse.ownerName ?? 'School Horse'} />
             </div>

@@ -40,9 +40,10 @@ export default function SignInScreen() {
       }
     } catch (err: unknown) {
       const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
-      const message = clerkError.errors?.[0]?.longMessage
-        ?? clerkError.errors?.[0]?.message
-        ?? 'Failed to sign in. Please check your credentials.';
+      const message =
+        clerkError.errors?.[0]?.longMessage ??
+        clerkError.errors?.[0]?.message ??
+        'Failed to sign in. Please check your credentials.';
       setError(message);
     } finally {
       setLoading(false);
@@ -60,9 +61,7 @@ export default function SignInScreen() {
           <View className="mb-10">
             <CavaliqLogo height={36} style={{ marginBottom: 24 }} />
             <Text className="text-3xl font-bold text-gray-900">Welcome back</Text>
-            <Text className="mt-2 text-base text-gray-500">
-              Sign in to your account
-            </Text>
+            <Text className="mt-2 text-base text-gray-500">Sign in to your account</Text>
           </View>
 
           {/* Form */}
@@ -111,9 +110,7 @@ export default function SignInScreen() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text className="text-center text-base font-semibold text-white">
-                  Sign In
-                </Text>
+                <Text className="text-center text-base font-semibold text-white">Sign In</Text>
               )}
             </TouchableOpacity>
           </View>

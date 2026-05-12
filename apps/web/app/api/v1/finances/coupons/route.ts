@@ -2,9 +2,21 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createCouponSchema, paginationSchema } from '@equestrian/shared/schemas';
 import { parseDateTimeLocal } from '@equestrian/shared/utils';
-import { getCouponsByClub, createCoupon, getClubById, getClubTimezone } from '@equestrian/db/queries';
+import {
+  getCouponsByClub,
+  createCoupon,
+  getClubById,
+  getClubTimezone,
+} from '@equestrian/db/queries';
 import { couponStatusEnum } from '@equestrian/db/schema';
-import { withAuth, successResponse, paginatedResponse, errorResponse, validateInput, parseRequiredBody } from '@/lib/api-utils';
+import {
+  withAuth,
+  successResponse,
+  paginatedResponse,
+  errorResponse,
+  validateInput,
+  parseRequiredBody,
+} from '@/lib/api-utils';
 
 // Audit G-26: a datetime-local string from the admin form (no Z, no
 // offset) is meant to mean "this hour, in the club's local timezone".

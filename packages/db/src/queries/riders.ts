@@ -31,7 +31,9 @@ const RIDER_PROFILE_ENCRYPTED_FIELDS = [
 ] as const;
 
 type NewRiderProfile = typeof riderProfiles.$inferInsert;
-type DrizzleRiderUpdate = Partial<Omit<NewRiderProfile, 'id' | 'clubId' | 'memberId' | 'createdAt' | 'updatedAt'>>;
+type DrizzleRiderUpdate = Partial<
+  Omit<NewRiderProfile, 'id' | 'clubId' | 'memberId' | 'createdAt' | 'updatedAt'>
+>;
 
 /** Accepts numbers for decimal fields — converts to strings for Drizzle/Postgres */
 interface RiderProfileUpdate extends Omit<DrizzleRiderUpdate, 'weightKg' | 'heightCm'> {
@@ -62,9 +64,7 @@ interface RiderFilters {
 }
 
 export async function getRidersByClub(clubId: string, filters: RiderFilters) {
-  const conditions: SQL[] = [
-    eq(riderProfiles.clubId, clubId),
-  ];
+  const conditions: SQL[] = [eq(riderProfiles.clubId, clubId)];
 
   if (filters.skillLevel) {
     conditions.push(sql`${riderProfiles.skillLevel} = ${filters.skillLevel}`);
@@ -270,7 +270,11 @@ export async function createRider(clubId: string, data: CreateRiderData) {
   });
 }
 
-export async function updateRiderProfile(clubId: string, riderId: string, data: RiderProfileUpdate) {
+export async function updateRiderProfile(
+  clubId: string,
+  riderId: string,
+  data: RiderProfileUpdate,
+) {
   // Audit MED-3 + pass-2 B-1: encrypt every PHI/PII field on PATCH.
   // PATCH semantics: omitted ≠ null (omitted = leave alone, null =
   // clear). `encryptFields` only writes keys present in `data`, so
@@ -404,12 +408,7 @@ export async function isParentOf(
   const result = await db
     .select({ parentMemberId: riderProfiles.parentMemberId })
     .from(riderProfiles)
-    .where(
-      and(
-        eq(riderProfiles.clubId, clubId),
-        eq(riderProfiles.memberId, childMemberId),
-      ),
-    )
+    .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, childMemberId)))
     .limit(1);
   return result[0]?.parentMemberId === parentMemberId;
 }
@@ -427,11 +426,6 @@ export async function getDependentMemberIds(
   const result = await db
     .select({ memberId: riderProfiles.memberId })
     .from(riderProfiles)
-    .where(
-      and(
-        eq(riderProfiles.clubId, clubId),
-        eq(riderProfiles.parentMemberId, parentMemberId),
-      ),
-    );
+    .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.parentMemberId, parentMemberId)));
   return result.map((r) => r.memberId);
 }

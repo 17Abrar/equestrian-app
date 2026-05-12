@@ -67,10 +67,7 @@ const registerHorseSchema = z.object({
   clubId: z.string().uuid({ message: 'Please select a stable' }),
   name: z.string().trim().min(1, 'Please enter a name').max(120),
   breed: z.string().trim().max(120).optional().or(z.literal('')),
-  gender: z
-    .enum(['gelding', 'mare', 'stallion', 'filly', 'colt'])
-    .optional()
-    .or(z.literal('')),
+  gender: z.enum(['gelding', 'mare', 'stallion', 'filly', 'colt']).optional().or(z.literal('')),
   color: z.string().trim().max(60).optional().or(z.literal('')),
   dateOfBirth: z.string().optional().or(z.literal('')),
   heightHands: z
@@ -234,7 +231,9 @@ export default function RegisterHorsePage() {
   }
 
   if (isError) {
-    return <ErrorState message={error instanceof Error ? error.message : undefined} onRetry={refetch} />;
+    return (
+      <ErrorState message={error instanceof Error ? error.message : undefined} onRetry={refetch} />
+    );
   }
 
   if (memberships.length === 0) {
@@ -287,9 +286,9 @@ export default function RegisterHorsePage() {
               )}
             />
             {form.formState.errors.clubId && (
-              <p className="text-xs text-destructive">{form.formState.errors.clubId.message}</p>
+              <p className="text-destructive text-xs">{form.formState.errors.clubId.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               You can register this horse at any stable you&apos;re a member of.
             </p>
           </CardContent>
@@ -322,7 +321,7 @@ export default function RegisterHorsePage() {
                 <Label htmlFor="name">Name *</Label>
                 <Input id="name" placeholder="e.g. Thunder" {...form.register('name')} />
                 {form.formState.errors.name && (
-                  <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                  <p className="text-destructive text-xs">{form.formState.errors.name.message}</p>
                 )}
               </div>
 
@@ -369,7 +368,10 @@ export default function RegisterHorsePage() {
                   control={form.control}
                   name="skillLevel"
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={(v) => field.onChange(v as SkillLevel)}>
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => field.onChange(v as SkillLevel)}
+                    >
                       <SelectTrigger id="skill">
                         <SelectValue />
                       </SelectTrigger>
@@ -381,7 +383,7 @@ export default function RegisterHorsePage() {
                     </Select>
                   )}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Minimum rider level this horse is suitable for.
                 </p>
               </div>
@@ -398,7 +400,7 @@ export default function RegisterHorsePage() {
                   {...form.register('heightHands')}
                 />
                 {form.formState.errors.heightHands && (
-                  <p className="text-xs text-destructive">
+                  <p className="text-destructive text-xs">
                     {form.formState.errors.heightHands.message}
                   </p>
                 )}
@@ -416,7 +418,7 @@ export default function RegisterHorsePage() {
                   {...form.register('weightKg')}
                 />
                 {form.formState.errors.weightKg && (
-                  <p className="text-xs text-destructive">
+                  <p className="text-destructive text-xs">
                     {form.formState.errors.weightKg.message}
                   </p>
                 )}
@@ -454,7 +456,7 @@ function BackLink() {
   return (
     <Link
       href="/rider/horses"
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
     >
       <ArrowLeft className="h-4 w-4" />
       Back to my horses

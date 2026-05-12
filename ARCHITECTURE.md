@@ -186,7 +186,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/api/webhooks(.*)',   // Webhooks are public (they verify signatures internally)
+  '/api/webhooks(.*)', // Webhooks are public (they verify signatures internally)
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
@@ -216,8 +216,8 @@ export default clerkMiddleware(async (auth, request) => {
 
 // When making API calls:
 const headers = {
-  'Authorization': `Bearer ${sessionToken}`,
-  'X-Organization-Id': selectedClubId,  // Which stable's data to access
+  Authorization: `Bearer ${sessionToken}`,
+  'X-Organization-Id': selectedClubId, // Which stable's data to access
 };
 
 // On the server:
@@ -277,7 +277,7 @@ export async function getHorses(clubId: string) {
   return db.query.horses.findMany({
     where: and(
       eq(horses.clubId, clubId),
-      isNull(horses.deletedAt),  // Soft delete filter
+      isNull(horses.deletedAt), // Soft delete filter
     ),
     orderBy: [asc(horses.name)],
   });
@@ -348,41 +348,42 @@ export async function createConnectedAccount(clubId: string, email: string) {
   });
 
   // Store account.id in our database linked to the club
-  await db.update(clubs)
-    .set({ stripeAccountId: account.id })
-    .where(eq(clubs.id, clubId));
+  await db.update(clubs).set({ stripeAccountId: account.id }).where(eq(clubs.id, clubId));
 
   return account;
 }
 
 // Create payment for a booking (rider pays stable)
 export async function createBookingPayment(params: {
-  amount: number;          // In smallest currency unit (fils for AED)
-  currency: string;        // 'aed', 'sar', 'usd', etc.
+  amount: number; // In smallest currency unit (fils for AED)
+  currency: string; // 'aed', 'sar', 'usd', etc.
   stableStripeAccountId: string;
-  platformFeePercent: number;  // 1, 2, or 3.5 based on stable's plan
+  platformFeePercent: number; // 1, 2, or 3.5 based on stable's plan
   bookingId: string;
   riderId: string;
   clubId: string;
 }) {
   const platformFee = Math.round(params.amount * (params.platformFeePercent / 100));
 
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: params.amount,
-    currency: params.currency,
-    application_fee_amount: platformFee,
-    transfer_data: {
-      destination: params.stableStripeAccountId,
+  const paymentIntent = await stripe.paymentIntents.create(
+    {
+      amount: params.amount,
+      currency: params.currency,
+      application_fee_amount: platformFee,
+      transfer_data: {
+        destination: params.stableStripeAccountId,
+      },
+      metadata: {
+        bookingId: params.bookingId,
+        riderId: params.riderId,
+        clubId: params.clubId,
+      },
+      // Enable idempotency
     },
-    metadata: {
-      bookingId: params.bookingId,
-      riderId: params.riderId,
-      clubId: params.clubId,
+    {
+      idempotencyKey: `booking_${params.bookingId}`,
     },
-    // Enable idempotency
-  }, {
-    idempotencyKey: `booking_${params.bookingId}`,
-  });
+  );
 
   return paymentIntent;
 }
@@ -407,11 +408,7 @@ export async function POST(request: Request) {
   let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (error) {
     logger.error('stripe_webhook_signature_invalid', { error });
     return new Response('Invalid signature', { status: 400 });
@@ -450,12 +447,8 @@ export async function validateCoupon(params: {
   bookingType: string;
   amount: number;
 }): Promise<{ valid: boolean; discount: number; error?: string }> {
-
   const coupon = await db.query.coupons.findFirst({
-    where: and(
-      eq(coupons.code, params.code.toUpperCase()),
-      eq(coupons.clubId, params.clubId),
-    ),
+    where: and(eq(coupons.code, params.code.toUpperCase()), eq(coupons.clubId, params.clubId)),
   });
 
   if (!coupon) {
@@ -485,10 +478,7 @@ export async function validateCoupon(params: {
   // Check per-rider usage limit
   if (coupon.maxUsesPerRider) {
     const riderUsageCount = await db.query.couponUsages.findMany({
-      where: and(
-        eq(couponUsages.couponId, coupon.id),
-        eq(couponUsages.riderId, params.riderId),
-      ),
+      where: and(eq(couponUsages.couponId, coupon.id), eq(couponUsages.riderId, params.riderId)),
     });
     if (riderUsageCount.length >= coupon.maxUsesPerRider) {
       return { valid: false, discount: 0, error: 'You have already used this promo code' };
@@ -512,12 +502,20 @@ export async function validateCoupon(params: {
 
   // Check booking type restriction
   if (coupon.applicableTypes && !coupon.applicableTypes.includes(params.bookingType)) {
-    return { valid: false, discount: 0, error: `This promo code is not valid for ${params.bookingType}` };
+    return {
+      valid: false,
+      discount: 0,
+      error: `This promo code is not valid for ${params.bookingType}`,
+    };
   }
 
   // Check minimum spend
   if (coupon.minimumAmount && params.amount < coupon.minimumAmount) {
-    return { valid: false, discount: 0, error: `Minimum spend of ${coupon.minimumAmount} required` };
+    return {
+      valid: false,
+      discount: 0,
+      error: `Minimum spend of ${coupon.minimumAmount} required`,
+    };
   }
 
   // Calculate discount
@@ -550,8 +548,8 @@ This is a core differentiator. Implement it correctly.
 interface MatchInput {
   rider: {
     skillLevel: 'beginner' | 'intermediate' | 'advanced';
-    weight: number;      // kg
-    height: number;      // cm
+    weight: number; // kg
+    height: number; // cm
     age: number;
     id: string;
   };
@@ -562,9 +560,9 @@ interface MatchInput {
 
 interface MatchResult {
   horse: Horse;
-  score: number;          // 0-100
-  reasons: string[];      // Why this horse was recommended
-  warnings: string[];     // Any concerns
+  score: number; // 0-100
+  reasons: string[]; // Why this horse was recommended
+  warnings: string[]; // Any concerns
 }
 
 export async function matchHorsesToRider(input: MatchInput): Promise<MatchResult[]> {
@@ -572,7 +570,7 @@ export async function matchHorsesToRider(input: MatchInput): Promise<MatchResult
   const availableHorses = await getAvailableHorses(input.clubId, input.dateTime);
 
   // 2. Filter out ineligible horses
-  const eligible = availableHorses.filter(horse => {
+  const eligible = availableHorses.filter((horse) => {
     // Horse must be available (not resting, injured, retired, sold)
     if (horse.status !== 'available') return false;
 
@@ -592,7 +590,7 @@ export async function matchHorsesToRider(input: MatchInput): Promise<MatchResult
   });
 
   // 3. Score each eligible horse
-  const scored = eligible.map(horse => {
+  const scored = eligible.map((horse) => {
     let score = 50; // Base score
     const reasons: string[] = [];
     const warnings: string[] = [];
@@ -607,9 +605,7 @@ export async function matchHorsesToRider(input: MatchInput): Promise<MatchResult
     ) {
       score += 15;
       reasons.push('Suitable for rider progression');
-    } else if (
-      (horse.skillLevel === 'advanced' && input.rider.skillLevel === 'beginner')
-    ) {
+    } else if (horse.skillLevel === 'advanced' && input.rider.skillLevel === 'beginner') {
       score -= 20;
       warnings.push('Horse may be too advanced for this rider');
     }
@@ -647,7 +643,7 @@ export async function matchHorsesToRider(input: MatchInput): Promise<MatchResult
     }
 
     // Past pairing success (+/- 15 points)
-    const pastPairings = horse.pairingHistory.filter(p => p.riderId === input.rider.id);
+    const pastPairings = horse.pairingHistory.filter((p) => p.riderId === input.rider.id);
     if (pastPairings.length > 0) {
       const avgRating = pastPairings.reduce((sum, p) => sum + p.rating, 0) / pastPairings.length;
       if (avgRating >= 4) {
@@ -669,13 +665,12 @@ export async function matchHorsesToRider(input: MatchInput): Promise<MatchResult
   });
 
   // 4. Sort by score (highest first) and return top 3
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+  return scored.sort((a, b) => b.score - a.score).slice(0, 3);
 }
 ```
 
 This algorithm MUST have unit tests covering:
+
 - Exact skill level match
 - Weight at limit, over limit, well under limit
 - Horse at max workload
@@ -712,11 +707,13 @@ export async function publishEvent(channel: string, event: string, data: unknown
 }
 
 // Usage after creating a booking:
-await publishEvent(
-  `club:${clubId}:calendar`,
-  'booking:created',
-  { bookingId, slotId, riderId, horseId, coachId }
-);
+await publishEvent(`club:${clubId}:calendar`, 'booking:created', {
+  bookingId,
+  slotId,
+  riderId,
+  horseId,
+  coachId,
+});
 ```
 
 ### Subscribing (Client-Side)
@@ -831,9 +828,14 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
   const output = JSON.stringify(entry);
 
   switch (level) {
-    case 'error': console.error(output); break;
-    case 'warn': console.warn(output); break;
-    default: console.log(output);
+    case 'error':
+      console.error(output);
+      break;
+    case 'warn':
+      console.warn(output);
+      break;
+    default:
+      console.log(output);
   }
 }
 
@@ -871,7 +873,7 @@ const r2 = new S3Client({
 // Generate upload URL (client uploads directly to R2, never through our server)
 export async function getUploadUrl(params: {
   clubId: string;
-  folder: string;       // 'horses/photos', 'horses/medical', 'invoices', etc.
+  folder: string; // 'horses/photos', 'horses/medical', 'invoices', etc.
   fileName: string;
   contentType: string;
   maxSizeBytes: number;
@@ -960,21 +962,25 @@ NEVER put real values in .env.example. NEVER commit .env.local.
 ## DEPLOYMENT
 
 ### Web App
+
 - Host on Vercel (connects to GitHub, auto-deploys on push to main)
 - Preview deployments for every PR
 - Environment variables set in Vercel dashboard
 
 ### Mobile App
+
 - Build with EAS (Expo Application Services)
 - Test builds via Expo Go and development builds
 - Production builds submitted to App Store and Google Play via EAS Submit
 
 ### Database
+
 - Neon auto-manages scaling
 - Migrations run via `pnpm db:migrate` (uses drizzle-kit)
 - Never manually modify production database — always use migrations
 
 ### Domain Setup
+
 - Main domain: TBD
 - API: api.{domain}.com (or same domain, /api routes)
 - Dashboard: app.{domain}.com

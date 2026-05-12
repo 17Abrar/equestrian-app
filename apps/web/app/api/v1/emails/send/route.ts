@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Per-recipient cool-down (audit AI-23) — same recipient can't be
+      // Per-recipient cool-down (audit QA-23) — same recipient can't be
       // hit by the same club more than once per 60s, regardless of which
       // staff member sent it. Bounds the blast radius of a compromised
       // admin and protects against accidental loops in front-end code.
@@ -73,12 +73,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Per-club daily cap (audit AI-23) — bound the blast radius of a
+      // Per-club daily cap (audit QA-23) — bound the blast radius of a
       // compromised admin to 500 sends/day per club.
-      const clubDay = await checkRateLimit(
-        `email:club_day:${ctx.clubId}`,
-        { maxRequests: 500, windowMs: 24 * 60 * 60_000, failClosed: true },
-      );
+      const clubDay = await checkRateLimit(`email:club_day:${ctx.clubId}`, {
+        maxRequests: 500,
+        windowMs: 24 * 60 * 60_000,
+        failClosed: true,
+      });
       if (!clubDay.allowed) {
         return errorResponse(
           'CLUB_DAILY_CAP',

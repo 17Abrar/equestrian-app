@@ -1,11 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { paginationSchema } from '@equestrian/shared/schemas';
-import {
-  createAudience,
-  listAudiences,
-  countAudienceMembersBatch,
-} from '@equestrian/db/queries';
+import { createAudience, listAudiences, countAudienceMembersBatch } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,

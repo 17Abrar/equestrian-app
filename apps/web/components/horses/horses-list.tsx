@@ -114,7 +114,7 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Horses</h1>
-          <p className="mt-1 text-muted-foreground">Manage your stable&apos;s horses</p>
+          <p className="text-muted-foreground mt-1">Manage your stable&apos;s horses</p>
         </div>
         {canCreate && (
           <Button asChild>
@@ -146,8 +146,8 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
       {/* Filters — only show on Active tab */}
       {tab === 'active' && (
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
             <Input
               placeholder="Search horses..."
               value={search}
@@ -164,11 +164,11 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
               setStatus(
                 v === 'all'
                   ? undefined
-                  : (HORSE_STATUS_FILTER_VALUES.includes(
+                  : HORSE_STATUS_FILTER_VALUES.includes(
                         v as (typeof HORSE_STATUS_FILTER_VALUES)[number],
                       )
-                      ? (v as (typeof HORSE_STATUS_FILTER_VALUES)[number])
-                      : undefined),
+                    ? (v as (typeof HORSE_STATUS_FILTER_VALUES)[number])
+                    : undefined,
               );
               setPage(1);
             }}
@@ -192,11 +192,11 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
               setSkillLevel(
                 v === 'all'
                   ? undefined
-                  : (SKILL_LEVEL_FILTER_VALUES.includes(
+                  : SKILL_LEVEL_FILTER_VALUES.includes(
                         v as (typeof SKILL_LEVEL_FILTER_VALUES)[number],
                       )
-                      ? (v as (typeof SKILL_LEVEL_FILTER_VALUES)[number])
-                      : undefined),
+                    ? (v as (typeof SKILL_LEVEL_FILTER_VALUES)[number])
+                    : undefined,
               );
               setPage(1);
             }}
@@ -252,14 +252,10 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.data.map((horse) => (
-              <Link
-                key={horse.id}
-                href={`/horses/${horse.id}`}
-                className="block"
-              >
+              <Link key={horse.id} href={`/horses/${horse.id}`} className="block">
                 <Card className="transition-shadow hover:shadow-md">
                   <CardContent className="p-4">
-                    <div className="relative mb-3 flex h-32 items-center justify-center rounded-lg bg-muted overflow-hidden">
+                    <div className="bg-muted relative mb-3 flex h-32 items-center justify-center overflow-hidden rounded-lg">
                       {horse.primaryPhotoUrl ? (
                         <Image
                           src={horse.primaryPhotoUrl}
@@ -269,13 +265,13 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
                           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
                       ) : (
-                        <span className="text-4xl text-muted-foreground">🐴</span>
+                        <span className="text-muted-foreground text-4xl">🐴</span>
                       )}
                     </div>
                     <div className="flex items-start justify-between">
                       <div>
                         <h3 className="font-semibold">{horse.name}</h3>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-muted-foreground text-sm">
                           {horse.breed ?? 'Unknown breed'}
                         </p>
                       </div>
@@ -313,7 +309,7 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-muted-foreground text-sm">
                 Page {page} of {data.pagination.totalPages}
               </span>
               <Button

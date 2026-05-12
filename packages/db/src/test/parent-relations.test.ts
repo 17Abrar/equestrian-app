@@ -223,14 +223,22 @@ describe('getDependentMemberIds', () => {
       .returning();
 
     await testDb.db.insert(riderProfiles).values([
-      { clubId: club!.id, memberId: child1!.id, skillLevel: 'beginner', parentMemberId: parent!.id },
-      { clubId: club!.id, memberId: child2!.id, skillLevel: 'beginner', parentMemberId: parent!.id },
+      {
+        clubId: club!.id,
+        memberId: child1!.id,
+        skillLevel: 'beginner',
+        parentMemberId: parent!.id,
+      },
+      {
+        clubId: club!.id,
+        memberId: child2!.id,
+        skillLevel: 'beginner',
+        parentMemberId: parent!.id,
+      },
       { clubId: club!.id, memberId: unrelated!.id, skillLevel: 'beginner' },
     ]);
 
-    const ids = await withTestDb(testDb.db, () =>
-      getDependentMemberIds(club!.id, parent!.id),
-    );
+    const ids = await withTestDb(testDb.db, () => getDependentMemberIds(club!.id, parent!.id));
 
     expect(ids).toHaveLength(2);
     expect(new Set(ids)).toEqual(new Set([child1!.id, child2!.id]));
@@ -256,9 +264,7 @@ describe('getDependentMemberIds', () => {
       })
       .returning();
 
-    const ids = await withTestDb(testDb.db, () =>
-      getDependentMemberIds(club!.id, parent!.id),
-    );
+    const ids = await withTestDb(testDb.db, () => getDependentMemberIds(club!.id, parent!.id));
 
     expect(ids).toEqual([]);
   });

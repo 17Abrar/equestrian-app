@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  MAX_MONTHLY_LIVERY_FEE_MINOR,
-  DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE,
-} from '../constants';
+import { MAX_MONTHLY_LIVERY_FEE_MINOR, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../constants';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -53,12 +49,9 @@ function isParseableDateString(value: string): boolean {
   const ms = Date.parse(value);
   return Number.isFinite(ms);
 }
-const parseableDateTime = z
-  .string()
-  .max(50)
-  .refine(isParseableDateString, {
-    message: 'Must be a valid ISO-8601 datetime (e.g. 2026-12-31T23:59 or 2026-12-31T23:59:00Z)',
-  });
+const parseableDateTime = z.string().max(50).refine(isParseableDateString, {
+  message: 'Must be a valid ISO-8601 datetime (e.g. 2026-12-31T23:59 or 2026-12-31T23:59:00Z)',
+});
 
 // ─── Common ────────────────────────────────────────────────────────────
 
@@ -71,9 +64,7 @@ const parseableDateTime = z
 export const paginationSchema = z
   .object({
     page: numericField(z.number().int().min(1)).default(1),
-    pageSize: numericField(
-      z.number().int().min(1).max(MAX_PAGE_SIZE),
-    ).default(DEFAULT_PAGE_SIZE),
+    pageSize: numericField(z.number().int().min(1).max(MAX_PAGE_SIZE)).default(DEFAULT_PAGE_SIZE),
   })
   .strict();
 
@@ -86,54 +77,58 @@ export type PaginationInput = z.infer<typeof paginationSchema>;
 // dropped today — fine — but the moment a future column with the same
 // name is added to the row insert it becomes mass-assignment.
 
-export const createHorseSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255),
-  barnName: z.string().max(255).optional(),
-  breed: z.string().max(100).optional(),
-  gender: z.string().max(20).optional(),
-  dateOfBirth: z.string().max(50).optional(),
-  color: z.string().max(100).optional(),
-  heightHands: optionalNumeric(z.number().positive()),
-  weightKg: optionalNumeric(z.number().positive()),
-  markings: z.string().max(1000).optional(),
-  microchipNumber: z.string().max(100).optional(),
-  passportNumber: z.string().max(100).optional(),
-  registrationNumber: z.string().max(100).optional(),
+export const createHorseSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    barnName: z.string().max(255).optional(),
+    breed: z.string().max(100).optional(),
+    gender: z.string().max(20).optional(),
+    dateOfBirth: z.string().max(50).optional(),
+    color: z.string().max(100).optional(),
+    heightHands: optionalNumeric(z.number().positive()),
+    weightKg: optionalNumeric(z.number().positive()),
+    markings: z.string().max(1000).optional(),
+    microchipNumber: z.string().max(100).optional(),
+    passportNumber: z.string().max(100).optional(),
+    registrationNumber: z.string().max(100).optional(),
 
-  status: z.enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold']).default('available'),
-  skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-  temperament: z.array(z.string().max(50)).max(20).optional(),
-  weightLimitKg: optionalNumeric(z.number().positive()),
-  minRiderAge: optionalNumeric(z.number().int().positive()),
-  maxLessonsPerDay: numericField(z.number().int().min(1)).default(3),
-  mandatoryRestDays: numericField(z.number().int().min(0)).default(1),
+    status: z
+      .enum(['available', 'resting', 'injured', 'retired', 'off_site', 'sold'])
+      .default('available'),
+    skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+    temperament: z.array(z.string().max(50)).max(20).optional(),
+    weightLimitKg: optionalNumeric(z.number().positive()),
+    minRiderAge: optionalNumeric(z.number().int().positive()),
+    maxLessonsPerDay: numericField(z.number().int().min(1)).default(3),
+    mandatoryRestDays: numericField(z.number().int().min(0)).default(1),
 
-  saleStatus: z.enum(['not_for_sale', 'for_sale', 'sold']).default('not_for_sale'),
-  // Asset prices are minor-unit integers ≥ 0. Negative values would slip
-  // through the prior `.int()` and surface as nonsense in the finance UI.
-  purchasePrice: optionalNumeric(z.number().int().min(0)),
-  currentValue: optionalNumeric(z.number().int().min(0)),
-  salePrice: optionalNumeric(z.number().int().min(0)),
+    saleStatus: z.enum(['not_for_sale', 'for_sale', 'sold']).default('not_for_sale'),
+    // Asset prices are minor-unit integers ≥ 0. Negative values would slip
+    // through the prior `.int()` and surface as nonsense in the finance UI.
+    purchasePrice: optionalNumeric(z.number().int().min(0)),
+    currentValue: optionalNumeric(z.number().int().min(0)),
+    salePrice: optionalNumeric(z.number().int().min(0)),
 
-  saddleSize: z.string().max(50).optional(),
-  girthSize: z.string().max(50).optional(),
-  bridleSize: z.string().max(50).optional(),
-  bitType: z.string().max(100).optional(),
-  bitSize: z.string().max(50).optional(),
-  blanketSize: z.string().max(50).optional(),
-  bootsSize: z.string().max(50).optional(),
-  gearNotes: z.string().max(2000).optional(),
+    saddleSize: z.string().max(50).optional(),
+    girthSize: z.string().max(50).optional(),
+    bridleSize: z.string().max(50).optional(),
+    bitType: z.string().max(100).optional(),
+    bitSize: z.string().max(50).optional(),
+    blanketSize: z.string().max(50).optional(),
+    bootsSize: z.string().max(50).optional(),
+    gearNotes: z.string().max(2000).optional(),
 
-  insuranceProvider: z.string().max(255).optional(),
-  insurancePolicyNumber: z.string().max(100).optional(),
-  insuranceCoverage: z.string().max(500).optional(),
-  insuranceExpiry: z.string().max(50).optional(),
+    insuranceProvider: z.string().max(255).optional(),
+    insurancePolicyNumber: z.string().max(100).optional(),
+    insuranceCoverage: z.string().max(500).optional(),
+    insuranceExpiry: z.string().max(50).optional(),
 
-  primaryPhotoUrl: z.string().url().max(2000).optional(),
-  photoUrls: z.array(z.string().url().max(2000)).max(20).optional(),
-  notes: z.string().max(2000).optional(),
-  ownerMemberId: z.string().uuid().optional(),
-}).strict();
+    primaryPhotoUrl: z.string().url().max(2000).optional(),
+    photoUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+    notes: z.string().max(2000).optional(),
+    ownerMemberId: z.string().uuid().optional(),
+  })
+  .strict();
 
 /** Input type for forms — fields with .default() are optional */
 export type CreateHorseFormValues = z.input<typeof createHorseSchema>;
@@ -227,9 +222,7 @@ export type RegisterHorseOwnershipInput = z.output<typeof registerHorseOwnership
  */
 export const approveHorseOwnershipSchema = z
   .object({
-    monthlyLiveryFeeMinor: numericField(
-      z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR),
-    ),
+    monthlyLiveryFeeMinor: numericField(z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR)),
     liveryStartDate: z.string().max(50).min(1, 'Start date is required'),
   })
   .strict();
@@ -339,13 +332,10 @@ export const createLessonTypeSchema = lessonTypeFields
   // `lesson_types_riders_minmax_check` DB constraint (migration 0049).
   // A misclick (`min=4, max=2`) silently produces a lesson type that
   // never matches any slot — refuse it at the API boundary too.
-  .refine(
-    (val) => val.minRiders <= val.maxRiders,
-    {
-      message: 'minRiders cannot exceed maxRiders',
-      path: ['minRiders'],
-    },
-  );
+  .refine((val) => val.minRiders <= val.maxRiders, {
+    message: 'minRiders cannot exceed maxRiders',
+    path: ['minRiders'],
+  });
 
 export type CreateLessonTypeFormValues = z.input<typeof createLessonTypeSchema>;
 export type CreateLessonTypeInput = z.output<typeof createLessonTypeSchema>;
@@ -358,8 +348,7 @@ export const updateLessonTypeSchema = lessonTypeFields
   .strict()
   .refine(
     (val) =>
-      val.minRiders === undefined || val.maxRiders === undefined ||
-      val.minRiders <= val.maxRiders,
+      val.minRiders === undefined || val.maxRiders === undefined || val.minRiders <= val.maxRiders,
     {
       message: 'minRiders cannot exceed maxRiders',
       path: ['minRiders'],
@@ -444,10 +433,22 @@ export const createBookingSchema = z
     slotId: z.string().uuid(),
     riderMemberId: z.string().uuid(),
     horseId: z.string().uuid().optional(),
-    paymentMethod: z.enum([
-      'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
-      'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
-    ]).optional(),
+    paymentMethod: z
+      .enum([
+        'card',
+        'apple_pay',
+        'google_pay',
+        'tabby',
+        'tamara',
+        'knet',
+        'mada',
+        'benefit',
+        'cash',
+        'card_in_person',
+        'package_credit',
+        'bank_transfer',
+      ])
+      .optional(),
     couponCode: z.string().max(50).optional(),
     autoMatchHorse: z.boolean().default(true),
     // When present, this booking is for a guest (non-member). `riderMemberId`
@@ -480,10 +481,16 @@ export type BookingFiltersInput = z.infer<typeof bookingFiltersSchema>;
 
 // ─── Competitions ─────────────────────────────────────────────────────
 
-const COMPETITION_STATUSES = ['draft', 'published', 'in_progress', 'completed', 'cancelled'] as const;
+const COMPETITION_STATUSES = [
+  'draft',
+  'published',
+  'in_progress',
+  'completed',
+  'cancelled',
+] as const;
 
 // `.strict()` for parity with update schemas — unknown keys 422 instead
-// of being silently stripped (audit AI-32c).
+// of being silently stripped (audit QA-32c).
 export const createCompetitionSchema = z
   .object({
     name: z.string().min(1, 'Name is required').max(255),
@@ -542,8 +549,18 @@ export type CreateCompetitionClassInput = z.output<typeof createCompetitionClass
 export const updateCompetitionClassSchema = createCompetitionClassSchema.partial().strict();
 
 const PAYMENT_METHODS = [
-  'card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet',
-  'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer',
+  'card',
+  'apple_pay',
+  'google_pay',
+  'tabby',
+  'tamara',
+  'knet',
+  'mada',
+  'benefit',
+  'cash',
+  'card_in_person',
+  'package_credit',
+  'bank_transfer',
 ] as const;
 
 // Entry fee is intentionally NOT accepted from the request — it's stamped
@@ -717,7 +734,7 @@ export type UpdateOwnerInput = z.output<typeof updateOwnerSchema>;
 
 // ─── Finances ─────────────────────────────────────────────────────────
 
-// `.strict()` (audit AI-32c) — see createCompetitionSchema rationale.
+// `.strict()` (audit QA-32c) — see createCompetitionSchema rationale.
 export const createExpenseSchema = z
   .object({
     category: z.string().min(1).max(100),
@@ -765,10 +782,14 @@ export type InvoiceFiltersInput = z.output<typeof invoiceFiltersSchema>;
 
 // Base ZodObject — used for `.partial().strict()` on the update schema.
 // The update route can't apply `.partial()` directly on the refined version
-// because superRefine returns ZodEffects (not ZodObject). Audit AI-21/AI-24/AI-32c.
+// because superRefine returns ZodEffects (not ZodObject). Audit QA-21/QA-24/QA-32c.
 export const couponBaseSchema = z
   .object({
-    code: z.string().min(1).max(50).transform((v) => v.toUpperCase()),
+    code: z
+      .string()
+      .min(1)
+      .max(50)
+      .transform((v) => v.toUpperCase()),
     discountType: z.enum(['percentage', 'fixed']),
     // Stored as integer; for 'percentage' the unit is whole percent points
     // (1–100), for 'fixed' the unit is minor currency units (fils/cents).
@@ -792,7 +813,7 @@ export const couponBaseSchema = z
     currency: z.string().length(3).optional(),
   })
   // `.strict()` for parity with update schemas — unknown keys 422
-  // instead of being silently stripped (audit AI-32c).
+  // instead of being silently stripped (audit QA-32c).
   .strict();
 
 // Reusable refine: percentage discounts must be in [1,100]. Hoisted so the
@@ -824,11 +845,19 @@ export type CreateCouponInput = z.output<typeof createCouponSchema>;
 // ─── Horse Health ─────────────────────────────────────────────────────
 
 const HEALTH_RECORD_TYPES = [
-  'vaccination', 'vet_visit', 'dental', 'deworming', 'blood_test',
-  'injury', 'condition', 'allergy', 'farrier', 'other',
+  'vaccination',
+  'vet_visit',
+  'dental',
+  'deworming',
+  'blood_test',
+  'injury',
+  'condition',
+  'allergy',
+  'farrier',
+  'other',
 ] as const;
 
-// `.strict()` (audit AI-32c) — see createCompetitionSchema rationale.
+// `.strict()` (audit QA-32c) — see createCompetitionSchema rationale.
 export const createHealthRecordSchema = z
   .object({
     recordType: z.string().min(1).max(50),
@@ -920,8 +949,15 @@ export type CreateExerciseScheduleInput = z.output<typeof createExerciseSchedule
 export const updateExerciseScheduleSchema = createExerciseScheduleSchema.partial().strict();
 
 const FILE_CATEGORIES = [
-  'medical_report', 'blood_test', 'xray', 'competition_result',
-  'registration', 'insurance', 'purchase_agreement', 'vaccination_certificate', 'other',
+  'medical_report',
+  'blood_test',
+  'xray',
+  'competition_result',
+  'registration',
+  'insurance',
+  'purchase_agreement',
+  'vaccination_certificate',
+  'other',
 ] as const;
 
 export const createDocumentSchema = z

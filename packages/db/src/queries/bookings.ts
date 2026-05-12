@@ -71,7 +71,7 @@ interface BookingFilters {
 // ─── Booking lifecycle ────────────────────────────────────────────────
 
 /**
- * Allowed booking-status transitions. Audit AI-31 — surfacing the matrix
+ * Allowed booking-status transitions. Audit QA-31 — surfacing the matrix
  * here means future write paths can call `canTransitionBookingStatus`
  * instead of open-coding `WHERE status = 'X'` clauses (and risk
  * forgetting one). The SQL guards in `markBookingComplete`,
@@ -97,10 +97,7 @@ export function canTransitionBookingStatus(from: string, to: string): boolean {
 // ─── Booking Slots ────────────────────────────────────────────────────
 
 export async function getBookingSlotsByClub(clubId: string, filters: BookingSlotFilters) {
-  const conditions: SQL[] = [
-    eq(bookingSlots.clubId, clubId),
-    eq(bookingSlots.isCancelled, false),
-  ];
+  const conditions: SQL[] = [eq(bookingSlots.clubId, clubId), eq(bookingSlots.isCancelled, false)];
 
   if (filters.date) {
     conditions.push(sql`${bookingSlots.date} = ${filters.date}`);
@@ -122,50 +119,52 @@ export async function getBookingSlotsByClub(clubId: string, filters: BookingSlot
     conditions.push(eq(bookingSlots.coachMemberId, filters.coachMemberId));
   }
 
-  return db
-    .select({
-      id: bookingSlots.id,
-      clubId: bookingSlots.clubId,
-      lessonTypeId: bookingSlots.lessonTypeId,
-      arenaId: bookingSlots.arenaId,
-      coachMemberId: bookingSlots.coachMemberId,
-      date: bookingSlots.date,
-      startTime: bookingSlots.startTime,
-      endTime: bookingSlots.endTime,
-      maxRiders: bookingSlots.maxRiders,
-      currentRiders: bookingSlots.currentRiders,
-      isCancelled: bookingSlots.isCancelled,
-      createdAt: bookingSlots.createdAt,
-      lessonTypeName: lessonTypes.name,
-      lessonTypeType: lessonTypes.type,
-      lessonTypeColor: lessonTypes.color,
-      lessonTypePrice: lessonTypes.price,
-      lessonTypeCurrency: lessonTypes.currency,
-      arenaName: arenas.name,
-      coachName: clubMembers.displayName,
-    })
-    .from(bookingSlots)
-    // Defence-in-depth: tenant-owned joined tables (lesson_types, arenas,
-    // club_members) all carry club_id, but FK chains alone don't enforce
-    // it — a migration error or hand-written SQL could attach a slot to a
-    // foreign-club lesson type. Mirroring the clubId condition into each
-    // join keeps a stale row from leaking into a hot-path read.
-    .innerJoin(
-      lessonTypes,
-      and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
-    )
-    .leftJoin(arenas, and(eq(bookingSlots.arenaId, arenas.id), eq(arenas.clubId, clubId)))
-    .leftJoin(
-      clubMembers,
-      and(eq(bookingSlots.coachMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
-    )
-    .where(and(...conditions))
-    .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime))
-    // Defensive cap (audit G-8). Without it, a `dateFrom=1970-01-01&dateTo=
-    // 2099-12-31` request returns every slot the club ever created — a
-    // 5MB+ JSON payload on a busy stable. The route enforces a 90-day
-    // window via Zod, but the DB cap is the last line of defence.
-    .limit(2000);
+  return (
+    db
+      .select({
+        id: bookingSlots.id,
+        clubId: bookingSlots.clubId,
+        lessonTypeId: bookingSlots.lessonTypeId,
+        arenaId: bookingSlots.arenaId,
+        coachMemberId: bookingSlots.coachMemberId,
+        date: bookingSlots.date,
+        startTime: bookingSlots.startTime,
+        endTime: bookingSlots.endTime,
+        maxRiders: bookingSlots.maxRiders,
+        currentRiders: bookingSlots.currentRiders,
+        isCancelled: bookingSlots.isCancelled,
+        createdAt: bookingSlots.createdAt,
+        lessonTypeName: lessonTypes.name,
+        lessonTypeType: lessonTypes.type,
+        lessonTypeColor: lessonTypes.color,
+        lessonTypePrice: lessonTypes.price,
+        lessonTypeCurrency: lessonTypes.currency,
+        arenaName: arenas.name,
+        coachName: clubMembers.displayName,
+      })
+      .from(bookingSlots)
+      // Defence-in-depth: tenant-owned joined tables (lesson_types, arenas,
+      // club_members) all carry club_id, but FK chains alone don't enforce
+      // it — a migration error or hand-written SQL could attach a slot to a
+      // foreign-club lesson type. Mirroring the clubId condition into each
+      // join keeps a stale row from leaking into a hot-path read.
+      .innerJoin(
+        lessonTypes,
+        and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
+      )
+      .leftJoin(arenas, and(eq(bookingSlots.arenaId, arenas.id), eq(arenas.clubId, clubId)))
+      .leftJoin(
+        clubMembers,
+        and(eq(bookingSlots.coachMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(bookingSlots.date), asc(bookingSlots.startTime))
+      // Defensive cap (audit G-8). Without it, a `dateFrom=1970-01-01&dateTo=
+      // 2099-12-31` request returns every slot the club ever created — a
+      // 5MB+ JSON payload on a busy stable. The route enforces a 90-day
+      // window via Zod, but the DB cap is the last line of defence.
+      .limit(2000)
+  );
 }
 
 export async function getBookingSlotById(clubId: string, slotId: string) {
@@ -207,7 +206,10 @@ export async function getBookingSlotById(clubId: string, slotId: string) {
 }
 
 export async function createBookingSlot(clubId: string, data: BookingSlotCreate) {
-  const result = await db.insert(bookingSlots).values({ ...data, clubId }).returning();
+  const result = await db
+    .insert(bookingSlots)
+    .values({ ...data, clubId })
+    .returning();
   return result[0];
 }
 
@@ -232,7 +234,12 @@ export async function createBulkBookingSlots(clubId: string, slots: BookingSlotC
 export async function updateBookingSlot(
   clubId: string,
   slotId: string,
-  data: Partial<Pick<typeof bookingSlots.$inferInsert, 'date' | 'startTime' | 'endTime' | 'maxRiders' | 'arenaId' | 'coachMemberId'>>,
+  data: Partial<
+    Pick<
+      typeof bookingSlots.$inferInsert,
+      'date' | 'startTime' | 'endTime' | 'maxRiders' | 'arenaId' | 'coachMemberId'
+    >
+  >,
 ): Promise<typeof bookingSlots.$inferSelect | { notFound: true } | { cancelled: true }> {
   const result = await db
     .update(bookingSlots)
@@ -286,9 +293,7 @@ export async function cancelBookingSlot(clubId: string, slotId: string, reason?:
       .update(bookings)
       .set({
         status: 'cancelled',
-        cancellationReason: reason
-          ? `Slot cancelled: ${reason}`
-          : 'Slot cancelled',
+        cancellationReason: reason ? `Slot cancelled: ${reason}` : 'Slot cancelled',
         cancelledAt: new Date(),
         updatedAt: new Date(),
       })
@@ -331,12 +336,7 @@ export async function cancelBookingSlot(clubId: string, slotId: string, reason?:
             displayName: clubMembers.displayName,
           })
           .from(clubMembers)
-          .where(
-            and(
-              eq(clubMembers.clubId, clubId),
-              inArray(clubMembers.id, memberIds),
-            ),
-          )
+          .where(and(eq(clubMembers.clubId, clubId), inArray(clubMembers.id, memberIds)))
       : [];
     const memberMap = new Map(memberRows.map((m) => [m.id, m]));
 
@@ -593,8 +593,7 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       // Recompute. Falls back to caller-supplied `amount` when grossAmount
       // is omitted (legacy callers); the recompute then derives the
       // pre-discount value as amount + discountAmount.
-      const gross =
-        data.grossAmount ?? (data.amount ?? 0) + (data.discountAmount ?? 0);
+      const gross = data.grossAmount ?? (data.amount ?? 0) + (data.discountAmount ?? 0);
       recomputedDiscount = calculateCouponDiscount({
         amount: gross,
         discountType: c.discountType as 'percentage' | 'fixed',
@@ -739,12 +738,7 @@ export async function cancelBooking(
           currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(bookingSlots.id, cancelled.slotId),
-            eq(bookingSlots.clubId, clubId),
-          ),
-        );
+        .where(and(eq(bookingSlots.id, cancelled.slotId), eq(bookingSlots.clubId, clubId)));
     }
 
     return cancelled ?? null;
@@ -755,11 +749,7 @@ export async function cancelBooking(
  * Marks a confirmed booking as no-show and records the fee.
  * Does NOT decrement the slot rider count — the rider was expected to attend.
  */
-export async function markBookingNoShow(
-  clubId: string,
-  bookingId: string,
-  noShowFee: number,
-) {
+export async function markBookingNoShow(clubId: string, bookingId: string, noShowFee: number) {
   const result = await db
     .update(bookings)
     .set({
@@ -1010,8 +1000,7 @@ export async function setBookingPaymentRef(
       if (
         data.paymentStatus !== 'refunded' &&
         data.paymentStatus !== 'partial' &&
-        (current.paymentStatus === 'refunded' ||
-          current.paymentStatus === 'partial')
+        (current.paymentStatus === 'refunded' || current.paymentStatus === 'partial')
       ) {
         return null;
       }
@@ -1059,10 +1048,7 @@ export async function setBookingPaymentRef(
  * on the `confirmed → completed` transition (the WHERE on status), so
  * double-clicks don't double-count.
  */
-export async function markBookingComplete(
-  clubId: string,
-  bookingId: string,
-) {
+export async function markBookingComplete(clubId: string, bookingId: string) {
   return writeTransaction(async (tx) => {
     const result = await tx
       .update(bookings)
@@ -1091,10 +1077,7 @@ export async function markBookingComplete(
           updatedAt: new Date(),
         })
         .where(
-          and(
-            eq(riderProfiles.clubId, clubId),
-            eq(riderProfiles.memberId, row.riderMemberId),
-          ),
+          and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, row.riderMemberId)),
         );
     }
 
@@ -1121,9 +1104,7 @@ export async function markBookingComplete(
 export async function findUpcomingBookingsForReminder(now: Date) {
   const today = now.toISOString().slice(0, 10);
   // Audit r5 F-59 (2026-05-07): use the shared MS_PER_HOUR constant.
-  const twoDaysOut = new Date(now.getTime() + 48 * MS_PER_HOUR)
-    .toISOString()
-    .slice(0, 10);
+  const twoDaysOut = new Date(now.getTime() + 48 * MS_PER_HOUR).toISOString().slice(0, 10);
 
   const rows = await db
     .select({
@@ -1145,31 +1126,16 @@ export async function findUpcomingBookingsForReminder(now: Date) {
     .from(bookings)
     .innerJoin(
       bookingSlots,
-      and(
-        eq(bookingSlots.id, bookings.slotId),
-        eq(bookingSlots.clubId, bookings.clubId),
-      ),
+      and(eq(bookingSlots.id, bookings.slotId), eq(bookingSlots.clubId, bookings.clubId)),
     )
     .innerJoin(
       lessonTypes,
-      and(
-        eq(lessonTypes.id, bookingSlots.lessonTypeId),
-        eq(lessonTypes.clubId, bookings.clubId),
-      ),
+      and(eq(lessonTypes.id, bookingSlots.lessonTypeId), eq(lessonTypes.clubId, bookings.clubId)),
     )
-    .leftJoin(
-      arenas,
-      and(
-        eq(arenas.id, bookingSlots.arenaId),
-        eq(arenas.clubId, bookings.clubId),
-      ),
-    )
+    .leftJoin(arenas, and(eq(arenas.id, bookingSlots.arenaId), eq(arenas.clubId, bookings.clubId)))
     .leftJoin(
       clubMembers,
-      and(
-        eq(clubMembers.id, bookings.riderMemberId),
-        eq(clubMembers.clubId, bookings.clubId),
-      ),
+      and(eq(clubMembers.id, bookings.riderMemberId), eq(clubMembers.clubId, bookings.clubId)),
     )
     .where(
       and(
@@ -1191,10 +1157,7 @@ export async function findUpcomingBookingsForReminder(now: Date) {
  * sending a reminder for the same booking. Returns the row when the
  * caller won the CAS, null when another worker beat them.
  */
-export async function markBookingReminderSent(
-  clubId: string,
-  bookingId: string,
-) {
+export async function markBookingReminderSent(clubId: string, bookingId: string) {
   const result = await db
     .update(bookings)
     .set({ reminderSentAt: new Date(), updatedAt: new Date() })
@@ -1221,10 +1184,7 @@ export async function markBookingReminderSent(
  * concurrent worker re-claimed it (rare — the cron is hourly, the
  * window is 2h wide).
  */
-export async function unmarkBookingReminderSent(
-  clubId: string,
-  bookingId: string,
-) {
+export async function unmarkBookingReminderSent(clubId: string, bookingId: string) {
   const result = await db
     .update(bookings)
     .set({ reminderSentAt: null, updatedAt: new Date() })

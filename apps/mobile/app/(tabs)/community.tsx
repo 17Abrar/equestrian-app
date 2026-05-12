@@ -5,11 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 export default function CommunityScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 100 }}
-      >
-        <View className="px-6 pt-4 pb-2">
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
+        <View className="px-6 pb-2 pt-4">
           <Text className="text-2xl font-bold text-gray-900">Community</Text>
           <Text className="mt-1 text-base text-gray-500">
             Connect with riders across your stable
@@ -21,12 +18,10 @@ export default function CommunityScreen() {
             <View className="h-16 w-16 items-center justify-center rounded-full bg-gray-100">
               <Ionicons name="chatbubbles-outline" size={28} color="#6b7280" />
             </View>
-            <Text className="mt-4 text-lg font-semibold text-gray-900">
-              Coming soon
-            </Text>
+            <Text className="mt-4 text-lg font-semibold text-gray-900">Coming soon</Text>
             <Text className="mt-2 text-center text-sm text-gray-500">
-              Share rides, photos, and tips with other riders at your stable. We&apos;re
-              building this with your stable&apos;s feedback — watch this space.
+              Share rides, photos, and tips with other riders at your stable. We&apos;re building
+              this with your stable&apos;s feedback — watch this space.
             </Text>
           </View>
         </View>
