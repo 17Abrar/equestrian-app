@@ -85,11 +85,11 @@ export default function BookingDetailScreen() {
     const result = await pay(booking.id);
     if (result.ok) {
       Toast.show({ type: 'success', text1: 'Payment received' });
-      void query.refetch();
+      void refetch();
     } else if (!result.dismissed) {
       Alert.alert('Payment Failed', result.errorMessage ?? "We couldn't start the payment flow.");
     }
-  }, [booking, pay, query]);
+  }, [booking, pay, refetch]);
 
   const handleCancel = useCallback(() => {
     if (!booking) return;

@@ -12,7 +12,10 @@ interface DayStripProps {
   counts?: Record<string, number>;
 }
 
-const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
+// Two letters disambiguates Tue/Thu and Sat/Sun without crowding the strip
+// — matches the web `BookingDayStrip` and the reference design's mixed
+// `M T W Th F S Su` shorthand.
+const WEEKDAY_LETTERS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 
 function getTodayLocal(): string {
   const d = new Date();
