@@ -42,6 +42,16 @@ export function useBookingSlots(filters: { dateFrom?: string; dateTo?: string } 
   });
 }
 
+export function useBooking(bookingId: string | null) {
+  const api = useApiClient();
+
+  return useQuery({
+    queryKey: ['booking', bookingId],
+    queryFn: () => api.get<Booking>(`/api/v1/bookings/${bookingId}`),
+    enabled: !!bookingId,
+  });
+}
+
 export function useMyBookings(filters: { status?: string; page?: number } = {}) {
   const api = useApiClient();
   const params = new URLSearchParams();

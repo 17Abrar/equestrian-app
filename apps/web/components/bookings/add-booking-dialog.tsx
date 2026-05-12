@@ -14,12 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import {
   Form,
   FormControl,
@@ -211,25 +211,32 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
   }
 
   return (
-    <Dialog
+    <Sheet
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) reset();
       }}
     >
-      <DialogTrigger asChild>
+      <SheetTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
           Add Booking
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Create Manual Booking</DialogTitle>
-        </DialogHeader>
+      </SheetTrigger>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+        // Don't close the sheet when the admin clicks outside the panel —
+        // wizard data is in flight and accidental dismissal loses progress.
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
+        <SheetHeader className="border-b">
+          <SheetTitle>Create Manual Booking</SheetTitle>
+        </SheetHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 flex-col">
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {/* Step 1: Lesson Type */}
             <FormField
               control={form.control}
@@ -299,7 +306,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                     {slotsQuery.isLoading ? (
                       <Skeleton className="h-10" />
                     ) : slots.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">
+                      <p className="text-sm text-muted-foreground">
                         No slots available for this date and lesson type.
                       </p>
                     ) : (
@@ -321,8 +328,9 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                             const cap = getCapacityInfo(slot.currentRiders, slot.maxRiders);
                             return (
                               <SelectItem key={slot.id} value={slot.id} disabled={cap.isFull}>
-                                {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)} (
-                                {slot.currentRiders}/{slot.maxRiders} riders)
+                                {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
+                                {' '}
+                                ({slot.currentRiders}/{slot.maxRiders} riders)
                                 {slot.arenaName ? ` • ${slot.arenaName}` : ''}
                                 {cap.isFull ? ' — FULL' : ''}
                               </SelectItem>
@@ -454,7 +462,9 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                     {couponValidating ? 'Applying…' : 'Apply'}
                   </Button>
                 </div>
-                {couponError && <p className="text-destructive mt-1 text-sm">{couponError}</p>}
+                {couponError && (
+                  <p className="mt-1 text-sm text-destructive">{couponError}</p>
+                )}
                 {couponDiscount > 0 && (
                   <p className="mt-1 text-sm text-green-600">
                     Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
@@ -463,43 +473,54 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
               </div>
             )}
 
-            {/* Summary */}
-            {selectedSlot && riderMemberId && (
-              <div className="bg-muted/50 rounded-lg border p-3">
-                <p className="text-sm font-medium">Booking Summary</p>
-                <div className="text-muted-foreground mt-2 space-y-1 text-sm">
-                  <p>{selectedSlot.lessonTypeName}</p>
-                  <p>
-                    {selectedSlot.date} at {selectedSlot.startTime.slice(0, 5)} –{' '}
-                    {selectedSlot.endTime.slice(0, 5)}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <p className={couponDiscount > 0 ? 'line-through' : ''}>
-                      {formatMoney(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
+            </div>
+
+            {/* Sticky bottom: summary + submit. Stays visible while the field
+                stack scrolls inside the sheet, mirroring the rider funnel's
+                bottom-action language. */}
+            <div className="space-y-3 border-t bg-background p-4">
+              {selectedSlot && riderMemberId && (
+                <div className="rounded-lg border bg-muted/50 p-3">
+                  <p className="text-sm font-medium">Booking Summary</p>
+                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                    <p>{selectedSlot.lessonTypeName}</p>
+                    <p>
+                      {selectedSlot.date} at {selectedSlot.startTime.slice(0, 5)} –{' '}
+                      {selectedSlot.endTime.slice(0, 5)}
                     </p>
-                    {couponDiscount > 0 && (
-                      <p className="font-semibold text-green-600">
+                    <div className="flex items-center gap-2">
+                      <p className={couponDiscount > 0 ? 'line-through' : ''}>
                         {formatMoney(
-                          selectedSlot.lessonTypePrice - couponDiscount,
+                          selectedSlot.lessonTypePrice,
                           selectedSlot.lessonTypeCurrency,
                         )}
                       </p>
-                    )}
+                      {couponDiscount > 0 && (
+                        <p className="font-semibold text-green-600">
+                          {formatMoney(
+                            selectedSlot.lessonTypePrice - couponDiscount,
+                            selectedSlot.lessonTypeCurrency,
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={createBooking.isPending || couponValidating || form.formState.isSubmitting}
-            >
-              {createBooking.isPending ? 'Creating...' : 'Create Booking'}
-            </Button>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  createBooking.isPending || couponValidating || form.formState.isSubmitting
+                }
+              >
+                {createBooking.isPending ? 'Creating...' : 'Create Booking'}
+              </Button>
+            </div>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

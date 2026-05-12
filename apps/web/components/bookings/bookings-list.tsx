@@ -1,7 +1,15 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Calendar, Clock, MoreHorizontal, XCircle, CheckCircle2, UserX, Undo2 } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  XCircle,
+  CheckCircle2,
+  UserX,
+  Undo2,
+} from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -12,9 +20,12 @@ import {
   type Booking,
 } from '@/hooks/use-bookings';
 import { AddBookingDialog } from './add-booking-dialog';
+import { BookingDayStrip } from './booking-day-strip';
+import { BookingItemRow } from './booking-item-row';
+import { BookingFab } from './booking-fab';
 import { formatMoney } from '@equestrian/shared/utils';
+import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -69,21 +80,16 @@ interface RefundBookingResult {
   remainingRefundableMinor: number;
 }
 
-const ACTION_CONFIG: Record<
-  ActionType,
-  { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }
-> = {
+const ACTION_CONFIG: Record<ActionType, { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }> = {
   cancel: {
     title: 'Cancel Booking',
-    description:
-      'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
+    description: 'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
     confirmLabel: 'Cancel Booking',
     variant: 'destructive',
   },
   no_show: {
     title: 'Mark as No-Show',
-    description:
-      'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
+    description: 'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
     confirmLabel: 'Mark No-Show',
     variant: 'destructive',
   },
@@ -95,8 +101,7 @@ const ACTION_CONFIG: Record<
   },
   refund: {
     title: 'Refund Payment',
-    description:
-      'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
+    description: 'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
     confirmLabel: 'Issue Refund',
     variant: 'destructive',
   },
@@ -109,20 +114,43 @@ function BookingListSkeleton() {
     <div className="space-y-3">
       {Array.from({ length: 6 }).map((_, i) => (
         <Card key={i}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-12 w-12 rounded-lg" />
-              <div className="flex-1">
-                <Skeleton className="mb-2 h-5 w-1/3" />
-                <Skeleton className="h-4 w-1/2" />
-              </div>
-              <Skeleton className="h-6 w-20" />
+          <CardContent className="flex items-center gap-3 p-4">
+            <Skeleton className="h-5 w-5 rounded-full" />
+            <div className="flex-1">
+              <Skeleton className="mb-2 h-4 w-2/5" />
+              <Skeleton className="h-3 w-1/3" />
             </div>
+            <div className="flex flex-col items-end gap-1.5">
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+            <Skeleton className="h-8 w-8 rounded-md" />
           </CardContent>
         </Card>
       ))}
     </div>
   );
+}
+
+// ─── Date filter helpers ─────────────────────────────────────────────
+
+function toLocalDateString(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getWeekDates(weekOffset: number): string[] {
+  const today = new Date();
+  const dayOfWeek = today.getDay() || 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - dayOfWeek + 1 + weekOffset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return toLocalDateString(d);
+  });
 }
 
 // ─── Action Confirmation Dialog ──────────────────────────────────────
@@ -192,9 +220,7 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
           throw new Error(refundResult.error.message);
         }
         if (refundResult.data.status === 'pending') {
-          toast.warning(
-            'Refund requested. Booking ledger will update after provider confirmation.',
-          );
+          toast.warning('Refund requested. Booking ledger will update after provider confirmation.');
         } else {
           toast.success('Refund issued');
         }
@@ -202,10 +228,7 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       setReason('');
       onClose();
     } catch (err) {
-      reportMutationError('booking.action', err, {
-        type: state?.type,
-        bookingId: state?.booking.id,
-      });
+      reportMutationError('booking.action', err, { type: state?.type, bookingId: state?.booking.id });
       toast.error(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setIsSubmitting(false);
@@ -229,21 +252,15 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{config.title}</AlertDialogTitle>
-          <AlertDialogDescription>{config.description}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {config.description}
+          </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-2 text-sm">
-          <p>
-            <strong>Lesson:</strong> {state.booking.lessonTypeName}
-          </p>
-          <p>
-            <strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}
-          </p>
-          {state.booking.riderName && (
-            <p>
-              <strong>Rider:</strong> {state.booking.riderName}
-            </p>
-          )}
+          <p><strong>Lesson:</strong> {state.booking.lessonTypeName}</p>
+          <p><strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}</p>
+          {state.booking.riderName && <p><strong>Rider:</strong> {state.booking.riderName}</p>}
         </div>
 
         {state.type === 'cancel' && (
@@ -277,8 +294,14 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isSubmitting}>Keep Booking</AlertDialogCancel>
-          <Button variant={config.variant} onClick={handleConfirm} disabled={isSubmitting}>
+          <AlertDialogCancel disabled={isSubmitting}>
+            Keep Booking
+          </AlertDialogCancel>
+          <Button
+            variant={config.variant}
+            onClick={handleConfirm}
+            disabled={isSubmitting}
+          >
             {isSubmitting ? 'Processing...' : config.confirmLabel}
           </Button>
         </AlertDialogFooter>
@@ -316,16 +339,27 @@ type BookingStatusFilter = (typeof BOOKING_STATUS_FILTER_VALUES)[number] | undef
 
 export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
   const [status, setStatus] = useState<BookingStatusFilter>();
-  const [date, setDate] = useState<string>('');
+  // Day-strip selection IS the date filter. `null` means "any date in the
+  // current week" (server returns the global paginated list — useful when the
+  // admin wants the recency-sorted view); selecting a day filters server-side.
+  const [date, setDate] = useState<string | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [page, setPage] = useState(1);
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
   // Audit F-20 (2026-05-07 r4): lift dialog open state so EmptyState CTA
   // can trigger the same Add Booking flow as the header button.
   const [addOpen, setAddOpen] = useState(false);
 
+  const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
+  const weekLabel = useMemo(() => {
+    const start = new Date(`${weekDates[0]}T00:00:00`);
+    const end = new Date(`${weekDates[6]}T00:00:00`);
+    return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
+  }, [weekDates]);
+
   const { data, isLoading, isError, error, refetch } = useBookings({
     status,
-    date: date || undefined,
+    date: date ?? undefined,
     page,
     pageSize: DEFAULT_PAGE_SIZE,
   });
@@ -354,52 +388,85 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="text-muted-foreground mt-1">View and manage lesson bookings</p>
+          <p className="mt-1 text-muted-foreground">View and manage lesson bookings</p>
         </div>
         {canCreate && <AddBookingDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[180px]">
-          <Calendar className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => {
-              setDate(e.target.value);
-              setPage(1);
-            }}
-            className="pl-9"
-          />
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setWeekOffset((w) => w - 1)}
+              aria-label="Previous week"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium tabular-nums">{weekLabel}</span>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setWeekOffset((w) => w + 1)}
+              aria-label="Next week"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            {date && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDate(null);
+                  setPage(1);
+                }}
+              >
+                Any date
+              </Button>
+            )}
+            <Select
+              value={status ?? 'all'}
+              onValueChange={(v) => {
+                setStatus(
+                  v === 'all'
+                    ? undefined
+                    : BOOKING_STATUS_FILTER_VALUES.includes(
+                          v as (typeof BOOKING_STATUS_FILTER_VALUES)[number],
+                        )
+                      ? (v as (typeof BOOKING_STATUS_FILTER_VALUES)[number])
+                      : undefined,
+                );
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="no_show">No Show</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <Select
-          value={status ?? 'all'}
-          onValueChange={(v) => {
-            setStatus(
-              v === 'all'
-                ? undefined
-                : BOOKING_STATUS_FILTER_VALUES.includes(
-                      v as (typeof BOOKING_STATUS_FILTER_VALUES)[number],
-                    )
-                  ? (v as (typeof BOOKING_STATUS_FILTER_VALUES)[number])
-                  : undefined,
-            );
+        <BookingDayStrip
+          dates={weekDates}
+          selected={date}
+          onSelect={(d) => {
+            // Toggle off when picking the already-selected day so the admin
+            // can return to the un-date-scoped paginated view in one tap.
+            setDate((current) => (current === d ? null : d));
             setPage(1);
           }}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="confirmed">Confirmed</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-            <SelectItem value="no_show">No Show</SelectItem>
-          </SelectContent>
-        </Select>
+        />
       </div>
 
       {/* Content */}
@@ -417,7 +484,9 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
           title="No bookings yet"
           description="Bookings will appear here once riders start booking lessons"
           action={
-            canCreate ? { label: 'Create booking', onClick: () => setAddOpen(true) } : undefined
+            canCreate
+              ? { label: 'Create booking', onClick: () => setAddOpen(true) }
+              : undefined
           }
         />
       )}
@@ -429,42 +498,14 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
               const actions = getAvailableActions(booking);
 
               return (
-                <Card key={booking.id} className="transition-shadow hover:shadow-md">
-                  <CardContent className="flex items-center gap-4 p-4">
-                    <div
-                      className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
-                      style={{ backgroundColor: '#6366f1' }}
-                    >
-                      {booking.lessonTypeType.slice(0, 3).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate font-semibold">{booking.lessonTypeName}</h3>
-                        <Badge
-                          variant="secondary"
-                          className={BOOKING_STATUS_COLORS[booking.status] ?? ''}
-                        >
-                          {booking.status.replace('_', ' ')}
-                        </Badge>
-                      </div>
-                      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {booking.slotDate}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {booking.slotStartTime} - {booking.slotEndTime}
-                        </span>
-                        {booking.riderName && <span>{booking.riderName}</span>}
-                        {booking.horseName && <span>{booking.horseName}</span>}
-                        {booking.arenaName && <span>{booking.arenaName}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex flex-col items-end gap-1">
+                <BookingItemRow
+                  key={booking.id}
+                  booking={booking}
+                  right={
+                    <div className="flex items-center gap-2 pl-2">
+                      <div className="hidden flex-col items-end gap-1 sm:flex">
                         {booking.amount !== null && (
-                          <span className="font-semibold">
+                          <span className="text-sm font-semibold">
                             {formatMoney(booking.amount, booking.currency)}
                           </span>
                         )}
@@ -475,6 +516,12 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
                           {booking.paymentStatus}
                         </Badge>
                       </div>
+                      <Badge
+                        variant="secondary"
+                        className={`hidden md:inline-flex ${BOOKING_STATUS_COLORS[booking.status] ?? ''}`}
+                      >
+                        {booking.status.replace('_', ' ')}
+                      </Badge>
                       {actions.length > 0 && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -522,8 +569,8 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
                         </DropdownMenu>
                       )}
                     </div>
-                  </CardContent>
-                </Card>
+                  }
+                />
               );
             })}
           </div>
@@ -539,7 +586,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
               >
                 Previous
               </Button>
-              <span className="text-muted-foreground text-sm">
+              <span className="text-sm text-muted-foreground">
                 Page {page} of {data.pagination.totalPages}
               </span>
               <Button
@@ -557,6 +604,15 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
 
       {/* Confirmation Dialog */}
       <BookingActionDialog state={actionDialog} onClose={() => setActionDialog(null)} />
+
+      {/* FAB — mobile/tablet only; desktop keeps the inline header button. */}
+      {canCreate && (
+        <BookingFab
+          onClick={() => setAddOpen(true)}
+          label="Add booking"
+          className="lg:hidden"
+        />
+      )}
     </div>
   );
 }

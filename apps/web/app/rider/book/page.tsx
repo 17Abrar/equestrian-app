@@ -10,12 +10,10 @@ import {
   Calendar,
   Clock,
   MapPin,
-  Users,
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
   ArrowRight,
-  Check,
   Ticket,
   Loader2,
 } from 'lucide-react';
@@ -27,7 +25,6 @@ import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -49,6 +46,8 @@ import {
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { BookingDayStrip } from '@/components/bookings/booking-day-strip';
+import { cn } from '@/lib/utils';
 import { fetchJson } from '@/lib/fetch-json';
 
 // Audit F-30 (2026-05-07 r5 PR Rho): RHF schema for the guest sub-form.
@@ -117,6 +116,23 @@ function formatPrice(price: number, currency: string): string {
   return formatMoney(price, currency);
 }
 
+function initialsForType(type: string): string {
+  const parts = type.split('_').filter(Boolean);
+  if (parts.length >= 2) return ((parts[0]![0] ?? '') + (parts[1]![0] ?? '')).toUpperCase();
+  return (parts[0] ?? '').slice(0, 2).toUpperCase();
+}
+
+function durationLabel(start: string, end: string): string {
+  const sParts = start.split(':').map(Number);
+  const eParts = end.split(':').map(Number);
+  const minutes =
+    eParts[0]! * 60 + (eParts[1] ?? 0) - (sParts[0]! * 60 + (sParts[1] ?? 0));
+  if (minutes <= 0) return '';
+  if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}h`;
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return `${minutes}m`;
+}
+
 // ─── Slot Card ────────────────────────────────────────────────────────
 
 interface SlotCardProps {
@@ -130,73 +146,71 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
   // capacity policy (e.g. waitlist semantics) lands everywhere — see
   // audit E-6.
   const { isFull, spotsLeft } = getCapacityInfo(slot.currentRiders, slot.maxRiders);
+  const initials = initialsForType(slot.lessonTypeType);
+  const duration = durationLabel(slot.startTime, slot.endTime);
 
   return (
-    <Card
-      className={`cursor-pointer transition-all ${
+    <button
+      type="button"
+      onClick={() => !isFull && onSelect()}
+      disabled={isFull}
+      aria-pressed={isSelected}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         isSelected
-          ? 'ring-primary border-primary ring-2'
+          ? 'border-primary ring-1 ring-primary'
           : isFull
             ? 'cursor-not-allowed opacity-50'
-            : 'hover:border-primary/50 hover:shadow-md'
-      }`}
-      onClick={() => !isFull && onSelect()}
+            : 'hover:bg-accent/40',
+      )}
     >
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <p className="font-medium">{slot.lessonTypeName}</p>
-              <Badge
-                variant="secondary"
-                style={{
-                  backgroundColor: slot.lessonTypeColor ? `${slot.lessonTypeColor}20` : undefined,
-                  color: slot.lessonTypeColor ?? undefined,
-                }}
-              >
-                {slot.lessonTypeType}
-              </Badge>
-            </div>
-            <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+        style={
+          slot.lessonTypeColor
+            ? { backgroundColor: `${slot.lessonTypeColor}20`, color: slot.lessonTypeColor }
+            : undefined
+        }
+      >
+        {initials || <Calendar className="h-4 w-4" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{slot.lessonTypeName}</p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+          </span>
+          {duration && <span aria-hidden="true">·</span>}
+          {duration && <span>{duration}</span>}
+          {slot.arenaName && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {slot.arenaName}
               </span>
-              {slot.arenaName && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {slot.arenaName}
-                </span>
-              )}
-              {slot.coachName && <span className="text-xs">Coach: {slot.coachName}</span>}
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1">
-            <span className="font-semibold">
-              {formatPrice(slot.lessonTypePrice, slot.lessonTypeCurrency)}
-            </span>
-            <span className="text-muted-foreground flex items-center gap-1 text-xs">
-              <Users className="h-3 w-3" />
-              {isFull ? (
-                <span className="text-destructive font-medium">Full</span>
-              ) : (
-                <span>
-                  {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
-                </span>
-              )}
-            </span>
-          </div>
-        </div>
-
-        {isSelected && (
-          <div className="text-primary mt-2 flex items-center gap-1 text-xs font-medium">
-            <Check className="h-3 w-3" />
-            Selected
-          </div>
+            </>
+          )}
+        </p>
+        {slot.coachName && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">Coach {slot.coachName}</p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      <div className="flex flex-col items-end gap-0.5 text-xs">
+        <span className="text-sm font-semibold text-foreground">
+          {formatPrice(slot.lessonTypePrice, slot.lessonTypeCurrency)}
+        </span>
+        {isFull ? (
+          <span className="font-medium text-destructive">Full</span>
+        ) : (
+          <span className="text-muted-foreground">
+            {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -233,13 +247,7 @@ export default function RiderBookPage() {
   const { data: user } = useCurrentUser();
   const memberId = user?.data?.memberId;
 
-  const {
-    data: slotsData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useBookingSlots({
+  const { data: slotsData, isLoading, isError, error, refetch } = useBookingSlots({
     dateFrom: toDateString(week.start),
     dateTo: toDateString(week.end),
   });
@@ -269,9 +277,7 @@ export default function RiderBookPage() {
       });
       if (json.data.valid && json.data.discount) {
         setCouponDiscount(json.data.discount);
-        toast.success(
-          `Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`,
-        );
+        toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
       } else {
         setCouponError(json.data.error ?? 'Invalid code');
       }
@@ -283,10 +289,17 @@ export default function RiderBookPage() {
     }
   }, [couponCode, selectedSlot, memberId]);
 
-  const slots = slotsData?.data ?? [];
+  const slots = useMemo(() => slotsData?.data ?? [], [slotsData?.data]);
 
   // Group slots by date, filter to selected date
   const slotsForDate = slots.filter((s) => s.date === selectedDate);
+
+  const weekDateStrings = useMemo(() => week.dates.map(toDateString), [week.dates]);
+  const slotCountsByDate = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of slots) counts[s.date] = (counts[s.date] ?? 0) + 1;
+    return counts;
+  }, [slots]);
 
   function resetBookingState() {
     setStep('browse');
@@ -362,16 +375,16 @@ export default function RiderBookPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 text-sm">
-              <Calendar className="text-muted-foreground h-4 w-4" />
+              <Calendar className="h-4 w-4 text-muted-foreground" />
               {formatDate(new Date(`${selectedSlot.date}T00:00:00`))}
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <Clock className="text-muted-foreground h-4 w-4" />
+              <Clock className="h-4 w-4 text-muted-foreground" />
               {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
             </div>
             {selectedSlot.arenaName && (
               <div className="flex items-center gap-2 text-sm">
-                <MapPin className="text-muted-foreground h-4 w-4" />
+                <MapPin className="h-4 w-4 text-muted-foreground" />
                 {selectedSlot.arenaName}
               </div>
             )}
@@ -380,12 +393,10 @@ export default function RiderBookPage() {
                 Coach: <span className="font-medium">{selectedSlot.coachName}</span>
               </div>
             )}
-            <div className="space-y-1 border-t pt-3">
+            <div className="border-t pt-3 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground text-sm">Price</span>
-                <span
-                  className={`text-lg font-semibold ${couponDiscount > 0 ? 'text-muted-foreground text-base line-through' : ''}`}
-                >
+                <span className="text-sm text-muted-foreground">Price</span>
+                <span className={`text-lg font-semibold ${couponDiscount > 0 ? 'line-through text-muted-foreground text-base' : ''}`}>
                   {formatPrice(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
                 </span>
               </div>
@@ -393,10 +404,7 @@ export default function RiderBookPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-green-600">After discount</span>
                   <span className="text-lg font-semibold text-green-600">
-                    {formatPrice(
-                      selectedSlot.lessonTypePrice - couponDiscount,
-                      selectedSlot.lessonTypeCurrency,
-                    )}
+                    {formatPrice(selectedSlot.lessonTypePrice - couponDiscount, selectedSlot.lessonTypeCurrency)}
                   </span>
                 </div>
               )}
@@ -411,7 +419,7 @@ export default function RiderBookPage() {
           </label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Ticket className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+              <Ticket className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="coupon"
                 placeholder="Enter promo code"
@@ -434,7 +442,7 @@ export default function RiderBookPage() {
               {couponValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
             </Button>
           </div>
-          {couponError && <p className="text-destructive text-sm">{couponError}</p>}
+          {couponError && <p className="text-sm text-destructive">{couponError}</p>}
           {couponDiscount > 0 && (
             <p className="text-sm text-green-600">
               Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
@@ -447,9 +455,9 @@ export default function RiderBookPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-0.5">
               <Label htmlFor="guest-toggle">Booking this for a guest?</Label>
-              <p className="text-muted-foreground text-xs">
-                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in their
-                name. You can book yourself once AND bring guests on the same slot.
+              <p className="text-xs text-muted-foreground">
+                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in
+                their name. You can book yourself once AND bring guests on the same slot.
               </p>
             </div>
             <Switch
@@ -483,7 +491,11 @@ export default function RiderBookPage() {
                       <FormItem>
                         <FormLabel className="text-xs">Guest email *</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="guest@example.com" {...field} />
+                          <Input
+                            type="email"
+                            placeholder="guest@example.com"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -496,7 +508,11 @@ export default function RiderBookPage() {
                       <FormItem>
                         <FormLabel className="text-xs">Guest phone *</FormLabel>
                         <FormControl>
-                          <Input type="tel" placeholder="+971 50 123 4567" {...field} />
+                          <Input
+                            type="tel"
+                            placeholder="+971 50 123 4567"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -525,7 +541,7 @@ export default function RiderBookPage() {
                     </FormItem>
                   )}
                 />
-                <p className="text-muted-foreground text-xs">
+                <p className="text-xs text-muted-foreground">
                   A horse will be assigned manually by the stable after booking.
                 </p>
               </div>
@@ -535,7 +551,7 @@ export default function RiderBookPage() {
 
         {/* Horse matching info for self-bookings */}
         {!bookingForGuest && (
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             A horse will be automatically matched to your skill level and preferences.
           </p>
         )}
@@ -582,63 +598,28 @@ export default function RiderBookPage() {
         <span className="text-sm font-medium">
           {formatDate(week.start)} – {formatDate(week.end)}
         </span>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setWeekOffset((w) => w + 1)}
-          aria-label="Next week"
-        >
+        <Button variant="outline" size="icon" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Next week">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Date selector */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {week.dates.map((d) => {
-          const dateStr = toDateString(d);
-          const isToday = dateStr === toDateString(new Date());
-          const isSelected = dateStr === selectedDate;
-          const daySlots = slots.filter((s) => s.date === dateStr);
-          const isPast = d < new Date(toDateString(new Date()) + 'T00:00:00');
+      <BookingDayStrip
+        dates={weekDateStrings}
+        selected={selectedDate}
+        onSelect={(d) => {
+          setSelectedDate(d);
+          setSelectedSlot(null);
+        }}
+        disabledBefore={toDateString(new Date())}
+        slotCounts={slotCountsByDate}
+      />
 
-          return (
-            <button
-              key={dateStr}
-              onClick={() => {
-                setSelectedDate(dateStr);
-                setSelectedSlot(null);
-              }}
-              disabled={isPast}
-              className={`flex min-w-[4.5rem] flex-col items-center rounded-xl border px-3 py-2 text-sm transition-colors ${
-                isSelected
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : isPast
-                    ? 'cursor-not-allowed opacity-40'
-                    : 'hover:border-primary/50'
-              }`}
-            >
-              <span className="text-[10px] uppercase">
-                {d.toLocaleDateString('en-US', { weekday: 'short' })}
-              </span>
-              <span className="text-lg font-bold">{d.getDate()}</span>
-              {daySlots.length > 0 && (
-                <span
-                  className={`text-[10px] ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}
-                >
-                  {daySlots.length} slot{daySlots.length !== 1 ? 's' : ''}
-                </span>
-              )}
-              {isToday && !isSelected && (
-                <span className="bg-primary mt-0.5 h-1 w-1 rounded-full" />
-              )}
-            </button>
-          );
-        })}
-      </div>
+
 
       {/* Slots for selected date */}
       <section>
-        <h2 className="text-muted-foreground mb-3 text-sm font-medium">
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Available on {formatDate(new Date(`${selectedDate}T00:00:00`))}
         </h2>
 
@@ -681,7 +662,7 @@ export default function RiderBookPage() {
 
       {/* Continue button */}
       {selectedSlot && (
-        <div className="bg-background sticky bottom-20 z-40 -mx-4 border-t px-4 pb-4 pt-4 sm:bottom-0 sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0">
+        <div className="sticky bottom-20 sm:bottom-0 z-40 bg-background pt-4 pb-4 border-t -mx-4 px-4 sm:mx-0 sm:px-0 sm:border-0 sm:bg-transparent">
           <Button className="w-full" size="lg" onClick={() => setStep('confirm')}>
             Continue with {selectedSlot.lessonTypeName}
             <ArrowRight className="ml-2 h-4 w-4" />
