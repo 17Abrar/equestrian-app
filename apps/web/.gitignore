@@ -8,3 +8,8 @@
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# Playwright test artifacts (captured screenshots / traces / last-run state)
+/test-results/
+/playwright-report/
+
