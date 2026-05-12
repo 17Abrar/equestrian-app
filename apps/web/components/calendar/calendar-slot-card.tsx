@@ -8,6 +8,7 @@ import { Clock, X, Pencil, Users, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -59,18 +60,26 @@ interface CalendarSlotCardProps {
 }
 
 export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProps) {
-  const bgColor = slot.lessonTypeColor ?? getSlotColor(slot.lessonTypeType);
+  const accentColor = slot.lessonTypeColor ?? getSlotColor(slot.lessonTypeType);
   const capacity = getCapacityInfo(slot.currentRiders, slot.maxRiders);
+
+  // Subtle tinted background (~7% of the lesson-type colour) keeps the card
+  // calm at high density while the saturated left rail still signals which
+  // lesson type the slot is. Dark text reads on both light and dark modes.
+  const tintBg = `${accentColor}14`;
 
   if (compact) {
     return (
       <div
-        className="flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white"
-        style={{ backgroundColor: bgColor, opacity: capacity.isFull ? 0.5 : 1 }}
+        className={cn(
+          'flex items-center gap-1 truncate rounded border-l-2 bg-card px-1.5 py-0.5 text-[10px] font-medium text-foreground',
+          capacity.isFull && 'opacity-60',
+        )}
+        style={{ borderLeftColor: accentColor, backgroundColor: tintBg }}
         title={`${slot.lessonTypeName} ${slot.startTime.slice(0, 5)} — ${capacity.label}`}
       >
         <span
-          className={`inline-block h-1.5 w-1.5 rounded-full ${CAPACITY_DOT_CLASSES[capacity.color]}`}
+          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${CAPACITY_DOT_CLASSES[capacity.color]}`}
         />
         {slot.lessonTypeName}
       </div>
@@ -82,33 +91,45 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="focus:ring-ring w-full cursor-pointer rounded-md p-2 text-left text-xs text-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1"
-          style={{ backgroundColor: bgColor, opacity: capacity.isFull ? 0.6 : 1 }}
+          className={cn(
+            'w-full cursor-pointer rounded-md border-l-[3px] p-2 text-left text-xs text-foreground transition-colors',
+            'hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+            capacity.isFull && 'opacity-60',
+          )}
+          style={{ borderLeftColor: accentColor, backgroundColor: tintBg }}
           aria-label={`${slot.lessonTypeName} at ${slot.startTime.slice(0, 5)} - ${slot.endTime.slice(0, 5)}, ${capacity.label}`}
         >
-          <p className="truncate font-semibold">{slot.lessonTypeName}</p>
-          <p className="flex items-center gap-1 opacity-90">
-            <Clock className="h-3 w-3" />
-            {slot.startTime.slice(0, 5)} - {slot.endTime.slice(0, 5)}
-          </p>
-          <div className="mt-1 flex items-center justify-between">
-            <span className="opacity-75">{slot.arenaName ?? 'TBD'}</span>
-            <Badge
-              variant="secondary"
-              className={`h-5 text-[10px] ${
-                capacity.isFull
-                  ? 'bg-red-500/80 text-white'
-                  : capacity.color === 'orange'
-                    ? 'bg-orange-400/80 text-white'
-                    : capacity.color === 'yellow'
-                      ? 'bg-yellow-400/80 text-white'
-                      : 'bg-white/20 text-white'
-              }`}
-            >
-              {capacity.isFull ? 'FULL' : `${capacity.spotsLeft} left`}
-            </Badge>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-block h-2 w-2 shrink-0 rounded-full ${CAPACITY_DOT_CLASSES[capacity.color]}`}
+              aria-hidden="true"
+            />
+            <p className="truncate font-semibold">{slot.lessonTypeName}</p>
           </div>
-          {slot.coachName && <p className="mt-0.5 truncate opacity-75">{slot.coachName}</p>}
+          <p className="mt-0.5 flex items-center gap-1 text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
+          </p>
+          <div className="mt-1 flex items-center justify-between text-[11px]">
+            <span className="truncate text-muted-foreground">{slot.arenaName ?? 'TBD'}</span>
+            <span
+              className={cn(
+                'font-medium',
+                capacity.isFull
+                  ? 'text-destructive'
+                  : capacity.color === 'orange'
+                    ? 'text-orange-700'
+                    : capacity.color === 'yellow'
+                      ? 'text-amber-700'
+                      : 'text-muted-foreground',
+              )}
+            >
+              {capacity.isFull ? 'Full' : `${capacity.spotsLeft} left`}
+            </span>
+          </div>
+          {slot.coachName && (
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{slot.coachName}</p>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
