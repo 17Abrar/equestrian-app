@@ -77,7 +77,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const data = await parseRequiredBody(request, createMedicationLogSchema);
 
-      // Mass-assignment guard (audit AI-19). The body's optional
+      // Mass-assignment guard (audit QA-19). The body's optional
       // administeredByMemberId is a UUID — without verification a caller
       // could log doses against any UUID, which doesn't compromise
       // tenant isolation today (the FK references club_members(id) which

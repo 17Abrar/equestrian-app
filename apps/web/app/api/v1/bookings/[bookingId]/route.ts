@@ -190,7 +190,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // would otherwise advertise a refund that never actually issued.
       // Pre-flight provider-account fetch — surfaces as 422 if the club
       // disconnected the provider mid-flight, before we lock the booking
-      // row. Audit AI-18: the cancel-with-refund flow now mirrors the
+      // row. Audit QA-18: the cancel-with-refund flow now mirrors the
       // standalone /refund route's lock-then-call pattern so cancelBooking
       // and recordBookingRefund are committed atomically with the
       // provider call.

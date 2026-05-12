@@ -28,7 +28,7 @@ import { getClientIp } from '@/lib/request-ip';
  * signing secret as the `PLATFORM_ZIINA_WEBHOOK_SECRET` env / wrangler
  * secret.
  *
- * Audit AI-15 — every rejection path returns identical 401 so an
+ * Audit QA-15 — every rejection path returns identical 401 so an
  * attacker can't probe the webhook config state via response shape.
  *
  * Idempotency: events are claim-then-process via `webhook_events` keyed
@@ -75,7 +75,7 @@ async function handlePost(request: NextRequest) {
   // Audit F-8 (2026-05-06 r3): hoist the signature-header check
   // BEFORE the body read so a forgery without the header pays
   // constant cost — matches the per-club Ziina route's ordering
-  // (`/api/webhooks/ziina/[clubId]`). Audit AI-15 — return identical
+  // (`/api/webhooks/ziina/[clubId]`). Audit QA-15 — return identical
   // 401 across all rejection paths so the response shape doesn't
   // leak webhook config state.
   const signature = request.headers.get('x-hmac-signature');
@@ -258,7 +258,7 @@ async function applyPaidEvent(args: PaidEventArgs): Promise<string | null> {
   // automatic settlement path — admin cancelled the invoice before the
   // webhook arrived, but the club's card has been charged. Surface this
   // as `permanently_failed` so it lands in the alert pipeline (mirror
-  // livery's F-13 fix and bookings' AI-24 — the third instance of the
+  // livery's F-13 fix and bookings' QA-24 — the third instance of the
   // same shape that the prior audit pass missed). Without this signal
   // the dedup row flips to `processed`, the money sits unreconciled in
   // Cavaliq's Ziina balance, and the operator sees nothing.

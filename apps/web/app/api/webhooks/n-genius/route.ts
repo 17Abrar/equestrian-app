@@ -98,7 +98,7 @@ async function handlePost(request: NextRequest) {
   try {
     parsed = JSON.parse(body) as NGeniusPayload;
   } catch (err) {
-    // Audit AI-32g — only log the length, not the body. N-Genius
+    // Audit QA-32g — only log the length, not the body. N-Genius
     // payloads include cardholderName / last4 and a 200-char preview
     // could leak partial PII to log aggregators.
     logger.warn('n_genius_webhook_invalid_json', {

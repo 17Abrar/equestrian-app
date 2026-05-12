@@ -7,7 +7,7 @@ import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 
 /**
- * Integration tests for the rider signup / join flow — audit AI-22.
+ * Integration tests for the rider signup / join flow — audit QA-22.
  *
  * Closes the test gap on the open-club instant-join path:
  *   1. Idempotent on (club_id, clerk_user_id) — duplicate POST from

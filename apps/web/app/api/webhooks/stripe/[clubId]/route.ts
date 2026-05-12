@@ -27,7 +27,7 @@ import { logger } from '@/lib/logger';
  * the URL's clubId, decrypt, and verify the `Stripe-Signature` header
  * against it.
  *
- * Audit AI-15 — response shape is uniform across the rejection paths
+ * Audit QA-15 — response shape is uniform across the rejection paths
  * (no account / no secret / invalid signature) so an attacker who has a
  * clubId UUID can't probe whether Stripe is connected for that club.
  */
@@ -103,7 +103,7 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
     return new Response('Invalid signature', { status: 401 });
   }
 
-  // Audit B-9 + AI-15: getWebhookConfigByClubProvider returns ONLY the
+  // Audit B-9 + QA-15: getWebhookConfigByClubProvider returns ONLY the
   // webhook fields, never the Stripe secret key. Identical 401 for every
   // rejection path so connect-state isn't leaked via response shape.
   const account = await getWebhookConfigByClubProvider(clubId, 'stripe');

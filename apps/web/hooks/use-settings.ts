@@ -27,7 +27,7 @@ export function useClubSettings() {
   });
 }
 
-// Audit AI-25 — union of every settings sub-schema accepted by the
+// Audit QA-25 — union of every settings sub-schema accepted by the
 // PATCH /api/v1/settings handler. Replaces the previous
 // `Record<string, unknown>` that admitted any payload shape.
 export type UpdateSettingsInput =

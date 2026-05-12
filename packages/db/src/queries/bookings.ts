@@ -71,7 +71,7 @@ interface BookingFilters {
 // ─── Booking lifecycle ────────────────────────────────────────────────
 
 /**
- * Allowed booking-status transitions. Audit AI-31 — surfacing the matrix
+ * Allowed booking-status transitions. Audit QA-31 — surfacing the matrix
  * here means future write paths can call `canTransitionBookingStatus`
  * instead of open-coding `WHERE status = 'X'` clauses (and risk
  * forgetting one). The SQL guards in `markBookingComplete`,

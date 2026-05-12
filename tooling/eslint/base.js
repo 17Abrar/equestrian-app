@@ -55,6 +55,18 @@ module.exports = [
     },
   },
   {
+    files: ['**/eslint.config.js'],
+    languageOptions: {
+      globals: {
+        module: 'readonly',
+        require: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     ignores: [
       'node_modules/',
       'dist/',
@@ -64,6 +76,7 @@ module.exports = [
       '.turbo/',
       'coverage/',
       '**/*.config.js',
+      '!**/eslint.config.js',
       '**/next-env.d.ts',
       '**/cloudflare-env.d.ts',
     ],

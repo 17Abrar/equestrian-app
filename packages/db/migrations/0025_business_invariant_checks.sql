@@ -1,4 +1,4 @@
--- Audit AI-22 — DB CHECK constraints for invariants the application code
+-- Audit QA-22 — DB CHECK constraints for invariants the application code
 -- already asserts but the DB does not enforce. Each constraint is named
 -- with the audit category for traceability. All ALTERs are idempotent
 -- via DROP CONSTRAINT IF EXISTS so re-running is safe.
@@ -29,7 +29,7 @@ UPDATE "booking_slots"
 
 -- ─── Refund ledger invariants ─────────────────────────────────────────
 
--- AI-22 / KP-7 — refunded amount must never exceed the original amount.
+-- QA-22 / KP-7 — refunded amount must never exceed the original amount.
 -- The comment in packages/db/src/queries/bookings.ts:622 advertised this
 -- as a "belt-and-braces guard" that didn't exist in the DB; this fixes it.
 ALTER TABLE "bookings"
@@ -48,7 +48,7 @@ ALTER TABLE "payments"
 
 -- ─── Slot capacity bounds ─────────────────────────────────────────────
 
--- AI-22 — cancelBooking uses GREATEST(...,0) precisely because no DB
+-- QA-22 — cancelBooking uses GREATEST(...,0) precisely because no DB
 -- guard existed; this adds it.
 ALTER TABLE "booking_slots"
   DROP CONSTRAINT IF EXISTS "booking_slots_current_riders_bounds_check";
@@ -58,7 +58,7 @@ ALTER TABLE "booking_slots"
 
 -- ─── Coupon discount-value bounds ─────────────────────────────────────
 
--- AI-22 — coupon discount value bounds, discriminated by type.
+-- QA-22 — coupon discount value bounds, discriminated by type.
 -- Percentage in [1,100]; fixed in [1,+∞) minor units.
 ALTER TABLE "coupons"
   DROP CONSTRAINT IF EXISTS "coupons_discount_value_bounds_check";
@@ -92,7 +92,7 @@ ALTER TABLE "bookings"
 
 -- ─── Date-range invariants ────────────────────────────────────────────
 
--- AI-22 — date-range invariants. Use IS NULL guards so the constraints
+-- QA-22 — date-range invariants. Use IS NULL guards so the constraints
 -- accept open-ended ranges where the schema permits NULL on one side.
 ALTER TABLE "competitions"
   DROP CONSTRAINT IF EXISTS "competitions_date_range_check";
@@ -114,7 +114,7 @@ ALTER TABLE "horse_medications"
 
 -- ─── Platform fee bounds ──────────────────────────────────────────────
 
--- AI-22 — clubs.platform_fee_percent must be in [0, 100].
+-- QA-22 — clubs.platform_fee_percent must be in [0, 100].
 ALTER TABLE "clubs"
   DROP CONSTRAINT IF EXISTS "clubs_platform_fee_percent_bounds_check";
 ALTER TABLE "clubs"
@@ -133,7 +133,7 @@ ALTER TABLE "webhook_events"
   CHECK ("attempt_count" >= 0);
 
 -- ─── Platform fee percent default correction ──────────────────────────
--- AI-32k — lower the column default to 0.9 (the documented pricing tier).
+-- QA-32k — lower the column default to 0.9 (the documented pricing tier).
 -- Existing rows are NOT auto-updated; an admin must explicitly migrate
 -- clubs that signed up under the legacy 3.5 default to avoid silently
 -- changing what merchants are charged.

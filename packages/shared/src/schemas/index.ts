@@ -490,7 +490,7 @@ const COMPETITION_STATUSES = [
 ] as const;
 
 // `.strict()` for parity with update schemas — unknown keys 422 instead
-// of being silently stripped (audit AI-32c).
+// of being silently stripped (audit QA-32c).
 export const createCompetitionSchema = z
   .object({
     name: z.string().min(1, 'Name is required').max(255),
@@ -734,7 +734,7 @@ export type UpdateOwnerInput = z.output<typeof updateOwnerSchema>;
 
 // ─── Finances ─────────────────────────────────────────────────────────
 
-// `.strict()` (audit AI-32c) — see createCompetitionSchema rationale.
+// `.strict()` (audit QA-32c) — see createCompetitionSchema rationale.
 export const createExpenseSchema = z
   .object({
     category: z.string().min(1).max(100),
@@ -782,7 +782,7 @@ export type InvoiceFiltersInput = z.output<typeof invoiceFiltersSchema>;
 
 // Base ZodObject — used for `.partial().strict()` on the update schema.
 // The update route can't apply `.partial()` directly on the refined version
-// because superRefine returns ZodEffects (not ZodObject). Audit AI-21/AI-24/AI-32c.
+// because superRefine returns ZodEffects (not ZodObject). Audit QA-21/QA-24/QA-32c.
 export const couponBaseSchema = z
   .object({
     code: z
@@ -813,7 +813,7 @@ export const couponBaseSchema = z
     currency: z.string().length(3).optional(),
   })
   // `.strict()` for parity with update schemas — unknown keys 422
-  // instead of being silently stripped (audit AI-32c).
+  // instead of being silently stripped (audit QA-32c).
   .strict();
 
 // Reusable refine: percentage discounts must be in [1,100]. Hoisted so the
@@ -857,7 +857,7 @@ const HEALTH_RECORD_TYPES = [
   'other',
 ] as const;
 
-// `.strict()` (audit AI-32c) — see createCompetitionSchema rationale.
+// `.strict()` (audit QA-32c) — see createCompetitionSchema rationale.
 export const createHealthRecordSchema = z
   .object({
     recordType: z.string().min(1).max(50),

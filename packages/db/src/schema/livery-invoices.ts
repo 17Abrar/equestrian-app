@@ -54,7 +54,7 @@ export const liveryInvoices = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // Audit AI-22 pass-2: the global `unique('livery_invoices_unique_horse_period')`
+    // Audit QA-22 pass-2: the global `unique('livery_invoices_unique_horse_period')`
     // declaration was dropped in migration 0027, replaced with a partial
     // unique `WHERE status <> 'cancelled'` so a cancelled invoice for
     // (horse, period) doesn't block re-issuing one for the same period

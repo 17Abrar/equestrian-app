@@ -858,7 +858,7 @@ export default function OnboardingPage() {
           <StepIndicator currentStep={step} />
         </div>
 
-        {/* Loading overlay for completion. Audit AI-32d — skeleton card
+        {/* Loading overlay for completion. Audit QA-32d — skeleton card
             previewing the next dashboard view rather than a generic
             spinner; CLAUDE.md mandates skeleton-over-spinner. */}
         {completing && (

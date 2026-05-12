@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // minor in KWD 3-decimal — that's 100 AED vs 10 KWD), or treat the
       // row as intentionally re-priced? Reject it and force the caller to
       // either change currency+amount together or leave currency alone.
-      // Audit AI-21.
+      // Audit QA-21.
       if (data.currency && data.currency !== existing.currency && amount === undefined) {
         return errorResponse(
           'CURRENCY_CHANGE_REQUIRES_AMOUNT',

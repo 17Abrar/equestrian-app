@@ -432,7 +432,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     }
 
     // Discriminate on `event.type` so the SDK's union narrows naturally —
-    // audit AI-26.
+    // audit QA-26.
     let providerPaymentId: string | undefined;
     let status: PaymentIntentStatus | undefined;
     let amountReceivedMinorUnits: number | undefined;

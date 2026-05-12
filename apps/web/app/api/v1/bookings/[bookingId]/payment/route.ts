@@ -362,10 +362,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // parents who pay for child bookings under `bookings:create_child`.
       // The inline check authorizes staff, the rider themselves, and the
       // rider's recorded guardian.
-      // Audit AI-22 — payment-init creates real Stripe/N-Genius/Ziina
+      // Audit QA-22 — payment-init creates real Stripe/N-Genius/Ziina
       // PaymentIntents (real money in observability). Tighten from the
       // default 60/min so a runaway client or replay loop can't flood
-      // the provider with intents. failClosed (audit AI-45) — an Upstash
+      // the provider with intents. failClosed (audit QA-45) — an Upstash
       // outage must NOT lift the cap on a money-moving endpoint.
       rateLimit: { maxRequests: 10, windowMs: 60_000, failClosed: true },
       routeKey: 'booking_payment_init',

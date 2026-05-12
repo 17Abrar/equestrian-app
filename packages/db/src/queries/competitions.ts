@@ -252,7 +252,7 @@ export async function updateCompetitionClass(clubId: string, classId: string, da
 /**
  * Sentinel error thrown by deleteCompetitionClass when active entries
  * exist. Callers (route handler) catch and return 409 to the admin so
- * the UI can prompt them to withdraw entries first. Audit AI-24.
+ * the UI can prompt them to withdraw entries first. Audit QA-24.
  */
 export class CompetitionClassHasEntriesError extends Error {
   public readonly code = 'CLASS_HAS_ENTRIES';
@@ -266,7 +266,7 @@ export async function deleteCompetitionClass(clubId: string, classId: string) {
   // Refuse to delete a class with any non-withdrawn entries — the schema's
   // ON DELETE CASCADE on competition_entries (and through to results)
   // would otherwise wipe paid registrations and orphan their payments.
-  // Audit AI-24.
+  // Audit QA-24.
   const liveEntries = await db
     .select({ id: competitionEntries.id })
     .from(competitionEntries)

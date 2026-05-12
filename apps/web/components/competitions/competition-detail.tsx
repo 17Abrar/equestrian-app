@@ -577,7 +577,7 @@ function AddClassForm({
 
   async function onSubmit(data: CreateCompetitionClassInput) {
     try {
-      // Audit AI-25 — typed onSubmit; entryFee in minor units, no `as number` cast.
+      // Audit QA-25 — typed onSubmit; entryFee in minor units, no `as number` cast.
       const apiData: Parameters<typeof createClass.mutateAsync>[0] = {
         ...data,
         entryFee: data.entryFee != null ? toMinorUnits(data.entryFee, currency) : undefined,
@@ -715,7 +715,7 @@ function AddEntryForm({
 
   async function onSubmit(data: CreateCompetitionEntryInput) {
     try {
-      // Audit AI-25 — typed onSubmit. `amount` is intentionally absent
+      // Audit QA-25 — typed onSubmit. `amount` is intentionally absent
       // from this form — the server stamps the entry fee from
       // competitionClasses.entryFee on create (price-injection guard).
       await createEntry.mutateAsync(data);
@@ -831,7 +831,7 @@ function AddResultForm({
 
   async function onSubmit(data: CreateCompetitionResultInput) {
     try {
-      // Audit AI-25 — typed onSubmit; no Record<string, unknown> cast.
+      // Audit QA-25 — typed onSubmit; no Record<string, unknown> cast.
       await createResult.mutateAsync(data);
       toast.success('Result added');
       form.reset();

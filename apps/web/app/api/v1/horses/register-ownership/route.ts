@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     },
     {
       requiredPermission: 'horses:register_own',
-      // Audit AI-22 — admins must review every pending registration.
+      // Audit QA-22 — admins must review every pending registration.
       // Cap at 5/hour per rider so a runaway form can't backlog the
       // admin queue with hundreds of pending rows.
       // failClosed (audit LOW 2026-05-06) — Upstash outage must NOT

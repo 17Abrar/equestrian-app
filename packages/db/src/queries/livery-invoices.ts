@@ -229,7 +229,7 @@ export async function createLiveryInvoice(input: CreateInvoiceInput) {
  * Marks an invoice paid idempotently. Won't move a terminal `cancelled`
  * invoice back to paid — call `clearCancellation` first if that's intended.
  *
- * `clubId` is mandatory (audit AI-22 / CLAUDE.md): the invoice id alone
+ * `clubId` is mandatory (audit QA-22 / CLAUDE.md): the invoice id alone
  * isn't enough — a webhook routing bug or a future caller that derives
  * `invoiceId` from a less-trusted source could otherwise mark a foreign
  * tenant's invoice paid.
@@ -338,7 +338,7 @@ export async function findOverdueInvoicesForReminders(today: string) {
       ownerName: clubMembers.displayName,
     })
     .from(liveryInvoices)
-    // Bind clubId on every join (audit AI-22). Without this, a row with a
+    // Bind clubId on every join (audit QA-22). Without this, a row with a
     // mis-tenanted owner_member_id or horse_id (planted by a future bug)
     // would surface that tenant's display name on this club's reminder.
     .innerJoin(
@@ -577,7 +577,7 @@ export async function getLiveryInvoicesOwnedByUser(
         payLink: liveryInvoices.payLink,
       })
       .from(liveryInvoices)
-      // Bind clubId on every join (audit AI-22).
+      // Bind clubId on every join (audit QA-22).
       .innerJoin(
         horses,
         and(eq(horses.id, liveryInvoices.horseId), eq(horses.clubId, liveryInvoices.clubId)),
@@ -640,7 +640,7 @@ export async function getLiveryInvoiceForEmail(clubId: string, invoiceId: string
       ownerName: clubMembers.displayName,
     })
     .from(liveryInvoices)
-    // Bind clubId on every join (audit AI-22).
+    // Bind clubId on every join (audit QA-22).
     .innerJoin(
       horses,
       and(eq(horses.id, liveryInvoices.horseId), eq(horses.clubId, liveryInvoices.clubId)),

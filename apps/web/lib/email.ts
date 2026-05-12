@@ -325,7 +325,7 @@ export function sendEmailAsync(params: SendEmailParams): void {
     // `after()` throws when called outside a request lifecycle (e.g. from
     // a cron run or background job that didn't establish one). Log so a
     // Worker-isolate kill is observable instead of silently dropping the
-    // email — audit AI-32l.
+    // email — audit QA-32l.
     logger.warn('email_after_unavailable_falling_back_to_void', {
       to: params.to,
       subject: params.subject,
@@ -444,7 +444,7 @@ export function sendTriggeredEmailAsync(params: TriggeredEmailParams): void {
   try {
     after(task);
   } catch (err) {
-    // Same fallback rationale as the parent helper — audit AI-32l.
+    // Same fallback rationale as the parent helper — audit QA-32l.
     logger.warn('email_after_unavailable_falling_back_to_void', {
       clubId: params.clubId,
       trigger: params.trigger,

@@ -85,7 +85,7 @@ export interface PaymentStatusResult {
    * non-terminal state (pending/requires_action) — a future booking-
    * reconciliation path that compares this against booking.amount would
    * otherwise treat requires_action as "0 received" and downgrade the
-   * booking ledger. Audit AI-32e. */
+   * booking ledger. Audit QA-32e. */
   amountReceivedMinorUnits: number | undefined;
 }
 
@@ -144,7 +144,7 @@ export interface WebhookEvent {
    * against booking.currency in webhook-helpers.ts before flipping
    * paymentStatus='paid'. Required on succeeded events for stripe/ziina/
    * n_genius adapters; undefined on refund-only charge.refund.updated
-   * events. Audit AI-21.
+   * events. Audit QA-21.
    */
   currency?: string;
   /**

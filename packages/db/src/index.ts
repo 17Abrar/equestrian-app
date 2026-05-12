@@ -13,7 +13,7 @@ if (!process.env.DATABASE_URL) {
 // Workers the native `globalThis.WebSocket` is used by `@neondatabase/
 // serverless`; the `ws` module must not be statically referenced there (it
 // pulls in node:net/tls which the Workers bundler cannot satisfy). Audit
-// AI-32j — switched from `require('ws')` to a lazy dynamic import inside
+// QA-32j — switched from `require('ws')` to a lazy dynamic import inside
 // the runtime guard so bundlers can tree-shake it out cleanly. The
 // `webSocketConstructor` only matters for `writeTransaction` (the WS
 // driver), which is async and awaits `wsPolyfillReady` before connecting.
@@ -112,7 +112,7 @@ export async function writeTransaction<T>(fn: (tx: WsTx) => Promise<T>): Promise
   // a real Postgres connection. The pglite-backed test executor exposes
   // the same `.transaction()` shape, and this lets us test
   // writeTransaction-wrapped queries (createBooking, cancelBooking, etc.)
-  // without a live Neon pool. Audit AI-22.
+  // without a live Neon pool. Audit QA-22.
   const testExecutor = executorStore.getStore();
   if (
     testExecutor &&
@@ -128,7 +128,7 @@ export async function writeTransaction<T>(fn: (tx: WsTx) => Promise<T>): Promise
     });
   }
 
-  // Audit AI-32j — the ws polyfill is needed before Pool tries to connect
+  // Audit QA-32j — the ws polyfill is needed before Pool tries to connect
   // (Node < 22 only). On Workers `globalThis.WebSocket` exists and this
   // resolves to a no-op on first call.
   await ensureWsPolyfill();

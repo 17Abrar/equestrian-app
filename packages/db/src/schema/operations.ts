@@ -21,7 +21,7 @@ import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 import { horses } from './horses';
 
-// ─── Typed jsonb shapes (audit AI-43) ────────────────────────────────
+// ─── Typed jsonb shapes (audit QA-43) ────────────────────────────────
 
 /** Per-option vote tally on a community poll post. */
 export interface PollOption {
@@ -178,7 +178,7 @@ export const communityTopics = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
 
     name: varchar('name', { length: 255 }).notNull(),
-    // Audit AI-13 pass-2: was `unique()` globally — two clubs couldn't both
+    // Audit QA-13 pass-2: was `unique()` globally — two clubs couldn't both
     // use the same per-club topic slug ("general", "events", etc.).
     // Migration 0035 swaps to a per-club composite unique declared in the
     // table-extras below. Default-system topics with `clubId IS NULL` keep
@@ -229,7 +229,7 @@ export const communityPosts = pgTable(
     title: varchar('title', { length: 500 }),
     body: text('body').notNull(),
     mediaUrls: text('media_urls').array(),
-    // Audit AI-43 — typed jsonb. Each option carries a free-form label and
+    // Audit QA-43 — typed jsonb. Each option carries a free-form label and
     // a running tally (`count`) updated by the vote endpoint.
     pollOptions: jsonb('poll_options').$type<PollOption[]>(),
 
@@ -388,7 +388,7 @@ export const notifications = pgTable(
     type: varchar('type', { length: 100 }).notNull(),
     title: varchar('title', { length: 255 }).notNull(),
     body: text('body').notNull(),
-    // Audit AI-43 — typed jsonb. Notification payloads are union-typed by
+    // Audit QA-43 — typed jsonb. Notification payloads are union-typed by
     // `type`; consumers narrow at read time. Storing as
     // `Record<string, JsonValue>` is closer to the contract than `unknown`
     // and lets the read-side use a discriminated union.
@@ -457,7 +457,7 @@ export const auditLog = pgTable(
     action: varchar('action', { length: 100 }).notNull(),
     resourceType: varchar('resource_type', { length: 100 }).notNull(),
     resourceId: uuid('resource_id'),
-    // Audit AI-43 — `{ field: { from, to } }` is the canonical shape; the
+    // Audit QA-43 — `{ field: { from, to } }` is the canonical shape; the
     // route helpers (`ctx.audit({ changes })`) already produce it.
     changes: jsonb('changes').$type<AuditLogChanges | null>(),
     ipAddress: inet('ip_address'),

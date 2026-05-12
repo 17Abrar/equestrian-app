@@ -7,7 +7,7 @@ import { hasPermission } from '@/lib/permissions';
 // `slotId` is the canonical pricing source — we read amount + currency from
 // the slot's lesson type rather than trust client-supplied values. Without
 // this, a rider could probe a coupon's behaviour at any amount and binary-
-// search the maxDiscount cap. Audit AI-21.
+// search the maxDiscount cap. Audit QA-21.
 const validateCouponRequestSchema = z
   .object({
     code: z.string().min(1),

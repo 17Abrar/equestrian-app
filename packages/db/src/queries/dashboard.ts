@@ -10,7 +10,7 @@ import { getTodayDateString } from '@equestrian/shared/utils';
 export async function getDashboardStats(clubId: string) {
   // Resolve the club's timezone for accurate "today" calculation. A
   // tombstoned club (post-org.deleted webhook) shouldn't surface stats
-  // even if the auth path missed — audit AI-32b.
+  // even if the auth path missed — audit QA-32b.
   const clubRow = await db
     .select({ timezone: clubs.timezone })
     .from(clubs)
@@ -44,7 +44,7 @@ export async function getDashboardStats(clubId: string) {
         .from(bookings)
         // Bind clubId on the join so a row with a mis-tenanted slotId
         // (planted by a future bug) can't surface in this club's count.
-        // Audit AI-32b.
+        // Audit QA-32b.
         .innerJoin(
           bookingSlots,
           and(eq(bookings.slotId, bookingSlots.id), eq(bookingSlots.clubId, clubId)),

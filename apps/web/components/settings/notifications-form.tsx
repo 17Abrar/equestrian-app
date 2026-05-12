@@ -159,6 +159,7 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
     resolver: zodResolver(notificationsFormSchema),
     defaultValues: prefsToFormValues(settings.notificationPreferences),
   });
+  const { reset } = form;
 
   // Audit MED (2026-05-05 pass 2): the previous shape initialised `prefs`
   // from the prop ONCE — a parallel mutation that invalidated the cached
@@ -169,10 +170,8 @@ export function NotificationsForm({ settings }: { settings: ClubSettings }) {
   // resyncs whenever `settings.notificationPreferences` shifts. RHF's
   // `reset` is the correct way to re-seed a form from new props.
   useEffect(() => {
-    form.reset(prefsToFormValues(settings.notificationPreferences));
-    // form is a stable reference; re-running on prefs only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.notificationPreferences]);
+    reset(prefsToFormValues(settings.notificationPreferences));
+  }, [reset, settings.notificationPreferences]);
 
   async function onSave(values: NotificationsFormValues) {
     try {

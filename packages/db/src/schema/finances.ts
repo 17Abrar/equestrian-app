@@ -26,7 +26,7 @@ import { clubs } from './clubs';
 import { clubMembers } from './club-members';
 import { horses } from './horses';
 
-// Audit AI-43 — typed jsonb shapes for the finance tables.
+// Audit QA-43 — typed jsonb shapes for the finance tables.
 /** A single line on an issued invoice. Quantity defaults to 1 if omitted
  *  by the issuer; unit/total amounts are minor units to match the parent
  *  invoice's `amount`. */
@@ -232,7 +232,7 @@ export const invoices = pgTable(
     totalAmount: integer('total_amount').notNull(),
     currency: varchar('currency', { length: 3 }).notNull().default('AED'),
     description: text('description'),
-    // Audit AI-43 — typed jsonb. Default `'[]'` stays as a stringified
+    // Audit QA-43 — typed jsonb. Default `'[]'` stays as a stringified
     // empty array because Drizzle's default-marker is the SQL literal,
     // not the parsed value.
     lineItems: jsonb('line_items').$type<InvoiceLineItem[]>().notNull().default([]),

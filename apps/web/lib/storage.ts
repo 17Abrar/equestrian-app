@@ -22,7 +22,7 @@ const ALLOWED_CONTENT_TYPES = [
 // Hard cap to block terabyte uploads via a leaked presigned URL. Documents
 // per CLAUDE.md go up to 25 MB; images are capped at 15 MB. Anything larger
 // is rejected outright at the API boundary, before R2 is even told about
-// the request. Audit AI-29.
+// the request. Audit QA-29.
 export const MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
 export const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
 
@@ -112,7 +112,7 @@ export async function getUploadUrl(params: {
     throw new Error('File size must be a positive integer.');
   }
 
-  // Branch the cap by content type (audit AI-29). 15 MB for images,
+  // Branch the cap by content type (audit QA-29). 15 MB for images,
   // 25 MB for documents — matches CLAUDE.md.
   const maxBytes = maxUploadSizeFor(contentType);
   if (fileSizeBytes > maxBytes) {

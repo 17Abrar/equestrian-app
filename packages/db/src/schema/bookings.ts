@@ -205,7 +205,7 @@ export const bookings = pgTable(
     // to cascade through (or detach) bookings explicitly via app-layer
     // logic, never silently lose the rider linkage.
     riderMemberId: uuid('rider_member_id').notNull(),
-    // Audit AI-22 (2026-05-05 pass 2): composite FK declared in the
+    // Audit QA-22 (2026-05-05 pass 2): composite FK declared in the
     // table-extras below as `bookings_horse_club_fk` (horseId, clubId)
     // -> horses(id, clubId) ON DELETE SET NULL — matches migration 0033.
     // The single-column inline `references(() => horses.id)` was a
@@ -519,7 +519,7 @@ export const waitlist = pgTable(
     position: integer('position').notNull(),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
-    // Audit AI-36 — promoted to pgEnum.
+    // Audit QA-36 — promoted to pgEnum.
     status: waitlistStatusEnum('status').notNull().default('waiting'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -130,7 +130,7 @@ async function handlePost(request: Request) {
     // its 5xx retry band (~24h, 5 attempts). The operator already gets
     // paged via the `clerk_webhook_no_secret` error log; the route is
     // operator-actionable, not transient — retrying without the secret
-    // configured just amplifies the alert noise. Mirrors the AI-15
+    // configured just amplifies the alert noise. Mirrors the QA-15
     // unified-rejection pattern.
     return new Response('Webhook secret not configured', { status: 401 });
   }

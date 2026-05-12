@@ -8,7 +8,7 @@ import { clubMembers } from '../schema/club-members';
 import { coupons } from '../schema/packages';
 
 /**
- * Integration tests for booking concurrency — audit AI-22.
+ * Integration tests for booking concurrency — audit QA-22.
  *
  * The slot's UPDATE-with-WHERE-and-FOR-UPDATE pattern (see
  * `createBooking` in queries/bookings.ts) is the only thing standing

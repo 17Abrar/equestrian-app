@@ -71,7 +71,7 @@ export const webhookEvents = pgTable(
     // `'processed'` lied about state — every caller passes `status` explicitly
     // so the default was unreachable, but a future contributor reading the
     // schema would draw the wrong conclusion.
-    // Audit AI-36 — promoted to pgEnum.
+    // Audit QA-36 — promoted to pgEnum.
     status: webhookEventStatusEnum('status').notNull().default('received'),
     attemptCount: integer('attempt_count').notNull().default(1),
     lastAttemptedAt: timestamp('last_attempted_at', { withTimezone: true }).notNull().defaultNow(),

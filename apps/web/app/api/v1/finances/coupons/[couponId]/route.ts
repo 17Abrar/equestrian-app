@@ -36,7 +36,7 @@ interface RouteParams {
 // PATCH could rewrite clubId / usageCount / createdByMemberId by
 // piggybacking on Drizzle's spread into SET. The percentage refine is
 // re-applied so a partial update from {discountType:'percentage'} →
-// discountValue:250 still 422s. Audit AI-21.
+// discountValue:250 still 422s. Audit QA-21.
 //
 // Audit F-52 (2026-05-07 r4): allow operator-driven status transitions
 // (active ↔ paused, both → expired). The DB enum also includes

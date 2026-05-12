@@ -540,7 +540,7 @@ export async function POST(request: NextRequest) {
       // the success/failure on the booking — see audit B-23. 30/min lets
       // legitimate burst-booking through (e.g. an admin batch-creating)
       // while still capping the brute-force surface. failClosed (audit
-      // AI-45) — bookings consume slot capacity; must not be lifted on a
+      // QA-45) — bookings consume slot capacity; must not be lifted on a
       // limiter outage.
       rateLimit: { maxRequests: 30, windowMs: 60_000, failClosed: true },
       routeKey: 'bookings:create',

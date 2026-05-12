@@ -65,7 +65,7 @@ export const clubs = pgTable(
     stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
     stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
 
-    // Subscription. Audit AI-36 — tier promoted to pgEnum.
+    // Subscription. Audit QA-36 — tier promoted to pgEnum.
     subscriptionTier: subscriptionTierEnum('subscription_tier').notNull().default('trial'),
     subscriptionStatus: subscriptionStatusEnum('subscription_status').notNull().default('trialing'),
     trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
@@ -127,7 +127,7 @@ export const clubs = pgTable(
     // Onboarding
     onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
 
-    // Public discovery (Round 7 — rider self-signup funnel). Audit AI-36 —
+    // Public discovery (Round 7 — rider self-signup funnel). Audit QA-36 —
     // joinPolicy promoted to pgEnum.
     isPublicListing: boolean('is_public_listing').notNull().default(false),
     joinPolicy: joinPolicyEnum('join_policy').notNull().default('invite_only'),

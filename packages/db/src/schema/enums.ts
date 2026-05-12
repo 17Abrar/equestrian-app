@@ -130,7 +130,7 @@ export const paymentAccountStatusEnum = pgEnum('payment_account_status', [
   'error',
 ]);
 
-// ─── Audit AI-36 — varchar status columns promoted to pgEnum ─────────
+// ─── Audit QA-36 — varchar status columns promoted to pgEnum ─────────
 
 export const competitionStatusEnum = pgEnum('competition_status', [
   'draft',

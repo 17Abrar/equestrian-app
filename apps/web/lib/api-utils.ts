@@ -319,7 +319,7 @@ export async function withAuth(
   options?: ApiHandlerOptions,
 ): Promise<NextResponse> {
   // Hoisted so the catch handler can re-use it without re-reading headers
-  // (audit AI-27). Default to 'unknown' so the catch path is robust to
+  // (audit QA-27). Default to 'unknown' so the catch path is robust to
   // a throw that lands before headers() resolves.
   let requestId = 'unknown';
   // Audit F-5 (2026-05-07 r4): hoist clubId / userId so the
@@ -453,7 +453,7 @@ export async function withAuth(
       return errorResponse('PAYLOAD_TOO_LARGE', error.message, 413);
     }
 
-    // Reuse the requestId captured at the top of withAuth (audit AI-27).
+    // Reuse the requestId captured at the top of withAuth (audit QA-27).
     // The previous fallback re-read headers() inside the catch — both
     // unnecessary (the value is in scope) and fragile.
     //

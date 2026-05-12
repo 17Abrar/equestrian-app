@@ -658,10 +658,10 @@ export async function findBookingByIdForWebhook(
   currentPaymentStatus: string;
   currentProviderPaymentId: string | null;
   /** Booking lifecycle status — webhooks must refuse to flip a cancelled/no_show
-   * booking to paid (audit AI-24). */
+   * booking to paid (audit QA-24). */
   bookingStatus: string;
   /** Captured amount in minor units. Webhook reconciles against this before
-   * marking the booking paid (audit AI-21). */
+   * marking the booking paid (audit QA-21). */
   amount: number | null;
   /** Audit HIGH-3 (2026-05-05): refunded-so-far for cumulative→delta
    *  conversion in the empty-`refunds.data` fallback path. */
@@ -844,7 +844,7 @@ function rowToWebhookSecretConfig(row: PaymentAccountRow): WebhookSecretConfig {
       }
     }
   }
-  // Audit AI-32a — typeof guard already narrows to string; no cast needed.
+  // Audit QA-32a — typeof guard already narrows to string; no cast needed.
   // Hoist the values so the narrow survives optional-chain lookups.
   const signingSecret = creds?.webhookSigningSecret;
   const headerName = creds?.webhookHeaderName;

@@ -501,7 +501,7 @@ interface ValidateCouponParams {
   amount: number;
   /** Required for the minimum-spend message — currency-aware formatting
    * (KWD has 3 decimals, JPY has 0). Defaults to AED when omitted so the
-   * legacy callers stay correct for the dominant tenant. Audit AI-21. */
+   * legacy callers stay correct for the dominant tenant. Audit QA-21. */
   currency?: string;
   riderMemberId: string;
   lessonType?: string;
@@ -572,7 +572,7 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
   }
 
   if (coupon.minimumAmount != null && params.amount < coupon.minimumAmount) {
-    // Currency-aware formatting (audit AI-21). The previous /100 .toFixed(2)
+    // Currency-aware formatting (audit QA-21). The previous /100 .toFixed(2)
     // was wrong by 10× for KWD/BHD (3-decimal) and 100× for JPY (0-decimal)
     // and never showed the currency code.
     return {
@@ -625,7 +625,7 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
     };
   }
 
-  // Single source of truth for the math (audit AI-9). The shared helper
+  // Single source of truth for the math (audit QA-9). The shared helper
   // also enforces the order-total cap so a percentage coupon can never
   // refund more than was charged.
   const discount = calculateCouponDiscount({

@@ -160,7 +160,7 @@ type UpdateCouponInput = Partial<CreateCouponInput> & {
 
 export function useUpdateCoupon(couponId: string) {
   const queryClient = useQueryClient();
-  // Audit AI-25 — `Partial<CreateCouponInput>` matches the PATCH route's
+  // Audit QA-25 — `Partial<CreateCouponInput>` matches the PATCH route's
   // `couponBaseSchema.partial()` shape; replaces the previous
   // `Record<string, unknown>` that lost type safety on the payload.
   return useMutation({

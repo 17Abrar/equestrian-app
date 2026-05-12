@@ -22,7 +22,7 @@ import { decryptFields, encryptFields } from '../crypto';
 // list wastes CPU. Detail GETs continue to read + decrypt the full row.
 
 /**
- * Soft-delete gate for every read/write in this file (audit AI-22 / KP-1).
+ * Soft-delete gate for every read/write in this file (audit QA-22 / KP-1).
  * After softDeleteHorse, the horse_health_records / medications / etc. rows
  * remain on disk but must not be reachable via any horse-scoped GET or POST
  * — the buyer of a transferred horse, or a GDPR-style deletion request,
@@ -117,7 +117,7 @@ export async function getHealthRecords(
   recordType: string | undefined,
   { page, pageSize }: { page: number; pageSize: number },
 ) {
-  // Soft-delete gate (audit AI-22). Returns empty rather than null so
+  // Soft-delete gate (audit QA-22). Returns empty rather than null so
   // route handlers don't need to special-case the deleted-horse path.
   if (!(await isHorseActiveInClub(clubId, horseId))) return { items: [], total: 0 };
 

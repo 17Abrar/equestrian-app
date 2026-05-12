@@ -4,7 +4,7 @@ import type { Breadcrumb, BreadcrumbHint, ErrorEvent, EventHint } from '@sentry/
 // insensitively against the param name. Any matching value is replaced with
 // `[REDACTED]` before the event leaves the server.
 //
-// Audit AI-37 — extended to cover PII keys (email/phone/name/user/customer)
+// Audit QA-37 — extended to cover PII keys (email/phone/name/user/customer)
 // so URL scrubs never leak query-string PII to the error vendor.
 //
 // Audit F-27 (2026-05-06): NB — `sendDefaultPii` is currently set to

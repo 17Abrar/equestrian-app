@@ -101,7 +101,7 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
   // fields, never the Ziina API key. A future logger.error here can't
   // accidentally surface the API key into observability.
   //
-  // Audit AI-15: a webhook URL that returns 200 when no account is
+  // Audit QA-15: a webhook URL that returns 200 when no account is
   // connected and 401 when an invalid signature is presented lets an
   // attacker probe whether a clubId has Ziina connected. clubIds are
   // UUIDs (not enumerable) but the asymmetry was unintentional. Unify

@@ -46,7 +46,7 @@ export const competitions = pgTable(
     currency: varchar('currency', { length: 3 }).notNull().default('AED'),
     registrationDeadline: timestamp('registration_deadline', { withTimezone: true }),
     maxParticipants: integer('max_participants'),
-    // Audit AI-36 — promoted to pgEnum so the DB rejects unknown values.
+    // Audit QA-36 — promoted to pgEnum so the DB rejects unknown values.
     status: competitionStatusEnum('status').notNull().default('draft'),
     isActive: boolean('is_active').notNull().default(true),
 
@@ -130,7 +130,7 @@ export const competitionEntries = pgTable(
     // horse is later deleted.
     horseId: uuid('horse_id'),
 
-    // Audit AI-36 — promoted to pgEnum.
+    // Audit QA-36 — promoted to pgEnum.
     status: competitionEntryStatusEnum('status').notNull().default('registered'),
     paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
     paymentMethod: paymentMethodEnum('payment_method'),
