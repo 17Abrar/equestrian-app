@@ -11,6 +11,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import {
   Home,
   CalendarPlus,
+  CalendarCheck,
   TrendingUp,
   User,
   Compass,
@@ -44,6 +45,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/rider', icon: Home },
   { label: 'Book', href: '/rider/book', icon: CalendarPlus },
+  { label: 'Bookings', href: '/rider/bookings', icon: CalendarCheck },
   { label: 'Stables', href: '/discover', icon: Compass },
   { label: 'Horses', href: '/rider/horses', icon: Rabbit },
   { label: 'Progress', href: '/rider/progress', icon: TrendingUp },

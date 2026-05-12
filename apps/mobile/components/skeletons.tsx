@@ -137,3 +137,54 @@ export function SlotListSkeleton({ count = 4 }: { count?: number }) {
     </View>
   );
 }
+
+/**
+ * Skeleton matching the new `BookingRow` shape used on the My Bookings tab and
+ * (eventually) the redesigned home list. Status icon + two text lines + a
+ * stacked date/time chip on the right.
+ */
+export function BookingRowSkeleton() {
+  return (
+    <View className="flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <ShimmerBox className="h-5 w-5 rounded-full bg-gray-200" />
+      <View className="flex-1 gap-2">
+        <ShimmerBox className="h-4 w-2/5 rounded bg-gray-200" />
+        <ShimmerBox className="h-3 w-1/3 rounded bg-gray-200" />
+      </View>
+      <View className="items-end gap-1">
+        <ShimmerBox className="h-4 w-12 rounded bg-gray-200" />
+        <ShimmerBox className="h-3 w-10 rounded bg-gray-200" />
+      </View>
+    </View>
+  );
+}
+
+export function BookingRowListSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <View className="gap-3 px-6">
+      {Array.from({ length: count }).map((_, i) => (
+        <BookingRowSkeleton key={i} />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Skeleton matching the booking detail screen layout: header, title, banner,
+ * detail card with several rows, and a sticky bottom action.
+ */
+export function BookingDetailSkeleton() {
+  return (
+    <View className="gap-4 p-6">
+      <ShimmerBox className="h-6 w-32 rounded bg-gray-200" />
+      <ShimmerBox className="h-8 w-3/4 rounded bg-gray-200" />
+      <ShimmerBox className="h-20 w-full rounded-2xl bg-gray-200" />
+      <View className="gap-3 rounded-2xl border border-gray-200 bg-white p-5">
+        <ShimmerBox className="h-4 w-1/2 rounded bg-gray-200" />
+        <ShimmerBox className="h-4 w-2/5 rounded bg-gray-200" />
+        <ShimmerBox className="h-4 w-1/3 rounded bg-gray-200" />
+        <ShimmerBox className="h-4 w-2/5 rounded bg-gray-200" />
+      </View>
+    </View>
+  );
+}

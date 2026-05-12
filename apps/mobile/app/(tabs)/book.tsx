@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useBookingSlots, useCreateBooking, useMe, type BookingSlot } from '@/hooks/use-bookings';
 import { usePayBooking } from '@/hooks/use-booking-payment';
+import { DayStrip } from '@/components/bookings/day-strip';
 import { SlotListSkeleton } from '@/components/skeletons';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
     <TouchableOpacity
       className={`rounded-2xl border p-4 ${
         isSelected
-          ? 'border-blue-500 bg-blue-50'
+          ? 'border-gray-900 bg-gray-50'
           : isFull
             ? 'border-gray-200 bg-gray-100 opacity-50'
             : 'border-gray-200 bg-white'
@@ -82,11 +83,15 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
     >
       <View className="flex-row items-start justify-between">
         <View className="flex-1">
-          <Text className="text-base font-semibold text-gray-900">{slot.lessonTypeName}</Text>
+          <Text className="text-base font-semibold text-gray-900">
+            {slot.lessonTypeName}
+          </Text>
           <Text className="mt-1 text-sm text-gray-500">
             {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
           </Text>
-          {slot.arenaName && <Text className="mt-0.5 text-xs text-gray-400">{slot.arenaName}</Text>}
+          {slot.arenaName && (
+            <Text className="mt-0.5 text-xs text-gray-400">{slot.arenaName}</Text>
+          )}
           {slot.coachName && (
             <Text className="mt-0.5 text-xs text-gray-400">Coach: {slot.coachName}</Text>
           )}
@@ -101,7 +106,7 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
         </View>
       </View>
       {isSelected && (
-        <View className="mt-2 self-start rounded-full bg-blue-500 px-3 py-1">
+        <View className="mt-2 self-start rounded-full bg-gray-900 px-3 py-1">
           <Text className="text-xs font-medium text-white">Selected</Text>
         </View>
       )}
@@ -136,7 +141,8 @@ export default function BookScreen() {
     isLoading,
     refetch: refetchSlots,
   } = useBookingSlots({ dateFrom, dateTo });
-  const slotsErrorMessage = slotsData && !slotsData.success ? slotsData.error.message : null;
+  const slotsErrorMessage =
+    slotsData && !slotsData.success ? slotsData.error.message : null;
   const createBooking = useCreateBooking();
   const { pay, isPaying } = usePayBooking();
 
@@ -148,6 +154,13 @@ export default function BookScreen() {
   }, [slotsData]);
 
   const slotsForDate = slots.filter((s) => s.date === selectedDate);
+
+  const weekDateStrings = useMemo(() => week.dates.map(toDateString), [week.dates]);
+  const slotCountsByDate = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of slots) counts[s.date] = (counts[s.date] ?? 0) + 1;
+    return counts;
+  }, [slots]);
 
   const handleConfirmBooking = useCallback(async () => {
     if (!selectedSlot || !memberId) return;
@@ -222,7 +235,7 @@ export default function BookScreen() {
       <SafeAreaView className="flex-1 bg-gray-50">
         <ScrollView className="flex-1 px-6 pt-4" contentContainerStyle={{ paddingBottom: 120 }}>
           <TouchableOpacity onPress={() => setStep('browse')}>
-            <Text className="text-base font-medium text-blue-600">← Back to slots</Text>
+            <Text className="text-base font-medium text-gray-900">← Back to slots</Text>
           </TouchableOpacity>
 
           <Text className="mt-6 text-2xl font-bold text-gray-900">Confirm Booking</Text>
@@ -233,21 +246,20 @@ export default function BookScreen() {
             </Text>
             <View className="mt-3 gap-2">
               <Text className="text-sm text-gray-500">
-                📅{' '}
-                {new Date(`${selectedSlot.date}T00:00:00`).toLocaleDateString('en-US', {
+                📅  {new Date(`${selectedSlot.date}T00:00:00`).toLocaleDateString('en-US', {
                   weekday: 'long',
                   month: 'long',
                   day: 'numeric',
                 })}
               </Text>
               <Text className="text-sm text-gray-500">
-                🕐 {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
+                🕐  {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
               </Text>
               {selectedSlot.arenaName && (
-                <Text className="text-sm text-gray-500">📍 {selectedSlot.arenaName}</Text>
+                <Text className="text-sm text-gray-500">📍  {selectedSlot.arenaName}</Text>
               )}
               {selectedSlot.coachName && (
-                <Text className="text-sm text-gray-500">👤 Coach: {selectedSlot.coachName}</Text>
+                <Text className="text-sm text-gray-500">👤  Coach: {selectedSlot.coachName}</Text>
               )}
             </View>
             <View className="mt-4 border-t border-gray-100 pt-4">
@@ -292,7 +304,7 @@ export default function BookScreen() {
     <SafeAreaView className="flex-1 bg-gray-50">
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Header */}
-        <View className="px-6 pb-2 pt-4">
+        <View className="px-6 pt-4 pb-2">
           <Text className="text-2xl font-bold text-gray-900">Book a Lesson</Text>
           <Text className="mt-1 text-base text-gray-500">Choose a date and time</Text>
         </View>
@@ -317,58 +329,16 @@ export default function BookScreen() {
         </View>
 
         {/* Date selector */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
-          className="py-2"
-        >
-          {week.dates.map((d) => {
-            const dateStr = toDateString(d);
-            const isSelected = dateStr === selectedDate;
-            const isToday = dateStr === toDateString(new Date());
-            const isPast = d < new Date(toDateString(new Date()) + 'T00:00:00');
-            const daySlots = slots.filter((s) => s.date === dateStr);
-
-            return (
-              <TouchableOpacity
-                key={dateStr}
-                onPress={() => {
-                  setSelectedDate(dateStr);
-                  setSelectedSlot(null);
-                }}
-                disabled={isPast}
-                className={`items-center rounded-2xl border px-4 py-2.5 ${
-                  isSelected
-                    ? 'border-gray-900 bg-gray-900'
-                    : isPast
-                      ? 'border-gray-100 opacity-40'
-                      : 'border-gray-200 bg-white'
-                }`}
-                style={{ minWidth: 64 }}
-              >
-                <Text
-                  className={`text-[10px] uppercase ${isSelected ? 'text-gray-400' : 'text-gray-400'}`}
-                >
-                  {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                </Text>
-                <Text
-                  className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}
-                >
-                  {d.getDate()}
-                </Text>
-                {daySlots.length > 0 && (
-                  <Text className={`text-[10px] ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
-                    {daySlots.length} slot{daySlots.length !== 1 ? 's' : ''}
-                  </Text>
-                )}
-                {isToday && !isSelected && (
-                  <View className="mt-0.5 h-1 w-1 rounded-full bg-blue-500" />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <DayStrip
+          dates={weekDateStrings}
+          selected={selectedDate}
+          onSelect={(d) => {
+            setSelectedDate(d);
+            setSelectedSlot(null);
+          }}
+          disabledBefore={toDateString(new Date())}
+          counts={slotCountsByDate}
+        />
 
         {/* Slots */}
         <View className="px-6 pt-4">
@@ -391,7 +361,9 @@ export default function BookScreen() {
           {!isLoading && slotsErrorMessage && (
             <View className="items-center gap-3 py-8">
               <Text className="text-base text-rose-500">Couldn't load slots</Text>
-              <Text className="text-center text-sm text-gray-400">{slotsErrorMessage}</Text>
+              <Text className="text-center text-sm text-gray-400">
+                {slotsErrorMessage}
+              </Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => {
