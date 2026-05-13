@@ -380,6 +380,7 @@ export async function POST(request: NextRequest) {
           grossAmount: couponId ? grossAmount : undefined,
           currency: slot.lessonTypeCurrency,
           paymentMethod: data.paymentMethod,
+          paymentStatus: netAmount <= 0 ? 'paid' : 'pending',
           discountAmount,
           couponId,
           status: 'confirmed',

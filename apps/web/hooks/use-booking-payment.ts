@@ -9,14 +9,37 @@ import { fetchJson } from '@/lib/fetch-json';
 // so existing component imports keep working.
 export type { BookingPaymentResult };
 
+interface BookingPaymentVariables {
+  bookingId: string;
+  mode?: 'default' | 'hosted';
+}
+
+function normalizePaymentVariables(
+  input: string | BookingPaymentVariables,
+): BookingPaymentVariables {
+  return typeof input === 'string' ? { bookingId: input } : input;
+}
+
 export function usePaymentForBooking() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (bookingId: string) =>
-      fetchJson<ApiSuccessResponse<BookingPaymentResult>>(`/api/v1/bookings/${bookingId}/payment`, {
-        method: 'POST',
-      }),
-    onSuccess: (_data, bookingId) => {
+    mutationFn: (input: string | BookingPaymentVariables) => {
+      const { bookingId, mode } = normalizePaymentVariables(input);
+      return fetchJson<ApiSuccessResponse<BookingPaymentResult>>(
+        `/api/v1/bookings/${bookingId}/payment`,
+        {
+          method: 'POST',
+          ...(mode
+            ? {
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode }),
+              }
+            : {}),
+        },
+      );
+    },
+    onSuccess: (_data, input) => {
+      const { bookingId } = normalizePaymentVariables(input);
       // The booking row's payment_provider / provider_payment_id columns
       // were just written — refresh anything that might display them.
       void queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });

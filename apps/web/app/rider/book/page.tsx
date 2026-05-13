@@ -21,6 +21,8 @@ import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { getCapacityInfo } from '@/lib/capacity';
 import { useBookingSlots, useCreateBooking, type BookingSlot } from '@/hooks/use-bookings';
+import { usePaymentForBooking } from '@/hooks/use-booking-payment';
+import { isBookingPaymentActionRequired } from '@/lib/payments/payment-methods';
 import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { Button } from '@/components/ui/button';
@@ -259,6 +261,7 @@ export default function RiderBookPage() {
   });
 
   const createBooking = useCreateBooking();
+  const createPayment = usePaymentForBooking();
 
   const handleApplyCoupon = useCallback(async () => {
     if (!couponCode.trim() || !selectedSlot) return;
@@ -356,14 +359,50 @@ export default function RiderBookPage() {
           : {}),
       };
 
-      await createBooking.mutateAsync(payload);
+      const bookingResponse = await createBooking.mutateAsync(payload);
+      if (!bookingResponse.success) {
+        throw new Error(bookingResponse.error.message);
+      }
+
+      const booking = bookingResponse.data;
+
+      if (isBookingPaymentActionRequired(booking)) {
+        toast.success('Booking reserved. Opening secure payment…');
+        try {
+          const paymentResponse = await createPayment.mutateAsync({
+            bookingId: booking.id,
+            mode: 'hosted',
+          });
+          resetBookingState();
+          if (paymentResponse.data.flow === 'redirect') {
+            window.location.assign(paymentResponse.data.paymentUrl);
+            return;
+          }
+          router.push(`/rider/bookings/${booking.id}`);
+          return;
+        } catch (paymentErr) {
+          reportMutationError('rider.booking.payment_start', paymentErr, {
+            bookingId: booking.id,
+            slotId: selectedSlot.id,
+          });
+          toast.error(
+            paymentErr instanceof Error
+              ? `Booking created, but payment could not start: ${paymentErr.message}`
+              : 'Booking created, but payment could not start. Open the booking to try again.',
+          );
+          resetBookingState();
+          router.push(`/rider/bookings/${booking.id}?payment=start-failed`);
+          return;
+        }
+      }
+
       toast.success(
         guestValues
           ? `Guest booked — ${guestValues.name} will receive lesson details.`
           : 'Booking confirmed! Check your email for details.',
       );
       resetBookingState();
-      router.push('/rider');
+      router.push(`/rider/bookings/${booking.id}`);
     } catch (err) {
       reportMutationError('rider.booking.create', err, {
         slotId: selectedSlot.id,
@@ -378,7 +417,15 @@ export default function RiderBookPage() {
   }
 
   function handleConfirmBooking() {
-    if (!selectedSlot || !memberId || bookingSubmitting || createBooking.isPending) return;
+    if (
+      !selectedSlot ||
+      !memberId ||
+      bookingSubmitting ||
+      createBooking.isPending ||
+      createPayment.isPending
+    ) {
+      return;
+    }
     if (bookingForGuest) {
       // Audit F-30: RHF surfaces inline errors below each field; the
       // handler only fires when the schema accepts.
@@ -588,9 +635,19 @@ export default function RiderBookPage() {
           className="w-full"
           size="lg"
           onClick={handleConfirmBooking}
-          disabled={bookingSubmitting || createBooking.isPending || userFetching || !memberId}
+          disabled={
+            bookingSubmitting ||
+            createBooking.isPending ||
+            createPayment.isPending ||
+            userFetching ||
+            !memberId
+          }
         >
-          {bookingSubmitting || createBooking.isPending ? 'Booking...' : 'Confirm Booking'}
+          {createPayment.isPending
+            ? 'Preparing payment...'
+            : bookingSubmitting || createBooking.isPending
+              ? 'Booking...'
+              : 'Confirm Booking'}
         </Button>
       </div>
     );

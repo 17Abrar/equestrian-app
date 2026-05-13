@@ -17,7 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
-import { BOOKING_STATUS_COLORS } from '@/lib/ui-constants';
+import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
+import { isBookingPaymentActionRequired } from '@/lib/payments/payment-methods';
 import { formatMoney, formatDate, formatTime } from '@equestrian/shared/utils';
 import {
   AlertDialog,
@@ -41,6 +42,7 @@ interface BookingCardProps {
 
 function BookingCard({ booking, onCancel }: BookingCardProps) {
   const canCancel = booking.status === 'confirmed' || booking.status === 'pending';
+  const paymentActionRequired = isBookingPaymentActionRequired(booking);
 
   return (
     <Card className="transition-shadow hover:shadow-md">
@@ -49,7 +51,7 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
           <span className="text-muted-foreground text-[10px] uppercase">
             {formatDate(booking.slotDate).split(' ')[0]}
           </span>
-          <span className="text-lg font-bold leading-tight">
+          <span className="text-lg leading-tight font-bold">
             {formatDate(booking.slotDate).split(' ')[2]}
           </span>
         </div>
@@ -80,13 +82,29 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
         </div>
 
         <div className="flex flex-col items-end gap-1">
-          <Badge className={BOOKING_STATUS_COLORS[booking.status] ?? ''} variant="secondary">
-            {booking.status}
+          <Badge
+            className={
+              paymentActionRequired
+                ? (PAYMENT_STATUS_COLORS[booking.paymentStatus] ?? PAYMENT_STATUS_COLORS.pending)
+                : (BOOKING_STATUS_COLORS[booking.status] ?? '')
+            }
+            variant="secondary"
+          >
+            {paymentActionRequired
+              ? booking.paymentStatus === 'failed'
+                ? 'payment failed'
+                : 'payment needed'
+              : booking.status}
           </Badge>
           {booking.amount !== null && (
             <span className="text-muted-foreground text-xs">
               {formatAmount(booking.amount, booking.currency)}
             </span>
+          )}
+          {paymentActionRequired && (
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" asChild>
+              <Link href={`/rider/bookings/${booking.id}`}>Pay now</Link>
+            </Button>
           )}
           {canCancel && onCancel && (
             <Button
