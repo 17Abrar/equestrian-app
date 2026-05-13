@@ -68,6 +68,7 @@ export function usePayBooking() {
         // Refresh so the home screen / booking detail reflect the new status
         // as soon as the webhook lands.
         await queryClient.invalidateQueries({ queryKey: ['myBookings'] });
+        await queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });
         await queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
 
         if (result.type === 'dismiss' || result.type === 'cancel') {

@@ -74,6 +74,7 @@ describe('bookingListItemSchema (F-69 companion)', () => {
     horseId: null,
     status: 'confirmed',
     paymentStatus: 'paid',
+    paymentMethod: 'card',
     amount: 12000,
     currency: 'AED',
     createdAt: '2026-05-01T00:00:00Z',
@@ -82,6 +83,8 @@ describe('bookingListItemSchema (F-69 companion)', () => {
     slotEndTime: '10:00:00',
     lessonTypeName: 'Group lesson',
     lessonTypeType: 'group',
+    lessonTypePrice: 15000,
+    lessonTypeCurrency: 'AED',
     arenaName: 'Main arena',
     riderName: 'Layla',
     horseName: null,
@@ -97,6 +100,22 @@ describe('bookingListItemSchema (F-69 companion)', () => {
     );
   });
 
+  it('accepts the full database payment status enum', () => {
+    const statuses = ['pending', 'paid', 'partial', 'refunded', 'failed', 'overdue'];
+    for (const paymentStatus of statuses) {
+      expect(bookingListItemSchema.safeParse({ ...validRow, paymentStatus }).success).toBe(true);
+    }
+  });
+
+  it('rejects provider-only payment statuses that are not booking statuses', () => {
+    expect(
+      bookingListItemSchema.safeParse({ ...validRow, paymentStatus: 'requires_action' }).success,
+    ).toBe(false);
+    expect(bookingListItemSchema.safeParse({ ...validRow, paymentStatus: 'unpaid' }).success).toBe(
+      false,
+    );
+  });
+
   it('rejects a row whose amount comes through as a string (Drizzle numeric pitfall)', () => {
     expect(bookingListItemSchema.safeParse({ ...validRow, amount: '12000' }).success).toBe(false);
   });
@@ -105,5 +124,12 @@ describe('bookingListItemSchema (F-69 companion)', () => {
     expect(
       bookingListItemSchema.safeParse({ ...validRow, horseId: null, horseName: null }).success,
     ).toBe(true);
+  });
+
+  it('rejects a row missing payment and lesson-price fields used by clients', () => {
+    const rowWithoutRequiredFields: Partial<typeof validRow> = { ...validRow };
+    delete rowWithoutRequiredFields.paymentMethod;
+    delete rowWithoutRequiredFields.lessonTypePrice;
+    expect(bookingListItemSchema.safeParse(rowWithoutRequiredFields).success).toBe(false);
   });
 });

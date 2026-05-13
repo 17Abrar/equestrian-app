@@ -11,10 +11,10 @@ import { z } from 'zod';
  * dereferences `undefined`.
  *
  * `.passthrough()` is deliberate — the route's projection occasionally
- * stamps lookup-derived auxiliary fields (lessonTypePrice, arena
- * coordinates) that the mobile UI ignores. The schema gates only the
- * fields the mobile UI READS, so adding a new server-side column
- * doesn't trip the validator until a mobile consumer asks for it.
+ * stamps lookup-derived auxiliary fields that list screens ignore. The
+ * schema gates the fields client code reads or the shared Booking DTO
+ * promises, so a server-side projection drift fails loudly without making
+ * every future additive column a breaking change.
  */
 export const bookingStatusSchema = z.enum([
   'confirmed',
@@ -25,13 +25,12 @@ export const bookingStatusSchema = z.enum([
 ]);
 
 export const paymentStatusSchema = z.enum([
-  'unpaid',
-  'paid',
   'pending',
-  'refunded',
+  'paid',
   'partial',
+  'refunded',
   'failed',
-  'requires_action',
+  'overdue',
 ]);
 
 export const bookingListItemSchema = z
@@ -43,6 +42,22 @@ export const bookingListItemSchema = z
     horseId: z.string().uuid().nullable(),
     status: bookingStatusSchema,
     paymentStatus: paymentStatusSchema,
+    paymentMethod: z
+      .enum([
+        'card',
+        'apple_pay',
+        'google_pay',
+        'tabby',
+        'tamara',
+        'knet',
+        'mada',
+        'benefit',
+        'cash',
+        'card_in_person',
+        'package_credit',
+        'bank_transfer',
+      ])
+      .nullable(),
     amount: z.number().int().nullable(),
     currency: z.string(),
     createdAt: z.string(),
@@ -51,6 +66,8 @@ export const bookingListItemSchema = z
     slotEndTime: z.string(),
     lessonTypeName: z.string(),
     lessonTypeType: z.string(),
+    lessonTypePrice: z.number().int(),
+    lessonTypeCurrency: z.string(),
     arenaName: z.string().nullable(),
     riderName: z.string().nullable(),
     horseName: z.string().nullable(),
