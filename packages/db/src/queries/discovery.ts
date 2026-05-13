@@ -4,6 +4,7 @@ import { rawDb, db } from '../index';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { clubJoinRequests } from '../schema/club-join-requests';
+import { ensureRiderProfileForMember } from './riders';
 
 // ─── Public discovery (rawDb — no tenant context needed) ──────────────
 //
@@ -228,6 +229,9 @@ export async function joinClubInstantly(input: {
   const member = rows[0];
   if (!member || !member.isActive) {
     return { status: 'kicked', memberId: member?.id ?? null };
+  }
+  if (member.role === 'rider') {
+    await ensureRiderProfileForMember(input.clubId, member.id);
   }
   return { status: 'joined', member };
 }

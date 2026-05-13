@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq, and } from 'drizzle-orm';
 import { createTestDb, withTestDb } from './harness';
 import { joinClubInstantly, isUserMember } from '../queries/discovery';
+import { ensureRiderProfilesForActiveRiderMembers, getRidersByClub } from '../queries/riders';
 import { deactivateMember } from '../queries/club-members';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
+import { riderProfiles } from '../schema/rider-profiles';
 
 /**
  * Integration tests for the rider signup / join flow — audit QA-22.
@@ -65,6 +67,13 @@ describe('joinClubInstantly', () => {
     expect(result.member.role).toBe('rider');
     expect(result.member.isActive).toBe(true);
     expect(result.member.email).toBe('first@example.com');
+
+    const profiles = await testDb.db
+      .select()
+      .from(riderProfiles)
+      .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, result.member.id)));
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]!.skillLevel).toBe('beginner');
   });
 
   it('is idempotent — duplicate calls return the same membership without error', async () => {
@@ -98,6 +107,12 @@ describe('joinClubInstantly', () => {
       .from(clubMembers)
       .where(and(eq(clubMembers.clubId, clubId), eq(clubMembers.clerkUserId, 'user_dup')));
     expect(allRows).toHaveLength(1);
+
+    const profiles = await testDb.db
+      .select()
+      .from(riderProfiles)
+      .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, first.member.id)));
+    expect(profiles).toHaveLength(1);
   });
 
   it('reactivates a member who previously left voluntarily (is_active=false, no admin stamp)', async () => {
@@ -142,6 +157,46 @@ describe('joinClubInstantly', () => {
       .from(clubMembers)
       .where(and(eq(clubMembers.clubId, clubId), eq(clubMembers.clerkUserId, 'user_rejoin')));
     expect(allRows).toHaveLength(1);
+
+    const profiles = await testDb.db
+      .select()
+      .from(riderProfiles)
+      .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, result.member.id)));
+    expect(profiles).toHaveLength(1);
+  });
+
+  it('backfills legacy active rider memberships that have no rider profile', async () => {
+    const clubId = await seedClub(testDb.db, 'legacy-profile');
+
+    const [member] = await testDb.db
+      .insert(clubMembers)
+      .values({
+        clubId,
+        clerkUserId: 'user_legacy',
+        email: 'legacy@example.com',
+        displayName: 'Legacy Rider',
+        role: 'rider',
+        isActive: true,
+      })
+      .returning({ id: clubMembers.id });
+
+    const before = await withTestDb(testDb.db, () =>
+      getRidersByClub(clubId, { page: 1, pageSize: 10 }),
+    );
+    expect(before.total).toBe(0);
+
+    const repaired = await withTestDb(testDb.db, () =>
+      ensureRiderProfilesForActiveRiderMembers(clubId),
+    );
+    expect(repaired).toBe(1);
+
+    const after = await withTestDb(testDb.db, () =>
+      getRidersByClub(clubId, { page: 1, pageSize: 10 }),
+    );
+    expect(after.total).toBe(1);
+    expect(after.data[0]?.memberId).toBe(member!.id);
+    expect(after.data[0]?.displayName).toBe('Legacy Rider');
+    expect(after.data[0]?.skillLevel).toBe('beginner');
   });
 
   it('concurrent join attempts resolve to a single membership', async () => {

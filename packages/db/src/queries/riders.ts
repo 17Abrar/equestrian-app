@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, and, ilike, asc, sql, SQL } from 'drizzle-orm';
+import { eq, and, ilike, asc, sql, isNull, SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { riderProfiles } from '../schema/rider-profiles';
 import { clubMembers } from '../schema/club-members';
@@ -202,6 +202,73 @@ export async function getRiderByMemberId(clubId: string, memberId: string) {
   const row = result[0];
   if (!row) return null;
   return decryptFields(row, RIDER_PROFILE_ENCRYPTED_FIELDS);
+}
+
+/**
+ * Ensure a membership has a default rider profile. This is intentionally
+ * minimal: self-join can create the membership before the rider has supplied
+ * height, weight, emergency contact, or medical fields.
+ */
+export async function ensureRiderProfileForMember(
+  clubId: string,
+  memberId: string,
+): Promise<boolean> {
+  const inserted = await db
+    .insert(riderProfiles)
+    .values({
+      clubId,
+      memberId,
+      skillLevel: 'beginner',
+    })
+    .onConflictDoNothing({
+      target: [riderProfiles.clubId, riderProfiles.memberId],
+    })
+    .returning({ id: riderProfiles.id });
+
+  return inserted.length > 0;
+}
+
+/**
+ * Backfill the invariant expected by the admin Riders tab: every active
+ * club_members row with role='rider' should have exactly one rider_profiles
+ * row. Self-join used to create only the membership, so production can contain
+ * legacy active riders that can book but are invisible to /riders.
+ */
+export async function ensureRiderProfilesForActiveRiderMembers(clubId: string): Promise<number> {
+  const missing = await db
+    .select({ memberId: clubMembers.id })
+    .from(clubMembers)
+    .leftJoin(
+      riderProfiles,
+      and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.memberId, clubMembers.id)),
+    )
+    .where(
+      and(
+        eq(clubMembers.clubId, clubId),
+        eq(clubMembers.role, 'rider'),
+        eq(clubMembers.isActive, true),
+        isNull(riderProfiles.id),
+      ),
+    )
+    .limit(500);
+
+  if (missing.length === 0) return 0;
+
+  const inserted = await db
+    .insert(riderProfiles)
+    .values(
+      missing.map((row) => ({
+        clubId,
+        memberId: row.memberId,
+        skillLevel: 'beginner' as const,
+      })),
+    )
+    .onConflictDoNothing({
+      target: [riderProfiles.clubId, riderProfiles.memberId],
+    })
+    .returning({ id: riderProfiles.id });
+
+  return inserted.length;
 }
 
 interface CreateRiderData {

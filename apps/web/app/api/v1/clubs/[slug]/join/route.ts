@@ -3,9 +3,10 @@ import { type NextRequest, NextResponse, after } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import {
   getPublicClubBySlug,
-  isUserMember,
   joinClubInstantly,
   createAuditEntry,
+  ensureRiderProfileForMember,
+  getMemberByClerkUserAndClub,
 } from '@equestrian/db/queries';
 import { successResponse, errorResponse } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
@@ -78,8 +79,17 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (await isUserMember(club.id, userId)) {
-      return successResponse({ status: 'already_member', clubId: club.id, slug: club.slug });
+    const existingMember = await getMemberByClerkUserAndClub(userId, club.id);
+    if (existingMember) {
+      if (existingMember.role === 'rider') {
+        await ensureRiderProfileForMember(club.id, existingMember.id);
+      }
+      return successResponse({
+        status: 'already_member',
+        clubId: club.id,
+        slug: club.slug,
+        memberId: existingMember.id,
+      });
     }
 
     const clerkUser = await currentUser();

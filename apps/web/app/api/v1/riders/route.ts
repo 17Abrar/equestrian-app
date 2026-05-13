@@ -1,7 +1,12 @@
 import React from 'react';
 import { type NextRequest, after } from 'next/server';
 import { riderFiltersSchema, createRiderSchema } from '@equestrian/shared/schemas';
-import { getRidersByClub, createRider, getClubById } from '@equestrian/db/queries';
+import {
+  getRidersByClub,
+  createRider,
+  getClubById,
+  ensureRiderProfilesForActiveRiderMembers,
+} from '@equestrian/db/queries';
 import {
   withAuth,
   paginatedResponse,
@@ -19,6 +24,14 @@ export async function GET(request: NextRequest) {
     async (ctx) => {
       const searchParams = Object.fromEntries(request.nextUrl.searchParams);
       const filters = validateInput(riderFiltersSchema, searchParams);
+
+      const repairedProfiles = await ensureRiderProfilesForActiveRiderMembers(ctx.clubId);
+      if (repairedProfiles > 0) {
+        logger.info('rider_profiles_backfilled_for_active_members', {
+          clubId: ctx.clubId,
+          repairedProfiles,
+        });
+      }
 
       const { data, total } = await getRidersByClub(ctx.clubId, filters);
 

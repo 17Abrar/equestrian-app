@@ -398,12 +398,12 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
             </TabsContent>
 
             <TabsContent value="bookings" className="mt-4">
-              <RiderBookings riderMemberId={rider.id} />
+              <RiderBookings riderMemberId={rider.memberId} />
             </TabsContent>
 
             <TabsContent value="progress" className="mt-4">
               <RiderProgress
-                riderMemberId={rider.id}
+                riderMemberId={rider.memberId}
                 totalLessonsCompleted={rider.totalLessonsCompleted ?? 0}
                 skillLevel={rider.skillLevel}
               />
