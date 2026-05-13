@@ -125,8 +125,7 @@ function initialsForType(type: string): string {
 function durationLabel(start: string, end: string): string {
   const sParts = start.split(':').map(Number);
   const eParts = end.split(':').map(Number);
-  const minutes =
-    eParts[0]! * 60 + (eParts[1] ?? 0) - (sParts[0]! * 60 + (sParts[1] ?? 0));
+  const minutes = eParts[0]! * 60 + (eParts[1] ?? 0) - (sParts[0]! * 60 + (sParts[1] ?? 0));
   if (minutes <= 0) return '';
   if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}h`;
   if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
@@ -156,17 +155,17 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
       disabled={isFull}
       aria-pressed={isSelected}
       className={cn(
-        'flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'bg-card flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+        'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
         isSelected
-          ? 'border-primary ring-1 ring-primary'
+          ? 'border-primary ring-primary ring-1'
           : isFull
             ? 'cursor-not-allowed opacity-50'
             : 'hover:bg-accent/40',
       )}
     >
       <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+        className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
         style={
           slot.lessonTypeColor
             ? { backgroundColor: `${slot.lessonTypeColor}20`, color: slot.lessonTypeColor }
@@ -177,7 +176,7 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{slot.lessonTypeName}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+        <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
@@ -195,15 +194,15 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
           )}
         </p>
         {slot.coachName && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">Coach {slot.coachName}</p>
+          <p className="text-muted-foreground mt-0.5 truncate text-xs">Coach {slot.coachName}</p>
         )}
       </div>
       <div className="flex flex-col items-end gap-0.5 text-xs">
-        <span className="text-sm font-semibold text-foreground">
+        <span className="text-foreground text-sm font-semibold">
           {formatPrice(slot.lessonTypePrice, slot.lessonTypeCurrency)}
         </span>
         {isFull ? (
-          <span className="font-medium text-destructive">Full</span>
+          <span className="text-destructive font-medium">Full</span>
         ) : (
           <span className="text-muted-foreground">
             {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''}
@@ -225,6 +224,7 @@ export default function RiderBookPage() {
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponError, setCouponError] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [step, setStep] = useState<'browse' | 'confirm'>('browse');
 
   // Guest booking — booker signs up a non-member guest on the same slot.
@@ -244,10 +244,16 @@ export default function RiderBookPage() {
 
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
-  const { data: user } = useCurrentUser();
+  const { data: user, isFetching: userFetching, refetch: refetchCurrentUser } = useCurrentUser();
   const memberId = user?.data?.memberId;
 
-  const { data: slotsData, isLoading, isError, error, refetch } = useBookingSlots({
+  const {
+    data: slotsData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useBookingSlots({
     dateFrom: toDateString(week.start),
     dateTo: toDateString(week.end),
   });
@@ -255,11 +261,19 @@ export default function RiderBookPage() {
   const createBooking = useCreateBooking();
 
   const handleApplyCoupon = useCallback(async () => {
-    if (!couponCode.trim() || !selectedSlot || !memberId) return;
+    if (!couponCode.trim() || !selectedSlot) return;
     setCouponError('');
     setCouponDiscount(0);
     setCouponValidating(true);
     try {
+      const refreshedUser = await refetchCurrentUser();
+      if (refreshedUser.error) throw refreshedUser.error;
+      const currentMemberId = refreshedUser.data?.data.memberId;
+      if (!currentMemberId) {
+        setCouponError('Your rider profile is not ready yet. Refresh and try again.');
+        return;
+      }
+
       // The validate endpoint returns 200 with `{ valid: false, error }` for
       // recoverable cases (wrong code, expired, etc.) and a non-2xx for
       // network/server failures. fetchJson promotes non-2xx to thrown errors;
@@ -271,13 +285,15 @@ export default function RiderBookPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: couponCode.trim(),
-          amount: selectedSlot.lessonTypePrice,
-          riderMemberId: memberId,
+          slotId: selectedSlot.id,
+          riderMemberId: currentMemberId,
         }),
       });
       if (json.data.valid && json.data.discount) {
         setCouponDiscount(json.data.discount);
-        toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
+        toast.success(
+          `Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`,
+        );
       } else {
         setCouponError(json.data.error ?? 'Invalid code');
       }
@@ -287,7 +303,7 @@ export default function RiderBookPage() {
     } finally {
       setCouponValidating(false);
     }
-  }, [couponCode, selectedSlot, memberId]);
+  }, [couponCode, selectedSlot, refetchCurrentUser]);
 
   const slots = useMemo(() => slotsData?.data ?? [], [slotsData?.data]);
 
@@ -310,51 +326,66 @@ export default function RiderBookPage() {
     guestForm.reset();
   }
 
-  function submitBooking(guestValues: GuestBookingValues | null) {
-    if (!selectedSlot || !memberId) return;
+  async function submitBooking(guestValues: GuestBookingValues | null) {
+    if (!selectedSlot || bookingSubmitting || createBooking.isPending) return;
 
-    const payload = {
-      slotId: selectedSlot.id,
-      riderMemberId: memberId,
-      autoMatchHorse: !bookingForGuest, // Guest bookings skip auto-match
-      ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
-      ...(guestValues
-        ? {
-            guest: {
-              name: guestValues.name,
-              email: guestValues.email,
-              phone: guestValues.phone,
-              skillLevel: guestValues.skillLevel,
-            },
-          }
-        : {}),
-    };
+    setBookingSubmitting(true);
+    try {
+      const refreshedUser = await refetchCurrentUser();
+      if (refreshedUser.error) throw refreshedUser.error;
+      const currentMemberId = refreshedUser.data?.data.memberId;
+      if (!currentMemberId) {
+        toast.error('Your rider profile is not ready yet. Refresh and try again.');
+        return;
+      }
 
-    createBooking.mutate(payload, {
-      onSuccess: () => {
-        toast.success(
-          guestValues
-            ? `Guest booked — ${guestValues.name} will receive lesson details.`
-            : 'Booking confirmed! Check your email for details.',
-        );
-        resetBookingState();
-        router.push('/rider');
-      },
-      onError: (err) => {
-        toast.error(err.message || 'Failed to create booking. Please try again.');
-      },
-    });
+      const payload = {
+        slotId: selectedSlot.id,
+        riderMemberId: currentMemberId,
+        autoMatchHorse: !bookingForGuest, // Guest bookings skip auto-match
+        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+        ...(guestValues
+          ? {
+              guest: {
+                name: guestValues.name,
+                email: guestValues.email,
+                phone: guestValues.phone,
+                skillLevel: guestValues.skillLevel,
+              },
+            }
+          : {}),
+      };
+
+      await createBooking.mutateAsync(payload);
+      toast.success(
+        guestValues
+          ? `Guest booked — ${guestValues.name} will receive lesson details.`
+          : 'Booking confirmed! Check your email for details.',
+      );
+      resetBookingState();
+      router.push('/rider');
+    } catch (err) {
+      reportMutationError('rider.booking.create', err, {
+        slotId: selectedSlot.id,
+        bookingForGuest,
+      });
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create booking. Please try again.',
+      );
+    } finally {
+      setBookingSubmitting(false);
+    }
   }
 
   function handleConfirmBooking() {
-    if (!selectedSlot || !memberId) return;
+    if (!selectedSlot || !memberId || bookingSubmitting || createBooking.isPending) return;
     if (bookingForGuest) {
       // Audit F-30: RHF surfaces inline errors below each field; the
       // handler only fires when the schema accepts.
       void guestForm.handleSubmit((values) => submitBooking(values))();
       return;
     }
-    submitBooking(null);
+    void submitBooking(null);
   }
 
   // ─── Confirm Step ──────────────────────────────────────────────────
@@ -375,16 +406,16 @@ export default function RiderBookPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Calendar className="text-muted-foreground h-4 w-4" />
               {formatDate(new Date(`${selectedSlot.date}T00:00:00`))}
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Clock className="text-muted-foreground h-4 w-4" />
               {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
             </div>
             {selectedSlot.arenaName && (
               <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <MapPin className="text-muted-foreground h-4 w-4" />
                 {selectedSlot.arenaName}
               </div>
             )}
@@ -393,10 +424,12 @@ export default function RiderBookPage() {
                 Coach: <span className="font-medium">{selectedSlot.coachName}</span>
               </div>
             )}
-            <div className="border-t pt-3 space-y-1">
+            <div className="space-y-1 border-t pt-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Price</span>
-                <span className={`text-lg font-semibold ${couponDiscount > 0 ? 'line-through text-muted-foreground text-base' : ''}`}>
+                <span className="text-muted-foreground text-sm">Price</span>
+                <span
+                  className={`text-lg font-semibold ${couponDiscount > 0 ? 'text-muted-foreground text-base line-through' : ''}`}
+                >
                   {formatPrice(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
                 </span>
               </div>
@@ -404,7 +437,10 @@ export default function RiderBookPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-green-600">After discount</span>
                   <span className="text-lg font-semibold text-green-600">
-                    {formatPrice(selectedSlot.lessonTypePrice - couponDiscount, selectedSlot.lessonTypeCurrency)}
+                    {formatPrice(
+                      selectedSlot.lessonTypePrice - couponDiscount,
+                      selectedSlot.lessonTypeCurrency,
+                    )}
                   </span>
                 </div>
               )}
@@ -419,7 +455,7 @@ export default function RiderBookPage() {
           </label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Ticket className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Ticket className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
               <Input
                 id="coupon"
                 placeholder="Enter promo code"
@@ -436,13 +472,13 @@ export default function RiderBookPage() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={!couponCode.trim() || couponValidating}
+              disabled={!couponCode.trim() || couponValidating || userFetching}
               onClick={handleApplyCoupon}
             >
               {couponValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
             </Button>
           </div>
-          {couponError && <p className="text-sm text-destructive">{couponError}</p>}
+          {couponError && <p className="text-destructive text-sm">{couponError}</p>}
           {couponDiscount > 0 && (
             <p className="text-sm text-green-600">
               Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
@@ -455,9 +491,9 @@ export default function RiderBookPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-0.5">
               <Label htmlFor="guest-toggle">Booking this for a guest?</Label>
-              <p className="text-xs text-muted-foreground">
-                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in
-                their name. You can book yourself once AND bring guests on the same slot.
+              <p className="text-muted-foreground text-xs">
+                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in their
+                name. You can book yourself once AND bring guests on the same slot.
               </p>
             </div>
             <Switch
@@ -491,11 +527,7 @@ export default function RiderBookPage() {
                       <FormItem>
                         <FormLabel className="text-xs">Guest email *</FormLabel>
                         <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="guest@example.com"
-                            {...field}
-                          />
+                          <Input type="email" placeholder="guest@example.com" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -508,11 +540,7 @@ export default function RiderBookPage() {
                       <FormItem>
                         <FormLabel className="text-xs">Guest phone *</FormLabel>
                         <FormControl>
-                          <Input
-                            type="tel"
-                            placeholder="+971 50 123 4567"
-                            {...field}
-                          />
+                          <Input type="tel" placeholder="+971 50 123 4567" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -541,7 +569,7 @@ export default function RiderBookPage() {
                     </FormItem>
                   )}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   A horse will be assigned manually by the stable after booking.
                 </p>
               </div>
@@ -551,7 +579,7 @@ export default function RiderBookPage() {
 
         {/* Horse matching info for self-bookings */}
         {!bookingForGuest && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             A horse will be automatically matched to your skill level and preferences.
           </p>
         )}
@@ -560,9 +588,9 @@ export default function RiderBookPage() {
           className="w-full"
           size="lg"
           onClick={handleConfirmBooking}
-          disabled={createBooking.isPending || !memberId}
+          disabled={bookingSubmitting || createBooking.isPending || userFetching || !memberId}
         >
-          {createBooking.isPending ? 'Booking...' : 'Confirm Booking'}
+          {bookingSubmitting || createBooking.isPending ? 'Booking...' : 'Confirm Booking'}
         </Button>
       </div>
     );
@@ -598,7 +626,12 @@ export default function RiderBookPage() {
         <span className="text-sm font-medium">
           {formatDate(week.start)} – {formatDate(week.end)}
         </span>
-        <Button variant="outline" size="icon" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Next week">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setWeekOffset((w) => w + 1)}
+          aria-label="Next week"
+        >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -615,11 +648,9 @@ export default function RiderBookPage() {
         slotCounts={slotCountsByDate}
       />
 
-
-
       {/* Slots for selected date */}
       <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+        <h2 className="text-muted-foreground mb-3 text-sm font-medium">
           Available on {formatDate(new Date(`${selectedDate}T00:00:00`))}
         </h2>
 
@@ -662,7 +693,7 @@ export default function RiderBookPage() {
 
       {/* Continue button */}
       {selectedSlot && (
-        <div className="sticky bottom-20 sm:bottom-0 z-40 bg-background pt-4 pb-4 border-t -mx-4 px-4 sm:mx-0 sm:px-0 sm:border-0 sm:bg-transparent">
+        <div className="bg-background sticky bottom-20 z-40 -mx-4 border-t px-4 pt-4 pb-4 sm:bottom-0 sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0">
           <Button className="w-full" size="lg" onClick={() => setStep('confirm')}>
             Continue with {selectedSlot.lessonTypeName}
             <ArrowRight className="ml-2 h-4 w-4" />
