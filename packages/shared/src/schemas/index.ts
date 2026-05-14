@@ -1,5 +1,17 @@
 import { z } from 'zod';
-import { MAX_MONTHLY_LIVERY_FEE_MINOR, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../constants';
+import {
+  MAX_MONTHLY_LIVERY_FEE_MINOR,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  SUPPORTED_CURRENCIES,
+} from '../constants';
+import { PAYMENT_METHOD_VALUES } from '../types';
+
+// Audit 2026-05-13 (P1): canonical currency field used by every inbound
+// schema. Validating against SUPPORTED_CURRENCIES (vs raw `length(3)`)
+// rejects typos like 'XYZ' at the API boundary instead of silently
+// falling back to 2-decimal formatting downstream.
+const currencyField = z.enum(SUPPORTED_CURRENCIES);
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -316,7 +328,7 @@ const lessonTypeFields = z
     description: z.string().max(2000).optional(),
     durationMinutes: numericField(z.number().int().min(15)).default(60),
     price: numericField(z.number().int().min(0)),
-    currency: z.string().length(3).default('AED'),
+    currency: currencyField.default('AED'),
     maxRiders: numericField(z.number().int().min(1)).default(1),
     minRiders: numericField(z.number().int().min(1)).default(1),
     maxSessionsPerDay: optionalNumeric(z.number().int().positive()),
@@ -433,22 +445,11 @@ export const createBookingSchema = z
     slotId: z.string().uuid(),
     riderMemberId: z.string().uuid(),
     horseId: z.string().uuid().optional(),
-    paymentMethod: z
-      .enum([
-        'card',
-        'apple_pay',
-        'google_pay',
-        'tabby',
-        'tamara',
-        'knet',
-        'mada',
-        'benefit',
-        'cash',
-        'card_in_person',
-        'package_credit',
-        'bank_transfer',
-      ])
-      .optional(),
+    // Audit 2026-05-13 (P1): derived from canonical PAYMENT_METHOD_VALUES
+    // tuple in `types/index.ts` so booking-input, competition-entry input,
+    // and the response schema all stay in sync. Previously inlined here
+    // (four duplicate copies of the same 12 literals).
+    paymentMethod: z.enum(PAYMENT_METHOD_VALUES).optional(),
     couponCode: z.string().max(50).optional(),
     autoMatchHorse: z.boolean().default(true),
     // When present, this booking is for a guest (non-member). `riderMemberId`
@@ -501,7 +502,7 @@ export const createCompetitionSchema = z
     arenaId: z.string().uuid().optional(),
     disciplines: z.array(z.string().max(100)).max(50).optional(),
     entryFee: optionalNumeric(z.number().int().min(0)),
-    currency: z.string().length(3).default('AED'),
+    currency: currencyField.default('AED'),
     // Audit F-38 (2026-05-07 r5): refuse arbitrary strings — the route
     // either passes this through `parseDateTimeLocal` (datetime-local
     // form value, no TZ) or through `new Date(...)` directly (ISO with
@@ -539,7 +540,7 @@ export const createCompetitionClassSchema = z
     level: z.string().max(100).optional(),
     maxEntries: optionalNumeric(z.number().int().positive()),
     entryFee: optionalNumeric(z.number().int().min(0)),
-    currency: z.string().length(3).default('AED'),
+    currency: currencyField.default('AED'),
     sortOrder: numericField(z.number().int().min(0)).default(0),
   })
   .strict();
@@ -548,31 +549,19 @@ export type CreateCompetitionClassInput = z.output<typeof createCompetitionClass
 
 export const updateCompetitionClassSchema = createCompetitionClassSchema.partial().strict();
 
-const PAYMENT_METHODS = [
-  'card',
-  'apple_pay',
-  'google_pay',
-  'tabby',
-  'tamara',
-  'knet',
-  'mada',
-  'benefit',
-  'cash',
-  'card_in_person',
-  'package_credit',
-  'bank_transfer',
-] as const;
-
 // Entry fee is intentionally NOT accepted from the request — it's stamped
 // server-side from `competitionClasses.entryFee`. Accepting `amount` from
 // the body lets a rider POST `{ amount: 1 }` and pay 1 fil for a
 // full-price competition (same class of bug as the historical bookings
 // price-injection fix).
+//
+// Audit 2026-05-13 (P1): `paymentMethod` derives from PAYMENT_METHOD_VALUES
+// in types/index.ts (canonical source for input + response).
 export const createCompetitionEntrySchema = z
   .object({
     riderMemberId: z.string().uuid(),
     horseId: z.string().uuid().optional(),
-    paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+    paymentMethod: z.enum(PAYMENT_METHOD_VALUES).optional(),
   })
   .strict();
 
@@ -601,7 +590,7 @@ export const updateClubProfileSchema = z
     city: z.string().max(100).optional(),
     country: z.string().max(100).optional(),
     timezone: z.string().max(50).optional(),
-    currency: z.string().length(3).optional(),
+    currency: currencyField.optional(),
     // Nullable to match the underlying column (text, no NOT NULL) and the
     // branding schema's shape — staff need to be able to *clear* the logo
     // from the profile editor too, not just set a new one.
@@ -735,12 +724,19 @@ export type UpdateOwnerInput = z.output<typeof updateOwnerSchema>;
 // ─── Finances ─────────────────────────────────────────────────────────
 
 // `.strict()` (audit QA-32c) — see createCompetitionSchema rationale.
+// Audit 2026-05-13 (P1): `amount` is intentionally a positive number in
+// MAJOR units (e.g., `12.50` AED). The expenses route runs `toMinorUnits`
+// to convert before insert; the DB column `expenses.amount` is `integer`
+// (minor units). Asymmetry vs `purchasePrice`/`currentValue`/`salePrice`
+// elsewhere in this file, which are pre-converted minor-unit integers
+// from the form. Do NOT change to `.int()` without also moving the
+// conversion onto the form.
 export const createExpenseSchema = z
   .object({
     category: z.string().min(1).max(100),
     description: z.string().min(1).max(2000),
     amount: numericField(z.number().positive()),
-    currency: z.string().length(3).default('AED'),
+    currency: currencyField.default('AED'),
     date: z.string().max(50).min(1, 'Date is required'),
     horseId: z.string().uuid().optional(),
     vendorName: z.string().max(255).optional(),
@@ -810,7 +806,7 @@ export const couponBaseSchema = z
     // at the schema level so the route layer can default it from the
     // club's currency when omitted (the typical UX path). When the
     // operator passes one explicitly it must be a 3-letter ISO code.
-    currency: z.string().length(3).optional(),
+    currency: currencyField.optional(),
   })
   // `.strict()` for parity with update schemas — unknown keys 422
   // instead of being silently stripped (audit QA-32c).

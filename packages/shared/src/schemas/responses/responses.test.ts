@@ -60,7 +60,11 @@ describe('horseListItemSchema (F-69 companion)', () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect((parsed.data as Record<string, unknown>).newServerColumn).toBe('value');
+      // Audit 2026-05-13 (P1): use a typed intersection instead of the
+      // `Record<string, unknown>` cast. Avoids setting the
+      // "cast-to-Record" precedent for future tests.
+      const dataWithExtra = parsed.data as typeof validRow & { newServerColumn: string };
+      expect(dataWithExtra.newServerColumn).toBe('value');
     }
   });
 });
