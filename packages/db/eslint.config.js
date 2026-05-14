@@ -22,6 +22,18 @@ module.exports = [
     },
   },
   {
-    ignores: ['node_modules/**', 'dist/**', '*.tsbuildinfo', 'migrations/**'],
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      '*.tsbuildinfo',
+      'migrations/**',
+      // Top-level tool configs (drizzle.config.ts, vitest.config.ts) live
+      // outside the package's `src/**/*.ts` include glob and therefore
+      // can't be parsed by the type-aware service. They aren't shipped
+      // and don't contain Drizzle query code, so excluding them is
+      // safer than weakening the parser settings repo-wide.
+      'drizzle.config.ts',
+      'vitest.config.ts',
+    ],
   },
 ];

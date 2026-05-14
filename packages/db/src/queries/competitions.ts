@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, isNull, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import {
   competitions,

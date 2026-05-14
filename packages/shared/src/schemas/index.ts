@@ -846,18 +846,10 @@ export type CreateCouponInput = z.output<typeof createCouponSchema>;
 
 // ─── Horse Health ─────────────────────────────────────────────────────
 
-const HEALTH_RECORD_TYPES = [
-  'vaccination',
-  'vet_visit',
-  'dental',
-  'deworming',
-  'blood_test',
-  'injury',
-  'condition',
-  'allergy',
-  'farrier',
-  'other',
-] as const;
+// Audit 2026-05-13: HEALTH_RECORD_TYPES const-array removed — the
+// schema accepts free-form `recordType: z.string().min(1).max(50)`
+// and the list was never consumed. If we ever want to constrain the
+// values, add them back as `z.enum(HEALTH_RECORD_TYPES)` here.
 
 // `.strict()` (audit QA-32c) — see createCompetitionSchema rationale.
 export const createHealthRecordSchema = z

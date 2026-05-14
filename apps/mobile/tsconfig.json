@@ -1,14 +1,23 @@
 {
-  // Audit 2026-05-13 (P1): extend BOTH expo's base (Metro-aware module
-  // resolution, JSX runtime) AND the shared @equestrian/typescript-config
-  // react-native preset. TS 5.0+ accepts an array of extends; the rightmost
-  // entry overrides earlier ones, so shared strictness flags
-  // (`noUncheckedIndexedAccess`, `isolatedModules`, `esModuleInterop`,
-  // `forceConsistentCasingInFileNames`) apply on top of Expo's defaults.
-  // Previously mobile extended only `expo/tsconfig.base`, leaving the
-  // shared base unused and silently drifting from web's strictness profile.
-  "extends": ["expo/tsconfig.base", "@equestrian/typescript-config/react-native.json"],
+  // Audit 2026-05-13 (P1) attempt 2: extending BOTH `expo/tsconfig.base`
+  // and `@equestrian/typescript-config/react-native.json` collided on
+  // AbortSignal types (RN's vs the shared base's transitively-included
+  // DOM types). The web/RN AbortSignal difference is a known TS friction
+  // point — combining the two preserves both type bundles, both
+  // disagree, fetch() can't resolve an overload.
+  //
+  // Resolution: keep extending only `expo/tsconfig.base` (Metro / RN
+  // toolchain) and mirror the shared base's strictness flags inline so
+  // the intent is preserved without the type conflict. If
+  // `tooling/typescript/react-native.json` later narrows its lib set to
+  // exclude DOM, we can re-attempt the array extends.
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
     "paths": {
       "@/*": ["./*"]
     }

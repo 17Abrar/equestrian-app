@@ -95,7 +95,7 @@ export async function createAuditEntry(
     // Avoid pulling in the app-side logger here (different package; would
     // create a circular import). console.error is the audit-trail-of-
     // last-resort signal — operators monitor this prefix in tail logs.
-    // eslint-disable-next-line no-console
+     
     console.error('[audit] createAuditEntry failed', {
       clubId: params.clubId,
       action: params.action,

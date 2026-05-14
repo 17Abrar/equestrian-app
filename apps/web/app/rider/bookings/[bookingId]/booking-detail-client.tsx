@@ -19,11 +19,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { useBooking, type Booking } from '@/hooks/use-bookings';
 import { PayBookingDialog } from '@/components/payments/pay-booking-dialog';
-import {
-  isBookingPaymentActionRequired,
-  isOfflinePaymentMethod,
-} from '@/lib/payments/payment-methods';
 import { formatTime, formatDate, formatPrice } from '@equestrian/shared/utils';
+
+// Payment methods that settle at the stable — no online flow expected.
+const OFFLINE_METHODS = new Set(['cash', 'card_in_person', 'bank_transfer', 'package_credit']);
 
 interface RiderBookingDetailClientProps {
   bookingId: string;
@@ -36,16 +35,14 @@ export function RiderBookingDetailClient({ bookingId }: RiderBookingDetailClient
 
   const query = useBooking(bookingId);
   const booking = query.data?.success ? query.data.data : null;
-  const paymentActionRequired = booking ? isBookingPaymentActionRequired(booking) : false;
 
   // Poll while we're waiting for a payment to settle — the webhook updates
   // `paymentStatus` out-of-band. Stop polling once we see `paid`/`refunded`/
   // `failed`, or after a two-minute ceiling to avoid spinning forever.
   const shouldPoll =
     !!booking &&
-    paymentActionRequired &&
     booking.paymentStatus === 'pending' &&
-    !isOfflinePaymentMethod(booking.paymentMethod);
+    !OFFLINE_METHODS.has(booking.paymentMethod ?? '');
 
   // Audit MED-14 (2026-05-05): the previous implementation depended on
   // `query` directly. `useQuery` returns a fresh object every render,
@@ -85,15 +82,15 @@ export function RiderBookingDetailClient({ bookingId }: RiderBookingDetailClient
   useEffect(() => {
     if (hasAutoOpenedRef.current) return;
     if (!booking) return;
-    if (!paymentActionRequired) return;
     if (booking.paymentStatus !== 'pending') return;
+    if (OFFLINE_METHODS.has(booking.paymentMethod ?? '')) return;
     // If the rider is returning from a redirect-flow payment, let the
     // webhook land rather than immediately reopening the dialog.
     if (returningFromPayment) return;
     if (paymentStartFailed) return;
     setPayOpen(true);
     hasAutoOpenedRef.current = true;
-  }, [booking, paymentActionRequired, paymentStartFailed, returningFromPayment]);
+  }, [booking, paymentStartFailed, returningFromPayment]);
 
   if (query.isLoading) {
     return <BookingSkeleton />;
@@ -251,7 +248,7 @@ function PaymentBanner({
     );
   }
 
-  if (isOfflinePaymentMethod(booking.paymentMethod)) {
+  if (OFFLINE_METHODS.has(booking.paymentMethod ?? '')) {
     return (
       <Banner tone="muted" title="Pay at the stable">
         You&apos;ll settle up on arrival. See you there.

@@ -81,27 +81,29 @@ describe('errorResponse', () => {
 
   it('passes details through unchanged', async () => {
     const res = errorResponse('VALIDATION_ERROR', 'Invalid', 400, { fieldErrors: {} });
-    const body = await res.json();
+    const body = (await res.json()) as { error: { details: unknown } };
     expect(body.error.details).toEqual({ fieldErrors: {} });
   });
 });
 
 describe('paginatedResponse', () => {
+  type PaginatedBody = { pagination: { totalPages: number } };
+
   it('computes totalPages = ceil(total / pageSize)', async () => {
     const res = paginatedResponse([1, 2, 3], { page: 1, pageSize: 25, total: 60 });
-    const body = await res.json();
+    const body = (await res.json()) as PaginatedBody;
     expect(body.pagination.totalPages).toBe(3);
   });
 
   it('handles total < pageSize → 1 page', async () => {
     const res = paginatedResponse([], { page: 1, pageSize: 25, total: 5 });
-    const body = await res.json();
+    const body = (await res.json()) as PaginatedBody;
     expect(body.pagination.totalPages).toBe(1);
   });
 
   it('handles total === 0 → 0 pages', async () => {
     const res = paginatedResponse([], { page: 1, pageSize: 25, total: 0 });
-    const body = await res.json();
+    const body = (await res.json()) as PaginatedBody;
     expect(body.pagination.totalPages).toBe(0);
   });
 });

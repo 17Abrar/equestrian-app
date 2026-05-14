@@ -1,4 +1,4 @@
-import { eq, and, isNull, ilike, asc, desc, sql, SQL, inArray } from 'drizzle-orm';
+import { eq, and, isNull, ilike, asc, desc, sql, type SQL, inArray } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { horses } from '../schema/horses';
 import { clubs } from '../schema/clubs';

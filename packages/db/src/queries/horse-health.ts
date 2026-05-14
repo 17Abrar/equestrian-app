@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gte, isNull, lte, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, rawDb } from '../index';
 import {
   horseHealthRecords,

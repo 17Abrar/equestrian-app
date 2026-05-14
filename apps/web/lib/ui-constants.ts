@@ -68,7 +68,10 @@ export const LESSON_TYPE_COLORS: Record<string, string> = {
  * match the cultural week-start visible in most local calendars (Sunday
  * column drawn first), and document the override path inline.
  */
-export const WEEK_STARTS_ON: 0 | 1 | 6 = 0;
+// `as 0 | 1 | 6` widens the literal so the WEEKDAY_LABELS_* ternaries
+// below aren't flagged as unreachable comparisons against the
+// not-currently-selected branches.
+export const WEEK_STARTS_ON = 0 as 0 | 1 | 6;
 
 /**
  * Short two-letter weekday labels in WEEK_STARTS_ON order. Index 0 in this

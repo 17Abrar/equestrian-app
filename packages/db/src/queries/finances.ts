@@ -1,9 +1,8 @@
-import { eq, and, asc, desc, ne, sql, SQL } from 'drizzle-orm';
+import { eq, and, desc, ne, sql, type SQL } from 'drizzle-orm';
 import { calculateCouponDiscount, formatMoney } from '@equestrian/shared/utils';
 import { db } from '../index';
 import { invoices } from '../schema/finances';
 import { expenses } from '../schema/finances';
-import { payments } from '../schema/finances';
 import { bookings } from '../schema/bookings';
 import { liveryInvoices } from '../schema/livery-invoices';
 import { coupons, couponUsages } from '../schema/packages';

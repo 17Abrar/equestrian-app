@@ -6,7 +6,6 @@ import {
   date,
   numeric,
   integer,
-  boolean,
   timestamp,
   index,
   unique,

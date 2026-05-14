@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { type CreateArenaInput, type CreateLessonTypeInput } from '@equestrian/shared/schemas';
 import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
+import { SUPPORTED_CURRENCIES } from '@equestrian/shared/constants';
 import { formatMoney } from '@equestrian/shared/utils';
 import { useUpdateSettings } from '@/hooks/use-settings';
 import {
@@ -144,9 +145,13 @@ function StepIndicator({ currentStep }: StepIndicatorProps) {
 
 // ─── Step 1: Welcome + Club Basics ───────────────────────────────────
 
+// Audit 2026-05-13 (P2): align currency with the canonical
+// SUPPORTED_CURRENCIES tuple — `z.string().length(3)` had drifted from
+// the API's stricter enum, breaking the type of the updateSettings
+// mutation payload (`UpdateSettingsInput` now expects the enum literal).
 const clubBasicsSchema = z.object({
   timezone: z.string().min(1),
-  currency: z.string().length(3),
+  currency: z.enum(SUPPORTED_CURRENCIES),
 });
 
 type ClubBasicsInput = z.input<typeof clubBasicsSchema>;

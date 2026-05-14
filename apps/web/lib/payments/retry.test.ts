@@ -33,8 +33,8 @@ describe('withProviderRetry', () => {
   it('retries retryable PaymentProviderError up to maxAttempts', async () => {
     const fn = vi
       .fn<() => Promise<string>>()
-      .mockRejectedValueOnce(new PaymentProviderError('RATE_LIMITED', 'slow down', true))
-      .mockRejectedValueOnce(new PaymentProviderError('NETWORK', 'transient', true))
+      .mockRejectedValueOnce(new PaymentProviderError('RATE_LIMITED', 'slow down', { retryable: true }))
+      .mockRejectedValueOnce(new PaymentProviderError('NETWORK', 'transient', { retryable: true }))
       .mockResolvedValueOnce('finally');
 
     const promise = withProviderRetry(fn, {
@@ -49,7 +49,7 @@ describe('withProviderRetry', () => {
   it('does NOT retry non-retryable PaymentProviderError', async () => {
     const fn = vi
       .fn<() => Promise<unknown>>()
-      .mockRejectedValue(new PaymentProviderError('AUTH_FAILED', 'bad key', false));
+      .mockRejectedValue(new PaymentProviderError('AUTH_FAILED', 'bad key', { retryable: false }));
 
     await expect(withProviderRetry(fn, { label: 'test' })).rejects.toMatchObject({
       code: 'AUTH_FAILED',
@@ -64,21 +64,25 @@ describe('withProviderRetry', () => {
   });
 
   it('re-throws after exhausting maxAttempts', async () => {
-    const err = new PaymentProviderError('SERVER_ERROR', 'still down', true);
+    const err = new PaymentProviderError('SERVER_ERROR', 'still down', { retryable: true });
     const fn = vi.fn<() => Promise<unknown>>().mockRejectedValue(err);
 
     const promise = withProviderRetry(fn, {
       label: 'test',
       backoffMs: [10, 20],
     });
+    // Attach the rejection catcher BEFORE advancing timers so Vitest sees
+    // the rejection as handled. Otherwise the inner retry's pending
+    // rejection leaks as an unhandled-rejection error.
+    const assertion = expect(promise).rejects.toBe(err);
     await vi.advanceTimersByTimeAsync(100);
-    await expect(promise).rejects.toBe(err);
+    await assertion;
     // backoffs.length + 1 = 3 attempts total
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
   it('honors explicit maxAttempts even when smaller than backoffMs.length + 1', async () => {
-    const err = new PaymentProviderError('SERVER_ERROR', 'still down', true);
+    const err = new PaymentProviderError('SERVER_ERROR', 'still down', { retryable: true });
     const fn = vi.fn<() => Promise<unknown>>().mockRejectedValue(err);
 
     const promise = withProviderRetry(fn, {
@@ -86,8 +90,9 @@ describe('withProviderRetry', () => {
       backoffMs: [10, 20, 40, 80],
       maxAttempts: 2,
     });
+    const assertion = expect(promise).rejects.toBe(err);
     await vi.advanceTimersByTimeAsync(100);
-    await expect(promise).rejects.toBe(err);
+    await assertion;
     expect(fn).toHaveBeenCalledTimes(2);
   });
 

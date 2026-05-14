@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, and, ilike, asc, sql, SQL } from 'drizzle-orm';
+import { eq, and, ilike, asc, sql, type SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { riderProfiles } from '../schema/rider-profiles';
 import { clubMembers } from '../schema/club-members';
