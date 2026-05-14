@@ -1,7 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { z } from 'zod';
 import { type Booking, type BookingSlot } from '@equestrian/shared/types';
 import { bookingListItemSchema } from '@equestrian/shared/schemas/responses';
 import { useApiClient } from '@/lib/api';
+
+// Audit 2026-05-13 (P1): F-69 schema validation extended to `useMe` and
+// `useBooking`. Without these, a server-side projection drift would land as
+// a silent `undefined` dereference on the home / booking-detail screens —
+// the audit specifically called out the `book.tsx:133` `memberId` deref
+// dead-end as the symptom.
+const meSchema = z
+  .object({
+    memberId: z.string().nullable(),
+    role: z.string(),
+    displayName: z.string().nullable(),
+    email: z.string().nullable(),
+  })
+  .passthrough();
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): mobile previously declared trimmed
 // `Booking` and `BookingSlot` shapes locally with `status: string` etc.
@@ -23,7 +38,7 @@ export function useMe() {
 
   return useQuery({
     queryKey: ['me'],
-    queryFn: () => api.get<MeData>('/api/v1/me'),
+    queryFn: () => api.get<MeData>('/api/v1/me', { schema: meSchema }),
   });
 }
 
@@ -36,9 +51,15 @@ export function useBookingSlots(filters: { dateFrom?: string; dateTo?: string } 
   // /api/v1/booking-slots returns `successResponse(slot[])` — non-paginated
   // (the route enforces a 90-day window cap), so plain `get<BookingSlot[]>`
   // is correct here.
+  //
+  // Audit 2026-05-13 (P1): `placeholderData: keepPreviousData` keeps the
+  // previous week's slots on screen while a forward/back swipe in the Book
+  // tab fetches the next range. Without it every swipe flashes a skeleton
+  // on cellular — distracting on the rider's most-visited screen.
   return useQuery({
     queryKey: ['bookingSlots', filters],
     queryFn: () => api.get<BookingSlot[]>(`/api/v1/booking-slots?${params.toString()}`),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -47,7 +68,10 @@ export function useBooking(bookingId: string | null) {
 
   return useQuery({
     queryKey: ['booking', bookingId],
-    queryFn: () => api.get<Booking>(`/api/v1/bookings/${bookingId}`),
+    queryFn: () =>
+      // The single-booking endpoint returns the same row shape as the list,
+      // so the list-item schema is also the canonical detail-row schema.
+      api.get<Booking>(`/api/v1/bookings/${bookingId}`, { schema: bookingListItemSchema }),
     enabled: !!bookingId,
   });
 }

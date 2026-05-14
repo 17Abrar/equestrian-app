@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -52,30 +52,46 @@ export default function BookingDetailScreen() {
   // Mirror web's polling pattern (apps/web/.../[bookingId]/page.tsx:50-74) —
   // start time stored in a ref so the 2-minute ceiling holds across renders;
   // depend on `query.refetch` (stable identity), not `query` itself.
+  //
+  // Audit 2026-05-13 (P1): when the 2-minute ceiling fires the ref was never
+  // reset to null, so any subsequent re-render that re-ran the effect saw a
+  // non-null ref + elapsed > 120s and instantly cleared the new interval —
+  // polling was permanently disabled for that mount. Reset to null on
+  // ceiling, and surface a `manualPollTrigger` state that the rider can flip
+  // by tapping "Check again" once the auto-poll gives up. A manual flip
+  // increments a token consumed by the effect so we resume polling.
   const shouldPoll =
     !!booking &&
     booking.paymentStatus === 'pending' &&
     !OFFLINE_METHODS.has(booking.paymentMethod ?? '');
   const pollStartedAtRef = useRef<number | null>(null);
+  const [manualPollToken, setManualPollToken] = useState(0);
+  const [pollCeilingReached, setPollCeilingReached] = useState(false);
   const refetch = query.refetch;
   useEffect(() => {
     if (!shouldPoll) {
       pollStartedAtRef.current = null;
+      setPollCeilingReached(false);
       return;
     }
     if (pollStartedAtRef.current == null) {
       pollStartedAtRef.current = Date.now();
+      setPollCeilingReached(false);
     }
     const interval = setInterval(() => {
       const startedAt = pollStartedAtRef.current;
       if (startedAt != null && Date.now() - startedAt > 120_000) {
         clearInterval(interval);
+        pollStartedAtRef.current = null;
+        setPollCeilingReached(true);
         return;
       }
       void refetch();
     }, 3000);
     return () => clearInterval(interval);
-  }, [shouldPoll, refetch]);
+    // `manualPollToken` is included so the rider's "Check again" tap
+    // re-arms the effect from a clean state.
+  }, [shouldPoll, refetch, manualPollToken]);
 
   const { pay, isPaying } = usePayBooking();
   const cancelBooking = useCancelBooking();
@@ -177,6 +193,26 @@ export default function BookingDetailScreen() {
             isPolling={shouldPoll}
             returningFromPayment={returningFromPayment}
           />
+          {/*
+            Audit 2026-05-13 (P1): once the 2-min auto-poll gives up, the
+            rider needs a way to re-trigger the status check manually. Show
+            a "Check again" button only when the ceiling has been hit AND
+            the payment is still pending.
+          */}
+          {pollCeilingReached && shouldPoll && (
+            <Pressable
+              onPress={() => {
+                setManualPollToken((n) => n + 1);
+                void refetch();
+              }}
+              accessibilityRole="button"
+              className="mt-3 items-center rounded-xl border border-gray-200 py-3"
+            >
+              <Text className="text-sm font-medium text-gray-700">
+                Still waiting for payment? Check again
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         <View className="mx-6 mt-4 gap-3 rounded-2xl border border-gray-200 bg-white p-5">
