@@ -2,6 +2,19 @@
  * Audit F-4 (2026-05-08 r6 PR Alpha-2): consolidated club-settings DTO.
  * Source-of-truth row: the `clubs` row + `club_settings` join in
  * `packages/db/src/queries/clubs.ts` (`getClubSettings`).
+ *
+ * Audit pass-10 F-10 (2026-05-14): `NotificationPreferences` deliberately
+ * uses snake_case keys (the rest of this DTO is camelCase). The keys ARE
+ * the persisted shape of the `clubs.notification_preferences` jsonb
+ * column — see `packages/db/src/schema/clubs.ts:105-125`, where the
+ * default row is baked in as `{ booking_confirmation: { email: true },
+ * … }`. Email-trigger reads (`prefs.booking_confirmation?.email`) and
+ * the seed/migration history all match this shape. Renaming to
+ * camelCase would require a data migration to rewrite every existing
+ * row plus coordinated updates to schema defaults and every reader; for
+ * a cosmetic naming gain the cost/benefit doesn't justify the churn.
+ * Future contributors: leave the snake_case as-is and consume the keys
+ * exactly as written.
  */
 
 export interface NotificationPreferences {

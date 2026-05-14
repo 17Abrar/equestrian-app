@@ -40,13 +40,37 @@ function defaultMutationErrorReporter(mutationKey: string) {
   return (err: unknown) => reportMutationError(mutationKey, err);
 }
 
+// Audit pass-10 F-1 / F-5 (2026-05-14): apply the list/detail discriminator
+// pattern (established for `bookings` in pass-9) to arenas + lesson_types +
+// booking_slots so a future detail hook doesn't collide with the list key
+// and so list-only invalidations don't evict cached detail rows.
+const ARENAS_KEY = ['arenas'] as const;
+const arenasListKey = () => [...ARENAS_KEY, 'list'] as const;
+
+const LESSON_TYPES_KEY = ['lessonTypes'] as const;
+const lessonTypesListKey = () => [...LESSON_TYPES_KEY, 'list'] as const;
+
+// Booking-slot filters are normalized into a flat record so unknown
+// throwaway keys on the caller's filter object don't blow up the query
+// cache.
+interface NormalizedBookingSlotFilters {
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  lessonTypeId?: string;
+  coachMemberId?: string;
+}
+const BOOKING_SLOTS_KEY = ['bookingSlots'] as const;
+const bookingSlotsListKey = (filters: NormalizedBookingSlotFilters) =>
+  [...BOOKING_SLOTS_KEY, 'list', filters] as const;
+
 // ─── Arenas ───────────────────────────────────────────────────────────
 
 // Audit F-6 / F-7 (2026-05-07 r4): see use-staff.ts header — picker pulls
 // the full first page rather than the default-25 truncation.
 export function useArenas() {
   return useQuery({
-    queryKey: ['arenas'],
+    queryKey: arenasListKey(),
     queryFn: () => fetchJson<PaginatedResponse<Arena>>(`/api/v1/arenas?pageSize=${MAX_PAGE_SIZE}`),
   });
 }
@@ -62,7 +86,7 @@ export function useCreateArena() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: [...ARENAS_KEY, 'list'] });
     },
   });
 }
@@ -78,7 +102,7 @@ export function useUpdateArena(arenaId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: [...ARENAS_KEY, 'list'] });
     },
   });
 }
@@ -92,7 +116,7 @@ export function useDeleteArena() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['arenas'] });
+      void queryClient.invalidateQueries({ queryKey: [...ARENAS_KEY, 'list'] });
     },
   });
 }
@@ -101,7 +125,7 @@ export function useDeleteArena() {
 
 export function useLessonTypes() {
   return useQuery({
-    queryKey: ['lessonTypes'],
+    queryKey: lessonTypesListKey(),
     queryFn: () =>
       fetchJson<PaginatedResponse<LessonType>>(`/api/v1/lesson-types?pageSize=${MAX_PAGE_SIZE}`),
   });
@@ -118,7 +142,7 @@ export function useCreateLessonType() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
+      void queryClient.invalidateQueries({ queryKey: [...LESSON_TYPES_KEY, 'list'] });
     },
   });
 }
@@ -134,7 +158,7 @@ export function useUpdateLessonType(lessonTypeId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
+      void queryClient.invalidateQueries({ queryKey: [...LESSON_TYPES_KEY, 'list'] });
     },
   });
 }
@@ -148,7 +172,7 @@ export function useDeleteLessonType() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['lessonTypes'] });
+      void queryClient.invalidateQueries({ queryKey: [...LESSON_TYPES_KEY, 'list'] });
     },
   });
 }
@@ -158,15 +182,7 @@ export function useDeleteLessonType() {
 // Audit F-54 (2026-05-07 r4): the route schema accepts `coachMemberId`
 // but the hook's filter type omitted it, so the per-coach calendar view
 // can't filter slots. Expose it through.
-export function useBookingSlots(
-  filters: {
-    date?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    lessonTypeId?: string;
-    coachMemberId?: string;
-  } = {},
-) {
+export function useBookingSlots(filters: NormalizedBookingSlotFilters = {}) {
   const params = new URLSearchParams();
   if (filters.date) params.set('date', filters.date);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
@@ -174,8 +190,19 @@ export function useBookingSlots(
   if (filters.lessonTypeId) params.set('lessonTypeId', filters.lessonTypeId);
   if (filters.coachMemberId) params.set('coachMemberId', filters.coachMemberId);
 
+  // Audit pass-10 F-5: pick out only the URL-bound fields so the cache
+  // key can't be inflated by an unrelated property on the caller's
+  // filter object.
+  const normalized: NormalizedBookingSlotFilters = {
+    date: filters.date,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    lessonTypeId: filters.lessonTypeId,
+    coachMemberId: filters.coachMemberId,
+  };
+
   return useQuery({
-    queryKey: ['bookingSlots', filters],
+    queryKey: bookingSlotsListKey(normalized),
     queryFn: () =>
       fetchJson<ApiSuccessResponse<BookingSlot[]>>(`/api/v1/booking-slots?${params.toString()}`),
   });
@@ -192,7 +219,7 @@ export function useCreateBookingSlot() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
     },
   });
 }
@@ -215,7 +242,7 @@ export function useUpdateBookingSlot(slotId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
     },
   });
 }
@@ -231,7 +258,7 @@ export function useCancelBookingSlot() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
     },
     onError: defaultMutationErrorReporter('booking_slot.cancel'),
   });
@@ -248,7 +275,7 @@ export function useCreateRecurringSlots() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
     },
   });
 }
@@ -304,7 +331,7 @@ export function useCreateBooking() {
       // Invalidate only the list slice — no in-cache detail row exists yet
       // for a brand-new booking.
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
       // Audit 2026-05-13 (P2): keep the dashboard tiles + finance
       // overview in sync after every booking mutation — both compute
       // booking-derived KPIs and were stale for up to 30s otherwise.
@@ -315,8 +342,12 @@ export function useCreateBooking() {
 }
 
 export function useCancelPreview(bookingId: string | null) {
+  // Audit pass-10 F-8: the `enabled` guard suppresses the network call when
+  // bookingId is null, but TanStack Query still uses the key to cache the
+  // (suspended) query. Replace `null` with a sentinel so the cache doesn't
+  // accumulate a `['cancelPreview', null]` entry per dialog mount.
   return useQuery({
-    queryKey: ['cancelPreview', bookingId],
+    queryKey: ['cancelPreview', bookingId ?? 'pending'],
     queryFn: () =>
       fetchJson<ApiSuccessResponse<CancelPreview>>(`/api/v1/bookings/${bookingId}/cancel-preview`),
     enabled: !!bookingId,
@@ -336,7 +367,7 @@ export function useCancelBooking() {
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: bookingDetailKey(vars.bookingId) });
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
       // Audit 2026-05-13 (P2): see useCreateBooking — keep dashboard /
       // finance overview fresh after booking-state mutations.
@@ -358,7 +389,7 @@ export function useMarkNoShow() {
     onSuccess: (_data, bookingId) => {
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: bookingDetailKey(bookingId) });
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
@@ -377,7 +408,7 @@ export function useMarkComplete() {
     onSuccess: (_data, bookingId) => {
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: bookingDetailKey(bookingId) });
-      void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: [...BOOKING_SLOTS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },

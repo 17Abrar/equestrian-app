@@ -15,6 +15,31 @@ import { fetchJson } from '@/lib/fetch-json';
 // project `UserRole` enum union rather than `string`.
 export type { ClubMember };
 
+// Audit pass-10 F-9 (2026-05-14): apply the list-discriminator pattern (and
+// pick out only URL-bound fields) so future detail hooks don't collide with
+// the list key and so unknown keys on the filter literal can't inflate the
+// query cache. The dropdown-by-role queries below stay as
+// `['members', role]` — they have no filter object and have a different
+// invalidation lifecycle than the paginated `/staff` + `/owners` lists.
+interface NormalizedStaffFilters {
+  search?: string;
+  role?: string;
+  page?: number;
+  pageSize?: number;
+}
+const STAFF_KEY = ['staff'] as const;
+const staffListKey = (filters: NormalizedStaffFilters) =>
+  [...STAFF_KEY, 'list', filters] as const;
+
+interface NormalizedOwnersFilters {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+const OWNERS_KEY = ['owners'] as const;
+const ownersListKey = (filters: NormalizedOwnersFilters) =>
+  [...OWNERS_KEY, 'list', filters] as const;
+
 // ─── Member Dropdowns ─────────────────────────────────────────────────
 //
 // Audit F-6 / F-7 (2026-05-07 r4): the routes return `paginatedResponse(...)`,
@@ -58,17 +83,22 @@ export function useCoachMembers() {
 
 // ─── Staff CRUD ───────────────────────────────────────────────────────
 
-export function useStaff(
-  filters: { search?: string; role?: string; page?: number; pageSize?: number } = {},
-) {
+export function useStaff(filters: NormalizedStaffFilters = {}) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
   if (filters.role) params.set('role', filters.role);
   if (filters.page) params.set('page', String(filters.page));
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
+  const normalized: NormalizedStaffFilters = {
+    search: filters.search,
+    role: filters.role,
+    page: filters.page,
+    pageSize: filters.pageSize,
+  };
+
   return useQuery({
-    queryKey: ['staff', filters],
+    queryKey: staffListKey(normalized),
     queryFn: () => fetchJson<PaginatedResponse<ClubMember>>(`/api/v1/staff?${params.toString()}`),
   });
 }
@@ -84,7 +114,7 @@ export function useCreateStaff() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['staff'] });
+      void queryClient.invalidateQueries({ queryKey: [...STAFF_KEY, 'list'] });
     },
   });
 }
@@ -100,7 +130,7 @@ export function useUpdateStaff(memberId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['staff'] });
+      void queryClient.invalidateQueries({ queryKey: [...STAFF_KEY, 'list'] });
     },
   });
 }
@@ -114,21 +144,27 @@ export function useDeactivateStaff() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['staff'] });
+      void queryClient.invalidateQueries({ queryKey: [...STAFF_KEY, 'list'] });
     },
   });
 }
 
 // ─── Owners CRUD ──────────────────────────────────────────────────────
 
-export function useOwners(filters: { search?: string; page?: number; pageSize?: number } = {}) {
+export function useOwners(filters: NormalizedOwnersFilters = {}) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
   if (filters.page) params.set('page', String(filters.page));
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
+  const normalized: NormalizedOwnersFilters = {
+    search: filters.search,
+    page: filters.page,
+    pageSize: filters.pageSize,
+  };
+
   return useQuery({
-    queryKey: ['owners', filters],
+    queryKey: ownersListKey(normalized),
     queryFn: () => fetchJson<PaginatedResponse<ClubMember>>(`/api/v1/owners?${params.toString()}`),
   });
 }
@@ -144,7 +180,7 @@ export function useCreateOwner() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['owners'] });
+      void queryClient.invalidateQueries({ queryKey: [...OWNERS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['members', 'horse_owner'] });
     },
   });
@@ -159,7 +195,7 @@ export function useDeactivateOwner() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['owners'] });
+      void queryClient.invalidateQueries({ queryKey: [...OWNERS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['members', 'horse_owner'] });
     },
   });

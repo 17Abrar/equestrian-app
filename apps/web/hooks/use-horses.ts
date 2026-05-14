@@ -21,6 +21,17 @@ import { fetchJson } from '@/lib/fetch-json';
 // `import { type Horse } from '@/hooks/use-horses'` consumers keep working.
 export type { Horse, HorseListItem };
 
+// Audit pass-10 F-9 (2026-05-14): pick the URL-bound fields off the caller's
+// filter object so an extra throwaway key can't fragment the query cache.
+interface NormalizedHorseFilters {
+  search?: string;
+  status?: HorseFiltersInput['status'];
+  skillLevel?: HorseFiltersInput['skillLevel'];
+  ownershipStatus?: HorseFiltersInput['ownershipStatus'];
+  page?: number;
+  pageSize?: number;
+}
+
 export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
@@ -30,6 +41,15 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
   if (filters.page) params.set('page', String(filters.page));
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
+  const normalized: NormalizedHorseFilters = {
+    search: filters.search,
+    status: filters.status,
+    skillLevel: filters.skillLevel,
+    ownershipStatus: filters.ownershipStatus,
+    page: filters.page,
+    pageSize: filters.pageSize,
+  };
+
   return useQuery({
     // Audit F-70 (2026-05-08 r6): split list vs detail query keys with a
     // discriminator segment so a list invalidation doesn't evict every
@@ -38,7 +58,7 @@ export function useHorses(filters: Partial<HorseFiltersInput> = {}) {
     // membership) or `['horses', 'detail', id]` (mutations that only
     // affect a single horse). Mass invalidations that need both can hit
     // `['horses']` to evict everything.
-    queryKey: ['horses', 'list', filters],
+    queryKey: ['horses', 'list', normalized],
     queryFn: () =>
       fetchJson<PaginatedResponse<HorseListItem>>(`/api/v1/horses?${params.toString()}`),
     staleTime: STALE_TIME_FREQUENT,

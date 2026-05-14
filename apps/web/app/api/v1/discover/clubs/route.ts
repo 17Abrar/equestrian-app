@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { paginationSchema } from '@equestrian/shared/schemas';
 import { listPublicClubs } from '@equestrian/db/queries';
 import { errorResponse, paginatedResponse } from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -12,12 +13,17 @@ import { checkRateLimit } from '@/lib/rate-limit';
 // Audit F-22/F-23 (2026-05-06): `.strict()` rejects unknown keys; `.max(200)`
 // caps user input on the unauthenticated discovery endpoint. The route is
 // rate-limited (20 req/min per IP), but capped lengths reduce the amplifier.
+//
+// Audit pass-10 F-7 (2026-05-14): reuse the shared `paginationSchema`
+// (capped at MAX_PAGE_SIZE = 50, default DEFAULT_PAGE_SIZE = 25) instead
+// of a local `.max(100).default(20)`. The shared cap exists to keep
+// join-heavy queries inside the Workers subrequest budget — letting the
+// public discover endpoint exceed it was a silent divergence.
 const queryShape = z
   .object({
     search: z.string().max(200).optional(),
     city: z.string().max(200).optional(),
-    page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+    ...paginationSchema.shape,
   })
   .strict();
 
