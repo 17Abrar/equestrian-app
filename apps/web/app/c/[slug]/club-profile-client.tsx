@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
@@ -37,6 +37,8 @@ interface PublicClub {
 export function ClubProfileClient({ club }: { club: PublicClub }) {
   const { isSignedIn, isLoaded } = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const primary = club.brandPrimaryColor ?? '#6366f1';
 
   const [joining, setJoining] = useState(false);
@@ -76,6 +78,30 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
       setJoining(false);
     }
   }
+
+  // Audit 2026-05-13 (P1): post-signup auto-join. `openJoinFlow` redirects
+  // unauthenticated visitors through `/sign-up?redirect_url=/c/[slug]?join=1`
+  // so they land back here after creating an account. Previously the `?join=1`
+  // flag was set but never read — the rider had to manually click Join again.
+  // Now: once Clerk finishes loading and confirms the user is signed in, fire
+  // submitJoin() automatically and strip the query param so a page refresh
+  // doesn't re-trigger.
+  const hasAutoJoinedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoJoinedRef.current) return;
+    if (!isLoaded || !isSignedIn) return;
+    if (searchParams.get('join') !== '1') return;
+    if (club.joinPolicy !== 'open') return;
+    if (joining) return;
+    hasAutoJoinedRef.current = true;
+    // Clear ?join=1 first so a refresh after the user lands on /rider doesn't
+    // re-fire on the back button. Use replace so this doesn't add to history.
+    router.replace(pathname);
+    void submitJoin();
+    // submitJoin is stable for the lifetime of this component; intentionally
+    // omitted from deps to avoid re-firing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn, searchParams, club.joinPolicy, joining, pathname]);
 
   const joinCta = club.joinPolicy === 'open' ? 'Join stable' : 'Invite only';
 

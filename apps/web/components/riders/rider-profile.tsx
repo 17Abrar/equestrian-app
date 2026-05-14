@@ -98,18 +98,27 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
 
   const form = useForm<UpdateRiderProfileFormValues, unknown, UpdateRiderProfileInput>({
     resolver: zodResolver(updateRiderProfileSchema),
+    // Audit 2026-05-13 (P1): `keepDirtyValues: true` preserves unsaved edits
+    // when the parent query refetches (focus-revalidation, mutation
+    // invalidation). Without this option, every cache update for the rider
+    // row silently overwrites whatever the user was typing — the audit
+    // surfaced this as a data-loss bug for clinic staff editing medical
+    // notes while a background refetch landed. `rider.skillLevel` is
+    // already typed as `SkillLevel` in the response schema — the prior
+    // `as` cast was a no-op and is removed.
     values: rider
       ? {
           dateOfBirth: rider.dateOfBirth ?? undefined,
           weightKg: rider.weightKg ? Number(rider.weightKg) : undefined,
           heightCm: rider.heightCm ? Number(rider.heightCm) : undefined,
-          skillLevel: rider.skillLevel as 'beginner' | 'intermediate' | 'advanced',
+          skillLevel: rider.skillLevel,
           emergencyContactName: rider.emergencyContactName ?? undefined,
           emergencyContactPhone: rider.emergencyContactPhone ?? undefined,
           emergencyContactRelation: rider.emergencyContactRelation ?? undefined,
           medicalNotes: rider.medicalNotes ?? undefined,
         }
       : undefined,
+    resetOptions: { keepDirtyValues: true },
   });
 
   if (isLoading) return <ProfileSkeleton />;

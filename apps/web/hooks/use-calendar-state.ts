@@ -12,6 +12,7 @@ import {
   startOfDay,
   endOfDay,
 } from 'date-fns';
+import { WEEK_STARTS_ON } from '@/lib/ui-constants';
 
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda';
 
@@ -34,7 +35,7 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
           to: format(endOfDay(currentDate), 'yyyy-MM-dd'),
         };
       case 'week': {
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+        const weekStart = startOfWeek(currentDate, { weekStartsOn: WEEK_STARTS_ON });
         const weekEnd = addDays(weekStart, 6);
         return {
           from: format(weekStart, 'yyyy-MM-dd'),
@@ -44,9 +45,9 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
       case 'month': {
         // Fetch a full 6-week grid (to cover partial weeks at start/end)
         const monthStart = startOfMonth(currentDate);
-        const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+        const gridStart = startOfWeek(monthStart, { weekStartsOn: WEEK_STARTS_ON });
         const monthEnd = endOfMonth(currentDate);
-        const gridEnd = addDays(startOfWeek(monthEnd, { weekStartsOn: 0 }), 6);
+        const gridEnd = addDays(startOfWeek(monthEnd, { weekStartsOn: WEEK_STARTS_ON }), 6);
         return {
           from: format(gridStart, 'yyyy-MM-dd'),
           to: format(gridEnd, 'yyyy-MM-dd'),
@@ -63,7 +64,7 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
   }, [view, currentDate, agendaLookaheadDays]);
 
   const weekDates = useMemo(() => {
-    const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: WEEK_STARTS_ON });
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [currentDate]);
 
@@ -110,7 +111,7 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
       case 'day':
         return format(currentDate, 'EEEE, MMM d, yyyy');
       case 'week': {
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+        const weekStart = startOfWeek(currentDate, { weekStartsOn: WEEK_STARTS_ON });
         const weekEnd = addDays(weekStart, 6);
         return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
       }

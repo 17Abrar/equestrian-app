@@ -16,6 +16,7 @@ import {
   type Invoice,
   type Coupon,
 } from '@equestrian/shared/types';
+import { STALE_TIME_MEDIUM } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): finance DTOs consolidated into
@@ -26,6 +27,12 @@ export function useFinanceOverview() {
   return useQuery({
     queryKey: ['finances', 'overview'],
     queryFn: () => fetchJson<ApiSuccessResponse<FinanceOverview>>('/api/v1/finances/overview'),
+    // Audit 2026-05-13 (P1): the overview aggregates large rollups (revenue,
+    // outstanding invoices, etc.). 30s stale was aggressive enough to refetch
+    // on every nav between dashboard sub-pages. 1-minute medium stale strikes
+    // the balance between freshness post-mutation and avoiding thrash; the
+    // booking/refund/payment mutations invalidate this key explicitly.
+    staleTime: STALE_TIME_MEDIUM,
   });
 }
 

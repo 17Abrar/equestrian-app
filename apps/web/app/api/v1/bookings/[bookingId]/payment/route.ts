@@ -44,9 +44,56 @@ const bodySchema = z
      * `default` which lets each provider choose their native flow.
      */
     mode: z.enum(['default', 'hosted']).default('default'),
+    /**
+     * Optional client-provided callback URL the provider should redirect the
+     * user back to once payment completes. Mobile passes a `cavaliq://`
+     * deep link so iOS `ASWebAuthenticationSession` / Android Chrome Custom
+     * Tabs can intercept the redirect and close the in-app browser. Web
+     * omits this and falls back to the server-built `/rider/bookings/{id}`
+     * return URL. Validated against an allow-list of origins/schemes below
+     * to prevent the field from being repurposed as an open-redirect.
+     */
+    returnUrl: z.string().min(1).max(500).optional(),
   })
   .strict()
   .partial();
+
+/**
+ * Validate a client-provided returnUrl against the allow-list. Returns the
+ * normalized URL string if accepted, or null if the URL is malformed or
+ * outside the allow-list (in which case the caller falls back to the default
+ * web return URL).
+ *
+ * Allow-list:
+ *   - Same-origin web URLs under `NEXT_PUBLIC_APP_URL` (defense-in-depth — web
+ *     clients can equally well let the server build the URL)
+ *   - `cavaliq://` deep links (mobile Expo scheme)
+ */
+function validateClientReturnUrl(raw: string | undefined, appUrl: string): string | null {
+  if (!raw) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  // Cavaliq mobile deep link
+  if (parsed.protocol === 'cavaliq:') {
+    return parsed.toString();
+  }
+  // Same-origin web URL
+  if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+    try {
+      const appOrigin = new URL(appUrl).origin;
+      if (parsed.origin === appOrigin) {
+        return parsed.toString();
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 interface RouteParams {
   params: Promise<{ bookingId: string }>;
@@ -74,7 +121,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       validateUuidParam('bookingId', bookingId);
 
       // Body is optional — default mode when absent.
-      const { mode = 'default' } = await parseOptionalBody(request, bodySchema);
+      const { mode = 'default', returnUrl: clientReturnUrl } = await parseOptionalBody(
+        request,
+        bodySchema,
+      );
 
       // 1. Load booking, verify it belongs to the caller or they have staff rights.
       const booking = await getBookingById(ctx.clubId, bookingId);
@@ -198,10 +248,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           503,
         );
       }
-      // `?from=payment` tells the return-URL page that this is a post-redirect
-      // landing so it can show "confirming payment…" while the webhook lands.
-      const returnUrlPath = `/rider/bookings/${bookingId}?from=payment`;
-      const returnUrl = new URL(returnUrlPath, appUrl).toString();
+      // Resolve the return URL the provider should send the user back to.
+      // Mobile clients (in-app browser) pass a `cavaliq://` deep link so the
+      // OS can intercept the redirect and close the WebBrowser session. Web
+      // clients omit this and we build the standard /rider/bookings/{id}
+      // path. Client-supplied URLs are validated against an allow-list
+      // (validateClientReturnUrl) to prevent open-redirect via this field.
+      const defaultWebReturnPath = `/rider/bookings/${bookingId}?from=payment`;
+      const defaultWebReturnUrl = new URL(defaultWebReturnPath, appUrl).toString();
+      const validatedClientReturnUrl = validateClientReturnUrl(clientReturnUrl, appUrl);
+      if (clientReturnUrl && !validatedClientReturnUrl) {
+        logger.warn('booking_payment_return_url_rejected', {
+          requestId: ctx.requestId,
+          bookingId,
+          clubId: ctx.clubId,
+          // Log only the scheme/origin shape, not the full URL (avoids leaking
+          // any querystring the caller may have appended).
+          provided: (() => {
+            try {
+              const u = new URL(clientReturnUrl);
+              return `${u.protocol}//${u.host}`;
+            } catch {
+              return 'unparseable';
+            }
+          })(),
+        });
+      }
+      const returnUrl = validatedClientReturnUrl ?? defaultWebReturnUrl;
 
       // booking.amount is the NET (post-coupon) amount we charge — coupon
       // discounts are baked into it at booking-create time. We do NOT take

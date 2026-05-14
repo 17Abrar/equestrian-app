@@ -69,8 +69,17 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
   const tintBg = `${accentColor}14`;
 
   if (compact) {
+    // Audit 2026-05-13 (P1): compact slot tiles render inside the parent day-
+    // cell button (see `month-view.tsx`); they are intentionally NOT focusable
+    // (they would create double tabstops since the day-cell is the
+    // interactive surface). The previous markup had no accessible name —
+    // screen readers announced an empty group. Adding `role="img"` with an
+    // `aria-label` describing time + lesson type + capacity gives assistive
+    // tech a readable summary while keeping keyboard semantics unchanged.
     return (
       <div
+        role="img"
+        aria-label={`${slot.lessonTypeName} at ${slot.startTime.slice(0, 5)}, ${capacity.label}`}
         className={cn(
           'flex items-center gap-1 truncate rounded border-l-2 bg-card px-1.5 py-0.5 text-[10px] font-medium text-foreground',
           capacity.isFull && 'opacity-60',
@@ -79,6 +88,7 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
         title={`${slot.lessonTypeName} ${slot.startTime.slice(0, 5)} — ${capacity.label}`}
       >
         <span
+          aria-hidden="true"
           className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${CAPACITY_DOT_CLASSES[capacity.color]}`}
         />
         {slot.lessonTypeName}
@@ -112,15 +122,21 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
           </p>
           <div className="mt-1 flex items-center justify-between text-[11px]">
             <span className="truncate text-muted-foreground">{slot.arenaName ?? 'TBD'}</span>
+            {/*
+              Audit 2026-05-13 (P1): paired dark-mode variants. The 8%-alpha
+              tinted background drops `text-amber-700` / `text-orange-700`
+              contrast below 4.5:1 in dark mode. The brighter `*-300` shades
+              clear AA on a tinted dark card.
+            */}
             <span
               className={cn(
                 'font-medium',
                 capacity.isFull
                   ? 'text-destructive'
                   : capacity.color === 'orange'
-                    ? 'text-orange-700'
+                    ? 'text-orange-700 dark:text-orange-300'
                     : capacity.color === 'yellow'
-                      ? 'text-amber-700'
+                      ? 'text-amber-700 dark:text-amber-300'
                       : 'text-muted-foreground',
               )}
             >

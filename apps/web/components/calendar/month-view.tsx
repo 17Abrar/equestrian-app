@@ -6,8 +6,11 @@ import { CalendarSlotCard } from './calendar-slot-card';
 import { type BookingSlot } from '@/hooks/use-bookings';
 import { type CalendarCompetition } from '@/hooks/use-competitions';
 import { Card, CardContent } from '@/components/ui/card';
+import { WEEK_STARTS_ON, WEEKDAY_LABELS_SHORT } from '@/lib/ui-constants';
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Audit 2026-05-13 (P1): unified week-start with the bookings day-strip via
+// the shared `WEEK_STARTS_ON` constant.
+const WEEKDAYS = WEEKDAY_LABELS_SHORT;
 
 interface MonthViewProps {
   currentDate: Date;
@@ -18,7 +21,7 @@ interface MonthViewProps {
 
 export function MonthView({ currentDate, slots, competitions, onDayClick }: MonthViewProps) {
   const monthStart = startOfMonth(currentDate);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: WEEK_STARTS_ON });
 
   const today = new Date();
 
