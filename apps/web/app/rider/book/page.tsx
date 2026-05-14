@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -47,6 +47,7 @@ import {
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { BookingDayStrip } from '@/components/bookings/booking-day-strip';
+import { PayBookingDialog } from '@/components/payments/pay-booking-dialog';
 import { cn } from '@/lib/utils';
 import { fetchJson } from '@/lib/fetch-json';
 
@@ -231,6 +232,17 @@ export default function RiderBookPage() {
   // A rider can book themselves once AND bring guests; each guest identified
   // uniquely by email per slot (DB partial unique index enforces it).
   const [bookingForGuest, setBookingForGuest] = useState(false);
+
+  // Payment dialog state — opened immediately after the booking is created,
+  // before any navigation. The dialog calls POST /bookings/{id}/payment to
+  // initiate the inline Stripe Elements form OR the redirect URL for
+  // N-Genius/Ziina. `paidRef` records whether `onPaid` fired before the
+  // dialog closed, so we can route to the booking detail page (paid) vs
+  // the rider home (cancelled) on close.
+  const [paymentBookingId, setPaymentBookingId] = useState<string | null>(null);
+  const [paymentDisplay, setPaymentDisplay] = useState<string | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
+  const paidRef = useRef(false);
   // RHF form for guest fields — see schema above (audit F-30).
   const guestForm = useForm<GuestBookingValues>({
     resolver: zodResolver(guestBookingSchema),
@@ -271,7 +283,7 @@ export default function RiderBookPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: couponCode.trim(),
-          amount: selectedSlot.lessonTypePrice,
+          slotId: selectedSlot.id,
           riderMemberId: memberId,
         }),
       });
@@ -331,14 +343,26 @@ export default function RiderBookPage() {
     };
 
     createBooking.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (response) => {
+        // fetchJson throws on non-2xx, so the success branch is the only
+        // path here — but ApiResponse is a discriminated union, so narrow
+        // before reading `data`.
+        if (!response.success) {
+          toast.error(response.error.message || 'Failed to create booking.');
+          return;
+        }
         toast.success(
           guestValues
             ? `Guest booked — ${guestValues.name} will receive lesson details.`
-            : 'Booking confirmed! Check your email for details.',
+            : 'Booking confirmed.',
         );
-        resetBookingState();
-        router.push('/rider');
+        // Snapshot the net (post-coupon) amount for the dialog header
+        // before resetting the confirm-step state.
+        const netAmount = selectedSlot.lessonTypePrice - couponDiscount;
+        paidRef.current = false;
+        setPaymentBookingId(response.data.id);
+        setPaymentDisplay(formatPrice(netAmount, selectedSlot.lessonTypeCurrency));
+        setPayOpen(true);
       },
       onError: (err) => {
         toast.error(err.message || 'Failed to create booking. Please try again.');
@@ -357,10 +381,42 @@ export default function RiderBookPage() {
     submitBooking(null);
   }
 
+  // PayBookingDialog renders alongside both step branches so it survives
+  // the post-create `resetBookingState()` that swaps the confirm UI back
+  // to the browse list. Stripe-inline success fires `onPaid` then
+  // `onOpenChange(false)`; cancel / ESC / outside-click skip `onPaid`.
+  // Redirect providers (N-Genius, Ziina) leave the page via
+  // `window.location` so this handler doesn't fire — the rider returns
+  // to /rider/bookings/{id}?from=payment via the provider's redirect.
+  const paymentDialog = paymentBookingId ? (
+    <PayBookingDialog
+      bookingId={paymentBookingId}
+      displayAmount={paymentDisplay ?? undefined}
+      open={payOpen}
+      onPaid={() => {
+        paidRef.current = true;
+      }}
+      onOpenChange={(open) => {
+        setPayOpen(open);
+        if (open) return;
+        const id = paymentBookingId;
+        const wasPaid = paidRef.current;
+        paidRef.current = false;
+        setPaymentBookingId(null);
+        setPaymentDisplay(null);
+        resetBookingState();
+        if (id) {
+          router.push(wasPaid ? `/rider/bookings/${id}` : '/rider');
+        }
+      }}
+    />
+  ) : null;
+
   // ─── Confirm Step ──────────────────────────────────────────────────
 
   if (step === 'confirm' && selectedSlot) {
     return (
+      <>
       <div className="mx-auto max-w-lg space-y-6 pb-20 sm:pb-0">
         <Button variant="ghost" size="sm" onClick={resetBookingState}>
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -565,12 +621,15 @@ export default function RiderBookPage() {
           {createBooking.isPending ? 'Booking...' : 'Confirm Booking'}
         </Button>
       </div>
+      {paymentDialog}
+      </>
     );
   }
 
   // ─── Browse Step ───────────────────────────────────────────────────
 
   return (
+    <>
     <div className="space-y-6 pb-20 sm:pb-0">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild aria-label="Back to home">
@@ -670,5 +729,7 @@ export default function RiderBookPage() {
         </div>
       )}
     </div>
+    {paymentDialog}
+    </>
   );
 }
