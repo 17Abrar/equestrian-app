@@ -575,10 +575,16 @@ export async function validateCoupon(params: ValidateCouponParams): Promise<{
     // Currency-aware formatting (audit QA-21). The previous /100 .toFixed(2)
     // was wrong by 10× for KWD/BHD (3-decimal) and 100× for JPY (0-decimal)
     // and never showed the currency code.
+    //
+    // Audit 2026-05-13 (P2): drop the `'AED'` fallback — once a coupon has a
+    // non-default currency (post-migration 0055) the AED-label is wrong.
+    // Use the coupon's own currency, then the caller-supplied currency, then
+    // AED only as a last resort.
+    const displayCurrency = params.currency ?? coupon.currency ?? 'AED';
     return {
       valid: false,
       discount: 0,
-      error: `Minimum spend of ${formatMoney(coupon.minimumAmount, params.currency ?? 'AED')} required`,
+      error: `Minimum spend of ${formatMoney(coupon.minimumAmount, displayCurrency)} required`,
     };
   }
 

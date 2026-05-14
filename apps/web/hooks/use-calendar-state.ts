@@ -60,6 +60,17 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
           to: format(addDays(today, agendaLookaheadDays), 'yyyy-MM-dd'),
         };
       }
+      default: {
+        // Audit 2026-05-13 (P2): exhaustiveness check. If a future
+        // contributor extends `CalendarView` (e.g. 'timeline', 'year')
+        // and forgets to add a `case`, the switch would silently fall
+        // through, dateRange would become `undefined`, and every
+        // consuming `useQuery` would key on undefined and refetch the
+        // same URL repeatedly. The `never` assignment turns that into
+        // a TS error at the new-case site.
+        const _exhaustive: never = view;
+        throw new Error(`Unhandled calendar view: ${String(_exhaustive)}`);
+      }
     }
   }, [view, currentDate, agendaLookaheadDays]);
 

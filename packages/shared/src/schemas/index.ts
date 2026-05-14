@@ -674,7 +674,13 @@ export const updateBookingRulesSchema = z
     lateCancellationFeePercent: optionalNumeric(z.number().min(0).max(100)),
     noShowFeePercent: optionalNumeric(z.number().min(0).max(100)),
   })
-  .strict();
+  .strict()
+  // Audit 2026-05-13 (P2): refuse no-field payloads — matches the pattern
+  // already on `updateExpenseSchema`. Without it, an empty `{}` PATCH
+  // succeeded and ran an `updated_at`-only UPDATE, confusing diagnostics.
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided',
+  });
 
 export type UpdateBookingRulesInput = z.output<typeof updateBookingRulesSchema>;
 

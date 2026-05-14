@@ -361,6 +361,11 @@ export async function findOverdueInvoicesForReminders(today: string) {
         // see audit F-1.
         isNull(clubs.deletedAt),
         isNull(horses.deletedAt),
+        // Audit 2026-05-13 (P2): respect the manual-pause flag on clubs
+        // (`is_active = false`). The platform-billing reminder cron and
+        // `findClubsDueForBilling` already filter `isActive=true`; livery
+        // overdue reminders were the outlier.
+        eq(clubs.isActive, true),
       ),
     )
     // Bounded run-time so the cron can't hit Workers' wall-clock budget on

@@ -1,5 +1,6 @@
-'use client';
-
+// Audit 2026-05-13 (P2): no client APIs in use — this is a static
+// placeholder. Dropped the `'use client'` directive so the page can
+// render as a Server Component and shave the client bundle.
 import { Users } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 

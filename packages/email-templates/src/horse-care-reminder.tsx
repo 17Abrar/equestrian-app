@@ -54,12 +54,12 @@ const TITLES: Record<HorseCareReminderKind, string> = {
   horse_medication_end: 'Medication ending',
 };
 
-const DASHBOARD_PATHS: Record<HorseCareReminderKind, string> = {
-  horse_health_record_due: '/horses',
-  horse_health_record_followup: '/horses',
-  horse_insurance: '/horses',
-  horse_medication_end: '/horses',
-};
+// Audit 2026-05-13 (P2): every kind dropped the rider on the same
+// /horses index — the per-kind lookup was dead code that suggested
+// deep-links existed when they didn't. Flatten to a single constant
+// until we add per-kind deep-links (e.g. /horses?tab=health for due
+// records, /horses?tab=medications for medication-end reminders).
+const DASHBOARD_PATH = '/horses';
 
 export function HorseCareReminder({
   kind,
@@ -123,7 +123,7 @@ export function HorseCareReminder({
           </Text>
 
           <Text style={styles.clubName}>{clubName}</Text>
-          <Text style={styles.dashboardPath}>cavaliq.com{DASHBOARD_PATHS[kind]}</Text>
+          <Text style={styles.dashboardPath}>cavaliq.com{DASHBOARD_PATH}</Text>
         </Container>
       </Body>
     </Html>

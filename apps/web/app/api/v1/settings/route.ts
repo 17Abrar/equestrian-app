@@ -53,16 +53,66 @@ export async function PATCH(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const body = await parseRequiredBody(request, passthroughObjectSchema);
+      const source = body as Record<string, unknown>;
 
-      // Accept any combination of profile, booking rules, branding, or
-      // notification updates in a single PATCH. Unknown keys are ignored
-      // silently by each schema's strip-by-default behavior — Zod's
-      // default is to drop unrecognised keys, NOT reject (.strict()) them.
-      const profileResult = updateClubProfileSchema.safeParse(body);
-      const rulesResult = updateBookingRulesSchema.safeParse(body);
-      const brandingResult = updateBrandingSchema.safeParse(body);
-      const notificationsResult = updateNotificationsSchema.safeParse(body);
-      const discoveryResult = updateDiscoverySchema.safeParse(body);
+      // Audit 2026-05-13 (P2): pre-narrow keys per section before parsing.
+      // Every section schema is `.strict()` (audit QA-25 / G-5), so
+      // running each schema against the whole body — as the previous
+      // implementation did — caused every parse to fail on any
+      // multi-section payload, returning a spurious "No valid fields
+      // provided" 400. Hardcoded key buckets are explicit and survive a
+      // future Zod version change to `_def.shape`.
+      const pickKeys = (keys: readonly string[]): Record<string, unknown> => {
+        const out: Record<string, unknown> = {};
+        for (const key of keys) {
+          if (key in source) out[key] = source[key];
+        }
+        return out;
+      };
+      const PROFILE_KEYS = [
+        'name',
+        'email',
+        'phone',
+        'address',
+        'city',
+        'country',
+        'timezone',
+        'currency',
+        'logoUrl',
+        'websiteUrl',
+        'socialInstagram',
+        'socialFacebook',
+        'socialTiktok',
+        'description',
+      ] as const;
+      const RULES_KEYS = [
+        'advanceBookingDays',
+        'bookingCutoffHours',
+        'cancellationNoticeHours',
+        'defaultLessonDurationMinutes',
+        'allowOverbooking',
+        'overbookingLimit',
+        'defaultCalendarView',
+        'lateCancellationFeePercent',
+        'noShowFeePercent',
+      ] as const;
+      const BRANDING_KEYS = [
+        'brandPrimaryColor',
+        'brandSecondaryColor',
+        'logoUrl',
+        'coverPhotoUrl',
+        'faviconUrl',
+      ] as const;
+      const NOTIFICATIONS_KEYS = ['notificationPreferences'] as const;
+      const DISCOVERY_KEYS = ['isPublicListing', 'joinPolicy', 'shortDescription'] as const;
+
+      const profileResult = updateClubProfileSchema.safeParse(pickKeys(PROFILE_KEYS));
+      const rulesResult = updateBookingRulesSchema.safeParse(pickKeys(RULES_KEYS));
+      const brandingResult = updateBrandingSchema.safeParse(pickKeys(BRANDING_KEYS));
+      const notificationsResult = updateNotificationsSchema.safeParse(
+        pickKeys(NOTIFICATIONS_KEYS),
+      );
+      const discoveryResult = updateDiscoverySchema.safeParse(pickKeys(DISCOVERY_KEYS));
 
       const merged: SettingsPatchData = {
         ...(profileResult.success ? profileResult.data : {}),
@@ -80,13 +130,19 @@ export async function PATCH(request: NextRequest) {
       // `numeric` columns require strings (preserves precision), Zod gives us
       // numbers. Doing the split first instead of mutating-in-place keeps the
       // typed `merged` object intact for any future readers.
+      // Audit 2026-05-13 (P2): use `Number(v).toFixed(2)` so floating-point
+      // artifacts like `0.1 + 0.2 → 0.30000000000000004` don't get written
+      // through to a `numeric(5,2)` column. Postgres rounds it but the
+      // round-trip no longer matches what the operator typed. Pitfall #4.
       const { lateCancellationFeePercent, noShowFeePercent, ...rest } = merged;
       const dbUpdate = {
         ...rest,
         ...(lateCancellationFeePercent !== undefined
-          ? { lateCancellationFeePercent: String(lateCancellationFeePercent) }
+          ? { lateCancellationFeePercent: Number(lateCancellationFeePercent).toFixed(2) }
           : {}),
-        ...(noShowFeePercent !== undefined ? { noShowFeePercent: String(noShowFeePercent) } : {}),
+        ...(noShowFeePercent !== undefined
+          ? { noShowFeePercent: Number(noShowFeePercent).toFixed(2) }
+          : {}),
       };
 
       const club = await updateClubSettings(ctx.clubId, dbUpdate);

@@ -119,15 +119,29 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
         </div>
       </header>
 
+      {/*
+        Audit 2026-05-13 (P2): cover image now goes through next/image
+        (Pitfall 10) instead of an inline `style.backgroundImage`. The
+        previous markup fetched the full-resolution R2 object on every
+        page view — bad LCP on the public club page. `fill` + `sizes`
+        let Next pick a width-appropriate variant and `priority` is
+        intentionally omitted (the LCP candidate is the heading below,
+        not the cover banner).
+      */}
       <section
         className="relative h-64 w-full overflow-hidden sm:h-80"
-        style={{
-          backgroundColor: primary,
-          backgroundImage: club.coverPhotoUrl ? `url(${club.coverPhotoUrl})` : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+        style={{ backgroundColor: primary }}
       >
+        {club.coverPhotoUrl && (
+          <Image
+            src={club.coverPhotoUrl}
+            alt=""
+            fill
+            sizes="100vw"
+            className="object-cover"
+            unoptimized
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
       </section>
 

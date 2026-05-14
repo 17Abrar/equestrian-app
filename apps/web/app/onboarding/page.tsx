@@ -63,6 +63,12 @@ const STEPS = [
   { id: 'staff', label: 'Staff', icon: Users },
 ] as const;
 
+// Audit 2026-05-13 (P2): the canonical currency set lives at
+// `packages/shared/src/constants/index.ts:SUPPORTED_CURRENCIES`. The
+// onboarding wizard keeps a labelled tuple here (currency + display
+// name) rather than re-deriving labels — when a new currency is added
+// to SUPPORTED_CURRENCIES, also add its `label` entry here. Same goes
+// for any future settings form that needs the labelled shape.
 const TIMEZONES = [
   { value: 'Asia/Dubai', label: 'Asia/Dubai (UTC+4)' },
   { value: 'Asia/Riyadh', label: 'Asia/Riyadh (UTC+3)' },

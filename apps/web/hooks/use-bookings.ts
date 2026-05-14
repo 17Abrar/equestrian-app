@@ -305,6 +305,11 @@ export function useCreateBooking() {
       // for a brand-new booking.
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      // Audit 2026-05-13 (P2): keep the dashboard tiles + finance
+      // overview in sync after every booking mutation — both compute
+      // booking-derived KPIs and were stale for up to 30s otherwise.
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
   });
 }
@@ -333,6 +338,10 @@ export function useCancelBooking() {
       void queryClient.invalidateQueries({ queryKey: bookingDetailKey(vars.bookingId) });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
       void queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
+      // Audit 2026-05-13 (P2): see useCreateBooking — keep dashboard /
+      // finance overview fresh after booking-state mutations.
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
     onError: defaultMutationErrorReporter('booking.cancel'),
   });
@@ -350,6 +359,8 @@ export function useMarkNoShow() {
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: bookingDetailKey(bookingId) });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
     onError: defaultMutationErrorReporter('booking.no_show'),
   });
@@ -367,6 +378,8 @@ export function useMarkComplete() {
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: bookingDetailKey(bookingId) });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
     onError: defaultMutationErrorReporter('booking.mark_complete'),
   });
