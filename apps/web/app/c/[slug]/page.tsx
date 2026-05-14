@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { getPublicClubBySlug } from '@equestrian/db/queries';
 import { ClubProfileClient } from './club-profile-client';
@@ -36,5 +37,11 @@ export default async function ClubProfilePage({ params }: PageProps) {
   // as private.
   const joinPolicy: 'open' | 'invite_only' = club.joinPolicy === 'open' ? 'open' : 'invite_only';
 
-  return <ClubProfileClient club={{ ...club, joinPolicy }} />;
+  // Audit 2026-05-13 (P1): Suspense boundary required by Next 15 — the client
+  // now reads `useSearchParams()` for the post-signup auto-join handshake.
+  return (
+    <Suspense fallback={null}>
+      <ClubProfileClient club={{ ...club, joinPolicy }} />
+    </Suspense>
+  );
 }

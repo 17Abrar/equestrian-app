@@ -118,6 +118,14 @@ export function LiveryTab({ horse }: LiveryTabProps) {
   const [endDate, setEndDate] = useState(getTodayLocalDateString);
   const retire = useRetireHorseOwnership(horse.id);
 
+  // Audit 2026-05-13 (P2): re-seed `endDate` to today when the dialog opens.
+  // Without this, the date the user saw on a previous open lingers if they
+  // dismiss-and-reopen, surfacing "yesterday" after midnight.
+  function handleRetireOpenChange(open: boolean) {
+    if (open) setEndDate(getTodayLocalDateString());
+    setRetireOpen(open);
+  }
+
   const invoicesQuery = useHorseLiveryInvoices(
     horse.id,
     horse.ownershipStatus === 'active' || horse.ownershipStatus === 'retired',
@@ -177,7 +185,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
 
           {horse.ownershipStatus === 'active' && (
             <div className="flex justify-end pt-2">
-              <Button variant="outline" size="sm" onClick={() => setRetireOpen(true)}>
+              <Button variant="outline" size="sm" onClick={() => handleRetireOpenChange(true)}>
                 <Archive className="mr-2 h-4 w-4" />
                 Retire ownership
               </Button>
@@ -190,7 +198,7 @@ export function LiveryTab({ horse }: LiveryTabProps) {
         <InvoicesCard horseId={horse.id} invoicesQuery={invoicesQuery} />
       )}
 
-      <AlertDialog open={retireOpen} onOpenChange={setRetireOpen}>
+      <AlertDialog open={retireOpen} onOpenChange={handleRetireOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Retire {horse.name}&apos;s ownership?</AlertDialogTitle>

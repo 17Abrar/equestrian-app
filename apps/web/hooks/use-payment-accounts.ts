@@ -7,7 +7,9 @@ import {
   type PaymentAccountStatus,
   type PaymentProviderName,
 } from '@equestrian/shared/types';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
+import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): `PaymentAccount`,
 // `PaymentProviderName`, `PaymentAccountStatus`, and `BookingPaymentResult`
@@ -18,6 +20,11 @@ export function usePaymentAccounts() {
   return useQuery({
     queryKey: ['paymentAccounts'],
     queryFn: () => fetchJson<ApiSuccessResponse<PaymentAccount[]>>('/api/v1/payments/accounts'),
+    // Audit 2026-05-13 (P1): payment-account state changes only on
+    // connect/disconnect mutations (which already invalidate). Default
+    // 30s staleTime caused a fresh fetch on every Settings → Payments
+    // mount with a full credentials-decryption hop server-side.
+    staleTime: STALE_TIME_STABLE,
   });
 }
 
@@ -40,6 +47,7 @@ export function useConnectStripe() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
+    onError: (err: unknown) => reportMutationError('payment_account.mutate', err),
   });
 }
 
@@ -70,6 +78,7 @@ export function useConnectNGenius() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
+    onError: (err: unknown) => reportMutationError('payment_account.mutate', err),
   });
 }
 
@@ -91,6 +100,7 @@ export function useConnectZiina() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
+    onError: (err: unknown) => reportMutationError('payment_account.mutate', err),
   });
 }
 
@@ -106,6 +116,7 @@ export function useSetActiveProvider() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
+    onError: (err: unknown) => reportMutationError('payment_account.mutate', err),
   });
 }
 
@@ -119,5 +130,6 @@ export function useDisconnectProvider() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['paymentAccounts'] });
     },
+    onError: (err: unknown) => reportMutationError('payment_account.mutate', err),
   });
 }

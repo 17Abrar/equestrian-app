@@ -79,7 +79,9 @@ const ALERTS = [
   { name: 'Livery invoice issue failed',          event: 'livery_invoice_issue_failed',          value: 0, interval: '5m', severity: 'critical' },
   { name: 'Webhook no club resolved',             event: 'webhook_no_club_resolved',             value: 3, interval: '5m', severity: 'critical' },
   { name: 'Booking refund ledger conflict',       event: 'booking_refund_ledger_conflict',       value: 0, interval: '1h', severity: 'critical' },
-  { name: 'Stripe OAuth state invalid',           event: 'stripe_oauth_state_invalid',           value: 5, interval: '5m', severity: 'critical' },
+  // Audit 2026-05-13 (P1): `stripe_oauth_state_invalid` removed — Cavaliq
+  // dropped Stripe Connect in the 2026-05-04 direct-keys pivot, so no code
+  // path emits this event. The alert was paging on a dead signal.
   { name: 'Livery cron bad secret',               event: 'livery_cron_bad_secret',               value: 0, interval: '5m', severity: 'critical' },
 
   // ─── Warning — Slack ─────────────────────────────────────────────

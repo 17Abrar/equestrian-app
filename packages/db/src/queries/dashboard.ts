@@ -56,6 +56,12 @@ export async function getDashboardStats(clubId: string) {
             // Audit M-5: exclude cancelled bookings from "today's bookings"
             // counts. They were inflating the dashboard tile.
             sql`${bookings.status} != 'cancelled'`,
+            // Audit 2026-05-13 (P2): also exclude bookings whose underlying
+            // slot was retro-cancelled after the booking reached a terminal
+            // status (completed/no_show). `cancelBookingSlot` flips
+            // non-terminal bookings, but terminal-status bookings stay
+            // attached to a now-cancelled slot and were inflating today's tile.
+            eq(bookingSlots.isCancelled, false),
           ),
         ),
 

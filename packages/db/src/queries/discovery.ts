@@ -1,9 +1,9 @@
-import { eq, and, desc, isNull, sql, ilike, inArray, type SQL } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql, ilike, type inArray, type SQL } from 'drizzle-orm';
 import { escapeLikePattern } from '@equestrian/shared/utils';
-import { rawDb, db } from '../index';
+import { rawDb } from '../index';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
-import { clubJoinRequests } from '../schema/club-join-requests';
+import { type clubJoinRequests } from '../schema/club-join-requests';
 
 // ─── Public discovery (rawDb — no tenant context needed) ──────────────
 //

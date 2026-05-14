@@ -31,6 +31,21 @@ export type {
   CalendarCompetition,
 };
 
+// Audit 2026-05-13 (P1): list/detail key split — see use-bookings.ts header.
+// Previously `['competitions', filters]` (list) and `['competitions', id]`
+// (detail) collided so list mutations refetched every mounted detail.
+const COMPETITIONS_KEY = ['competitions'] as const;
+const competitionsListKey = (filters: Partial<CompetitionFiltersInput>) =>
+  [...COMPETITIONS_KEY, 'list', filters] as const;
+const competitionDetailKey = (competitionId: string) =>
+  [...COMPETITIONS_KEY, 'detail', competitionId] as const;
+const competitionClassesKey = (competitionId: string) =>
+  [...COMPETITIONS_KEY, 'detail', competitionId, 'classes'] as const;
+const competitionEntriesKey = (competitionId: string, classId: string) =>
+  [...COMPETITIONS_KEY, 'detail', competitionId, 'classes', classId, 'entries'] as const;
+const competitionResultsKey = (competitionId: string, classId: string) =>
+  [...COMPETITIONS_KEY, 'detail', competitionId, 'classes', classId, 'results'] as const;
+
 // ─── Competitions ─────────────────────────────────────────────────────
 
 export function useCompetitions(filters: Partial<CompetitionFiltersInput> = {}) {
@@ -42,7 +57,7 @@ export function useCompetitions(filters: Partial<CompetitionFiltersInput> = {}) 
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
   return useQuery({
-    queryKey: ['competitions', filters],
+    queryKey: competitionsListKey(filters),
     queryFn: () =>
       fetchJson<{
         success: true;
@@ -54,7 +69,7 @@ export function useCompetitions(filters: Partial<CompetitionFiltersInput> = {}) 
 
 export function useCompetition(competitionId: string) {
   return useQuery({
-    queryKey: ['competitions', competitionId],
+    queryKey: competitionDetailKey(competitionId),
     queryFn: () =>
       fetchJson<ApiSuccessResponse<Competition>>(`/api/v1/competitions/${competitionId}`),
     enabled: !!competitionId,
@@ -72,7 +87,7 @@ export function useCreateCompetition() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['competitions'] });
+      void queryClient.invalidateQueries({ queryKey: [...COMPETITIONS_KEY, 'list'] });
     },
   });
 }
@@ -88,8 +103,8 @@ export function useUpdateCompetition(competitionId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['competitions'] });
-      void queryClient.invalidateQueries({ queryKey: ['competitions', competitionId] });
+      void queryClient.invalidateQueries({ queryKey: [...COMPETITIONS_KEY, 'list'] });
+      void queryClient.invalidateQueries({ queryKey: competitionDetailKey(competitionId) });
     },
   });
 }
@@ -102,8 +117,9 @@ export function useDeleteCompetition() {
       fetchJson<ApiResponse<{ id: string }>>(`/api/v1/competitions/${competitionId}`, {
         method: 'DELETE',
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['competitions'] });
+    onSuccess: (_data, competitionId) => {
+      void queryClient.invalidateQueries({ queryKey: [...COMPETITIONS_KEY, 'list'] });
+      void queryClient.invalidateQueries({ queryKey: competitionDetailKey(competitionId) });
     },
   });
 }
@@ -118,7 +134,7 @@ export function useDeleteCompetition() {
 // paginated continues to render the full list under realistic loads.
 export function useCompetitionClasses(competitionId: string) {
   return useQuery({
-    queryKey: ['competitions', competitionId, 'classes'],
+    queryKey: competitionClassesKey(competitionId),
     queryFn: () =>
       fetchJson<{
         success: true;
@@ -140,7 +156,7 @@ export function useCreateCompetitionClass(competitionId: string) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['competitions', competitionId, 'classes'] });
+      void queryClient.invalidateQueries({ queryKey: competitionClassesKey(competitionId) });
     },
   });
 }
@@ -149,7 +165,7 @@ export function useCreateCompetitionClass(competitionId: string) {
 
 export function useCompetitionEntries(competitionId: string, classId: string) {
   return useQuery({
-    queryKey: ['competitions', competitionId, 'classes', classId, 'entries'],
+    queryKey: competitionEntriesKey(competitionId, classId),
     queryFn: () =>
       fetchJson<ApiSuccessResponse<CompetitionEntry[]>>(
         `/api/v1/competitions/${competitionId}/classes/${classId}/entries`,
@@ -173,7 +189,7 @@ export function useCreateCompetitionEntry(competitionId: string, classId: string
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ['competitions', competitionId, 'classes', classId, 'entries'],
+        queryKey: competitionEntriesKey(competitionId, classId),
       });
     },
   });
@@ -194,7 +210,7 @@ export function useWithdrawCompetitionEntry(competitionId: string, classId: stri
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ['competitions', competitionId, 'classes', classId, 'entries'],
+        queryKey: competitionEntriesKey(competitionId, classId),
       });
     },
   });
@@ -204,7 +220,7 @@ export function useWithdrawCompetitionEntry(competitionId: string, classId: stri
 
 export function useCompetitionResults(competitionId: string, classId: string) {
   return useQuery({
-    queryKey: ['competitions', competitionId, 'classes', classId, 'results'],
+    queryKey: competitionResultsKey(competitionId, classId),
     queryFn: () =>
       fetchJson<ApiSuccessResponse<CompetitionResult[]>>(
         `/api/v1/competitions/${competitionId}/classes/${classId}/results`,
@@ -228,7 +244,7 @@ export function useCreateCompetitionResult(competitionId: string, classId: strin
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ['competitions', competitionId, 'classes', classId, 'results'],
+        queryKey: competitionResultsKey(competitionId, classId),
       });
     },
   });

@@ -13,6 +13,8 @@
     "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
     "postinstall": "test -f cloudflare-env.d.ts || pnpm cf:typegen || true",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:prod": "env -u NO_COLOR PLAYWRIGHT_BASE_URL=https://cavaliq.com playwright test --project=api-smoke"
   },
@@ -63,6 +65,7 @@
     "@types/react-dom": "^19.1.2",
     "eslint": "^9.24.0",
     "typescript": "^5.8.2",
+    "vitest": "^4.1.2",
     "wrangler": "^4.84.1"
   }
 }

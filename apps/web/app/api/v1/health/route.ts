@@ -69,38 +69,55 @@ export async function GET(request: NextRequest) {
   }
 
   // Deep readiness probe.
-  const subsystems: Record<string, { ok: boolean; error?: string }> = {};
+  //
+  // Audit 2026-05-13 (P1): the public response intentionally omits the
+  // raw `err.message` for each subsystem. Returning it to anonymous
+  // callers leaked infra topology — a Neon outage would surface
+  // `getaddrinfo ENOTFOUND ...neon.tech`, exposing the provider, and a
+  // Postgres-level error string could include schema/table names. The
+  // full error (with stack) is now emitted ONLY to the structured
+  // logger; the public payload reports `{ok: false}` per subsystem with
+  // no diagnostic detail. Operators reading Sentry see the actionable
+  // message; attackers probing the endpoint see nothing they can use
+  // to fingerprint the stack.
+  type SubsystemResult = { ok: boolean };
+  const subsystems: Record<string, SubsystemResult> = {};
+  const subsystemErrors: Record<string, string> = {};
 
   // Neon Postgres
   try {
     await rawDb.execute(sql`SELECT 1`);
     subsystems.database = { ok: true };
   } catch (err) {
-    subsystems.database = {
-      ok: false,
-      error: err instanceof Error ? err.message : 'unknown',
-    };
+    subsystems.database = { ok: false };
+    subsystemErrors.database = err instanceof Error ? err.message : 'unknown';
   }
 
   // Upstash Redis (treated as ok when unconfigured — dev environments)
   const redis = getRedis();
   if (!redis) {
-    subsystems.redis = { ok: true, error: 'not configured (skipped)' };
+    subsystems.redis = { ok: true };
   } else {
     try {
       await redis.ping();
       subsystems.redis = { ok: true };
     } catch (err) {
-      subsystems.redis = {
-        ok: false,
-        error: err instanceof Error ? err.message : 'unknown',
-      };
+      subsystems.redis = { ok: false };
+      subsystemErrors.redis = err instanceof Error ? err.message : 'unknown';
     }
   }
 
   const allOk = Object.values(subsystems).every((s) => s.ok);
   if (!allOk) {
-    logger.error('health_deep_probe_failed', { subsystems });
+    // Full error detail lands here (and only here) for operators.
+    logger.error('health_deep_probe_failed', {
+      subsystems: Object.fromEntries(
+        Object.entries(subsystems).map(([k, v]) => [
+          k,
+          { ok: v.ok, error: v.ok ? undefined : subsystemErrors[k] },
+        ]),
+      ),
+    });
   }
 
   return NextResponse.json(

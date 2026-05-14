@@ -65,6 +65,21 @@ export const SKILL_LEVEL = {
 
 export type SkillLevel = (typeof SKILL_LEVEL)[keyof typeof SKILL_LEVEL];
 
+// Audit 2026-05-13 (P1): canonical value tuples are the single source of truth
+// for booking/payment status and method enums. Both the human-readable
+// const-maps (e.g. `BOOKING_STATUS.Confirmed`) and the Zod runtime schemas
+// (e.g. `z.enum(BOOKING_STATUS_VALUES)`) derive from these tuples so a new
+// member added here propagates to: discriminated unions, validation schemas,
+// response schemas, and TypeScript types — no parallel arrays to keep in sync.
+
+export const BOOKING_STATUS_VALUES = [
+  'pending',
+  'confirmed',
+  'completed',
+  'cancelled',
+  'no_show',
+] as const satisfies readonly string[];
+
 export const BOOKING_STATUS = {
   Pending: 'pending',
   Confirmed: 'confirmed',
@@ -73,7 +88,16 @@ export const BOOKING_STATUS = {
   NoShow: 'no_show',
 } as const;
 
-export type BookingStatus = (typeof BOOKING_STATUS)[keyof typeof BOOKING_STATUS];
+export type BookingStatus = (typeof BOOKING_STATUS_VALUES)[number];
+
+export const PAYMENT_STATUS_VALUES = [
+  'pending',
+  'paid',
+  'partial',
+  'refunded',
+  'failed',
+  'overdue',
+] as const satisfies readonly string[];
 
 export const PAYMENT_STATUS = {
   Pending: 'pending',
@@ -84,7 +108,22 @@ export const PAYMENT_STATUS = {
   Overdue: 'overdue',
 } as const;
 
-export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
+export type PaymentStatus = (typeof PAYMENT_STATUS_VALUES)[number];
+
+export const PAYMENT_METHOD_VALUES = [
+  'card',
+  'apple_pay',
+  'google_pay',
+  'tabby',
+  'tamara',
+  'knet',
+  'mada',
+  'benefit',
+  'cash',
+  'card_in_person',
+  'package_credit',
+  'bank_transfer',
+] as const satisfies readonly string[];
 
 export const PAYMENT_METHOD = {
   Card: 'card',
@@ -101,7 +140,7 @@ export const PAYMENT_METHOD = {
   BankTransfer: 'bank_transfer',
 } as const;
 
-export type PaymentMethod = (typeof PAYMENT_METHOD)[keyof typeof PAYMENT_METHOD];
+export type PaymentMethod = (typeof PAYMENT_METHOD_VALUES)[number];
 
 /**
  * Suggested lesson type names shown as templates when creating a new type.

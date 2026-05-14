@@ -9,11 +9,14 @@ import {
   Section,
   Img,
 } from '@react-email/components';
+import { formatBookingDate, formatBookingTime } from './util/format-date-time';
 
 interface BookingReminderProps {
   riderName: string;
   lessonType: string;
+  /** YYYY-MM-DD; formatted to "Monday, March 31, 2026" before render. */
   date: string;
+  /** "HH:MM" or "HH:MM:SS"; formatted to "9:00 AM" before render. */
   time: string;
   horseName?: string;
   coachName?: string;
@@ -33,6 +36,10 @@ export function BookingReminder({
   clubName,
   clubLogo,
 }: BookingReminderProps) {
+  // Audit 2026-05-13 (P1): previously rendered raw ISO date and SQL time
+  // strings. Now shared with BookingConfirmation via util/format-date-time.
+  const formattedDate = formatBookingDate(date);
+  const formattedTime = formatBookingTime(time);
   return (
     <Html>
       <Head />
@@ -50,10 +57,10 @@ export function BookingReminder({
               <strong>Lesson:</strong> {lessonType}
             </Text>
             <Text style={styles.detailRow}>
-              <strong>Date:</strong> {date}
+              <strong>Date:</strong> {formattedDate}
             </Text>
             <Text style={styles.detailRow}>
-              <strong>Time:</strong> {time}
+              <strong>Time:</strong> {formattedTime}
             </Text>
             {horseName && (
               <Text style={styles.detailRow}>

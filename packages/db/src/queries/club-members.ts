@@ -1,4 +1,4 @@
-import { eq, and, asc, ilike, inArray, sql, SQL } from 'drizzle-orm';
+import { eq, and, asc, ilike, inArray, sql, type SQL } from 'drizzle-orm';
 import { db } from '../index';
 import { clubMembers } from '../schema/club-members';
 import { escapeLikePattern } from '@equestrian/shared/utils';

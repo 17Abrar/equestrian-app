@@ -12,6 +12,7 @@ import {
   startOfDay,
   endOfDay,
 } from 'date-fns';
+import { WEEK_STARTS_ON } from '@/lib/ui-constants';
 
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda';
 
@@ -34,7 +35,7 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
           to: format(endOfDay(currentDate), 'yyyy-MM-dd'),
         };
       case 'week': {
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+        const weekStart = startOfWeek(currentDate, { weekStartsOn: WEEK_STARTS_ON });
         const weekEnd = addDays(weekStart, 6);
         return {
           from: format(weekStart, 'yyyy-MM-dd'),
@@ -44,9 +45,9 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
       case 'month': {
         // Fetch a full 6-week grid (to cover partial weeks at start/end)
         const monthStart = startOfMonth(currentDate);
-        const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+        const gridStart = startOfWeek(monthStart, { weekStartsOn: WEEK_STARTS_ON });
         const monthEnd = endOfMonth(currentDate);
-        const gridEnd = addDays(startOfWeek(monthEnd, { weekStartsOn: 0 }), 6);
+        const gridEnd = addDays(startOfWeek(monthEnd, { weekStartsOn: WEEK_STARTS_ON }), 6);
         return {
           from: format(gridStart, 'yyyy-MM-dd'),
           to: format(gridEnd, 'yyyy-MM-dd'),
@@ -59,11 +60,22 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
           to: format(addDays(today, agendaLookaheadDays), 'yyyy-MM-dd'),
         };
       }
+      default: {
+        // Audit 2026-05-13 (P2): exhaustiveness check. If a future
+        // contributor extends `CalendarView` (e.g. 'timeline', 'year')
+        // and forgets to add a `case`, the switch would silently fall
+        // through, dateRange would become `undefined`, and every
+        // consuming `useQuery` would key on undefined and refetch the
+        // same URL repeatedly. The `never` assignment turns that into
+        // a TS error at the new-case site.
+        const _exhaustive: never = view;
+        throw new Error(`Unhandled calendar view: ${String(_exhaustive)}`);
+      }
     }
   }, [view, currentDate, agendaLookaheadDays]);
 
   const weekDates = useMemo(() => {
-    const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: WEEK_STARTS_ON });
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [currentDate]);
 
@@ -110,7 +122,7 @@ export function useCalendarState(options: UseCalendarStateOptions = {}) {
       case 'day':
         return format(currentDate, 'EEEE, MMM d, yyyy');
       case 'week': {
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+        const weekStart = startOfWeek(currentDate, { weekStartsOn: WEEK_STARTS_ON });
         const weekEnd = addDays(weekStart, 6);
         return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
       }

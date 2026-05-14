@@ -14,6 +14,7 @@ import {
   check,
   index,
   foreignKey,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { taskStatusEnum, postTypeEnum } from './enums';
@@ -281,7 +282,7 @@ export const communityComments = pgTable(
     // moderator's hard-delete of a parent removes the entire subtree —
     // matches the post-level cascade above.
     parentCommentId: uuid('parent_comment_id').references(
-      (): import('drizzle-orm/pg-core').AnyPgColumn => communityComments.id,
+      (): AnyPgColumn => communityComments.id,
       { onDelete: 'cascade' },
     ),
     // Audit F-4 (2026-05-06 r2): inline single-column FK dropped in

@@ -40,12 +40,15 @@ This document defines HOW the system is built. Every architectural decision here
               ▼           ▼   │   ▼           ▼
            [NEON]     [CLERK] │ [R2]       [ABLY]
           Postgres     Auth   │ Storage   Real-time
-           (RLS)             │
+       (app-layer tenant
+         scoping only)        │
                              │
                     ┌────────┴────────┐
                     ▼                 ▼
-               [STRIPE]          [RESEND]
-              Payments            Email
+            [STRIPE/ZIINA/      [RESEND]
+              N-GENIUS]          Email
+           Per-club direct
+              keys
 ```
 
 ---
@@ -239,37 +242,20 @@ Request arrives
 Clerk middleware extracts orgId from session
     │
     ▼
-Set PostgreSQL session variable: SET app.current_club_id = '{orgId}'
+withAuth helper resolves the active club_id (from Clerk org, or active-club cookie fallback)
     │
     ▼
-Row-Level Security policies filter ALL queries automatically
+Every Drizzle query in the handler filters by .where(eq(table.clubId, clubId))
     │
     ▼
-Application code runs normally — RLS ensures data isolation
+Application code is the SOLE enforcement layer — no DB-level safety net
 ```
 
-### Database-Level Isolation (RLS)
+### Tenant Isolation Model (Application-Only)
 
-```sql
--- Enable RLS on every table
-ALTER TABLE horses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE riders ENABLE ROW LEVEL SECURITY;
--- ... (every table)
+Postgres Row-Level Security was dropped in migrations `0011_drop_rls.sql` and `0023_drop_rls_for_added_tables.sql`. The `app.current_club_id` session variable is no longer set; no `tenant_isolation` policies exist. This was an intentional design choice — RLS added query-rewrite overhead on Neon's pooler and obscured slow queries during the launch period. Application-layer scoping is the documented invariant and is exercised by `packages/db/src/test/tenant-isolation.test.ts`.
 
--- Create isolation policy on every table
-CREATE POLICY tenant_isolation ON horses
-  USING (club_id = current_setting('app.current_club_id')::uuid);
-
-CREATE POLICY tenant_isolation ON bookings
-  USING (club_id = current_setting('app.current_club_id')::uuid);
-
--- ... (every table)
-```
-
-### Application-Level Isolation (Belt and Suspenders)
-
-Even with RLS, the application code MUST also filter by club_id:
+**Every Drizzle query MUST include the tenant filter.** Forgetting it is a critical security bug; there is no second line of defense.
 
 ```typescript
 // EVERY query function follows this pattern
@@ -304,10 +290,8 @@ export async function withTenantContext<T>(fn: (clubId: string) => Promise<T>): 
     throw new Error('No organization context. User must belong to a club.');
   }
 
-  // Set RLS context
-  await db.execute(sql`SET app.current_club_id = ${orgId}`);
-
-  // Execute the function with the club context
+  // No RLS context to set — application-layer scoping is the sole enforcement.
+  // The fn body MUST include .where(eq(table.clubId, orgId)) on every query.
   return fn(orgId);
 }
 
@@ -324,117 +308,69 @@ export async function GET() {
 
 ## PAYMENT INTEGRATION PATTERNS
 
-### Stripe Connect Setup
+Cavaliq is NOT a Stripe Connect platform. Each club pastes its own provider credentials into the settings form and we encrypt them into `club_payment_accounts.encrypted_credentials`. Charges land in the club's own merchant balance directly — there is no platform `STRIPE_CLIENT_ID`, no OAuth, no `application_fee_amount`, no `stripeAccount` SDK header, and no platform cut on transactions. Revenue comes from subscription tiers (Starter / Growing / Professional), not per-booking fees. (Pivot recorded 2026-05-04.)
+
+Three providers are wired today, behind a common adapter contract:
+
+- `stripe` — global card payments. Credentials: `sk_…`, `pk_…`, optional `whsec_…`.
+- `ziina` — UAE wallet/card aggregator. Credentials: API key + webhook signing secret.
+- `n_genius` — Network International hosted-page UAE acquirer. Credentials: API key + outlet reference.
+
+Each adapter implements `PaymentProviderAdapter` (`apps/web/lib/payments/types.ts`): `createPayment`, `getPaymentStatus`, `refundPayment`, `verifyWebhook`, plus a `connect` step that validates pasted credentials before they're encrypted and stored. The registry (`apps/web/lib/payments/registry.ts`) picks the active adapter at runtime by the club's saved provider preference.
+
+### Direct-key Stripe adapter (simplified)
 
 ```typescript
-// lib/stripe.ts
+// apps/web/lib/payments/stripe.ts
 import Stripe from 'stripe';
+import { decryptCredentials } from '@/lib/payments/credentials';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
-  typescript: true,
-});
+export async function createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
+  // Per-club credentials, decrypted on demand
+  const creds = await decryptCredentials(input.clubId, 'stripe');
+  const stripe = new Stripe(creds.secretKey, { apiVersion: '2025-08-27.basil' });
 
-// Create connected account for a new stable
-export async function createConnectedAccount(clubId: string, email: string) {
-  const account = await stripe.accounts.create({
-    type: 'express',
-    email,
-    metadata: { clubId },
-    capabilities: {
-      card_payments: { requested: true },
-      transfers: { requested: true },
-    },
-  });
-
-  // Store account.id in our database linked to the club
-  await db.update(clubs).set({ stripeAccountId: account.id }).where(eq(clubs.id, clubId));
-
-  return account;
-}
-
-// Create payment for a booking (rider pays stable)
-export async function createBookingPayment(params: {
-  amount: number; // In smallest currency unit (fils for AED)
-  currency: string; // 'aed', 'sar', 'usd', etc.
-  stableStripeAccountId: string;
-  platformFeePercent: number; // 1, 2, or 3.5 based on stable's plan
-  bookingId: string;
-  riderId: string;
-  clubId: string;
-}) {
-  const platformFee = Math.round(params.amount * (params.platformFeePercent / 100));
-
-  const paymentIntent = await stripe.paymentIntents.create(
+  const intent = await stripe.paymentIntents.create(
     {
-      amount: params.amount,
-      currency: params.currency,
-      application_fee_amount: platformFee,
-      transfer_data: {
-        destination: params.stableStripeAccountId,
-      },
-      metadata: {
-        bookingId: params.bookingId,
-        riderId: params.riderId,
-        clubId: params.clubId,
-      },
-      // Enable idempotency
+      amount: input.amountMinorUnits,
+      currency: input.currency,
+      // NO application_fee_amount, NO transfer_data — direct-keys model
+      metadata: { bookingId: input.bookingId, clubId: input.clubId },
     },
     {
-      idempotencyKey: `booking_${params.bookingId}`,
+      // Idempotency key stable per-booking; see ziina-operation-id.ts for the
+      // deterministic-uuid pattern used to convert this to Ziina's UUID shape.
+      idempotencyKey: `booking_${input.bookingId}`,
     },
   );
 
-  return paymentIntent;
+  return {
+    paymentIntentId: intent.id,
+    clientSecret: intent.client_secret,
+    publishableKey: creds.publishableKey, // returned to the client so Stripe Elements mounts the right account
+    status: mapStripeStatus(intent.status),
+  };
 }
 ```
 
-### Stripe Webhook Handler
+### Per-club webhook delivery
 
-```typescript
-// app/api/webhooks/stripe/route.ts
-import { stripe } from '@/lib/stripe';
-import { headers } from 'next/headers';
+Each club configures `https://cavaliq.com/api/webhooks/<provider>/<clubId>` in their own provider dashboard. The `[clubId]` path segment lets the receiver look up the right per-club webhook signing secret and verify the signature before any state mutation. Signature verification uses `timingSafeEqual` across all three adapters; failures return 401 with no body to avoid leaking which clubs have webhooks configured.
 
-export async function POST(request: Request) {
-  const body = await request.text();
-  const headersList = await headers();
-  const signature = headersList.get('stripe-signature');
+Key invariants enforced on every webhook handler (see `apps/web/lib/payments/webhook-helpers.ts`):
 
-  if (!signature) {
-    return new Response('Missing signature', { status: 400 });
-  }
+1. **Signature verify before body parse** — no payload is trusted prior to verification.
+2. **Idempotency via `webhook_events`** — `claimWebhookEvent(provider, eventId, bodyHash)` performs an INSERT-ON-CONFLICT-DO-NOTHING claim; duplicate deliveries no-op.
+3. **Cumulative-refund computation under `FOR UPDATE`** — provider events carry cumulative refund totals (Stripe) or single deltas (Ziina/N-Genius); the helper reconciles both shapes against the ledger with a bounded retry loop, escalating to `webhook_permanently_failed` on exhaustion.
+4. **Currency-mismatch hard fail** — if the event's currency disagrees with the booking row, the handler refuses to apply the delta and logs `webhook_currency_mismatch`.
 
-  let event: Stripe.Event;
+### Tested events
 
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
-  } catch (error) {
-    logger.error('stripe_webhook_signature_invalid', { error });
-    return new Response('Invalid signature', { status: 400 });
-  }
+The Stripe handler listens for: `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `charge.refund.updated`, `payment_intent.canceled`. Subscription-billing events (`invoice.payment_succeeded`, `customer.subscription.deleted`) flow through a separate platform-side surface (`/api/webhooks/ziina-platform` and the Ziina manual-pay-link reconciler), not the per-club Stripe receiver — platform billing for Cavaliq itself runs on Ziina, not Stripe.
 
-  // Handle the event
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      await handlePaymentSuccess(event.data.object as Stripe.PaymentIntent);
-      break;
-    case 'payment_intent.payment_failed':
-      await handlePaymentFailure(event.data.object as Stripe.PaymentIntent);
-      break;
-    case 'invoice.payment_succeeded':
-      await handleSubscriptionPayment(event.data.object as Stripe.Invoice);
-      break;
-    case 'customer.subscription.deleted':
-      await handleSubscriptionCancelled(event.data.object as Stripe.Subscription);
-      break;
-    default:
-      logger.info('stripe_webhook_unhandled', { type: event.type });
-  }
+### Connect credentials (one-time setup)
 
-  return new Response('OK', { status: 200 });
-}
-```
+Each club opens **Settings → Payments**, pastes their secret key / publishable key / webhook signing secret into a form, and we validate the credentials by calling `stripe.accounts.retrieve()` (or the provider equivalent) before encrypting and storing them. The pasted keys never round-trip back to the client — only the publishable key is returned at payment-init time. See `apps/web/app/api/v1/payments/stripe/connect/route.ts`.
 
 ### Coupon/Promo Code Validation
 

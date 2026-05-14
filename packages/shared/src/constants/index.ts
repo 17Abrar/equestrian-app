@@ -1,3 +1,26 @@
+// Audit 2026-05-13 (P1): canonical list of currency codes the platform
+// supports. The Zod schemas that accept user-supplied currencies validate
+// against this tuple (was: any 3-letter string) so a typo'd 'XYZ' stops
+// at the API boundary instead of silently flowing into `formatMoney` /
+// `toMinorUnits` and getting a 2-decimal fallback. The CURRENCY_LOCALE
+// table in `utils/money.ts` is keyed by this same set; adding a currency
+// here means adding it there too.
+export const SUPPORTED_CURRENCIES = [
+  'AED',
+  'SAR',
+  'KWD',
+  'BHD',
+  'QAR',
+  'OMR',
+  'USD',
+  'EUR',
+  'GBP',
+  'CAD',
+  'AUD',
+] as const satisfies readonly string[];
+
+export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
 // Pagination
 export const DEFAULT_PAGE_SIZE = 25;
 // Audit QA-18 — capped at 50 (down from 100) so a single oversized page

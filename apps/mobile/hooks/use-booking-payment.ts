@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useApiClient } from '@/lib/api';
 
 interface HostedPaymentResponse {
@@ -44,9 +45,19 @@ export function usePayBooking() {
       setError(null);
 
       try {
+        // Build a `cavaliq://` deep link the provider will redirect to once
+        // payment completes. iOS `ASWebAuthenticationSession` and Android
+        // Chrome Custom Tabs both close the in-app browser automatically
+        // when the system intercepts a matching custom-scheme URL — without
+        // this, the WebBrowser session never resolves and the rider is
+        // stranded on the provider's "thank you" page with no way back to
+        // the app. The path under the scheme is informational only; we
+        // route the user to the booking detail screen after dismissal.
+        const redirectUrl = Linking.createURL(`/payment-callback/${bookingId}`);
+
         const res = (await api.post<HostedPaymentResponse['data']>(
           `/api/v1/bookings/${bookingId}/payment`,
-          { mode: 'hosted' },
+          { mode: 'hosted', returnUrl: redirectUrl },
         )) as HostedPaymentResponse | ApiError;
 
         if (!res.success) {
@@ -56,14 +67,11 @@ export function usePayBooking() {
 
         // Open the hosted payment page. `openAuthSessionAsync` handles the
         // round-trip: iOS uses SFSafariViewController / ASWebAuthenticationSession,
-        // Android uses Chrome Custom Tabs. The call resolves when the page
-        // either redirects back to `returnUrl` or the user dismisses it.
-        const result = await WebBrowser.openAuthSessionAsync(
-          res.data.paymentUrl,
-          // The server passes a return URL inside `success/cancel/failure`,
-          // so we don't pre-declare one here — the browser closes on its own.
-          null,
-        );
+        // Android uses Chrome Custom Tabs. Passing `redirectUrl` lets the
+        // OS recognise the provider's post-payment redirect as the closing
+        // signal — the call resolves with `type:'success'` and the in-app
+        // browser dismisses automatically.
+        const result = await WebBrowser.openAuthSessionAsync(res.data.paymentUrl, redirectUrl);
 
         // Refresh so the home screen / booking detail reflect the new status
         // as soon as the webhook lands.

@@ -184,7 +184,21 @@ function ClubProfileForm({ settings }: { settings: ClubSettings }) {
       city: settings.city ?? '',
       country: settings.country ?? '',
       timezone: settings.timezone ?? 'Asia/Dubai',
-      currency: settings.currency ?? 'AED',
+      // Audit 2026-05-13: API response types currency as `string`; cast to
+      // the narrowed SupportedCurrency union the form expects. The server
+      // already enforced the enum at write time.
+      currency: (settings.currency ?? 'AED') as
+        | 'AED'
+        | 'SAR'
+        | 'KWD'
+        | 'BHD'
+        | 'QAR'
+        | 'OMR'
+        | 'USD'
+        | 'EUR'
+        | 'GBP'
+        | 'CAD'
+        | 'AUD',
       logoUrl: settings.logoUrl ?? '',
       websiteUrl: settings.websiteUrl ?? '',
       socialInstagram: settings.socialInstagram ?? '',

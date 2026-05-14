@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  BOOKING_STATUS_VALUES,
+  PAYMENT_METHOD_VALUES,
+  PAYMENT_STATUS_VALUES,
+} from '../../types';
 
 /**
  * Audit F-69 companion (2026-05-08 r6): runtime schema for the
@@ -13,26 +18,20 @@ import { z } from 'zod';
  * `.passthrough()` is deliberate — the route's projection occasionally
  * stamps lookup-derived auxiliary fields (lessonTypePrice, arena
  * coordinates) that the mobile UI ignores. The schema gates only the
- * fields the mobile UI READS, so adding a new server-side column
- * doesn't trip the validator until a mobile consumer asks for it.
+ * fields client code reads or the shared Booking DTO promises, so a
+ * server-side projection drift fails loudly without making every future
+ * additive column a breaking change.
+ *
+ * Audit 2026-05-13 (P1): all three enums derive from canonical tuples in
+ * `types/index.ts` so input schemas, response schemas, and the const-maps
+ * never drift. A new payment method or booking status added there
+ * propagates here automatically. PAYMENT_STATUS_VALUES matches the
+ * `payment_status` pgEnum in `packages/db/src/schema/enums.ts` —
+ * `'pending' | 'paid' | 'partial' | 'refunded' | 'failed' | 'overdue'`.
  */
-export const bookingStatusSchema = z.enum([
-  'confirmed',
-  'cancelled',
-  'completed',
-  'no_show',
-  'pending',
-]);
+export const bookingStatusSchema = z.enum(BOOKING_STATUS_VALUES);
 
-export const paymentStatusSchema = z.enum([
-  'unpaid',
-  'paid',
-  'pending',
-  'refunded',
-  'partial',
-  'failed',
-  'requires_action',
-]);
+export const paymentStatusSchema = z.enum(PAYMENT_STATUS_VALUES);
 
 export const bookingListItemSchema = z
   .object({
@@ -43,14 +42,17 @@ export const bookingListItemSchema = z
     horseId: z.string().uuid().nullable(),
     status: bookingStatusSchema,
     paymentStatus: paymentStatusSchema,
+    paymentMethod: z.enum(PAYMENT_METHOD_VALUES).nullable(),
     amount: z.number().int().nullable(),
-    currency: z.string(),
+    currency: z.string().length(3),
     createdAt: z.string(),
     slotDate: z.string(),
     slotStartTime: z.string(),
     slotEndTime: z.string(),
     lessonTypeName: z.string(),
     lessonTypeType: z.string(),
+    lessonTypePrice: z.number().int(),
+    lessonTypeCurrency: z.string().length(3),
     arenaName: z.string().nullable(),
     riderName: z.string().nullable(),
     horseName: z.string().nullable(),

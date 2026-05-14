@@ -546,7 +546,9 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
       category: expense.category,
       description: expense.description,
       amount: toMajorUnits(expense.amount, expense.currency),
-      currency: expense.currency,
+      // Server enforces SupportedCurrency at write time; the API response
+      // types as `string` so we cast to the form's enum-narrowed shape.
+      currency: expense.currency as 'AED' | 'SAR' | 'KWD' | 'BHD' | 'QAR' | 'OMR' | 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD',
       date: expense.date,
       vendorName: expense.vendorName ?? undefined,
     },
@@ -558,7 +560,9 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
         category: expense.category,
         description: expense.description,
         amount: toMajorUnits(expense.amount, expense.currency),
-        currency: expense.currency,
+        // Server enforces SupportedCurrency at write time; the API response
+      // types as `string` so we cast to the form's enum-narrowed shape.
+      currency: expense.currency as 'AED' | 'SAR' | 'KWD' | 'BHD' | 'QAR' | 'OMR' | 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD',
         date: expense.date,
         vendorName: expense.vendorName ?? undefined,
       });

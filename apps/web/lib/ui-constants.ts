@@ -54,3 +54,47 @@ export const LESSON_TYPE_COLORS: Record<string, string> = {
   clinic: '#ec4899',
   custom: '#6366f1',
 };
+
+/**
+ * Audit 2026-05-13 (P1): single source of truth for "what day starts the
+ * week" across the dashboard. Calendar (month/week/agenda views) and the
+ * bookings list day-strip previously disagreed — calendar started weeks on
+ * Sunday (`weekStartsOn: 0`), the bookings day-strip started on Monday.
+ * Both surfaces now consume this constant so a future per-club preference
+ * (`clubs.weekStartsOn`) only has to change one place.
+ *
+ * 0 = Sunday, 1 = Monday, 6 = Saturday. GCC clubs traditionally consider
+ * Saturday the start of the working week; we keep 0 (Sunday) for now to
+ * match the cultural week-start visible in most local calendars (Sunday
+ * column drawn first), and document the override path inline.
+ */
+// `as 0 | 1 | 6` widens the literal so the WEEKDAY_LABELS_* ternaries
+// below aren't flagged as unreachable comparisons against the
+// not-currently-selected branches.
+export const WEEK_STARTS_ON = 0 as 0 | 1 | 6;
+
+/**
+ * Short two-letter weekday labels in WEEK_STARTS_ON order. Index 0 in this
+ * array is whichever day WEEK_STARTS_ON identifies as the start.
+ */
+export const WEEKDAY_LABELS_SHORT: readonly [string, string, string, string, string, string, string] =
+  WEEK_STARTS_ON === 1
+    ? (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const)
+    : WEEK_STARTS_ON === 6
+      ? (['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const)
+      : (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const);
+
+export const WEEKDAY_LABELS_LETTER: readonly [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+] =
+  WEEK_STARTS_ON === 1
+    ? (['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const)
+    : WEEK_STARTS_ON === 6
+      ? (['Sa', 'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr'] as const)
+      : (['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const);

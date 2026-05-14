@@ -58,7 +58,7 @@ import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
 import type { ApiResponse } from '@equestrian/shared/types';
 
-import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
+import { BOOKING_STATUS_COLORS, PAYMENT_STATUS_COLORS, WEEK_STARTS_ON } from '@/lib/ui-constants';
 import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 // ─── Action Dialog Types ─────────────────────────────────────────────
@@ -141,14 +141,20 @@ function toLocalDateString(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Audit 2026-05-13 (P1): week-start aligned with calendar via WEEK_STARTS_ON
+// (`lib/ui-constants.ts`). Previously the bookings strip hardcoded Monday as
+// the week start while the calendar started weeks on Sunday — a UI
+// inconsistency for any admin switching between /calendar and /bookings.
 function getWeekDates(weekOffset: number): string[] {
   const today = new Date();
-  const dayOfWeek = today.getDay() || 7;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - dayOfWeek + 1 + weekOffset * 7);
+  // today.getDay() returns 0..6 with Sunday=0. Offset back to the configured
+  // start of the week.
+  const dayIndex = (today.getDay() - WEEK_STARTS_ON + 7) % 7;
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - dayIndex + weekOffset * 7);
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
     return toLocalDateString(d);
   });
 }
@@ -175,7 +181,11 @@ function useRefundBooking() {
         body: JSON.stringify(reason ? { reason } : {}),
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['bookings'] });
+      // Audit 2026-05-13 (P1): aligned with the list/detail split in
+      // use-bookings.ts. Invalidate both slices so the list and any open
+      // detail view refresh after a refund.
+      void qc.invalidateQueries({ queryKey: ['bookings', 'list'] });
+      void qc.invalidateQueries({ queryKey: ['bookings', 'detail'] });
     },
     // Audit LOW-12 (2026-05-05): hook-level reporter so a backend regression
     // never hides behind the consumer's bare `toast.error` — the call-site

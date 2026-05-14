@@ -13,6 +13,7 @@ import {
   type UpdateDiscoveryInput,
   type UpdateBookingRulesInput,
 } from '@equestrian/shared/schemas';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): `ClubSettings` and
@@ -24,6 +25,10 @@ export function useClubSettings() {
   return useQuery({
     queryKey: ['settings'],
     queryFn: () => fetchJson<ApiSuccessResponse<ClubSettings>>('/api/v1/settings'),
+    // Audit 2026-05-13 (P1): club settings only change via admin
+    // mutations (which already invalidate). The default 30s caused
+    // unnecessary refetches on every settings-page tab switch.
+    staleTime: STALE_TIME_STABLE,
   });
 }
 

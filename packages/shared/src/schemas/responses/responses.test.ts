@@ -60,12 +60,22 @@ describe('horseListItemSchema (F-69 companion)', () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect((parsed.data as Record<string, unknown>).newServerColumn).toBe('value');
+      // Audit 2026-05-13 (P1): use a typed intersection instead of the
+      // `Record<string, unknown>` cast. Avoids setting the
+      // "cast-to-Record" precedent for future tests.
+      const dataWithExtra = parsed.data as typeof validRow & { newServerColumn: string };
+      expect(dataWithExtra.newServerColumn).toBe('value');
     }
   });
 });
 
 describe('bookingListItemSchema (F-69 companion)', () => {
+  // Audit 2026-05-13 (P1): fixture extended to include the canonical-
+  // tuple-driven fields (`paymentMethod`, `lessonTypePrice`,
+  // `lessonTypeCurrency`) and the tightened `currency.length(3)` shape
+  // that the schema now requires. `paymentMethod` is `.nullable()` so
+  // the absence of an online provider on offline-pay bookings is
+  // representable.
   const validRow = {
     id: '11111111-1111-4111-8111-111111111111',
     clubId: '22222222-2222-4222-8222-222222222222',
@@ -74,6 +84,7 @@ describe('bookingListItemSchema (F-69 companion)', () => {
     horseId: null,
     status: 'confirmed',
     paymentStatus: 'paid',
+    paymentMethod: 'card',
     amount: 12000,
     currency: 'AED',
     createdAt: '2026-05-01T00:00:00Z',
@@ -82,6 +93,8 @@ describe('bookingListItemSchema (F-69 companion)', () => {
     slotEndTime: '10:00:00',
     lessonTypeName: 'Group lesson',
     lessonTypeType: 'group',
+    lessonTypePrice: 12000,
+    lessonTypeCurrency: 'AED',
     arenaName: 'Main arena',
     riderName: 'Layla',
     horseName: null,

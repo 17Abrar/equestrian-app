@@ -21,7 +21,12 @@
   // export for the livery billing cron trigger. See that file for details.
   "main": "worker-entry.mjs",
   "compatibility_date": "2025-11-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // Audit 2026-05-13 (P1): `global_fetch_strictly_public` matches the
+  // OpenNext-Cloudflare `get-started` baseline. Without it,
+  // `worker-entry.mjs`'s `https://internal.worker/...` fetch to dispatch
+  // cron handlers is routed via the public internet path instead of the
+  // in-isolate handler, undermining the no-round-trip intent.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 
   "assets": {
     "binding": "ASSETS",

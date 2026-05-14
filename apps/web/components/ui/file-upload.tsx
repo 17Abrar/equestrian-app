@@ -123,18 +123,18 @@ export function FileUpload({
         // `image/jpeg` but actually contains something else. On mismatch the
         // server deletes the object, so we never hand a tainted URL to the
         // form.
-        const verifyRes = await fetch('/api/v1/upload/verify', {
+        //
+        // Audit 2026-05-13 (P1): migrated to `fetchJson` to match step 1
+        // (audit L-2). Before, a Cloudflare 502 with an HTML body landed in
+        // the `verifyRes.json().catch(() => ({}))` swallow path and produced
+        // the generic fallback message; `fetchJson` surfaces the structured
+        // error envelope when the server returns one and reports a clean
+        // network error otherwise.
+        await fetchJson<{ success: true; data: { ok: true } }>('/api/v1/upload/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, contentType: file.type }),
         });
-        if (!verifyRes.ok) {
-          const errData = await verifyRes.json().catch(() => ({}));
-          throw new Error(
-            (errData as { error?: { message?: string } }).error?.message ??
-              'Uploaded file could not be verified. Please try again.',
-          );
-        }
 
         // Step 4: Pass the public URL back to the form
         onChange(publicUrl);

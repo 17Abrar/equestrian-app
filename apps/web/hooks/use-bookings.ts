@@ -255,6 +255,18 @@ export function useCreateRecurringSlots() {
 
 // ─── Bookings ─────────────────────────────────────────────────────────
 
+// Audit 2026-05-13 (P1): split bookings query keys into `list` and `detail`
+// variants to match the use-horses.ts F-70 pattern. Previously both the
+// list (`['bookings', filters]`) and the detail (`['bookings', bookingId]`)
+// queries shared the same `['bookings']` prefix — every list mutation
+// invalidation refetched every mounted detail entry, and a detail
+// invalidation could mass-evict from cache. The narrow keys let mutations
+// invalidate the right slice without thrash.
+const BOOKINGS_KEY = ['bookings'] as const;
+const bookingsListKey = (filters: Partial<BookingFiltersInput>) =>
+  [...BOOKINGS_KEY, 'list', filters] as const;
+const bookingDetailKey = (bookingId: string) => [...BOOKINGS_KEY, 'detail', bookingId] as const;
+
 export function useBookings(filters: Partial<BookingFiltersInput> = {}) {
   const params = new URLSearchParams();
   if (filters.status) params.set('status', filters.status);
@@ -265,14 +277,14 @@ export function useBookings(filters: Partial<BookingFiltersInput> = {}) {
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
 
   return useQuery({
-    queryKey: ['bookings', filters],
+    queryKey: bookingsListKey(filters),
     queryFn: () => fetchJson<PaginatedResponse<Booking>>(`/api/v1/bookings?${params.toString()}`),
   });
 }
 
 export function useBooking(bookingId: string) {
   return useQuery({
-    queryKey: ['bookings', bookingId],
+    queryKey: bookingDetailKey(bookingId),
     queryFn: () => fetchJson<ApiResponse<Booking>>(`/api/v1/bookings/${bookingId}`),
     enabled: !!bookingId,
   });
@@ -289,8 +301,15 @@ export function useCreateBooking() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      // Invalidate only the list slice — no in-cache detail row exists yet
+      // for a brand-new booking.
+      void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      // Audit 2026-05-13 (P2): keep the dashboard tiles + finance
+      // overview in sync after every booking mutation — both compute
+      // booking-derived KPIs and were stale for up to 30s otherwise.
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
   });
 }
@@ -314,10 +333,15 @@ export function useCancelBooking() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
+      void queryClient.invalidateQueries({ queryKey: bookingDetailKey(vars.bookingId) });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
       void queryClient.invalidateQueries({ queryKey: ['cancelPreview'] });
+      // Audit 2026-05-13 (P2): see useCreateBooking — keep dashboard /
+      // finance overview fresh after booking-state mutations.
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
     onError: defaultMutationErrorReporter('booking.cancel'),
   });
@@ -331,9 +355,12 @@ export function useMarkNoShow() {
       fetchJson<ApiResponse<Booking>>(`/api/v1/bookings/${bookingId}/no-show`, {
         method: 'POST',
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    onSuccess: (_data, bookingId) => {
+      void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
+      void queryClient.invalidateQueries({ queryKey: bookingDetailKey(bookingId) });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
     onError: defaultMutationErrorReporter('booking.no_show'),
   });
@@ -347,9 +374,12 @@ export function useMarkComplete() {
       fetchJson<ApiResponse<Booking>>(`/api/v1/bookings/${bookingId}/complete`, {
         method: 'POST',
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    onSuccess: (_data, bookingId) => {
+      void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });
+      void queryClient.invalidateQueries({ queryKey: bookingDetailKey(bookingId) });
       void queryClient.invalidateQueries({ queryKey: ['bookingSlots'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['finances', 'overview'] });
     },
     onError: defaultMutationErrorReporter('booking.mark_complete'),
   });

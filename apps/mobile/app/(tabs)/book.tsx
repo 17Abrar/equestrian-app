@@ -279,20 +279,39 @@ export default function BookScreen() {
 
         {/* Bottom action */}
         <View className="absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-6 pb-10 pt-4">
-          <TouchableOpacity
-            className={`rounded-2xl py-4 ${createBooking.isPending || isPaying ? 'bg-gray-400' : 'bg-gray-900'}`}
-            onPress={handleConfirmBooking}
-            disabled={createBooking.isPending || isPaying || !memberId}
-            activeOpacity={0.8}
-          >
-            {createBooking.isPending || isPaying ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-center text-base font-semibold text-white">
-                Confirm &amp; Pay
+          {/*
+            Audit 2026-05-13 (P1): when the signed-in user has no membership
+            row yet (e.g. just signed up and hasn't joined a club),
+            `memberId` is null and the CTA silently disables. Show an
+            explicit explanation so the rider knows what to do instead of
+            tapping a dead button.
+          */}
+          {!memberId ? (
+            <View className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <Text className="text-sm font-semibold text-amber-900">
+                Almost there
               </Text>
-            )}
-          </TouchableOpacity>
+              <Text className="mt-1 text-xs text-amber-800">
+                Your account isn&apos;t linked to a stable yet. Open the Cavaliq web app and
+                join a stable, then come back here to book.
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              className={`rounded-2xl py-4 ${createBooking.isPending || isPaying ? 'bg-gray-400' : 'bg-gray-900'}`}
+              onPress={handleConfirmBooking}
+              disabled={createBooking.isPending || isPaying}
+              activeOpacity={0.8}
+            >
+              {createBooking.isPending || isPaying ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-center text-base font-semibold text-white">
+                  Confirm &amp; Pay
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );

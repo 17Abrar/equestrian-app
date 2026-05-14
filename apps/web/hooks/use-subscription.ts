@@ -10,6 +10,7 @@ import {
   type OutstandingInvoice,
   type SubscriptionSummary,
 } from '@equestrian/shared/types';
+import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 import { fetchJson } from '@/lib/fetch-json';
 
 // Audit F-4 (2026-05-08 r6 PR Alpha-2): subscription DTOs consolidated under
@@ -31,6 +32,10 @@ export function useSubscription() {
   return useQuery({
     queryKey: ['subscription'],
     queryFn: () => fetchJson<ApiSuccessResponse<SubscriptionSummary>>('/api/v1/me/subscription'),
+    // Audit 2026-05-13 (P1): subscription status changes only via webhook
+    // (Ziina pay-link) or the issue/cancel cron; refetching every 30s on
+    // every settings-tab mount is wasteful.
+    staleTime: STALE_TIME_STABLE,
   });
 }
 

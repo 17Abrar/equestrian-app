@@ -57,9 +57,14 @@ export function CompetitionForm() {
         ...data,
         entryFee: data.entryFee != null ? Math.round(data.entryFee * 100) : undefined,
       };
+      // Audit 2026-05-13 (P1): use the `success` discriminator for narrowing
+      // instead of the prior `result && 'data' in result && result.data`
+      // chain. `fetchJson` throws on non-2xx, so the error variant is
+      // unreachable here — but TS still types `result` as the union and the
+      // discriminator is the canonical narrow.
       const result = await createCompetition.mutateAsync(apiData);
       toast.success('Competition created');
-      if (result && 'data' in result && result.data) {
+      if (result.success) {
         router.push(`/competitions/${result.data.id}`);
       } else {
         router.push('/competitions');

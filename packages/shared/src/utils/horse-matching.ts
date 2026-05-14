@@ -20,8 +20,13 @@ import {
   WEIGHT_COMFORT_MARGIN_LOW,
   WORKLOAD_BUSY_THRESHOLD,
 } from '../constants/matching';
+import type { SkillLevel } from '../types';
 
-type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
+// Audit 2026-05-13 (P2): re-export SkillLevel from the canonical types
+// barrel rather than redeclaring locally. Adding 'novice' (or any new
+// value) to the SKILL_LEVEL const-map propagates here without a parallel
+// edit. Previous duplicate `type SkillLevel = 'beginner' | ... | 'advanced'`
+// removed.
 
 export interface MatchRider {
   id: string;
