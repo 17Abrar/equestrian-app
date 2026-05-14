@@ -18,7 +18,7 @@
   "devDependencies": {
     "@equestrian/eslint-config": "workspace:*",
     "@equestrian/typescript-config": "workspace:*",
-    "eslint": "^9.24.0",
+    "eslint": "^10.3.0",
     "typescript": "^5.8.2"
   }
 }
