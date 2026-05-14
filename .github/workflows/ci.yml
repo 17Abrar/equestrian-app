@@ -192,7 +192,7 @@ jobs:
 
       - name: Create Neon test branch
         id: create-branch
-        uses: neondatabase/create-branch-action@v5
+        uses: neondatabase/create-branch-action@v6
         with:
           # Both NEON_PROJECT_ID and NEON_API_KEY are repo secrets — see
           # Settings → Secrets and variables → Actions → Secrets. The
