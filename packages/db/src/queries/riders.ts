@@ -414,10 +414,17 @@ export async function isParentOf(
 }
 
 /**
- * Returns the memberIds of every rider whose `parent_member_id` points at
- * the given parent, scoped to `clubId`. Used by the booking GET path to
+ * Returns the memberIds of every ACTIVE rider whose `parent_member_id` points
+ * at the given parent, scoped to `clubId`. Used by the booking GET path to
  * list a parent's children's bookings without forcing them to know each
  * child's id.
+ *
+ * Audit 2026-05-13 (P1): joined `club_members` and filtered
+ * `clubMembers.isActive = true`. Without this filter, a parent could see (and
+ * via downstream write paths potentially book/cancel for) a child who had
+ * been deactivated by club staff — bypassing the deactivation signal entirely.
+ * Mirrors the active-member gate used by `getMemberById` in
+ * `packages/db/src/queries/club-members.ts`.
  */
 export async function getDependentMemberIds(
   clubId: string,
@@ -426,6 +433,16 @@ export async function getDependentMemberIds(
   const result = await db
     .select({ memberId: riderProfiles.memberId })
     .from(riderProfiles)
-    .where(and(eq(riderProfiles.clubId, clubId), eq(riderProfiles.parentMemberId, parentMemberId)));
+    .innerJoin(
+      clubMembers,
+      and(eq(clubMembers.id, riderProfiles.memberId), eq(clubMembers.clubId, clubId)),
+    )
+    .where(
+      and(
+        eq(riderProfiles.clubId, clubId),
+        eq(riderProfiles.parentMemberId, parentMemberId),
+        eq(clubMembers.isActive, true),
+      ),
+    );
   return result.map((r) => r.memberId);
 }

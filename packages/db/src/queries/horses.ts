@@ -436,18 +436,33 @@ export type HorseAvailableForMatching = Awaited<
 >[number];
 
 export async function softDeleteHorse(clubId: string, horseId: string) {
-  // Audit pass-3 follow-up E (2026-05-09): soft-delete now cascades to
-  // every medical child table — health records, medications,
-  // medication logs, documents — alongside the existing
-  // `horsePairingHistory` cascade (audit C-10). Each child table's
-  // schema-level FK declares `ON DELETE CASCADE` against horses, but
-  // that only fires on hard delete; soft-delete bypassed it and left
-  // medical PHI live indefinitely. Three failure modes the cascade
-  // closes:
+  // Audit pass-3 follow-up E (2026-05-09): soft-delete cascades to every
+  // medical PHI child table — health records, medications, medication
+  // logs, documents. Each child table's schema-level FK declares
+  // `ON DELETE CASCADE` against horses, but that only fires on hard
+  // delete; soft-delete bypassed it and left medical PHI live
+  // indefinitely. Three failure modes the cascade closes:
   //   1. GDPR right-to-erasure not honoured for medical records.
   //   2. A future query that forgets `isHorseActiveInClub` would leak.
   //   3. A hard-purge later silently CASCADE-deleted the children
   //      unexpectedly.
+  //
+  // Audit 2026-05-13 (P1 — appended): `horse_medication_logs` is
+  // documented as append-only (DATABASE.md "Append-only tables"). The
+  // PHI scrub here is an INTENTIONAL EXCEPTION to that invariant —
+  // GDPR right-to-erasure trumps append-only retention for medical
+  // PHI. Documented in DATABASE.md alongside the append-only list.
+  //
+  // `horse_pairing_history` is also append-only BUT contains NO PHI
+  // (rider_member_id + rating only) — it's behavioral signal for the
+  // smart-matching algorithm. The previous cascade hard-DELETEd it,
+  // which corrupted the matching model AND broke the append-only
+  // invariant with no GDPR justification. As of 2026-05-13 we leave
+  // `horse_pairing_history` rows alone on soft-delete; they continue
+  // to inform pairings even after the horse is retired. If the parent
+  // horse is later hard-deleted (rare; club deletion only), the FK
+  // CASCADE will sweep them then — which is consistent with append-only
+  // semantics (a removed parent removes its history).
   //
   // Wrapped in a writeTransaction so the parent UPDATE and the child
   // DELETEs commit atomically — a partial failure can't leave the
@@ -482,9 +497,7 @@ export async function softDeleteHorse(clubId: string, horseId: string) {
     await tx
       .delete(horseDocuments)
       .where(and(eq(horseDocuments.clubId, clubId), eq(horseDocuments.horseId, horseId)));
-    await tx
-      .delete(horsePairingHistory)
-      .where(and(eq(horsePairingHistory.clubId, clubId), eq(horsePairingHistory.horseId, horseId)));
+    // horse_pairing_history INTENTIONALLY preserved — see header comment.
 
     return result[0];
   });
