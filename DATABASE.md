@@ -2,7 +2,9 @@
 
 Database: PostgreSQL (Neon Serverless)
 ORM: Drizzle ORM
-Every table has Row-Level Security (RLS) enabled.
+Tenant isolation: **application-layer `club_id` scoping only.** Postgres Row-Level Security was dropped in migrations `0011_drop_rls.sql` and `0023_drop_rls_for_added_tables.sql`; the `app.current_club_id` session variable is no longer set and no `tenant_isolation` policies exist. Every Drizzle query MUST include `.where(eq(table.clubId, currentClubId))` — this is the SOLE enforcement mechanism. See `packages/db/src/test/tenant-isolation.test.ts` for the explicit invariant.
+
+**Source of truth.** This document is curated documentation, NOT a generated artifact. When this doc and `packages/db/src/schema/*.ts` disagree, the TS schema is authoritative. The schema is the single source of truth for column types, defaults, indexes, and FK behavior; treat the SQL in this document as illustrative shape, not the literal generated DDL. Migrations under `packages/db/migrations/` are the historical record. (Audit 2026-05-13: 11 tables were undocumented and 15+ columns on `clubs` were stale; the curation effort has been reset to "shape + intent" rather than column-by-column transcription.)
 
 ---
 
@@ -32,6 +34,8 @@ Audit F-65 (2026-05-07 r4): the platform never hard-deletes user-facing rows, bu
 | Deactivation flag      | `club_members` (`is_active=false` via `deactivateMember()`), `arenas` (`is_active=false`), `lesson_types` (`is_active=false`)                                                                                        | Flip `is_active` to false. Restorable.                                                     | Configuration entities — coaches/staff who leave, arenas taken out of rotation, lesson types renamed. Forward-creation paths (booking-slot create) check `is_active=true` to keep deactivated rows out of pickers without losing historical FKs from past bookings. |
 
 **Append-only tables** (`audit_log`, `webhook_events`, `competition_results`, `community_votes`, `horse_pairing_history`, `coupon_usages`, `rider_achievements`, `horse_medication_logs`, `horse_care_reminder_sends`, `waitlist`) have no delete pattern by design — they're write-once historical records and contain no user-deletable content.
+
+**Append-only exception — medical PHI scrub on parent horse soft-delete.** `horse_medication_logs` is append-only as a clinical-audit-trail invariant, BUT when a horse is soft-deleted (`softDeleteHorse` in `packages/db/src/queries/horses.ts`), the associated medication-log rows are hard-deleted alongside `horse_medications`, `horse_health_records`, and `horse_documents`. This is an INTENTIONAL EXCEPTION: GDPR right-to-erasure for medical PHI trumps append-only retention. The other append-only tables — including `horse_pairing_history` (which contains no PHI, only behavioral rating data) — are NOT affected by horse soft-delete and continue to inform the smart-matching algorithm after the horse is retired.
 
 ---
 
@@ -72,7 +76,12 @@ CREATE TYPE skill_level AS ENUM ('beginner', 'intermediate', 'advanced');
 CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'completed', 'cancelled', 'no_show');
 CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'partial', 'refunded', 'failed', 'overdue');
 CREATE TYPE payment_method AS ENUM ('card', 'apple_pay', 'google_pay', 'tabby', 'tamara', 'knet', 'mada', 'benefit', 'cash', 'card_in_person', 'package_credit', 'bank_transfer');
-CREATE TYPE lesson_type AS ENUM ('group', 'semi_private', 'private', 'desert_ride', 'beach_ride', 'endurance', 'camp', 'clinic', 'custom');
+-- lesson_type: NOT enforced as a Postgres ENUM. Stored as `varchar(100)` on `lesson_types.type`
+-- and `text[]` on `coupons.applicable_types`. Canonical values used by the app are
+-- 'group' | 'semi_private' | 'private' | 'desert_ride' | 'beach_ride' | 'endurance' |
+-- 'camp' | 'clinic' | 'custom'. Free-form storage is intentional so clubs can introduce
+-- new categories without a migration. Validation runs at the Zod layer in
+-- `packages/shared/src/schemas/index.ts`.
 CREATE TYPE user_role AS ENUM ('club_admin', 'club_manager', 'coach', 'horse_owner', 'rider', 'parent', 'groom', 'veterinarian');
 CREATE TYPE livery_type AS ENUM ('full', 'part', 'diy');
 CREATE TYPE coupon_status AS ENUM ('active', 'paused', 'expired', 'exhausted');
@@ -113,16 +122,22 @@ CREATE TABLE clubs (
   social_facebook TEXT,
   social_tiktok TEXT,
 
-  -- Stripe
-  stripe_account_id VARCHAR(255),             -- Stripe Connect account
-  stripe_customer_id VARCHAR(255),            -- For paying SaaS subscription
-  stripe_subscription_id VARCHAR(255),
+  -- Stripe (LEGACY columns from the dropped Connect platform model — see pivot 2026-05-04)
+  -- New code reads per-club provider credentials from `club_payment_accounts.encrypted_credentials`.
+  -- These three columns are retained for backwards compatibility; do not write to them in new flows.
+  stripe_account_id VARCHAR(255),             -- LEGACY: Stripe Connect account ID (no longer used)
+  stripe_customer_id VARCHAR(255),            -- For paying the Cavaliq SaaS subscription (still used for platform billing)
+  stripe_subscription_id VARCHAR(255),        -- For paying the Cavaliq SaaS subscription (still used for platform billing)
 
   -- Subscription
-  subscription_tier VARCHAR(20) NOT NULL DEFAULT 'trial',  -- trial, starter, professional, enterprise
+  subscription_tier VARCHAR(20) NOT NULL DEFAULT 'trial',  -- trial, starter, growing, professional
   subscription_status subscription_status NOT NULL DEFAULT 'trialing',
   trial_ends_at TIMESTAMPTZ,
-  platform_fee_percent DECIMAL(4,2) NOT NULL DEFAULT 3.5,  -- Transaction fee based on tier
+  -- platform_fee_percent retired 2026-05-04: Cavaliq takes no per-booking cut; revenue is subscription-only.
+
+  -- Trial-ending nudge dedup (audit pass-2 C-1)
+  trial_reminder_3day_sent_at TIMESTAMPTZ,
+  trial_reminder_1day_sent_at TIMESTAMPTZ,
 
   -- Booking settings
   advance_booking_days INT NOT NULL DEFAULT 30,
@@ -131,12 +146,32 @@ CREATE TABLE clubs (
   default_lesson_duration_minutes INT NOT NULL DEFAULT 60,
   allow_overbooking BOOLEAN NOT NULL DEFAULT false,
   overbooking_limit INT NOT NULL DEFAULT 0,
+  default_calendar_view VARCHAR(20) NOT NULL DEFAULT 'week',
+  late_cancellation_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+  no_show_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+
+  -- Branding (white-label)
+  brand_primary_color VARCHAR(7) DEFAULT '#6366f1',
+  brand_secondary_color VARCHAR(7) DEFAULT '#ec4899',
+  favicon_url TEXT,
+
+  -- Per-event notification toggles (NotificationPreferences shape — see clubs.ts:16)
+  notification_preferences JSONB NOT NULL DEFAULT '{...defaults...}',
+
+  -- Onboarding
+  onboarding_completed_at TIMESTAMPTZ,
+
+  -- Public discovery (Round 7 — rider self-signup funnel)
+  is_public_listing BOOLEAN NOT NULL DEFAULT false,
+  join_policy join_policy NOT NULL DEFAULT 'invite_only',
+  short_description VARCHAR(280),
 
   -- Metadata
   clerk_org_id VARCHAR(255) UNIQUE,           -- Links to Clerk Organization
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ,                     -- Soft-delete (audit F-41)
   deleted_at TIMESTAMPTZ
 );
 
@@ -515,7 +550,7 @@ CREATE TABLE lesson_types (
   club_id UUID NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
 
   name VARCHAR(255) NOT NULL,
-  type lesson_type NOT NULL,
+  type VARCHAR(100) NOT NULL,                  -- Free-form; see canonical values above (`lesson_type` comment)
   description TEXT,
   duration_minutes INT NOT NULL DEFAULT 60,
   price INT NOT NULL,                          -- In smallest currency unit
@@ -694,7 +729,7 @@ CREATE TABLE coupons (
   discount_type coupon_discount_type NOT NULL,
   discount_value INT NOT NULL,                 -- Percentage (0-100) or fixed amount in smallest currency unit
   max_discount INT,                            -- Cap for percentage discounts
-  applicable_types lesson_type[],              -- NULL = all types
+  applicable_types TEXT[],                     -- NULL = all types; values match the free-form `lesson_types.type` set
   minimum_amount INT,                          -- Minimum order amount
   max_uses INT,                                -- NULL = unlimited
   max_uses_per_rider INT,                      -- NULL = unlimited
@@ -786,10 +821,10 @@ CREATE TABLE payments (
   livery_contract_id UUID REFERENCES livery_contracts(id),
   invoice_id UUID REFERENCES invoices(id),
 
-  -- Stripe
+  -- Provider references (Stripe / Ziina / N-Genius — picked per-club via club_payment_accounts)
   stripe_payment_intent_id VARCHAR(255),
   stripe_charge_id VARCHAR(255),
-  platform_fee INT,                            -- Our cut in smallest currency unit
+  -- platform_fee INT removed 2026-05-04: no per-booking platform cut under the direct-keys model.
 
   refunded_amount INT DEFAULT 0,
   refunded_at TIMESTAMPTZ,
@@ -1129,22 +1164,45 @@ CREATE INDEX idx_audit_resource ON audit_log(resource_type, resource_id);
 
 ---
 
-## ROW-LEVEL SECURITY POLICIES
+## TABLES NOT YET DOCUMENTED INLINE
 
-Apply to ALL tables with `club_id`:
+> Audit 2026-05-13 (P1): the following tables exist in
+> `packages/db/src/schema/` but were never added to this document. Source
+> of truth is the schema file; this list ensures readers know they exist
+> and where to look. Curating full SQL shapes here would duplicate effort
+> and is the original cause of the drift.
+
+| Table                              | Schema file                                                | Purpose                                                                                                                              |
+| ---------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `audiences`                        | `schema/audiences.ts`                                      | Saved email-marketing recipient filters (Round 1F). One row per saved audience; the filter shape is JSONB.                          |
+| `club_join_requests`               | `schema/club-join-requests.ts`                             | Pending rider-side requests to join clubs whose `join_policy='approval'`. Status enum: pending / approved / rejected / withdrawn.    |
+| `club_payment_accounts`            | `schema/finances.ts` (`clubPaymentAccounts`)               | Per-club encrypted provider credentials (Stripe / Ziina / N-Genius) under the direct-keys model. One row per provider per club.     |
+| `burned_webhook_secret_hashes`     | `schema/finances.ts` (`burnedWebhookSecretHashes`)         | Append-only set of webhook secret hashes that have been rotated out, so a re-paste of an old secret is rejected (audit F-3 r6).      |
+| `livery_invoices`                  | `schema/livery-invoices.ts`                                | Monthly livery contract invoices issued by the platform-billing cron (Round 6). Status enum mirrors `invoices` but is a sibling tbl. |
+| `platform_subscription_invoices`   | `schema/platform-subscription-invoices.ts`                 | Cavaliq's own monthly SaaS invoices per club (Round 6 platform billing). Status: draft / sent / paid / overdue / void.               |
+| `webhook_events`                   | `schema/webhook-events.ts`                                 | Append-only dedup ledger for incoming provider webhooks. `claimWebhookEvent` does INSERT-ON-CONFLICT-DO-NOTHING.                     |
+| `horse_care_reminder_sends`        | `schema/horse-health.ts` (`horseCareReminderSends`)        | Append-only dedup ledger for Round 6.2 horse-care reminder emails (vaccination / farrier / dental / insurance / medication end).     |
+| `competitions`                     | `schema/competitions.ts`                                   | Round 8 competition entity (event metadata).                                                                                          |
+| `competition_classes`              | `schema/competitions.ts`                                   | Round 8 — individual classes within a competition; entry fee, level, capacity.                                                       |
+| `competition_entries`              | `schema/competitions.ts`                                   | Round 8 — rider entries into a class. Status enum: registered / confirmed / withdrawn / scratched.                                   |
+| `competition_results`              | `schema/competitions.ts`                                   | Round 8 — placings and scores for closed classes.                                                                                    |
+
+If you add a new table, either add it to the relevant `### {table}` section
+above or add a row here. Either way, the schema file remains the source of
+truth — this document captures shape + intent only.
+
+---
+
+## ROW-LEVEL SECURITY (HISTORICAL — DROPPED 2025)
+
+RLS policies and the `app.current_club_id` session variable were **removed** by migrations `0011_drop_rls.sql` and `0023_drop_rls_for_added_tables.sql`. Tenant isolation is now enforced exclusively at the application layer via Drizzle `.where(eq(table.clubId, currentClubId))` on every query. The block below shows the original RLS template for reference only — do NOT re-enable without explicit architectural review (the application-only model is intentional and tested in `packages/db/src/test/tenant-isolation.test.ts`).
 
 ```sql
--- Template for every table:
+-- HISTORICAL — these policies were dropped. Kept here for context only.
 ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY tenant_isolation ON {table_name}
   FOR ALL
   USING (club_id = current_setting('app.current_club_id')::uuid);
-
--- For community tables that can be global (club_id NULL):
-CREATE POLICY community_access ON community_topics
-  FOR SELECT
-  USING (club_id IS NULL OR club_id = current_setting('app.current_club_id')::uuid);
 ```
 
 ---

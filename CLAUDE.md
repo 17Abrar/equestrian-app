@@ -52,7 +52,7 @@ This is critical. If you are unsure about ANY of the following, you MUST search 
 
 - **API syntax**: If you're not 100% sure about the API for Clerk, Stripe, Drizzle ORM, Next.js 15 App Router, Expo Router, TanStack Query, Shadcn/ui, React Hook Form, Zod, NativeWind, Resend, or ANY library in our stack — SEARCH THE OFFICIAL DOCS FIRST. Do not guess. Do not use outdated patterns.
 - **Breaking changes**: Next.js 15, Clerk, Drizzle, and Expo are all actively evolving. If there's any chance an API has changed, look it up.
-- **Best practices**: If you're implementing something you haven't done before (e.g., Stripe Connect, Clerk Organizations, Postgres RLS policies, React Native animations), research it first.
+- **Best practices**: If you're implementing something you haven't done before (e.g., per-club direct-keys Stripe integration, Clerk Organizations, React Native animations), research it first. Note: Cavaliq is NOT a Stripe Connect platform — each club pastes its own provider credentials; there is no platform OAuth, no `application_fee_amount`, no `stripeAccount` SDK header. (Pivot 2026-05-04.)
 - **Error messages**: If you encounter an error you're not sure how to fix, search for it online before attempting a fix.
 - **Equestrian domain knowledge**: If a feature involves equestrian-specific terminology, workflows, or business logic you're not familiar with (e.g., horse rotation scheduling, arena management, feed planning, farrier schedules), research it to understand the real-world process before implementing.
 
@@ -148,7 +148,7 @@ Fix any errors before presenting your work. Do NOT tell me "there might be type 
 
 3. NEVER store secrets, API keys, tokens, or passwords in code. All secrets go in Cloudflare Workers Secrets (`wrangler secret put`) for production and `.env.local` (gitignored) for local development. Never commit `.env` files. See DEPLOY.md for the full secret list and `wrangler secret list cavaliq` to verify presence per release.
 
-4. NEVER handle raw credit card data. All payment processing uses Stripe Elements or Tap goSell.js hosted fields. Card data goes directly from browser to payment processor. Our servers only receive tokens.
+4. NEVER handle raw credit card data. All payment processing uses Stripe Elements, Ziina hosted checkout, or N-Genius hosted payment page. Card data goes directly from browser to payment processor. Our servers only receive tokens / provider references. (Tap goSell was on the original plan but is not currently integrated; see `apps/web/lib/payments/registry.ts` for the live adapter list.)
 
 5. NEVER interpolate user input into SQL queries. Always use parameterized queries via Drizzle ORM. No raw SQL string concatenation. Ever.
 
@@ -537,20 +537,20 @@ const PERMISSIONS = {
 - NEVER expose admin-only API endpoints without role verification.
 - Check permissions on EVERY route. If you forget, it's a security hole.
 
-### Multi-Tenancy (Row-Level Security)
+### Multi-Tenancy (Application-Layer Scoping)
 
 - EVERY database query MUST be scoped to the current club (tenant)
 - Use Drizzle ORM's `.where(eq(table.clubId, currentClubId))` on EVERY query
-- Additionally, enable Postgres RLS policies as a safety net
+- **There is NO database-level safety net.** Postgres RLS was dropped in migrations `0011_drop_rls.sql` and `0023_drop_rls_for_added_tables.sql`. Application-layer `club_id` filtering is the SOLE enforcement mechanism. Forgetting it is a critical security bug; you cannot rely on the DB to catch it.
 - NEVER allow cross-tenant data access, even in admin views
-- Test tenant isolation: write tests that verify Club A cannot read Club B's data
+- Test tenant isolation: write tests that verify Club A cannot read Club B's data (see `packages/db/src/test/tenant-isolation.test.ts` for the canonical pattern)
 - **This is the #1 security priority.** A tenant isolation failure is a critical, ship-stopping bug.
 
 ### Input Validation
 
 - Validate ALL user input on the server using Zod schemas
 - Validate on the client too (for UX), but NEVER trust client validation alone
-- Sanitize HTML input with DOMPurify for any rich text fields
+- **Free-text field rendering policy (2026-05-13).** Free-text columns — `riderProfiles.medicalNotes`, `horseHealthRecords.diagnosis`/`treatment`, `horses.notes`, `description`, `markings`, `gearNotes` — are stored as-is (with PHI fields encrypted at rest) and are CURRENTLY RENDERED AS PLAIN TEXT everywhere. There is no `dangerouslySetInnerHTML` anywhere in `apps/web` or `apps/mobile` and DOMPurify is intentionally NOT in the dependency tree. Do not change this rendering posture casually: any future feature that wants to render these as HTML MUST first install `isomorphic-dompurify` and route the field through `DOMPurify.sanitize(value, { ALLOWED_TAGS: ['b','i','em','strong','p','br'] })` (or stricter) at render time. Adding `dangerouslySetInnerHTML` without DOMPurify is a stored-XSS vulnerability — there is no upstream sanitization in the Zod schemas (length-validation only).
 - Limit file upload sizes (15MB max for images, 25MB for documents)
 - Validate file types (only allow: jpg, jpeg, png, webp, gif, pdf, doc, docx)
 - Validate file content type (check magic bytes, not just extension)

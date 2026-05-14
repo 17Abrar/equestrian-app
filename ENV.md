@@ -296,6 +296,22 @@ OAuth flow. Audit AI-\* (2026-05-04 pivot from Connect).
 - **Why:** mobile auth — must match the `pk_…` mode of the web app
   (live or test).
 
+### `EXPO_PUBLIC_SENTRY_DSN`
+
+- **Where:** mobile bundle (statically inlined)
+- **When:** required for TestFlight / production builds; optional in dev
+  (an unset value makes the Sentry init a no-op — `apps/mobile/lib/sentry.ts`).
+- **Why:** error reporting for the rider app. Without it, crashes go
+  unreported and the `Sentry.ErrorBoundary` fallback fires without an
+  associated event.
+
+### `EXPO_PUBLIC_SENTRY_DEBUG`
+
+- **Where:** mobile bundle
+- **When:** optional; only set to `1` during local debugging.
+- **Why:** enables Sentry's verbose console output. Noisy in normal
+  operation; leave unset / `0` for builds.
+
 ---
 
 ## CI-only

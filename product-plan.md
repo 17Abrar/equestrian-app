@@ -928,6 +928,16 @@ User books lesson
 
 ## PAYMENTS -- Full Payment Architecture
 
+> **STATUS (2026-05-04 pivot — read first):** The Stripe Connect marketplace model described in this section was the **original intent** and is preserved here for historical context. The **shipped architecture** is different:
+>
+> - **Cavaliq is NOT a Stripe Connect platform.** No platform `STRIPE_CLIENT_ID`, no OAuth, no `application_fee_amount`, no `transfer_data`, no `stripeAccount` SDK header.
+> - **Each club pastes its own provider credentials** (Stripe `sk_…`/`pk_…`/`whsec_…`, Ziina API key, N-Genius API key) into Settings → Payments. We encrypt them into `club_payment_accounts.encrypted_credentials` and call providers directly under the club's merchant account.
+> - **Three providers are wired today:** `stripe`, `ziina`, `n_genius`. Per-club webhook URLs are `/api/webhooks/<provider>/<clubId>`.
+> - **Money lands in the club's own balance.** Cavaliq takes **no per-booking cut** — revenue comes from subscription tiers (Starter AED 300 / Growing AED 800 / Professional AED 2000) only. The 0.9% per-booking fee that earlier drafts of this plan referenced is retired.
+> - **Platform billing for the Cavaliq SaaS itself** (Flow 2 below) is handled via Ziina manual pay-links, not Stripe Billing — see Round 6 launch notes in memory.
+>
+> The text below from "FLOW 1" onwards describes the original marketplace design. Treat it as background reading; the source of truth for current behaviour is `apps/web/lib/payments/*.ts` and ARCHITECTURE.md → PAYMENT INTEGRATION PATTERNS.
+
 There are TWO payment flows in the platform:
 
 FLOW 1: Riders paying the STABLE for services (lessons, rides, packages, livery)
@@ -1500,6 +1510,16 @@ Horse medical records are NOT covered by HIPAA (that's human health data only). 
 ---
 
 # PART 6: REVENUE MODEL
+
+> **STATUS (2026-05-04 pivot — read first):** The tier names, prices, and platform-transaction-fee percentages below are the **original 2025 plan** and have been superseded. Shipped pricing:
+>
+> - **Starter** — AED 300 / month
+> - **Growing** — AED 800 / month
+> - **Professional** — AED 2000 / month
+> - All tiers: unlimited riders, 14-day trial, 2-months-free on annual.
+> - **No per-booking transaction fee.** The 0.9% / 2% / 3.5% rates below are retired — Cavaliq operates on the direct-keys model and takes no cut on rider payments; clubs keep 100% of what Stripe/Ziina/N-Genius deposit.
+>
+> Treat the rest of this section as historical background.
 
 Subscription per stable. Stables pay, riders don't.
 
