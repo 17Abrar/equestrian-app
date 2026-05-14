@@ -122,12 +122,14 @@ jobs:
       - name: Test
         run: pnpm turbo test --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
-      # Catches Next 15 route-export validation errors and other build-
-      # time failures that `tsc --noEmit` misses (e.g. invalid named
-      # exports on a route file). Without this, broken route files land
-      # on main and only surface at `pnpm cf:deploy` time.
-      - name: Build web app
-        run: pnpm --filter @equestrian/web exec next build
+      # Audit 2026-05-13 (P1): build via OpenNext (`cf:build`) — the same
+      # entry point `pnpm cf:deploy` uses — so OpenNext-specific transform
+      # regressions (DurableObject extraction, asset emission, worker-entry
+      # wiring) are caught in CI rather than at deploy time. `cf:build`
+      # invokes `next build` internally, so this still catches every Next
+      # 15 route-export error the previous step did.
+      - name: Build web app (OpenNext)
+        run: pnpm --filter @equestrian/web cf:build
         env:
           NEXT_PUBLIC_APP_URL: https://cavaliq.com
           # `next build`'s "Collecting page data" phase imports every

@@ -1,8 +1,14 @@
 {
-  "extends": "expo/tsconfig.base",
+  // Audit 2026-05-13 (P1): extend BOTH expo's base (Metro-aware module
+  // resolution, JSX runtime) AND the shared @equestrian/typescript-config
+  // react-native preset. TS 5.0+ accepts an array of extends; the rightmost
+  // entry overrides earlier ones, so shared strictness flags
+  // (`noUncheckedIndexedAccess`, `isolatedModules`, `esModuleInterop`,
+  // `forceConsistentCasingInFileNames`) apply on top of Expo's defaults.
+  // Previously mobile extended only `expo/tsconfig.base`, leaving the
+  // shared base unused and silently drifting from web's strictness profile.
+  "extends": ["expo/tsconfig.base", "@equestrian/typescript-config/react-native.json"],
   "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
     "paths": {
       "@/*": ["./*"]
     }

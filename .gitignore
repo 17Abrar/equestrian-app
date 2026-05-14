@@ -28,6 +28,13 @@ android/
 # OS
 .DS_Store
 Thumbs.db
+# Audit 2026-05-13: macOS Finder / iCloud Drive sync collision filenames
+# (e.g. "FIXES_PASS_8_2026_05_11 2.md"). Catch any "<name> N.<ext>" shape
+# so they don't get accidentally committed alongside the original.
+"* [0-9].md"
+"* [0-9].ts"
+"* [0-9].tsx"
+"* [0-9].txt"
 
 # IDE
 .vscode/settings.json

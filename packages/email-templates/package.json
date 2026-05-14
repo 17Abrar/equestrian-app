@@ -20,14 +20,20 @@
     "./trial-ending": "./src/trial-ending.tsx",
     "./horse-care-reminder": "./src/horse-care-reminder.tsx"
   },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@equestrian/shared": "workspace:*",
     "@react-email/components": "^0.0.36",
     "react": "^19.1.0"
   },
   "devDependencies": {
+    "@equestrian/eslint-config": "workspace:*",
     "@equestrian/typescript-config": "workspace:*",
     "@types/react": "^19.1.0",
+    "eslint": "^9.24.0",
     "typescript": "^5.8.2"
   }
 }
