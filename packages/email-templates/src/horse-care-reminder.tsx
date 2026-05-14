@@ -130,7 +130,43 @@ export function HorseCareReminder({
   );
 }
 
+/**
+ * Audit 2026-05-13 (P1): three fixes here, all surfaced in the same email.
+ *   1. `&rsquo;` HTML entity was rendered literally — React text nodes do
+ *      NOT decode entities. Owners saw "Bella&rsquo;s insurance policy…".
+ *      Now uses the real U+2019 apostrophe character.
+ *   2. `when.replace('due', 'expiring')` turned "is past due" into
+ *      "is past expiring" for overdue insurance — broken English on
+ *      exactly the most actionable reminder. Same shape bug for
+ *      `horse_medication_end` overdue ("ends is past due."). Now each
+ *      kind composes its own phrase from `daysUntil` directly so past-due
+ *      paths read correctly.
+ *   3. Removed the shared `when` builder for the two kinds whose grammar
+ *      diverges, so a future tweak doesn't reintroduce the same bug.
+ */
 function headlineFor(kind: HorseCareReminderKind, daysUntil: number, horseName: string): string {
+  if (kind === 'horse_insurance') {
+    const phrase =
+      daysUntil < 0
+        ? 'has expired'
+        : daysUntil === 0
+          ? 'expires today'
+          : daysUntil === 1
+            ? 'expires tomorrow'
+            : `expires in ${daysUntil} days`;
+    return `${horseName}’s insurance policy ${phrase}.`;
+  }
+  if (kind === 'horse_medication_end') {
+    const phrase =
+      daysUntil < 0
+        ? `ended ${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? '' : 's'} ago`
+        : daysUntil === 0
+          ? 'ends today'
+          : daysUntil === 1
+            ? 'ends tomorrow'
+            : `ends in ${daysUntil} days`;
+    return `An active medication for ${horseName} ${phrase}.`;
+  }
   const when =
     daysUntil < 0
       ? 'is past due'
@@ -144,10 +180,6 @@ function headlineFor(kind: HorseCareReminderKind, daysUntil: number, horseName: 
       return `Routine care for ${horseName} ${when}.`;
     case 'horse_health_record_followup':
       return `A vet follow-up for ${horseName} ${when}.`;
-    case 'horse_insurance':
-      return `${horseName}&rsquo;s insurance policy ${when.replace('due', 'expiring')}.`;
-    case 'horse_medication_end':
-      return `An active medication for ${horseName} ends ${when.replace('is due', 'on')}.`;
   }
 }
 

@@ -9,11 +9,14 @@ import {
   Section,
   Img,
 } from '@react-email/components';
+import { formatBookingDate, formatBookingTime } from './util/format-date-time';
 
 interface BookingCancellationProps {
   riderName: string;
   lessonType: string;
+  /** YYYY-MM-DD; formatted to "Monday, March 31, 2026" before render. */
   date: string;
+  /** "HH:MM" or "HH:MM:SS"; formatted to "9:00 AM" before render. */
   time: string;
   arena: string;
   clubName: string;
@@ -44,6 +47,11 @@ export function BookingCancellation({
     ? 'You were marked as a no-show for the following lesson:'
     : 'Unfortunately, your booking has been cancelled. Here are the details:';
 
+  // Audit 2026-05-13 (P1): previously rendered raw ISO date and SQL time.
+  // Shared with BookingConfirmation and BookingReminder.
+  const formattedDate = formatBookingDate(date);
+  const formattedTime = formatBookingTime(time);
+
   return (
     <Html>
       <Head />
@@ -61,10 +69,10 @@ export function BookingCancellation({
               <strong>Lesson:</strong> {lessonType}
             </Text>
             <Text style={styles.detailRow}>
-              <strong>Date:</strong> {date}
+              <strong>Date:</strong> {formattedDate}
             </Text>
             <Text style={styles.detailRow}>
-              <strong>Time:</strong> {time}
+              <strong>Time:</strong> {formattedTime}
             </Text>
             <Text style={styles.detailRow}>
               <strong>Arena:</strong> {arena}
