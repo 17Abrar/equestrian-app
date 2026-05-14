@@ -110,6 +110,15 @@ jobs:
       - name: Regenerate Cloudflare env types
         run: pnpm --filter @equestrian/web cf:typegen
 
+      # Audit pass-10 F-6 (2026-05-14): fail the build if `wrangler.jsonc`
+      # cron schedules drift from `worker-entry.mjs:KNOWN_CRON_TARGETS`.
+      # The runtime handler catches schedules-without-targets via
+      # `cron_scheduled_unknown_schedule`; this catches the inverse
+      # (targets-without-schedules) which is silent at runtime — the
+      # route simply never fires.
+      - name: Verify cron schedule symmetry
+        run: node scripts/verify-cron-schedules.mjs
+
       - name: Typecheck
         run: pnpm turbo typecheck --filter='./apps/web' --filter='./apps/mobile' --filter='./packages/*'
 
