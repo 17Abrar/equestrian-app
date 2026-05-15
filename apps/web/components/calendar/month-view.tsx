@@ -105,7 +105,7 @@ export function MonthView({ currentDate, slots, competitions, onDayClick }: Mont
                   type="button"
                   key={d.toISOString()}
                   onClick={() => onDayClick(d)}
-                  className={`hover:bg-accent/50 focus:ring-ring min-h-[100px] p-1.5 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-inset ${
+                  className={`hover:bg-accent/50 focus:ring-ring min-h-[100px] p-1.5 text-left transition-colors focus:ring-2 focus:outline-none focus:ring-inset ${
                     !isCurrentMonth ? 'opacity-40' : ''
                   }`}
                   aria-label={`${format(d, 'MMMM d')}, ${slotCount} lessons${dayCompetitions.length > 0 ? `, ${dayCompetitions.length} competitions` : ''}`}

@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  BOOKING_STATUS_VALUES,
-  PAYMENT_METHOD_VALUES,
-  PAYMENT_STATUS_VALUES,
-} from '../../types';
+import { BOOKING_STATUS_VALUES, PAYMENT_METHOD_VALUES, PAYMENT_STATUS_VALUES } from '../../types';
 
 /**
  * Audit F-69 companion (2026-05-08 r6): runtime schema for the

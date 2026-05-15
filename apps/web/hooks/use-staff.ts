@@ -28,8 +28,7 @@ interface NormalizedStaffFilters {
   pageSize?: number;
 }
 const STAFF_KEY = ['staff'] as const;
-const staffListKey = (filters: NormalizedStaffFilters) =>
-  [...STAFF_KEY, 'list', filters] as const;
+const staffListKey = (filters: NormalizedStaffFilters) => [...STAFF_KEY, 'list', filters] as const;
 
 interface NormalizedOwnersFilters {
   search?: string;

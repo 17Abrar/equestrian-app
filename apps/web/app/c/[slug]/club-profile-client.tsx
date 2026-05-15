@@ -214,7 +214,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
             )}
             {club.description && (
               <Card>
-                <CardContent className="whitespace-pre-wrap pt-6 text-sm leading-relaxed">
+                <CardContent className="pt-6 text-sm leading-relaxed whitespace-pre-wrap">
                   {club.description}
                 </CardContent>
               </Card>
@@ -225,13 +225,13 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
             <Card>
               <CardContent className="space-y-3 pt-6 text-sm">
                 <div>
-                  <p className="text-muted-foreground text-xs uppercase tracking-wide">Joining</p>
+                  <p className="text-muted-foreground text-xs tracking-wide uppercase">Joining</p>
                   <p className="mt-1 font-medium">
                     {club.joinPolicy === 'open' ? 'Open — anyone can join' : 'Invitation only'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs uppercase tracking-wide">Timezone</p>
+                  <p className="text-muted-foreground text-xs tracking-wide uppercase">Timezone</p>
                   <p className="mt-1 font-medium">{club.timezone}</p>
                 </div>
 

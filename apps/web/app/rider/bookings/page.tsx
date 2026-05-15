@@ -71,11 +71,7 @@ function BookingsList({ items }: { items: Booking[] }) {
   return (
     <div className="space-y-3">
       {items.map((booking) => (
-        <BookingItemRow
-          key={booking.id}
-          booking={booking}
-          href={`/rider/bookings/${booking.id}`}
-        />
+        <BookingItemRow key={booking.id} booking={booking} href={`/rider/bookings/${booking.id}`} />
       ))}
     </div>
   );
@@ -95,9 +91,7 @@ export default function RiderBookingsPage() {
   const upcoming = useMemo(
     () =>
       allBookings
-        .filter(
-          (b) => (b.status === 'confirmed' || b.status === 'pending') && b.slotDate >= today,
-        )
+        .filter((b) => (b.status === 'confirmed' || b.status === 'pending') && b.slotDate >= today)
         .sort(compareByDateAsc),
     [allBookings, today],
   );
@@ -176,7 +170,7 @@ export default function RiderBookingsPage() {
 
           <TabsContent value="agenda" className="mt-4 space-y-4">
             <div>
-              <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
+              <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
                 {format(new Date(`${agendaDate}T00:00:00`), 'MMMM yyyy')}
               </p>
               <BookingDayStrip

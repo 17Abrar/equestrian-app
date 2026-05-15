@@ -60,9 +60,7 @@ export function TabStrip<T extends string>({ tabs, active, onChange }: TabStripP
               className="flex-1 items-center py-3"
             >
               <Text
-                className={`text-sm ${
-                  isActive ? 'font-semibold text-gray-900' : 'text-gray-500'
-                }`}
+                className={`text-sm ${isActive ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
               >
                 {tab.label}
               </Text>
@@ -70,10 +68,7 @@ export function TabStrip<T extends string>({ tabs, active, onChange }: TabStripP
           );
         })}
       </View>
-      <Animated.View
-        className="absolute bottom-0 h-0.5 bg-gray-900"
-        style={indicatorStyle}
-      />
+      <Animated.View className="absolute bottom-0 h-0.5 bg-gray-900" style={indicatorStyle} />
     </View>
   );
 }

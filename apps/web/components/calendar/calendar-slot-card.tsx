@@ -81,7 +81,7 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
         role="img"
         aria-label={`${slot.lessonTypeName} at ${slot.startTime.slice(0, 5)}, ${capacity.label}`}
         className={cn(
-          'flex items-center gap-1 truncate rounded border-l-2 bg-card px-1.5 py-0.5 text-[10px] font-medium text-foreground',
+          'bg-card text-foreground flex items-center gap-1 truncate rounded border-l-2 px-1.5 py-0.5 text-[10px] font-medium',
           capacity.isFull && 'opacity-60',
         )}
         style={{ borderLeftColor: accentColor, backgroundColor: tintBg }}
@@ -102,8 +102,8 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
         <button
           type="button"
           className={cn(
-            'w-full cursor-pointer rounded-md border-l-[3px] p-2 text-left text-xs text-foreground transition-colors',
-            'hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+            'text-foreground w-full cursor-pointer rounded-md border-l-[3px] p-2 text-left text-xs transition-colors',
+            'focus:ring-ring hover:brightness-95 focus:ring-2 focus:ring-offset-1 focus:outline-none',
             capacity.isFull && 'opacity-60',
           )}
           style={{ borderLeftColor: accentColor, backgroundColor: tintBg }}
@@ -116,12 +116,12 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
             />
             <p className="truncate font-semibold">{slot.lessonTypeName}</p>
           </div>
-          <p className="mt-0.5 flex items-center gap-1 text-muted-foreground">
+          <p className="text-muted-foreground mt-0.5 flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
           </p>
           <div className="mt-1 flex items-center justify-between text-[11px]">
-            <span className="truncate text-muted-foreground">{slot.arenaName ?? 'TBD'}</span>
+            <span className="text-muted-foreground truncate">{slot.arenaName ?? 'TBD'}</span>
             {/*
               Audit 2026-05-13 (P1): paired dark-mode variants. The 8%-alpha
               tinted background drops `text-amber-700` / `text-orange-700`
@@ -144,7 +144,7 @@ export function CalendarSlotCard({ slot, compact = false }: CalendarSlotCardProp
             </span>
           </div>
           {slot.coachName && (
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{slot.coachName}</p>
+            <p className="text-muted-foreground mt-0.5 truncate text-[11px]">{slot.coachName}</p>
           )}
         </button>
       </PopoverTrigger>

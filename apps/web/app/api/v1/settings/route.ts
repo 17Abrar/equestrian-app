@@ -109,9 +109,7 @@ export async function PATCH(request: NextRequest) {
       const profileResult = updateClubProfileSchema.safeParse(pickKeys(PROFILE_KEYS));
       const rulesResult = updateBookingRulesSchema.safeParse(pickKeys(RULES_KEYS));
       const brandingResult = updateBrandingSchema.safeParse(pickKeys(BRANDING_KEYS));
-      const notificationsResult = updateNotificationsSchema.safeParse(
-        pickKeys(NOTIFICATIONS_KEYS),
-      );
+      const notificationsResult = updateNotificationsSchema.safeParse(pickKeys(NOTIFICATIONS_KEYS));
       const discoveryResult = updateDiscoverySchema.safeParse(pickKeys(DISCOVERY_KEYS));
 
       const merged: SettingsPatchData = {

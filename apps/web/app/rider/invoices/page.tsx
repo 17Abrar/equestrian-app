@@ -119,7 +119,7 @@ function Section({ title, invoices }: { title: string; invoices: MyLiveryInvoice
   return (
     <section>
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-muted-foreground text-sm font-semibold uppercase tracking-wide">
+        <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
           {title}
         </h2>
         <Badge variant="secondary">{invoices.length}</Badge>
