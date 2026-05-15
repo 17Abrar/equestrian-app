@@ -361,8 +361,24 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     const creds = parseCredentials(input.account.credentials);
     const accessToken = await getAccessToken(creds);
 
-    // N-Genius limits orderReference to 35 chars alphanumeric.
-    const orderReference = input.idempotencyKey.replace(/[^A-Za-z0-9]/g, '').slice(0, 35);
+    // N-Genius limits orderReference to 35 chars alphanumeric. The
+    // booking-payment route builds the idempotencyKey as
+    // `booking_<uuid>_<currency>_<amount>` — once non-alphanumerics
+    // are stripped the prefix + UUID hex alone is ~39 chars, so the
+    // pre-fix `slice(0, 35)` lopped the currency and amount off the
+    // end. Two attempts on the same booking at different post-coupon
+    // amounts then collided on orderReference; N-Genius replayed the
+    // original (often stale) order without a fresh PayPage link,
+    // surfacing as MALFORMED_RESPONSE downstream. (2026-05-15.)
+    //
+    // Hash to 32 hex chars so each (booking, currency, amount) tuple
+    // maps to a unique reference. Deterministic — repeat calls with
+    // the same idempotency key still hit N-Genius's order-level
+    // idempotency.
+    const orderReference = createHash('sha256')
+      .update(input.idempotencyKey)
+      .digest('hex')
+      .slice(0, 32);
 
     // Audit F-22 / F-24 (2026-05-07 r5): N-Genius echoes
     // `merchantAttributes` in webhook order payloads. Pass the full
@@ -416,9 +432,28 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       );
     }
 
-    const fields = extractOrderFields(await res.json());
+    const rawJson = (await res.json()) as unknown;
+    const fields = extractOrderFields(rawJson);
 
     if (!fields.paymentUrl || !fields.reference) {
+      // 2026-05-15: surface the response shape so operators can
+      // distinguish "below outlet minimum" (200 OK with no embedded
+      // payment leg) from "outlet not activated", schema drift, etc.
+      // Pre-fix this threw with no structured log of the body, leaving
+      // CF Worker logs with `code: MALFORMED_RESPONSE` and nothing
+      // actionable. `safeProviderPreview` scrubs card-number-shaped
+      // tokens and email addresses before the body lands in logs.
+      logger.error('n_genius_create_payment_malformed', {
+        httpStatus: res.status,
+        orderReference,
+        bookingId: input.bookingId,
+        clubId: input.clubId,
+        currency: input.currency,
+        amountMinorUnits: input.amountMinorUnits,
+        responsePreview: safeProviderPreview(JSON.stringify(rawJson ?? null), 400),
+        responseKeys:
+          rawJson && typeof rawJson === 'object' ? Object.keys(rawJson as object) : [],
+      });
       throw new PaymentProviderError(
         'MALFORMED_RESPONSE',
         'N-Genius did not return a payment link and reference',
