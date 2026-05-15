@@ -43,8 +43,7 @@ function AuthGuard() {
   // the protected screen flashed, its queries fired (each landing as a
   // 401), and the user saw a brief moment of unauth content. Render a
   // null shell while the guard catches up.
-  const guardSatisfied =
-    isLoaded && ((isSignedIn && !inAuthGroup) || (!isSignedIn && inAuthGroup));
+  const guardSatisfied = isLoaded && ((isSignedIn && !inAuthGroup) || (!isSignedIn && inAuthGroup));
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -79,9 +78,7 @@ function ErrorFallback({ resetError }: { resetError: () => void }) {
         backgroundColor: '#fff',
       }}
     >
-      <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
-        Something went wrong
-      </Text>
+      <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Something went wrong</Text>
       <Text style={{ color: '#6b7280', marginBottom: 24, textAlign: 'center' }}>
         We hit an unexpected error. Please try again — if the issue persists, restart the app.
       </Text>

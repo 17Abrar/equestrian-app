@@ -77,7 +77,15 @@ export const WEEK_STARTS_ON = 0 as 0 | 1 | 6;
  * Short two-letter weekday labels in WEEK_STARTS_ON order. Index 0 in this
  * array is whichever day WEEK_STARTS_ON identifies as the start.
  */
-export const WEEKDAY_LABELS_SHORT: readonly [string, string, string, string, string, string, string] =
+export const WEEKDAY_LABELS_SHORT: readonly [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+] =
   WEEK_STARTS_ON === 1
     ? (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const)
     : WEEK_STARTS_ON === 6

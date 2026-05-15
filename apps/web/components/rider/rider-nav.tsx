@@ -195,7 +195,7 @@ function ActiveStableSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         disabled={switching}
-        className="hover:bg-accent focus:ring-ring flex items-center gap-1.5 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 disabled:opacity-60"
+        className="hover:bg-accent focus:ring-ring flex items-center gap-1.5 rounded-md px-2 py-1 text-sm focus:ring-2 focus:outline-none disabled:opacity-60"
         aria-label={`Booking from ${user.activeClub.name} — click to switch`}
       >
         <Building2 className="text-muted-foreground h-4 w-4" aria-hidden="true" />

@@ -74,7 +74,7 @@ export function BookingDayStrip({
               'flex min-w-[3rem] flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs transition-colors',
               isDisabled
                 ? 'cursor-not-allowed opacity-40'
-                : 'hover:bg-accent focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-2',
+                : 'hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
             )}
           >
             <span className="text-muted-foreground text-[10px] font-medium uppercase">
@@ -91,10 +91,7 @@ export function BookingDayStrip({
             </span>
             {typeof count === 'number' && count > 0 ? (
               <span
-                className={cn(
-                  'text-[10px]',
-                  isSelected ? 'text-primary' : 'text-muted-foreground',
-                )}
+                className={cn('text-[10px]', isSelected ? 'text-primary' : 'text-muted-foreground')}
               >
                 {count}
               </span>

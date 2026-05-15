@@ -281,10 +281,9 @@ export const communityComments = pgTable(
     // threaded view renders empty placeholders. ON DELETE CASCADE so a
     // moderator's hard-delete of a parent removes the entire subtree —
     // matches the post-level cascade above.
-    parentCommentId: uuid('parent_comment_id').references(
-      (): AnyPgColumn => communityComments.id,
-      { onDelete: 'cascade' },
-    ),
+    parentCommentId: uuid('parent_comment_id').references((): AnyPgColumn => communityComments.id, {
+      onDelete: 'cascade',
+    }),
     // Audit F-4 (2026-05-06 r2): inline single-column FK dropped in
     // migration 0041; replaced with composite below.
     authorMemberId: uuid('author_member_id').notNull(),

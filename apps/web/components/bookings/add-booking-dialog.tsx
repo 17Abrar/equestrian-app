@@ -13,13 +13,7 @@ import { useHorses } from '@/hooks/use-horses';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import {
   Form,
   FormControl,
@@ -237,132 +231,30 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 flex-col">
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {/* Step 1: Lesson Type */}
-            <FormField
-              control={form.control}
-              name="lessonTypeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>1. Lesson Type</FormLabel>
-                  <Select
-                    value={field.value}
-                    onValueChange={(v) => {
-                      field.onChange(v);
-                      form.setValue('slotId', '');
-                      clearCouponState();
-                    }}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select lesson type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {lessonTypes.map((lt) => (
-                        <SelectItem key={lt.id} value={lt.id}>
-                          {lt.name} — {formatMoney(lt.price, lt.currency)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Step 2: Date */}
-            {lessonTypeId && (
+              {/* Step 1: Lesson Type */}
               <FormField
                 control={form.control}
-                name="date"
+                name="lessonTypeId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>2. Date</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="date"
-                        {...field}
-                        onChange={(e) => {
-                          field.onChange(e.target.value);
-                          form.setValue('slotId', '');
-                          clearCouponState();
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Step 3: Time Slot */}
-            {date && (
-              <FormField
-                control={form.control}
-                name="slotId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>3. Time Slot</FormLabel>
-                    {slotsQuery.isLoading ? (
-                      <Skeleton className="h-10" />
-                    ) : slots.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No slots available for this date and lesson type.
-                      </p>
-                    ) : (
-                      <Select
-                        value={field.value}
-                        onValueChange={(v) => {
-                          field.onChange(v);
-                          clearCouponState();
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select time slot" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {slots.map((slot) => {
-                            // Shared with calendar + rider/book — see audit E-6.
-                            const cap = getCapacityInfo(slot.currentRiders, slot.maxRiders);
-                            return (
-                              <SelectItem key={slot.id} value={slot.id} disabled={cap.isFull}>
-                                {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)}
-                                {' '}
-                                ({slot.currentRiders}/{slot.maxRiders} riders)
-                                {slot.arenaName ? ` • ${slot.arenaName}` : ''}
-                                {cap.isFull ? ' — FULL' : ''}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Step 4: Rider */}
-            {slotId && (
-              <FormField
-                control={form.control}
-                name="riderMemberId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>4. Rider</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <FormLabel>1. Lesson Type</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => {
+                        field.onChange(v);
+                        form.setValue('slotId', '');
+                        clearCouponState();
+                      }}
+                    >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select rider" />
+                          <SelectValue placeholder="Select lesson type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {riders.map((r) => (
-                          <SelectItem key={r.memberId} value={r.memberId}>
-                            {r.displayName ?? r.email ?? 'Unnamed'}
+                        {lessonTypes.map((lt) => (
+                          <SelectItem key={lt.id} value={lt.id}>
+                            {lt.name} — {formatMoney(lt.price, lt.currency)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -371,118 +263,216 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                   </FormItem>
                 )}
               />
-            )}
 
-            {/* Step 5: Horse (optional) */}
-            {riderMemberId && (
-              <FormField
-                control={form.control}
-                name="horseId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>5. Horse (optional, auto-matches if empty)</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+              {/* Step 2: Date */}
+              {lessonTypeId && (
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>2. Date</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Auto-match horse" />
-                        </SelectTrigger>
+                        <Input
+                          type="date"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e.target.value);
+                            form.setValue('slotId', '');
+                            clearCouponState();
+                          }}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none__">Auto-match</SelectItem>
-                        {horses
-                          .filter((h) => h.status === 'available')
-                          .map((h) => (
-                            <SelectItem key={h.id} value={h.id}>
-                              {h.name}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Step 3: Time Slot */}
+              {date && (
+                <FormField
+                  control={form.control}
+                  name="slotId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>3. Time Slot</FormLabel>
+                      {slotsQuery.isLoading ? (
+                        <Skeleton className="h-10" />
+                      ) : slots.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">
+                          No slots available for this date and lesson type.
+                        </p>
+                      ) : (
+                        <Select
+                          value={field.value}
+                          onValueChange={(v) => {
+                            field.onChange(v);
+                            clearCouponState();
+                          }}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select time slot" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {slots.map((slot) => {
+                              // Shared with calendar + rider/book — see audit E-6.
+                              const cap = getCapacityInfo(slot.currentRiders, slot.maxRiders);
+                              return (
+                                <SelectItem key={slot.id} value={slot.id} disabled={cap.isFull}>
+                                  {slot.startTime.slice(0, 5)} – {slot.endTime.slice(0, 5)} (
+                                  {slot.currentRiders}/{slot.maxRiders} riders)
+                                  {slot.arenaName ? ` • ${slot.arenaName}` : ''}
+                                  {cap.isFull ? ' — FULL' : ''}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Step 4: Rider */}
+              {slotId && (
+                <FormField
+                  control={form.control}
+                  name="riderMemberId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>4. Rider</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select rider" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {riders.map((r) => (
+                            <SelectItem key={r.memberId} value={r.memberId}>
+                              {r.displayName ?? r.email ?? 'Unnamed'}
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
-            {/* Step 6: Payment Method */}
-            {riderMemberId && (
-              <FormField
-                control={form.control}
-                name="paymentMethod"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>6. Payment Method</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select payment method" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="card">Card</SelectItem>
-                        <SelectItem value="card_in_person">Card (in person)</SelectItem>
-                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="package_credit">Package Credit</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+              {/* Step 5: Horse (optional) */}
+              {riderMemberId && (
+                <FormField
+                  control={form.control}
+                  name="horseId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>5. Horse (optional, auto-matches if empty)</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Auto-match horse" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">Auto-match</SelectItem>
+                          {horses
+                            .filter((h) => h.status === 'available')
+                            .map((h) => (
+                              <SelectItem key={h.id} value={h.id}>
+                                {h.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
-            {/* Step 7: Promo Code */}
-            {riderMemberId && selectedSlot && (
-              <div>
-                <Label htmlFor="coupon-code">7. Promo Code (optional)</Label>
-                <div className="mt-1 flex gap-2">
-                  <Input
-                    id="coupon-code"
-                    placeholder="e.g. SUMMER25"
-                    className="font-mono uppercase"
-                    {...form.register('couponCode', {
-                      onChange: () => {
-                        // Editing the code clears any previously-applied
-                        // discount — user must re-click Apply.
-                        setCouponDiscount(0);
-                        setCouponError('');
-                      },
-                    })}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!couponCode || couponValidating}
-                    onClick={() => {
-                      void applyCoupon();
-                    }}
-                  >
-                    {couponValidating ? 'Applying…' : 'Apply'}
-                  </Button>
+              {/* Step 6: Payment Method */}
+              {riderMemberId && (
+                <FormField
+                  control={form.control}
+                  name="paymentMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>6. Payment Method</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select payment method" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="card">Card</SelectItem>
+                          <SelectItem value="card_in_person">Card (in person)</SelectItem>
+                          <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                          <SelectItem value="package_credit">Package Credit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Step 7: Promo Code */}
+              {riderMemberId && selectedSlot && (
+                <div>
+                  <Label htmlFor="coupon-code">7. Promo Code (optional)</Label>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      id="coupon-code"
+                      placeholder="e.g. SUMMER25"
+                      className="font-mono uppercase"
+                      {...form.register('couponCode', {
+                        onChange: () => {
+                          // Editing the code clears any previously-applied
+                          // discount — user must re-click Apply.
+                          setCouponDiscount(0);
+                          setCouponError('');
+                        },
+                      })}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!couponCode || couponValidating}
+                      onClick={() => {
+                        void applyCoupon();
+                      }}
+                    >
+                      {couponValidating ? 'Applying…' : 'Apply'}
+                    </Button>
+                  </div>
+                  {couponError && <p className="text-destructive mt-1 text-sm">{couponError}</p>}
+                  {couponDiscount > 0 && (
+                    <p className="mt-1 text-sm text-green-600">
+                      Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
+                    </p>
+                  )}
                 </div>
-                {couponError && (
-                  <p className="mt-1 text-sm text-destructive">{couponError}</p>
-                )}
-                {couponDiscount > 0 && (
-                  <p className="mt-1 text-sm text-green-600">
-                    Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
-                  </p>
-                )}
-              </div>
-            )}
-
+              )}
             </div>
 
             {/* Sticky bottom: summary + submit. Stays visible while the field
                 stack scrolls inside the sheet, mirroring the rider funnel's
                 bottom-action language. */}
-            <div className="space-y-3 border-t bg-background p-4">
+            <div className="bg-background space-y-3 border-t p-4">
               {selectedSlot && riderMemberId && (
-                <div className="rounded-lg border bg-muted/50 p-3">
+                <div className="bg-muted/50 rounded-lg border p-3">
                   <p className="text-sm font-medium">Booking Summary</p>
-                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                  <div className="text-muted-foreground mt-2 space-y-1 text-sm">
                     <p>{selectedSlot.lessonTypeName}</p>
                     <p>
                       {selectedSlot.date} at {selectedSlot.startTime.slice(0, 5)} –{' '}
@@ -490,10 +480,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                     </p>
                     <div className="flex items-center gap-2">
                       <p className={couponDiscount > 0 ? 'line-through' : ''}>
-                        {formatMoney(
-                          selectedSlot.lessonTypePrice,
-                          selectedSlot.lessonTypeCurrency,
-                        )}
+                        {formatMoney(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
                       </p>
                       {couponDiscount > 0 && (
                         <p className="font-semibold text-green-600">

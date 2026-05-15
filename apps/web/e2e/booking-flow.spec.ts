@@ -21,39 +21,41 @@ import { test, expect } from '@playwright/test';
  * still covers.
  */
 test.describe('booking + payment critical flow', () => {
-  test.fixme(
-    'rider can sign up, join a public club, book a lesson, and complete payment',
-    async ({ page }) => {
-      // 1. Sign up via Clerk
-      await page.goto('/sign-up');
-      // ...Clerk's test-mode sign-up flow
+  test.fixme('rider can sign up, join a public club, book a lesson, and complete payment', async ({
+    page,
+  }) => {
+    // 1. Sign up via Clerk
+    await page.goto('/sign-up');
+    // ...Clerk's test-mode sign-up flow
 
-      // 2. Land on /discover and pick the test club
-      await page.goto('/discover');
-      await page.getByRole('link', { name: /jsr.*test.*club/i }).click();
+    // 2. Land on /discover and pick the test club
+    await page.goto('/discover');
+    await page.getByRole('link', { name: /jsr.*test.*club/i }).click();
 
-      // 3. Hit Join (open-policy club so no approval gate)
-      await page.getByRole('button', { name: /join/i }).click();
-      await expect(page).toHaveURL(/\/rider/);
+    // 3. Hit Join (open-policy club so no approval gate)
+    await page.getByRole('button', { name: /join/i }).click();
+    await expect(page).toHaveURL(/\/rider/);
 
-      // 4. Book a slot
-      await page.getByRole('link', { name: /book/i }).click();
-      await page.getByRole('button', { name: /^9:00\b/ }).first().click();
-      await page.getByRole('button', { name: /confirm/i }).click();
+    // 4. Book a slot
+    await page.getByRole('link', { name: /book/i }).click();
+    await page
+      .getByRole('button', { name: /^9:00\b/ })
+      .first()
+      .click();
+    await page.getByRole('button', { name: /confirm/i }).click();
 
-      // 5. Stripe redirect → use 4242 4242 4242 4242
-      await page.waitForURL(/stripe\.com|checkout\.stripe/);
-      // ...Stripe Checkout's iframe-stuffed form is fragile to scrape; in
-      // CI we use Stripe's test-mode pre-filled card via API to avoid
-      // DOM brittleness. See docs/e2e-setup.md.
+    // 5. Stripe redirect → use 4242 4242 4242 4242
+    await page.waitForURL(/stripe\.com|checkout\.stripe/);
+    // ...Stripe Checkout's iframe-stuffed form is fragile to scrape; in
+    // CI we use Stripe's test-mode pre-filled card via API to avoid
+    // DOM brittleness. See docs/e2e-setup.md.
 
-      // 6. Land back at /rider/bookings/[id]?from=payment
-      await page.waitForURL(/\/rider\/bookings\/[0-9a-f-]+\?from=payment/);
+    // 6. Land back at /rider/bookings/[id]?from=payment
+    await page.waitForURL(/\/rider\/bookings\/[0-9a-f-]+\?from=payment/);
 
-      // 7. Banner should poll, then show "Payment received"
-      await expect(page.getByText(/payment received/i)).toBeVisible({ timeout: 60_000 });
-    },
-  );
+    // 7. Banner should poll, then show "Payment received"
+    await expect(page.getByText(/payment received/i)).toBeVisible({ timeout: 60_000 });
+  });
 
   test.fixme('rider can cancel a paid booking and see the refund banner', async ({ page }) => {
     // Same setup as above, then click Cancel on a paid booking; assert

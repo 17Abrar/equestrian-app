@@ -205,7 +205,7 @@ export function FileUpload({
         <button
           type="button"
           onClick={handleRemove}
-          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full shadow-sm"
+          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full shadow-sm"
           aria-label="Remove file"
         >
           <X className="h-4 w-4" />

@@ -80,16 +80,21 @@ interface RefundBookingResult {
   remainingRefundableMinor: number;
 }
 
-const ACTION_CONFIG: Record<ActionType, { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }> = {
+const ACTION_CONFIG: Record<
+  ActionType,
+  { title: string; description: string; confirmLabel: string; variant: 'default' | 'destructive' }
+> = {
   cancel: {
     title: 'Cancel Booking',
-    description: 'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
+    description:
+      'Are you sure you want to cancel this booking? The rider will be notified and any applicable cancellation fee will be applied.',
     confirmLabel: 'Cancel Booking',
     variant: 'destructive',
   },
   no_show: {
     title: 'Mark as No-Show',
-    description: 'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
+    description:
+      'Mark this rider as a no-show? Any configured no-show fee will be applied and the rider will be notified.',
     confirmLabel: 'Mark No-Show',
     variant: 'destructive',
   },
@@ -101,7 +106,8 @@ const ACTION_CONFIG: Record<ActionType, { title: string; description: string; co
   },
   refund: {
     title: 'Refund Payment',
-    description: 'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
+    description:
+      'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
     confirmLabel: 'Issue Refund',
     variant: 'destructive',
   },
@@ -230,7 +236,9 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
           throw new Error(refundResult.error.message);
         }
         if (refundResult.data.status === 'pending') {
-          toast.warning('Refund requested. Booking ledger will update after provider confirmation.');
+          toast.warning(
+            'Refund requested. Booking ledger will update after provider confirmation.',
+          );
         } else {
           toast.success('Refund issued');
         }
@@ -238,7 +246,10 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       setReason('');
       onClose();
     } catch (err) {
-      reportMutationError('booking.action', err, { type: state?.type, bookingId: state?.booking.id });
+      reportMutationError('booking.action', err, {
+        type: state?.type,
+        bookingId: state?.booking.id,
+      });
       toast.error(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setIsSubmitting(false);
@@ -262,15 +273,21 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{config.title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {config.description}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{config.description}</AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-2 text-sm">
-          <p><strong>Lesson:</strong> {state.booking.lessonTypeName}</p>
-          <p><strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}</p>
-          {state.booking.riderName && <p><strong>Rider:</strong> {state.booking.riderName}</p>}
+          <p>
+            <strong>Lesson:</strong> {state.booking.lessonTypeName}
+          </p>
+          <p>
+            <strong>Date:</strong> {state.booking.slotDate} at {state.booking.slotStartTime}
+          </p>
+          {state.booking.riderName && (
+            <p>
+              <strong>Rider:</strong> {state.booking.riderName}
+            </p>
+          )}
         </div>
 
         {state.type === 'cancel' && (
@@ -304,14 +321,8 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isSubmitting}>
-            Keep Booking
-          </AlertDialogCancel>
-          <Button
-            variant={config.variant}
-            onClick={handleConfirm}
-            disabled={isSubmitting}
-          >
+          <AlertDialogCancel disabled={isSubmitting}>Keep Booking</AlertDialogCancel>
+          <Button variant={config.variant} onClick={handleConfirm} disabled={isSubmitting}>
             {isSubmitting ? 'Processing...' : config.confirmLabel}
           </Button>
         </AlertDialogFooter>
@@ -398,7 +409,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="mt-1 text-muted-foreground">View and manage lesson bookings</p>
+          <p className="text-muted-foreground mt-1">View and manage lesson bookings</p>
         </div>
         {canCreate && <AddBookingDialog open={addOpen} onOpenChange={setAddOpen} />}
       </div>
@@ -494,9 +505,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
           title="No bookings yet"
           description="Bookings will appear here once riders start booking lessons"
           action={
-            canCreate
-              ? { label: 'Create booking', onClick: () => setAddOpen(true) }
-              : undefined
+            canCreate ? { label: 'Create booking', onClick: () => setAddOpen(true) } : undefined
           }
         />
       )}
@@ -596,7 +605,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-muted-foreground text-sm">
                 Page {page} of {data.pagination.totalPages}
               </span>
               <Button
@@ -617,11 +626,7 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
 
       {/* FAB — mobile/tablet only; desktop keeps the inline header button. */}
       {canCreate && (
-        <BookingFab
-          onClick={() => setAddOpen(true)}
-          label="Add booking"
-          className="lg:hidden"
-        />
+        <BookingFab onClick={() => setAddOpen(true)} label="Add booking" className="lg:hidden" />
       )}
     </div>
   );

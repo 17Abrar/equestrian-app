@@ -616,7 +616,7 @@ function RiderProgress({ riderMemberId, totalLessonsCompleted, skillLevel }: Pro
                     />
                   </div>
                   <p className="text-xs font-medium">{count}</p>
-                  <p className="text-muted-foreground text-[10px] uppercase tracking-wider">
+                  <p className="text-muted-foreground text-[10px] tracking-wider uppercase">
                     {month.slice(5)}/{month.slice(2, 4)}
                   </p>
                 </div>
@@ -649,7 +649,7 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <Card>
       <CardContent className="py-5">
-        <p className="text-muted-foreground text-xs uppercase tracking-wider">{label}</p>
+        <p className="text-muted-foreground text-xs tracking-wider uppercase">{label}</p>
         <p className="mt-1 text-2xl font-bold">{value}</p>
       </CardContent>
     </Card>
@@ -671,7 +671,7 @@ function SkillLadder({ current }: { current: string }) {
           <div key={level} className="flex flex-1 flex-col items-center gap-1">
             <div className={`h-1.5 w-full rounded ${active ? 'bg-primary' : 'bg-muted'}`} />
             <span
-              className={`text-[10px] uppercase tracking-wider ${active ? 'font-semibold' : 'text-muted-foreground'}`}
+              className={`text-[10px] tracking-wider uppercase ${active ? 'font-semibold' : 'text-muted-foreground'}`}
             >
               {level}
             </span>

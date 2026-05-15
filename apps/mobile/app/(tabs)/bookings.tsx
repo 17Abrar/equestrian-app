@@ -73,9 +73,7 @@ export default function BookingsScreen() {
   const upcoming = useMemo(
     () =>
       allBookings
-        .filter(
-          (b) => (b.status === 'confirmed' || b.status === 'pending') && b.slotDate >= today,
-        )
+        .filter((b) => (b.status === 'confirmed' || b.status === 'pending') && b.slotDate >= today)
         .sort(compareByDateAsc),
     [allBookings, today],
   );
@@ -118,9 +116,7 @@ export default function BookingsScreen() {
     <SafeAreaView className="flex-1 bg-gray-50">
       <View className="px-6 pb-2 pt-4">
         <Text className="text-2xl font-bold text-gray-900">My Bookings</Text>
-        <Text className="mt-1 text-base text-gray-500">
-          Your lessons across this stable
-        </Text>
+        <Text className="mt-1 text-base text-gray-500">Your lessons across this stable</Text>
       </View>
 
       <View className="px-6 pt-2">
@@ -136,9 +132,7 @@ export default function BookingsScreen() {
 
         {!isLoading && errorMessage && (
           <View className="mx-6 items-center rounded-2xl border border-red-200 bg-red-50 px-6 py-8">
-            <Text className="text-lg font-semibold text-red-700">
-              Couldn&apos;t load bookings
-            </Text>
+            <Text className="text-lg font-semibold text-red-700">Couldn&apos;t load bookings</Text>
             <Text className="mt-1 text-center text-sm text-red-500">{errorMessage}</Text>
             <TouchableOpacity
               className="mt-4 rounded-xl bg-red-600 px-6 py-2.5"
@@ -150,23 +144,23 @@ export default function BookingsScreen() {
           </View>
         )}
 
-        {!isLoading && !errorMessage && tab === 'upcoming' && (
-          upcoming.length === 0 ? (
-            <EmptyTab
-              title="No upcoming lessons"
-              description="Tap + to book your next ride."
-            />
+        {!isLoading &&
+          !errorMessage &&
+          tab === 'upcoming' &&
+          (upcoming.length === 0 ? (
+            <EmptyTab title="No upcoming lessons" description="Tap + to book your next ride." />
           ) : (
             <View className="gap-3 px-6">
               {upcoming.map((b) => (
                 <BookingRow key={b.id} booking={b} onPress={() => openBooking(b.id)} />
               ))}
             </View>
-          )
-        )}
+          ))}
 
-        {!isLoading && !errorMessage && tab === 'recent' && (
-          recent.length === 0 ? (
+        {!isLoading &&
+          !errorMessage &&
+          tab === 'recent' &&
+          (recent.length === 0 ? (
             <EmptyTab
               title="Nothing in your history yet"
               description="Past lessons will appear here once you've ridden."
@@ -177,8 +171,7 @@ export default function BookingsScreen() {
                 <BookingRow key={b.id} booking={b} onPress={() => openBooking(b.id)} />
               ))}
             </View>
-          )
-        )}
+          ))}
 
         {!isLoading && !errorMessage && tab === 'agenda' && (
           <View>
@@ -199,11 +192,13 @@ export default function BookingsScreen() {
             {agendaItems.length === 0 ? (
               <EmptyTab
                 title="Nothing scheduled"
-                description={new Date(`${agendaDate}T00:00:00`).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'short',
-                  day: 'numeric',
-                }) + " — you're free this day."}
+                description={
+                  new Date(`${agendaDate}T00:00:00`).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'short',
+                    day: 'numeric',
+                  }) + " — you're free this day."
+                }
               />
             ) : (
               <View className="mt-2 gap-3 px-6">
@@ -216,10 +211,7 @@ export default function BookingsScreen() {
         )}
       </ScrollView>
 
-      <Fab
-        onPress={() => router.push('/(tabs)/book')}
-        accessibilityLabel="Book a lesson"
-      />
+      <Fab onPress={() => router.push('/(tabs)/book')} accessibilityLabel="Book a lesson" />
     </SafeAreaView>
   );
 }

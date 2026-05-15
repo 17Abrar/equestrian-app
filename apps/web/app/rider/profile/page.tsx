@@ -277,7 +277,7 @@ export default function RiderProfilePage() {
             {profile.medicalNotes && (
               <div className="py-2">
                 <p className="text-muted-foreground text-xs">Medical notes</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm">{profile.medicalNotes}</p>
+                <p className="mt-1 text-sm whitespace-pre-wrap">{profile.medicalNotes}</p>
               </div>
             )}
           </CardContent>

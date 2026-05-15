@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -180,9 +173,7 @@ export default function BookingDetailScreen() {
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 140 }}>
         <View className="px-6 pt-2">
           <Text className="text-2xl font-bold text-gray-900">{booking.lessonTypeName}</Text>
-          <Text className="mt-1 font-mono text-xs text-gray-400">
-            {booking.id.slice(0, 8)}
-          </Text>
+          <Text className="mt-1 font-mono text-xs text-gray-400">{booking.id.slice(0, 8)}</Text>
         </View>
 
         <View className="mt-4 px-6">

@@ -103,7 +103,7 @@ export function BookingItemRow({ booking, tone, href, right }: BookingItemRowPro
         href={href}
         className={cn(
           baseClass,
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
         )}
       >
         <div className="flex-1">

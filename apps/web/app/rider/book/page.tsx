@@ -126,8 +126,7 @@ function initialsForType(type: string): string {
 function durationLabel(start: string, end: string): string {
   const sParts = start.split(':').map(Number);
   const eParts = end.split(':').map(Number);
-  const minutes =
-    eParts[0]! * 60 + (eParts[1] ?? 0) - (sParts[0]! * 60 + (sParts[1] ?? 0));
+  const minutes = eParts[0]! * 60 + (eParts[1] ?? 0) - (sParts[0]! * 60 + (sParts[1] ?? 0));
   if (minutes <= 0) return '';
   if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}h`;
   if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
@@ -157,17 +156,17 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
       disabled={isFull}
       aria-pressed={isSelected}
       className={cn(
-        'flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'bg-card flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+        'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
         isSelected
-          ? 'border-primary ring-1 ring-primary'
+          ? 'border-primary ring-primary ring-1'
           : isFull
             ? 'cursor-not-allowed opacity-50'
             : 'hover:bg-accent/40',
       )}
     >
       <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+        className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
         style={
           slot.lessonTypeColor
             ? { backgroundColor: `${slot.lessonTypeColor}20`, color: slot.lessonTypeColor }
@@ -178,7 +177,7 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{slot.lessonTypeName}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+        <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
@@ -196,15 +195,15 @@ function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
           )}
         </p>
         {slot.coachName && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">Coach {slot.coachName}</p>
+          <p className="text-muted-foreground mt-0.5 truncate text-xs">Coach {slot.coachName}</p>
         )}
       </div>
       <div className="flex flex-col items-end gap-0.5 text-xs">
-        <span className="text-sm font-semibold text-foreground">
+        <span className="text-foreground text-sm font-semibold">
           {formatPrice(slot.lessonTypePrice, slot.lessonTypeCurrency)}
         </span>
         {isFull ? (
-          <span className="font-medium text-destructive">Full</span>
+          <span className="text-destructive font-medium">Full</span>
         ) : (
           <span className="text-muted-foreground">
             {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''}
@@ -259,7 +258,13 @@ export default function RiderBookPage() {
   const { data: user } = useCurrentUser();
   const memberId = user?.data?.memberId;
 
-  const { data: slotsData, isLoading, isError, error, refetch } = useBookingSlots({
+  const {
+    data: slotsData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useBookingSlots({
     dateFrom: toDateString(week.start),
     dateTo: toDateString(week.end),
   });
@@ -289,7 +294,9 @@ export default function RiderBookPage() {
       });
       if (json.data.valid && json.data.discount) {
         setCouponDiscount(json.data.discount);
-        toast.success(`Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`);
+        toast.success(
+          `Discount applied: ${formatMoney(json.data.discount, selectedSlot.lessonTypeCurrency)}`,
+        );
       } else {
         setCouponError(json.data.error ?? 'Invalid code');
       }
@@ -417,211 +424,208 @@ export default function RiderBookPage() {
   if (step === 'confirm' && selectedSlot) {
     return (
       <>
-      <div className="mx-auto max-w-lg space-y-6 pb-20 sm:pb-0">
-        <Button variant="ghost" size="sm" onClick={resetBookingState}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to slots
-        </Button>
+        <div className="mx-auto max-w-lg space-y-6 pb-20 sm:pb-0">
+          <Button variant="ghost" size="sm" onClick={resetBookingState}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to slots
+          </Button>
 
-        <h1 className="text-2xl font-bold">Confirm Booking</h1>
+          <h1 className="text-2xl font-bold">Confirm Booking</h1>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">{selectedSlot.lessonTypeName}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              {formatDate(new Date(`${selectedSlot.date}T00:00:00`))}
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
-            </div>
-            {selectedSlot.arenaName && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">{selectedSlot.lessonTypeName}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
               <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                {selectedSlot.arenaName}
+                <Calendar className="text-muted-foreground h-4 w-4" />
+                {formatDate(new Date(`${selectedSlot.date}T00:00:00`))}
               </div>
-            )}
-            {selectedSlot.coachName && (
-              <div className="text-sm">
-                Coach: <span className="font-medium">{selectedSlot.coachName}</span>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="text-muted-foreground h-4 w-4" />
+                {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
               </div>
-            )}
-            <div className="border-t pt-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Price</span>
-                <span className={`text-lg font-semibold ${couponDiscount > 0 ? 'line-through text-muted-foreground text-base' : ''}`}>
-                  {formatPrice(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
-                </span>
-              </div>
-              {couponDiscount > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-green-600">After discount</span>
-                  <span className="text-lg font-semibold text-green-600">
-                    {formatPrice(selectedSlot.lessonTypePrice - couponDiscount, selectedSlot.lessonTypeCurrency)}
-                  </span>
+              {selectedSlot.arenaName && (
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="text-muted-foreground h-4 w-4" />
+                  {selectedSlot.arenaName}
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Coupon code */}
-        <div className="space-y-2">
-          <label htmlFor="coupon" className="text-sm font-medium">
-            Promo Code (optional)
-          </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Ticket className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="coupon"
-                placeholder="Enter promo code"
-                value={couponCode}
-                onChange={(e) => {
-                  setCouponCode(e.target.value);
-                  setCouponDiscount(0);
-                  setCouponError('');
-                }}
-                className="pl-9 font-mono uppercase"
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!couponCode.trim() || couponValidating}
-              onClick={handleApplyCoupon}
-            >
-              {couponValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
-            </Button>
-          </div>
-          {couponError && <p className="text-sm text-destructive">{couponError}</p>}
-          {couponDiscount > 0 && (
-            <p className="text-sm text-green-600">
-              Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
-            </p>
-          )}
-        </div>
-
-        {/* Guest booking — bring someone who isn't a club member */}
-        <div className="space-y-3 rounded-lg border p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="guest-toggle">Booking this for a guest?</Label>
-              <p className="text-xs text-muted-foreground">
-                Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in
-                their name. You can book yourself once AND bring guests on the same slot.
-              </p>
-            </div>
-            <Switch
-              id="guest-toggle"
-              checked={bookingForGuest}
-              onCheckedChange={setBookingForGuest}
-            />
-          </div>
-
-          {bookingForGuest && (
-            <Form {...guestForm}>
-              <div className="space-y-3 border-t pt-3">
-                <FormField
-                  control={guestForm.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Guest name *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Full name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <FormField
-                    control={guestForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Guest email *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="guest@example.com"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={guestForm.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Guest phone *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="tel"
-                            placeholder="+971 50 123 4567"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              {selectedSlot.coachName && (
+                <div className="text-sm">
+                  Coach: <span className="font-medium">{selectedSlot.coachName}</span>
                 </div>
-                <FormField
-                  control={guestForm.control}
-                  name="skillLevel"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Guest skill level *</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="beginner">Beginner</SelectItem>
-                          <SelectItem value="intermediate">Intermediate</SelectItem>
-                          <SelectItem value="advanced">Advanced</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              )}
+              <div className="space-y-1 border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-sm">Price</span>
+                  <span
+                    className={`text-lg font-semibold ${couponDiscount > 0 ? 'text-muted-foreground text-base line-through' : ''}`}
+                  >
+                    {formatPrice(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
+                  </span>
+                </div>
+                {couponDiscount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-green-600">After discount</span>
+                    <span className="text-lg font-semibold text-green-600">
+                      {formatPrice(
+                        selectedSlot.lessonTypePrice - couponDiscount,
+                        selectedSlot.lessonTypeCurrency,
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Coupon code */}
+          <div className="space-y-2">
+            <label htmlFor="coupon" className="text-sm font-medium">
+              Promo Code (optional)
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Ticket className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                <Input
+                  id="coupon"
+                  placeholder="Enter promo code"
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value);
+                    setCouponDiscount(0);
+                    setCouponError('');
+                  }}
+                  className="pl-9 font-mono uppercase"
                 />
-                <p className="text-xs text-muted-foreground">
-                  A horse will be assigned manually by the stable after booking.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!couponCode.trim() || couponValidating}
+                onClick={handleApplyCoupon}
+              >
+                {couponValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
+              </Button>
+            </div>
+            {couponError && <p className="text-destructive text-sm">{couponError}</p>}
+            {couponDiscount > 0 && (
+              <p className="text-sm text-green-600">
+                Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
+              </p>
+            )}
+          </div>
+
+          {/* Guest booking — bring someone who isn't a club member */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="guest-toggle">Booking this for a guest?</Label>
+                <p className="text-muted-foreground text-xs">
+                  Bring someone who isn&apos;t a member yet. We&apos;ll create the booking in their
+                  name. You can book yourself once AND bring guests on the same slot.
                 </p>
               </div>
-            </Form>
+              <Switch
+                id="guest-toggle"
+                checked={bookingForGuest}
+                onCheckedChange={setBookingForGuest}
+              />
+            </div>
+
+            {bookingForGuest && (
+              <Form {...guestForm}>
+                <div className="space-y-3 border-t pt-3">
+                  <FormField
+                    control={guestForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Guest name *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Full name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField
+                      control={guestForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Guest email *</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="guest@example.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={guestForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Guest phone *</FormLabel>
+                          <FormControl>
+                            <Input type="tel" placeholder="+971 50 123 4567" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={guestForm.control}
+                    name="skillLevel"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Guest skill level *</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="beginner">Beginner</SelectItem>
+                            <SelectItem value="intermediate">Intermediate</SelectItem>
+                            <SelectItem value="advanced">Advanced</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    A horse will be assigned manually by the stable after booking.
+                  </p>
+                </div>
+              </Form>
+            )}
+          </div>
+
+          {/* Horse matching info for self-bookings */}
+          {!bookingForGuest && (
+            <p className="text-muted-foreground text-sm">
+              A horse will be automatically matched to your skill level and preferences.
+            </p>
           )}
+
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={handleConfirmBooking}
+            disabled={createBooking.isPending || !memberId}
+          >
+            {createBooking.isPending ? 'Booking...' : 'Confirm Booking'}
+          </Button>
         </div>
-
-        {/* Horse matching info for self-bookings */}
-        {!bookingForGuest && (
-          <p className="text-sm text-muted-foreground">
-            A horse will be automatically matched to your skill level and preferences.
-          </p>
-        )}
-
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={handleConfirmBooking}
-          disabled={createBooking.isPending || !memberId}
-        >
-          {createBooking.isPending ? 'Booking...' : 'Confirm Booking'}
-        </Button>
-      </div>
-      {paymentDialog}
+        {paymentDialog}
       </>
     );
   }
@@ -630,106 +634,109 @@ export default function RiderBookPage() {
 
   return (
     <>
-    <div className="space-y-6 pb-20 sm:pb-0">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild aria-label="Back to home">
-          <Link href="/rider">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Book a Lesson</h1>
-          <p className="text-muted-foreground">Choose a date and time slot</p>
+      <div className="space-y-6 pb-20 sm:pb-0">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild aria-label="Back to home">
+            <Link href="/rider">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Book a Lesson</h1>
+            <p className="text-muted-foreground">Choose a date and time slot</p>
+          </div>
         </div>
-      </div>
 
-      {/* Week navigation */}
-      <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setWeekOffset((w) => w - 1)}
-          disabled={weekOffset <= 0}
-          aria-label="Previous week"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-medium">
-          {formatDate(week.start)} – {formatDate(week.end)}
-        </span>
-        <Button variant="outline" size="icon" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Next week">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Date selector */}
-      <BookingDayStrip
-        dates={weekDateStrings}
-        selected={selectedDate}
-        onSelect={(d) => {
-          setSelectedDate(d);
-          setSelectedSlot(null);
-        }}
-        disabledBefore={toDateString(new Date())}
-        slotCounts={slotCountsByDate}
-      />
-
-
-
-      {/* Slots for selected date */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-          Available on {formatDate(new Date(`${selectedDate}T00:00:00`))}
-        </h2>
-
-        {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Skeleton className="mb-2 h-5 w-32" />
-                      <Skeleton className="h-4 w-48" />
-                    </div>
-                    <Skeleton className="h-6 w-20" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : isError ? (
-          <ErrorState message={error?.message} onRetry={refetch} />
-        ) : slotsForDate.length === 0 ? (
-          <EmptyState
-            title="No slots available"
-            description="Try a different date or check back later."
-          />
-        ) : (
-          <div className="space-y-3">
-            {slotsForDate.map((slot) => (
-              <SlotCard
-                key={slot.id}
-                slot={slot}
-                isSelected={selectedSlot?.id === slot.id}
-                onSelect={() => setSelectedSlot(slot)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Continue button */}
-      {selectedSlot && (
-        <div className="sticky bottom-20 sm:bottom-0 z-40 bg-background pt-4 pb-4 border-t -mx-4 px-4 sm:mx-0 sm:px-0 sm:border-0 sm:bg-transparent">
-          <Button className="w-full" size="lg" onClick={() => setStep('confirm')}>
-            Continue with {selectedSlot.lessonTypeName}
-            <ArrowRight className="ml-2 h-4 w-4" />
+        {/* Week navigation */}
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setWeekOffset((w) => w - 1)}
+            disabled={weekOffset <= 0}
+            aria-label="Previous week"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium">
+            {formatDate(week.start)} – {formatDate(week.end)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setWeekOffset((w) => w + 1)}
+            aria-label="Next week"
+          >
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-      )}
-    </div>
-    {paymentDialog}
+
+        {/* Date selector */}
+        <BookingDayStrip
+          dates={weekDateStrings}
+          selected={selectedDate}
+          onSelect={(d) => {
+            setSelectedDate(d);
+            setSelectedSlot(null);
+          }}
+          disabledBefore={toDateString(new Date())}
+          slotCounts={slotCountsByDate}
+        />
+
+        {/* Slots for selected date */}
+        <section>
+          <h2 className="text-muted-foreground mb-3 text-sm font-medium">
+            Available on {formatDate(new Date(`${selectedDate}T00:00:00`))}
+          </h2>
+
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Skeleton className="mb-2 h-5 w-32" />
+                        <Skeleton className="h-4 w-48" />
+                      </div>
+                      <Skeleton className="h-6 w-20" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : isError ? (
+            <ErrorState message={error?.message} onRetry={refetch} />
+          ) : slotsForDate.length === 0 ? (
+            <EmptyState
+              title="No slots available"
+              description="Try a different date or check back later."
+            />
+          ) : (
+            <div className="space-y-3">
+              {slotsForDate.map((slot) => (
+                <SlotCard
+                  key={slot.id}
+                  slot={slot}
+                  isSelected={selectedSlot?.id === slot.id}
+                  onSelect={() => setSelectedSlot(slot)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Continue button */}
+        {selectedSlot && (
+          <div className="bg-background sticky bottom-20 z-40 -mx-4 border-t px-4 pt-4 pb-4 sm:bottom-0 sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0">
+            <Button className="w-full" size="lg" onClick={() => setStep('confirm')}>
+              Continue with {selectedSlot.lessonTypeName}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+      {paymentDialog}
     </>
   );
 }

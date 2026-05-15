@@ -72,11 +72,7 @@ export function DayStrip({ dates, selected, onSelect, disabledBefore, counts }: 
             </Text>
             <View
               className={`mt-1 h-10 w-10 items-center justify-center rounded-full ${
-                isSelected
-                  ? 'bg-gray-900'
-                  : isToday
-                    ? 'border border-gray-900'
-                    : ''
+                isSelected ? 'bg-gray-900' : isToday ? 'border border-gray-900' : ''
               }`}
             >
               <Text
@@ -86,9 +82,7 @@ export function DayStrip({ dates, selected, onSelect, disabledBefore, counts }: 
               </Text>
             </View>
             <Text
-              className={`mt-1 h-3 text-[10px] ${
-                isSelected ? 'text-gray-900' : 'text-gray-400'
-              }`}
+              className={`mt-1 h-3 text-[10px] ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}
             >
               {typeof count === 'number' && count > 0 ? count : ''}
             </Text>

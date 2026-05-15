@@ -49,7 +49,7 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
           <span className="text-muted-foreground text-[10px] uppercase">
             {formatDate(booking.slotDate).split(' ')[0]}
           </span>
-          <span className="text-lg font-bold leading-tight">
+          <span className="text-lg leading-tight font-bold">
             {formatDate(booking.slotDate).split(' ')[2]}
           </span>
         </div>

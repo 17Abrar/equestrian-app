@@ -451,8 +451,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         currency: input.currency,
         amountMinorUnits: input.amountMinorUnits,
         responsePreview: safeProviderPreview(JSON.stringify(rawJson ?? null), 400),
-        responseKeys:
-          rawJson && typeof rawJson === 'object' ? Object.keys(rawJson as object) : [],
+        responseKeys: rawJson && typeof rawJson === 'object' ? Object.keys(rawJson as object) : [],
       });
       throw new PaymentProviderError(
         'MALFORMED_RESPONSE',

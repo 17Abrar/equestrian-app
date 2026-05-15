@@ -131,7 +131,7 @@ export function PendingApprovalCard({ horse }: PendingApprovalCardProps) {
             </div>
 
             {horse.notes && (
-              <p className="bg-muted text-muted-foreground mt-2 whitespace-pre-wrap rounded-md p-2 text-xs">
+              <p className="bg-muted text-muted-foreground mt-2 rounded-md p-2 text-xs whitespace-pre-wrap">
                 {horse.notes}
               </p>
             )}

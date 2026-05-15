@@ -268,7 +268,7 @@ function HistoryCard({ invoices, isTrial }: { invoices: SubscriptionInvoice[]; i
       </CardHeader>
       <CardContent className="overflow-x-auto p-0">
         {invoices.length === 0 ? (
-          <div className="text-muted-foreground px-6 pb-6 pt-2 text-sm">No invoices yet.</div>
+          <div className="text-muted-foreground px-6 pt-2 pb-6 text-sm">No invoices yet.</div>
         ) : (
           <Table>
             <TableHeader>

@@ -33,7 +33,9 @@ describe('withProviderRetry', () => {
   it('retries retryable PaymentProviderError up to maxAttempts', async () => {
     const fn = vi
       .fn<() => Promise<string>>()
-      .mockRejectedValueOnce(new PaymentProviderError('RATE_LIMITED', 'slow down', { retryable: true }))
+      .mockRejectedValueOnce(
+        new PaymentProviderError('RATE_LIMITED', 'slow down', { retryable: true }),
+      )
       .mockRejectedValueOnce(new PaymentProviderError('NETWORK', 'transient', { retryable: true }))
       .mockResolvedValueOnce('finally');
 

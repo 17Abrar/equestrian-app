@@ -1172,20 +1172,20 @@ CREATE INDEX idx_audit_resource ON audit_log(resource_type, resource_id);
 > and where to look. Curating full SQL shapes here would duplicate effort
 > and is the original cause of the drift.
 
-| Table                              | Schema file                                                | Purpose                                                                                                                              |
-| ---------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `audiences`                        | `schema/audiences.ts`                                      | Saved email-marketing recipient filters (Round 1F). One row per saved audience; the filter shape is JSONB.                          |
-| `club_join_requests`               | `schema/club-join-requests.ts`                             | Pending rider-side requests to join clubs whose `join_policy='approval'`. Status enum: pending / approved / rejected / withdrawn.    |
-| `club_payment_accounts`            | `schema/finances.ts` (`clubPaymentAccounts`)               | Per-club encrypted provider credentials (Stripe / Ziina / N-Genius) under the direct-keys model. One row per provider per club.     |
-| `burned_webhook_secret_hashes`     | `schema/finances.ts` (`burnedWebhookSecretHashes`)         | Append-only set of webhook secret hashes that have been rotated out, so a re-paste of an old secret is rejected (audit F-3 r6).      |
-| `livery_invoices`                  | `schema/livery-invoices.ts`                                | Monthly livery contract invoices issued by the platform-billing cron (Round 6). Status enum mirrors `invoices` but is a sibling tbl. |
-| `platform_subscription_invoices`   | `schema/platform-subscription-invoices.ts`                 | Cavaliq's own monthly SaaS invoices per club (Round 6 platform billing). Status: draft / sent / paid / overdue / void.               |
-| `webhook_events`                   | `schema/webhook-events.ts`                                 | Append-only dedup ledger for incoming provider webhooks. `claimWebhookEvent` does INSERT-ON-CONFLICT-DO-NOTHING.                     |
-| `horse_care_reminder_sends`        | `schema/horse-health.ts` (`horseCareReminderSends`)        | Append-only dedup ledger for Round 6.2 horse-care reminder emails (vaccination / farrier / dental / insurance / medication end).     |
-| `competitions`                     | `schema/competitions.ts`                                   | Round 8 competition entity (event metadata).                                                                                          |
-| `competition_classes`              | `schema/competitions.ts`                                   | Round 8 — individual classes within a competition; entry fee, level, capacity.                                                       |
-| `competition_entries`              | `schema/competitions.ts`                                   | Round 8 — rider entries into a class. Status enum: registered / confirmed / withdrawn / scratched.                                   |
-| `competition_results`              | `schema/competitions.ts`                                   | Round 8 — placings and scores for closed classes.                                                                                    |
+| Table                            | Schema file                                         | Purpose                                                                                                                              |
+| -------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `audiences`                      | `schema/audiences.ts`                               | Saved email-marketing recipient filters (Round 1F). One row per saved audience; the filter shape is JSONB.                           |
+| `club_join_requests`             | `schema/club-join-requests.ts`                      | Pending rider-side requests to join clubs whose `join_policy='approval'`. Status enum: pending / approved / rejected / withdrawn.    |
+| `club_payment_accounts`          | `schema/finances.ts` (`clubPaymentAccounts`)        | Per-club encrypted provider credentials (Stripe / Ziina / N-Genius) under the direct-keys model. One row per provider per club.      |
+| `burned_webhook_secret_hashes`   | `schema/finances.ts` (`burnedWebhookSecretHashes`)  | Append-only set of webhook secret hashes that have been rotated out, so a re-paste of an old secret is rejected (audit F-3 r6).      |
+| `livery_invoices`                | `schema/livery-invoices.ts`                         | Monthly livery contract invoices issued by the platform-billing cron (Round 6). Status enum mirrors `invoices` but is a sibling tbl. |
+| `platform_subscription_invoices` | `schema/platform-subscription-invoices.ts`          | Cavaliq's own monthly SaaS invoices per club (Round 6 platform billing). Status: draft / sent / paid / overdue / void.               |
+| `webhook_events`                 | `schema/webhook-events.ts`                          | Append-only dedup ledger for incoming provider webhooks. `claimWebhookEvent` does INSERT-ON-CONFLICT-DO-NOTHING.                     |
+| `horse_care_reminder_sends`      | `schema/horse-health.ts` (`horseCareReminderSends`) | Append-only dedup ledger for Round 6.2 horse-care reminder emails (vaccination / farrier / dental / insurance / medication end).     |
+| `competitions`                   | `schema/competitions.ts`                            | Round 8 competition entity (event metadata).                                                                                         |
+| `competition_classes`            | `schema/competitions.ts`                            | Round 8 — individual classes within a competition; entry fee, level, capacity.                                                       |
+| `competition_entries`            | `schema/competitions.ts`                            | Round 8 — rider entries into a class. Status enum: registered / confirmed / withdrawn / scratched.                                   |
+| `competition_results`            | `schema/competitions.ts`                            | Round 8 — placings and scores for closed classes.                                                                                    |
 
 If you add a new table, either add it to the relevant `### {table}` section
 above or add a row here. Either way, the schema file remains the source of
