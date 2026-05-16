@@ -464,6 +464,7 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
       advanceBookingDays: settings.advanceBookingDays ?? 30,
       bookingCutoffHours: settings.bookingCutoffHours ?? 2,
       cancellationNoticeHours: settings.cancellationNoticeHours ?? 24,
+      bookingPaymentTimeoutMinutes: settings.bookingPaymentTimeoutMinutes ?? 15,
       defaultLessonDurationMinutes: settings.defaultLessonDurationMinutes ?? 60,
       allowOverbooking: settings.allowOverbooking ?? false,
       overbookingLimit: settings.overbookingLimit ?? 0,
@@ -546,6 +547,24 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
                     <FormControl>
                       <NumberInput {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="bookingPaymentTimeoutMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Payment Timeout (min)</FormLabel>
+                    <FormControl>
+                      <NumberInput min="1" max="60" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Minutes to wait before auto-cancelling a confirmed booking whose payment
+                      never completed. Slot is released and rider is emailed. Range 1–60;
+                      default 15.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

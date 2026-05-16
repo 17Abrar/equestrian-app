@@ -1,6 +1,7 @@
 import { eq, and, asc, desc, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
+import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
 import { coupons, couponUsages } from '../schema/packages';
@@ -1212,8 +1213,12 @@ export async function unmarkBookingReminderSent(clubId: string, bookingId: strin
  *   - `paymentMethod` not in the offline set (`cash`, `card_in_person`,
  *     `bank_transfer`, `package_credit`) — those legitimately stay
  *     pending until the stable settles at the counter.
- *   - `createdAt < now - graceMinutes` — give the rider time to complete
- *     the provider flow (3DS, OTP, etc.).
+ *   - `createdAt + clubs.bookingPaymentTimeoutMinutes < now` — give
+ *     the rider time to complete the provider flow (3DS, OTP, etc.).
+ *     Per-club so a stable with slow OTP can extend the window. JOIN
+ *     to `clubs` makes this a row-level filter so a 10-min club's
+ *     bookings get picked up while a 30-min club's same-age bookings
+ *     wait their turn.
  *   - `amount > 0` — zero-amount bookings (free, fully-discounted) have
  *     no money to wait on; the existing payment flow short-circuits
  *     and they don't get a provider intent.
@@ -1221,18 +1226,15 @@ export async function unmarkBookingReminderSent(clubId: string, bookingId: strin
  * Joins surface what the cancellation email needs (rider name/email,
  * lesson, arena) and what the reconciliation step needs (paymentProvider
  * + providerPaymentId, so `getPaymentStatus` can be called). Club name/
- * timezone/logo are looked up separately in the cron via `getClubById`
- * with a Map cache, matching the `findUpcomingBookingsForReminder`
- * pattern — keeps this query narrow and lets the cron cache club rows
- * across many bookings.
+ * timezone/logo are still looked up separately in the cron via
+ * `getClubById` with a Map cache (matches `findUpcomingBookingsForReminder`),
+ * even though we join clubs here for the timeout filter — the join
+ * pulls only one integer column, not the full row + jsonb prefs.
  *
  * Capped at 200 rows per pass to bound CPU; if the queue grows past
  * that, subsequent cron ticks pick up the residual.
  */
-export async function findStalePendingPaymentBookings(now: Date, graceMinutes: number) {
-  const cutoffMs = now.getTime() - graceMinutes * 60_000;
-  const cutoff = new Date(cutoffMs);
-
+export async function findStalePendingPaymentBookings(now: Date) {
   const rows = await db
     .select({
       bookingId: bookings.id,
@@ -1263,6 +1265,7 @@ export async function findStalePendingPaymentBookings(now: Date, graceMinutes: n
       lessonTypes,
       and(eq(lessonTypes.id, bookingSlots.lessonTypeId), eq(lessonTypes.clubId, bookings.clubId)),
     )
+    .innerJoin(clubs, eq(clubs.id, bookings.clubId))
     .leftJoin(arenas, and(eq(arenas.id, bookingSlots.arenaId), eq(arenas.clubId, bookings.clubId)))
     .leftJoin(
       clubMembers,
@@ -1272,7 +1275,12 @@ export async function findStalePendingPaymentBookings(now: Date, graceMinutes: n
       and(
         eq(bookings.status, 'confirmed'),
         eq(bookings.paymentStatus, 'pending'),
-        sql`${bookings.createdAt} < ${cutoff}`,
+        // Per-club tunable grace window. `created_at + N minutes < now` —
+        // bookings older than the club's configured timeout are eligible
+        // for auto-cancel. The CHECK constraint on
+        // `booking_payment_timeout_minutes` (1..60) bounds the worst-case
+        // delay; default 15.
+        sql`${bookings.createdAt} + (${clubs.bookingPaymentTimeoutMinutes} * INTERVAL '1 minute') < ${now}`,
         sql`${bookings.amount} > 0`,
         // Offline methods stay pending legitimately — exclude them.
         // NULL paymentMethod (online default) is included via the OR.
