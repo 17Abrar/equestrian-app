@@ -34,6 +34,44 @@ function formatAmount(amount: number | null, currency: string): string {
   return formatMoney(amount, currency);
 }
 
+// Payment methods that settle outside any online provider — for these, a
+// `paymentStatus === 'pending'` is normal and not a sign of an abandoned
+// pay flow. Mirrors `OFFLINE_PAYMENT_METHODS` in the booking-payment route
+// and `OFFLINE_METHODS` in the booking detail client; intentionally
+// duplicated here to keep this UI fix scoped to one file. Lift to
+// `@/lib/ui-constants` if a third surface needs it.
+const OFFLINE_METHODS = new Set(['cash', 'card_in_person', 'bank_transfer', 'package_credit']);
+
+/**
+ * 2026-05-16: the rider-home BookingCard used to render
+ * `<Badge>{booking.status}</Badge>` unconditionally, so a booking sitting
+ * in `status='confirmed'` + `paymentStatus='pending'` (rider abandoned the
+ * N-Genius PayPage, no webhook ever fired) displayed as a reassuring
+ * "confirmed" while the slot was actually unpaid. This helper folds the
+ * payment state back into the badge so the rider sees "awaiting payment"
+ * (or "payment failed") instead — the underlying booking lifecycle bug
+ * (slot held without payment) is tracked separately, this fix only
+ * stops the rider being misled.
+ */
+function bookingBadge(booking: Booking): { label: string; className: string } {
+  const lifecycle = booking.status;
+  if (lifecycle === 'cancelled' || lifecycle === 'no_show' || lifecycle === 'completed') {
+    return { label: lifecycle, className: BOOKING_STATUS_COLORS[lifecycle] ?? '' };
+  }
+  // For pending/confirmed bookings, payment state takes precedence when it
+  // means the rider needs to act. Offline methods (cash / bank transfer)
+  // legitimately stay pending after the stable-side action, so don't
+  // surface them as "awaiting payment".
+  const usesOnlineProvider = !OFFLINE_METHODS.has(booking.paymentMethod ?? '');
+  if (usesOnlineProvider && booking.paymentStatus === 'pending') {
+    return { label: 'awaiting payment', className: 'bg-amber-100 text-amber-900' };
+  }
+  if (booking.paymentStatus === 'failed') {
+    return { label: 'payment failed', className: 'bg-red-100 text-red-800' };
+  }
+  return { label: lifecycle, className: BOOKING_STATUS_COLORS[lifecycle] ?? '' };
+}
+
 interface BookingCardProps {
   booking: Booking;
   onCancel?: (booking: Booking) => void;
@@ -41,6 +79,7 @@ interface BookingCardProps {
 
 function BookingCard({ booking, onCancel }: BookingCardProps) {
   const canCancel = booking.status === 'confirmed' || booking.status === 'pending';
+  const badge = bookingBadge(booking);
 
   return (
     <Card className="transition-shadow hover:shadow-md">
@@ -80,8 +119,8 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
         </div>
 
         <div className="flex flex-col items-end gap-1">
-          <Badge className={BOOKING_STATUS_COLORS[booking.status] ?? ''} variant="secondary">
-            {booking.status}
+          <Badge className={badge.className} variant="secondary">
+            {badge.label}
           </Badge>
           {booking.amount !== null && (
             <span className="text-muted-foreground text-xs">
