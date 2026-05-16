@@ -58,6 +58,7 @@ export interface ClubSettings {
   advanceBookingDays: number;
   bookingCutoffHours: number;
   cancellationNoticeHours: number;
+  bookingPaymentTimeoutMinutes: number;
   defaultLessonDurationMinutes: number;
   allowOverbooking: boolean;
   overbookingLimit: number;

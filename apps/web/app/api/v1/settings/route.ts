@@ -89,6 +89,7 @@ export async function PATCH(request: NextRequest) {
         'advanceBookingDays',
         'bookingCutoffHours',
         'cancellationNoticeHours',
+        'bookingPaymentTimeoutMinutes',
         'defaultLessonDurationMinutes',
         'allowOverbooking',
         'overbookingLimit',

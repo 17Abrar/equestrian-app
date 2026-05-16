@@ -85,6 +85,15 @@ export const clubs = pgTable(
     advanceBookingDays: integer('advance_booking_days').notNull().default(30),
     bookingCutoffHours: integer('booking_cutoff_hours').notNull().default(2),
     cancellationNoticeHours: integer('cancellation_notice_hours').notNull().default(24),
+    // 2026-05-16 — grace window before the booking-payment-timeout cron
+    // auto-releases a slot whose payment never settled. Default 15 min
+    // matches the existing global (Stripe Checkout sessions, N-Genius
+    // PayPage 3DS flows comfortably fit). Clubs with high-friction card
+    // flows (slow OTP, etc.) can raise it; clubs with high double-booking
+    // pressure can lower it.
+    bookingPaymentTimeoutMinutes: integer('booking_payment_timeout_minutes')
+      .notNull()
+      .default(15),
     defaultLessonDurationMinutes: integer('default_lesson_duration_minutes').notNull().default(60),
     allowOverbooking: boolean('allow_overbooking').notNull().default(false),
     overbookingLimit: integer('overbooking_limit').notNull().default(0),

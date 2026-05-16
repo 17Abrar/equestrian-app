@@ -44,9 +44,10 @@ import { PaymentProviderError } from '@/lib/payments/types';
  *      `booking_cancellation`-trigger email so they know the slot was
  *      released and they can re-book.
  *
- * Grace: 15 minutes from `bookings.createdAt`. Long enough for a card
- * 3DS / OTP flow, short enough that the slot is freed within the next
- * cron tick (so worst-case lag is ~25 min: 15 grace + 10 cron period).
+ * Grace: per-club, default 15 minutes from `bookings.createdAt`
+ * (`clubs.booking_payment_timeout_minutes`, CHECK 1..60). Long enough
+ * for a card 3DS / OTP flow, short enough that the slot is freed within
+ * the next cron tick (so worst-case lag is ~tunable + 10 min cron period).
  *
  * Idempotency: the auto-cancel CAS requires `status='confirmed' AND
  * paymentStatus='pending'`, so a booking that flipped to paid (or was
@@ -60,8 +61,6 @@ import { PaymentProviderError } from '@/lib/payments/types';
  * stale provider's intent is unreachable, and treating the booking
  * as abandoned is the safe move.
  */
-
-const GRACE_MINUTES = 15;
 
 interface CronResult {
   considered: number;
@@ -96,7 +95,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function runSweep(now: Date): Promise<CronResult> {
-  const candidates = await findStalePendingPaymentBookings(now, GRACE_MINUTES);
+  const candidates = await findStalePendingPaymentBookings(now);
   let reconciledPaid = 0;
   let autoCancelled = 0;
   let skipped = 0;
@@ -231,7 +230,7 @@ async function runSweep(now: Date): Promise<CronResult> {
           clubName: club.name,
           clubLogo: club.logoUrl ?? undefined,
           reason:
-            'Payment was not completed within 15 minutes of booking, so we released the slot. You can re-book any time from the app.',
+            'Payment was not completed within the grace window, so we released the slot. You can re-book any time from the app.',
           type: 'cancellation',
         }),
       });
