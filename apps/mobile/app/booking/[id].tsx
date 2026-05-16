@@ -95,7 +95,21 @@ export default function BookingDetailScreen() {
     if (result.ok) {
       Toast.show({ type: 'success', text1: 'Payment received' });
       void refetch();
-    } else if (!result.dismissed) {
+      return;
+    }
+    // 2026-05-16: distinguish "rider hit Cancel on the PayPage" from a real
+    // failure. Mirrors the web banner copy. The hook detects this via the
+    // `payment=cancelled` flag N-Genius now echoes back on `cancelUrl`.
+    if (result.cancelled) {
+      Toast.show({
+        type: 'info',
+        text1: 'Payment cancelled',
+        text2: 'Your slot is still reserved — tap Pay now to try again.',
+      });
+      void refetch();
+      return;
+    }
+    if (!result.dismissed) {
       Alert.alert('Payment Failed', result.errorMessage ?? "We couldn't start the payment flow.");
     }
   }, [booking, pay, refetch]);
