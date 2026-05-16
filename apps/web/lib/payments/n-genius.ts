@@ -236,16 +236,40 @@ function extractOrderFields(order: unknown): {
       cavaliqDescription: undefined,
     };
   }
+  // N-Genius v2 PayPage responses do NOT consistently expose the hosted-page
+  // URL at the same `_links` key. Production traffic (Sentry event
+  // `30779906d169...`, 2026-05-16) returned an HTTP 201 Created order with
+  // `_links` containing only `cancel` + `cnp:payment-link` at the order level,
+  // and the hosted URL sitting inside `_embedded.payment[0]._links` under a
+  // colon-namespaced key — `payment:hosted` in current paypage docs, `payment`
+  // in older gateway versions. The pre-fix parser read only
+  // `_embedded.payment[0]._links.payment.href` and threw MALFORMED_RESPONSE on
+  // every modern paypage response.
+  //
+  // The `_links` types below intentionally enumerate every link key we've
+  // observed in v2 paypage responses so a future drift surfaces as a TS error
+  // at the lookup table, not a silent miss. The actual lookup is done with a
+  // candidate-key sweep (see `paymentUrl` below) so we don't depend on which
+  // single key the merchant outlet's gateway version chose.
+  type NGeniusLinks = {
+    payment?: { href?: string };
+    'payment:hosted'?: { href?: string };
+    'payment-page'?: { href?: string };
+    'payment-authorization'?: { href?: string };
+    'cnp:payment-link'?: { href?: string };
+    'cnp:hosted-payment'?: { href?: string };
+  };
   const o = order as {
     reference?: string;
     merchantAttributes?: { cavaliqDescription?: string };
+    _links?: NGeniusLinks;
     _embedded?: {
       payment?: Array<{
         state?: string;
         amount?: { value?: number; currencyCode?: string };
         outstandingAmount?: { value?: number };
         refundedAmount?: { value?: number };
-        _links?: { payment?: { href?: string } };
+        _links?: NGeniusLinks;
         _embedded?: {
           // N-Genius nests refunds under 'cnp:refund' (or just 'refund' on
           // some payloads). Each entry has its own amount.value + state.
@@ -300,9 +324,28 @@ function extractOrderFields(order: unknown): {
     }
   }
 
+  // Candidate sweep across every link key shape we've seen in v2 paypage
+  // responses, embedded payment leg first (where the hosted URL canonically
+  // lives), order-level as a fallback. First non-empty wins. See the
+  // `NGeniusLinks` type above for the keys we enumerate; if N-Genius starts
+  // returning a new key we'll see it surface in `availableLinkKeys` on the
+  // MALFORMED_RESPONSE log path.
+  const linkCandidates: Array<string | undefined> = [
+    payment?._links?.payment?.href,
+    payment?._links?.['payment:hosted']?.href,
+    payment?._links?.['payment-page']?.href,
+    payment?._links?.['payment-authorization']?.href,
+    o._links?.payment?.href,
+    o._links?.['payment:hosted']?.href,
+    o._links?.['payment-page']?.href,
+    o._links?.['payment-authorization']?.href,
+    o._links?.['cnp:hosted-payment']?.href,
+  ];
+  const paymentUrl = linkCandidates.find((u) => typeof u === 'string' && u.length > 0);
+
   return {
     reference: o.reference,
-    paymentUrl: payment?._links?.payment?.href,
+    paymentUrl,
     state: payment?.state,
     amountValue: payment?.amount?.value,
     amountCurrency: payment?.amount?.currencyCode,
@@ -436,13 +479,37 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     const fields = extractOrderFields(rawJson);
 
     if (!fields.paymentUrl || !fields.reference) {
-      // 2026-05-15: surface the response shape so operators can
-      // distinguish "below outlet minimum" (200 OK with no embedded
-      // payment leg) from "outlet not activated", schema drift, etc.
-      // Pre-fix this threw with no structured log of the body, leaving
-      // CF Worker logs with `code: MALFORMED_RESPONSE` and nothing
-      // actionable. `safeProviderPreview` scrubs card-number-shaped
-      // tokens and email addresses before the body lands in logs.
+      // 2026-05-15 / 2026-05-16: the first revision of this log told us
+      // N-Genius returns 201 Created with `_links` + `_embedded` but no
+      // payment URL matched any candidate (see `linkCandidates` sweep in
+      // extractOrderFields). Surface the `_links` key NAMES at both order
+      // and embedded levels so the next failure pinpoints the missing
+      // key without another deploy round-trip. Preview cap raised to
+      // 2000 chars — `safeProviderPreview` scrubs card-shaped digits +
+      // emails, and N-Genius order bodies don't carry rider PII beyond
+      // what we already send in `emailAddress`.
+      const rawObj =
+        rawJson && typeof rawJson === 'object' ? (rawJson as Record<string, unknown>) : null;
+      const orderLinksObj =
+        rawObj && typeof rawObj._links === 'object' && rawObj._links !== null
+          ? (rawObj._links as Record<string, unknown>)
+          : null;
+      const embeddedPayment =
+        rawObj &&
+        typeof rawObj._embedded === 'object' &&
+        rawObj._embedded !== null &&
+        Array.isArray((rawObj._embedded as { payment?: unknown }).payment)
+          ? ((rawObj._embedded as { payment: unknown[] }).payment[0] as
+              | Record<string, unknown>
+              | undefined)
+          : undefined;
+      const embeddedPaymentLinksObj =
+        embeddedPayment &&
+        typeof embeddedPayment._links === 'object' &&
+        embeddedPayment._links !== null
+          ? (embeddedPayment._links as Record<string, unknown>)
+          : null;
+
       logger.error('n_genius_create_payment_malformed', {
         httpStatus: res.status,
         orderReference,
@@ -450,8 +517,14 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
         clubId: input.clubId,
         currency: input.currency,
         amountMinorUnits: input.amountMinorUnits,
-        responsePreview: safeProviderPreview(JSON.stringify(rawJson ?? null), 400),
-        responseKeys: rawJson && typeof rawJson === 'object' ? Object.keys(rawJson as object) : [],
+        hasReference: !!fields.reference,
+        hasPaymentUrl: !!fields.paymentUrl,
+        orderLinkKeys: orderLinksObj ? Object.keys(orderLinksObj) : [],
+        embeddedPaymentLinkKeys: embeddedPaymentLinksObj
+          ? Object.keys(embeddedPaymentLinksObj)
+          : [],
+        responsePreview: safeProviderPreview(JSON.stringify(rawJson ?? null), 2000),
+        responseKeys: rawObj ? Object.keys(rawObj) : [],
       });
       throw new PaymentProviderError(
         'MALFORMED_RESPONSE',
