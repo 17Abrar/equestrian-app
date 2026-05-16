@@ -32,6 +32,11 @@ export function RiderBookingDetailClient({ bookingId }: RiderBookingDetailClient
   const searchParams = useSearchParams();
   const returningFromPayment = searchParams.get('from') === 'payment';
   const paymentStartFailed = searchParams.get('payment') === 'start-failed';
+  // 2026-05-16: N-Genius `cancelUrl` now appends `payment=cancelled` (see
+  // n-genius.ts), so a rider who clicked Cancel on the PayPage lands here
+  // with this flag set. Without it the "Confirming your payment…" spinner
+  // sat forever on a flow that will never produce a webhook.
+  const paymentCancelled = searchParams.get('payment') === 'cancelled';
 
   const query = useBooking(bookingId);
   const booking = query.data?.success ? query.data.data : null;
@@ -135,6 +140,7 @@ export function RiderBookingDetailClient({ bookingId }: RiderBookingDetailClient
         booking={booking}
         isPolling={shouldPoll}
         returningFromPayment={returningFromPayment}
+        paymentCancelled={paymentCancelled}
         onPayClick={() => setPayOpen(true)}
       />
 
@@ -188,6 +194,7 @@ interface PaymentBannerProps {
   booking: Booking;
   isPolling: boolean;
   returningFromPayment: boolean;
+  paymentCancelled: boolean;
   onPayClick: () => void;
 }
 
@@ -195,6 +202,7 @@ function PaymentBanner({
   booking,
   isPolling,
   returningFromPayment,
+  paymentCancelled,
   onPayClick,
 }: PaymentBannerProps) {
   const statusLabel = useMemo(() => {
@@ -260,6 +268,25 @@ function PaymentBanner({
     return (
       <Banner tone="success" icon={<CheckCircle2 className="h-5 w-5" />} title="No payment due">
         This booking is covered by a discount or credit. You&apos;re all set.
+      </Banner>
+    );
+  }
+
+  // 2026-05-16: rider hit Cancel on the N-Genius PayPage (or hit our
+  // differentiated `cancelUrl`). Takes precedence over the
+  // `returningFromPayment` "Confirming…" spinner below — no webhook is
+  // coming for a true cancel, so the spinner would sit forever. Keep the
+  // booking reserved (the lifecycle bug we're addressing in a separate
+  // PR with the auto-release cron) and let the rider retry.
+  if (paymentCancelled && booking.paymentStatus === 'pending') {
+    return (
+      <Banner tone="warn" icon={<AlertCircle className="h-5 w-5" />} title="Payment cancelled">
+        You cancelled the payment. Your slot is still reserved — try again to confirm it.
+        <div className="mt-3">
+          <Button size="sm" onClick={onPayClick}>
+            Try again
+          </Button>
+        </div>
       </Banner>
     );
   }
