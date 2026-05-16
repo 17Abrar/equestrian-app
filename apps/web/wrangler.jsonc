@@ -74,7 +74,14 @@
   // by `worker-entry.mjs`'s `scheduled()` handler which routes by the
   // event's scheduled-time signature.
   "triggers": {
-    "crons": ["0 2 * * *", "15 2 * * *", "0 * * * *", "0 3 * * *", "30 3 * * *"]
+    "crons": [
+      "0 2 * * *",
+      "15 2 * * *",
+      "0 * * * *",
+      "0 3 * * *",
+      "30 3 * * *",
+      "*/10 * * * *"
+    ]
   },
 
   // Custom domain binding. Cavaliq's root domain is served from this Worker.
