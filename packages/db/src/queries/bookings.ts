@@ -1,6 +1,7 @@
 import { eq, and, asc, desc, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
 import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
+import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
 import { coupons, couponUsages } from '../schema/packages';
@@ -977,9 +978,31 @@ export async function setBookingPaymentRef(
       // the live PI's id, and subsequent webhooks for the live PI would
       // miss the booking and the rider's payment status would never
       // settle (audit B-19).
+      //
+      // 2026-05-17: carve out the route-driven retry case. When the
+      // create-intent route reattempts (rider clicked Pay a second
+      // time on a booking whose first PI was abandoned mid-PayPage),
+      // N-Genius doesn't always replay the prior order — same
+      // `orderReference` can produce a fresh `_id` depending on
+      // gateway state — so the new attempt's providerPaymentId
+      // differs from the row's existing one. Refusing the overwrite
+      // here blocked legitimate retries with a confusing "state
+      // changed while setting up payment" error.
+      //
+      // Distinguish callers: webhooks always pass `paymentStatus`
+      // (they're recording an outcome), the route never does (it's
+      // attaching). When the booking is still in `pending` payment
+      // state, the route is the only legitimate caller, and the
+      // previous PI is by definition abandoned — overwrite is
+      // safe. The orphaned PI's late webhook is recovered via the
+      // `descriptionForRecovery` marker (n-genius.ts stamps
+      // `[booking:UUID]` into `merchantAttributes.cavaliqDescription`
+      // exactly for this case).
+      const isRouteRetry = !data.paymentStatus && current.paymentStatus === 'pending';
       if (
         current.providerPaymentId !== null &&
-        current.providerPaymentId !== data.providerPaymentId
+        current.providerPaymentId !== data.providerPaymentId &&
+        !isRouteRetry
       ) {
         return null;
       }
@@ -1197,4 +1220,284 @@ export async function unmarkBookingReminderSent(clubId: string, bookingId: strin
     )
     .returning({ id: bookings.id });
   return result[0] ?? null;
+}
+
+/**
+ * 2026-05-16 — find bookings whose payment never settled. The
+ * `booking-payment-timeout` cron uses this to identify slots that are
+ * being held by a non-paying rider so they can be auto-released and
+ * made bookable again.
+ *
+ * Filters:
+ *   - `status='confirmed'` — slot is reserved (lifecycle-pending bookings
+ *     are not in scope; they never had a confirmed slot held).
+ *   - `paymentStatus='pending'` — no terminal payment outcome.
+ *   - `paymentMethod` not in the offline set (`cash`, `card_in_person`,
+ *     `bank_transfer`, `package_credit`) — those legitimately stay
+ *     pending until the stable settles at the counter.
+ *   - `createdAt + clubs.bookingPaymentTimeoutMinutes < now` — give
+ *     the rider time to complete the provider flow (3DS, OTP, etc.).
+ *     Per-club so a stable with slow OTP can extend the window. JOIN
+ *     to `clubs` makes this a row-level filter so a 10-min club's
+ *     bookings get picked up while a 30-min club's same-age bookings
+ *     wait their turn.
+ *   - `amount > 0` — zero-amount bookings (free, fully-discounted) have
+ *     no money to wait on; the existing payment flow short-circuits
+ *     and they don't get a provider intent.
+ *
+ * Joins surface what the cancellation email needs (rider name/email,
+ * lesson, arena) and what the reconciliation step needs (paymentProvider
+ * + providerPaymentId, so `getPaymentStatus` can be called). Club name/
+ * timezone/logo are still looked up separately in the cron via
+ * `getClubById` with a Map cache (matches `findUpcomingBookingsForReminder`),
+ * even though we join clubs here for the timeout filter — the join
+ * pulls only one integer column, not the full row + jsonb prefs.
+ *
+ * Capped at 200 rows per pass to bound CPU; if the queue grows past
+ * that, subsequent cron ticks pick up the residual.
+ */
+export async function findStalePendingPaymentBookings(now: Date) {
+  const rows = await db
+    .select({
+      bookingId: bookings.id,
+      clubId: bookings.clubId,
+      slotId: bookings.slotId,
+      riderMemberId: bookings.riderMemberId,
+      riderName: clubMembers.displayName,
+      riderEmail: clubMembers.email,
+      isGuestBooking: bookings.isGuestBooking,
+      guestName: bookings.guestName,
+      guestEmail: bookings.guestEmail,
+      slotDate: bookingSlots.date,
+      slotStartTime: bookingSlots.startTime,
+      lessonTypeName: lessonTypes.name,
+      arenaName: arenas.name,
+      paymentProvider: bookings.paymentProvider,
+      providerPaymentId: bookings.providerPaymentId,
+      amount: bookings.amount,
+      currency: bookings.currency,
+      createdAt: bookings.createdAt,
+    })
+    .from(bookings)
+    .innerJoin(
+      bookingSlots,
+      and(eq(bookingSlots.id, bookings.slotId), eq(bookingSlots.clubId, bookings.clubId)),
+    )
+    .innerJoin(
+      lessonTypes,
+      and(eq(lessonTypes.id, bookingSlots.lessonTypeId), eq(lessonTypes.clubId, bookings.clubId)),
+    )
+    .innerJoin(clubs, eq(clubs.id, bookings.clubId))
+    .leftJoin(arenas, and(eq(arenas.id, bookingSlots.arenaId), eq(arenas.clubId, bookings.clubId)))
+    .leftJoin(
+      clubMembers,
+      and(eq(clubMembers.id, bookings.riderMemberId), eq(clubMembers.clubId, bookings.clubId)),
+    )
+    .where(
+      and(
+        eq(bookings.status, 'confirmed'),
+        eq(bookings.paymentStatus, 'pending'),
+        // Per-club tunable grace window. `created_at + N minutes < now` —
+        // bookings older than the club's configured timeout are eligible
+        // for auto-cancel. The CHECK constraint on
+        // `booking_payment_timeout_minutes` (1..60) bounds the worst-case
+        // delay; default 15.
+        sql`${bookings.createdAt} + (${clubs.bookingPaymentTimeoutMinutes} * INTERVAL '1 minute') < ${now}`,
+        sql`${bookings.amount} > 0`,
+        // Offline methods stay pending legitimately — exclude them.
+        // NULL paymentMethod (online default) is included via the OR.
+        sql`(${bookings.paymentMethod} IS NULL OR ${bookings.paymentMethod} NOT IN ('cash', 'card_in_person', 'bank_transfer', 'package_credit'))`,
+      ),
+    )
+    .orderBy(asc(bookings.createdAt))
+    .limit(200);
+
+  return rows;
+}
+
+/**
+ * 2026-05-16 — auto-cancel a confirmed booking whose payment never
+ * settled within the grace window. Mirrors `cancelBooking` but:
+ *   - `cancelledByMemberId` is NULL (no human actor — the cron did it)
+ *   - CAS additionally requires `paymentStatus='pending'` so we don't
+ *     race against an in-flight webhook that just confirmed payment
+ *     (the cron loop also pre-checks via `getPaymentStatus`, this is
+ *     defense-in-depth)
+ *   - `cancellationFee` is always 0 — no fee for a payment that never
+ *     happened; the rider didn't actually use the slot.
+ *
+ * Returns the cancelled booking row when the CAS succeeded; null if
+ * the booking moved out of `confirmed+pending` (paid, manually
+ * cancelled, etc.) between query and update.
+ */
+export async function autoCancelBookingForPaymentTimeout(
+  clubId: string,
+  bookingId: string,
+  reason: string,
+) {
+  return writeTransaction(async (tx) => {
+    const result = await tx
+      .update(bookings)
+      .set({
+        status: 'cancelled',
+        cancellationReason: reason,
+        cancellationFee: 0,
+        cancelledAt: new Date(),
+        cancelledByMemberId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.clubId, clubId),
+          eq(bookings.status, 'confirmed'),
+          eq(bookings.paymentStatus, 'pending'),
+        ),
+      )
+      .returning();
+
+    const cancelled = result[0];
+
+    if (cancelled) {
+      // Mirror `cancelBooking`: decrement slot rider count so the slot
+      // is bookable again. F-34-style explicit clubId predicate.
+      await tx
+        .update(bookingSlots)
+        .set({
+          currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(bookingSlots.id, cancelled.slotId), eq(bookingSlots.clubId, clubId)));
+    }
+
+    return cancelled ?? null;
+  });
+}
+
+/**
+ * 2026-05-16 — flip a booking's paymentStatus to `paid` when the
+ * provider says payment succeeded but our row is still `pending`.
+ * The cron pre-checks via `getPaymentStatus` before auto-cancelling
+ * to defend against the "webhook genuinely never landed" case; this
+ * is the reconcile path. CAS on `paymentStatus='pending'` so a
+ * concurrent webhook arrival is harmless (one updater wins, the
+ * other returns null).
+ *
+ * Returns the updated row when the CAS won; null otherwise.
+ */
+export async function reconcileBookingMarkPaid(clubId: string, bookingId: string) {
+  const result = await db
+    .update(bookings)
+    .set({ paymentStatus: 'paid', updatedAt: new Date() })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        eq(bookings.paymentStatus, 'pending'),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
+/**
+ * 2026-05-17 — auto-cancel a confirmed booking whose payment has
+ * failed (provider webhook reported DECLINED/FAILED, or the
+ * create-intent flow threw a non-retryable error). Parallel to
+ * `autoCancelBookingForPaymentTimeout` but with a looser CAS gate so
+ * either entry point — webhook-driven (`paymentStatus='failed'`) or
+ * create-intent-driven (`paymentStatus='pending'`, the booking never
+ * got a provider id stamped) — can fire it. CAS still blocks rows
+ * that are already terminal (paid/refunded/partial) or already
+ * cancelled, so concurrent invocations are safe.
+ *
+ * Mirrors the timeout helper otherwise: NULL cancelled_by_member_id
+ * (no human actor), zero cancellation_fee (rider didn't get to use
+ * the slot), and a slot rider-count decrement so the slot becomes
+ * bookable again.
+ *
+ * Returns the cancelled row when the CAS won, null otherwise.
+ */
+export async function autoCancelBookingForPaymentFailure(
+  clubId: string,
+  bookingId: string,
+  reason: string,
+) {
+  return writeTransaction(async (tx) => {
+    const result = await tx
+      .update(bookings)
+      .set({
+        status: 'cancelled',
+        cancellationReason: reason,
+        cancellationFee: 0,
+        cancelledAt: new Date(),
+        cancelledByMemberId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.clubId, clubId),
+          eq(bookings.status, 'confirmed'),
+          inArray(bookings.paymentStatus, ['pending', 'failed']),
+        ),
+      )
+      .returning();
+
+    const cancelled = result[0];
+    if (cancelled) {
+      await tx
+        .update(bookingSlots)
+        .set({
+          currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(bookingSlots.id, cancelled.slotId), eq(bookingSlots.clubId, clubId)));
+    }
+    return cancelled ?? null;
+  });
+}
+
+/**
+ * 2026-05-17 — minimal join for the payment-failure cancellation
+ * email path. Returns rider/lesson/arena fields needed by the
+ * `BookingCancellation` template. Club name/logo are looked up
+ * separately via `getClubById` at the call site (matches the
+ * `findUpcomingBookingsForReminder` / `findStalePendingPaymentBookings`
+ * pattern). Guest-booking fields surface alongside member fields so
+ * the call site can pick the right recipient.
+ */
+export async function getBookingForCancellationEmail(clubId: string, bookingId: string) {
+  const rows = await db
+    .select({
+      bookingId: bookings.id,
+      clubId: bookings.clubId,
+      riderMemberId: bookings.riderMemberId,
+      riderName: clubMembers.displayName,
+      riderEmail: clubMembers.email,
+      isGuestBooking: bookings.isGuestBooking,
+      guestName: bookings.guestName,
+      guestEmail: bookings.guestEmail,
+      slotDate: bookingSlots.date,
+      slotStartTime: bookingSlots.startTime,
+      lessonTypeName: lessonTypes.name,
+      arenaName: arenas.name,
+    })
+    .from(bookings)
+    .innerJoin(
+      bookingSlots,
+      and(eq(bookingSlots.id, bookings.slotId), eq(bookingSlots.clubId, bookings.clubId)),
+    )
+    .innerJoin(
+      lessonTypes,
+      and(eq(lessonTypes.id, bookingSlots.lessonTypeId), eq(lessonTypes.clubId, bookings.clubId)),
+    )
+    .leftJoin(arenas, and(eq(arenas.id, bookingSlots.arenaId), eq(arenas.clubId, bookings.clubId)))
+    .leftJoin(
+      clubMembers,
+      and(eq(clubMembers.id, bookings.riderMemberId), eq(clubMembers.clubId, bookings.clubId)),
+    )
+    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .limit(1);
+  return rows[0] ?? null;
 }

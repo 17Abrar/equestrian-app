@@ -667,6 +667,10 @@ export const updateBookingRulesSchema = z
     advanceBookingDays: optionalNumeric(z.number().int().min(1).max(365)),
     bookingCutoffHours: optionalNumeric(z.number().int().min(0)),
     cancellationNoticeHours: optionalNumeric(z.number().int().min(0)),
+    // 2026-05-16 — per-club grace before the booking-payment-timeout cron
+    // auto-cancels an unpaid confirmed booking. Bounds mirror the DB CHECK
+    // constraint (`clubs_booking_payment_timeout_minutes_range`, 1..60).
+    bookingPaymentTimeoutMinutes: optionalNumeric(z.number().int().min(1).max(60)),
     defaultLessonDurationMinutes: optionalNumeric(z.number().int().min(15)),
     allowOverbooking: z.boolean().optional(),
     overbookingLimit: optionalNumeric(z.number().int().min(0)),

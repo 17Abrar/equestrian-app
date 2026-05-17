@@ -40,7 +40,12 @@ export function usePayBooking() {
   const pay = useCallback(
     async (
       bookingId: string,
-    ): Promise<{ ok: boolean; dismissed?: boolean; errorMessage?: string }> => {
+    ): Promise<{
+      ok: boolean;
+      dismissed?: boolean;
+      cancelled?: boolean;
+      errorMessage?: string;
+    }> => {
       setIsPaying(true);
       setError(null);
 
@@ -80,6 +85,28 @@ export function usePayBooking() {
 
         if (result.type === 'dismiss' || result.type === 'cancel') {
           return { ok: false, dismissed: true };
+        }
+
+        // 2026-05-16: N-Genius's `cancelUrl` now appends `payment=cancelled`
+        // (see apps/web/lib/payments/n-genius.ts). When the rider hit Cancel
+        // on the PayPage the OS still resolves the session as `type:'success'`
+        // (because the redirect did happen — just to the cancelUrl, not the
+        // success URL). Without parsing the redirect URL we couldn't tell
+        // the two apart, so a true cancel surfaced as "Payment received".
+        // Parse the resolved URL for the `payment=cancelled` flag and
+        // bubble it back as a distinct state so the caller can show
+        // a "Payment cancelled — try again" toast instead of celebrating.
+        if (result.type === 'success' && typeof result.url === 'string') {
+          try {
+            const parsed = new URL(result.url);
+            if (parsed.searchParams.get('payment') === 'cancelled') {
+              return { ok: false, cancelled: true };
+            }
+          } catch {
+            // Custom-scheme parse failure: fall through to the success
+            // path. The webhook (when it arrives) is still authoritative
+            // for the booking's paymentStatus.
+          }
         }
         return { ok: true };
       } catch (err) {

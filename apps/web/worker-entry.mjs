@@ -150,6 +150,9 @@ export default {
     //   `0 * * * *`  → booking-reminder cron (hourly)
     //   `0 3 * * *`  → horse-care reminder cron (Round 6.2)
     //   `30 3 * * *` → audit-log prune cron (audit pass-2 C-3)
+    //   `*/10 * * * *` → booking-payment-timeout sweep (2026-05-16, auto-
+    //                    release slots held by abandoned PayPage flows
+    //                    after a 15-minute grace window; see route docstring)
     const KNOWN_CRON_TARGETS = {
       '0 2 * * *': [{ path: '/api/cron/livery-billing', label: 'livery' }],
       '15 2 * * *': [{ path: '/api/cron/platform-billing', label: 'platform' }],
@@ -161,6 +164,9 @@ export default {
       ],
       '30 3 * * *': [
         { path: '/api/cron/audit-prune', label: 'audit_prune' },
+      ],
+      '*/10 * * * *': [
+        { path: '/api/cron/booking-payment-timeout', label: 'booking_payment_timeout' },
       ],
     };
     // Audit F-26 (2026-05-06 comprehensive). Hard-fail an unknown
