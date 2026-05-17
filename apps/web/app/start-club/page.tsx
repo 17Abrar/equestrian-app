@@ -27,20 +27,25 @@ import { fetchJson } from '@/lib/fetch-json';
  * Bridges /select-org → /onboarding for users starting a new club. The
  * onboarding wizard assumes a club already exists for the signed-in
  * user — its layout calls `getTenantContext()` and redirects on
- * `NO_ORGANIZATION`. The Clerk org is the auth-level tenant key, and
- * our `clubs` row is created server-side by the `organization.created`
- * webhook handler. So a brand-new user has to:
+ * `NO_ORGANIZATION`.
  *
- *   1. Create a Clerk organization (this page)
- *   2. Wait for the `organization.created` webhook to populate `clubs`
- *      and the `organizationMembership.created` webhook to populate
- *      `club_members`
- *   3. Navigate to /onboarding once the membership is visible
+ * Flow:
+ *   1. Create a Clerk organization client-side (Clerk SDK).
+ *   2. `setActive` so the next server request carries the new orgId.
+ *   3. POST /api/v1/clubs/bootstrap — server INSERTs the `clubs` and
+ *      `club_members` rows synchronously via Clerk's Backend API. By
+ *      the time this resolves, `getTenantContext()` for this user is
+ *      guaranteed to succeed.
+ *   4. Navigate to /onboarding.
  *
- * Without this page, /select-org's "Start a club" button linked
- * directly to /onboarding, which redirected back to /select-org
- * (NO_ORGANIZATION) — a user-visible hang on the very first action a
- * club admin takes.
+ * The earlier shape of this page polled `/api/v1/me` for up to 30s
+ * waiting on the `organization.created` / `organizationMembership.created`
+ * Svix webhooks to land, then navigated to /onboarding regardless. The
+ * /onboarding layout would then throw `NO_MEMBERSHIP` for the unlucky
+ * subset of users where the webhook hadn't been delivered in time —
+ * surfacing in Sentry as `TenantError: Your account is being set up`
+ * unhandled exceptions. The synchronous bootstrap eliminates the race;
+ * the Svix webhook remains as redundancy / drift-correction.
  */
 
 const createClubSchema = z.object({
@@ -53,8 +58,10 @@ const createClubSchema = z.object({
 type CreateClubInput = z.input<typeof createClubSchema>;
 type CreateClubOutput = z.output<typeof createClubSchema>;
 
-const WEBHOOK_POLL_INTERVAL_MS = 1000;
-const WEBHOOK_POLL_TIMEOUT_MS = 30_000;
+interface BootstrapResponse {
+  success: true;
+  data: { clubId: string; memberId: string; slug: string };
+}
 
 export default function StartClubPage() {
   const router = useRouter();
@@ -76,27 +83,15 @@ export default function StartClubPage() {
     setStage('creating');
     try {
       const org = await createOrganization({ name: data.name });
-      // Switching the active session-org NOW so subsequent server-side
-      // `auth()` calls see `orgId` populated. The webhook will create the
-      // `clubs` row asynchronously; we poll below until it lands.
+      // Activate the new org so the bootstrap call (and any subsequent
+      // server-side `auth()`) sees `orgId` populated in the JWT.
       await setActive({ organization: org.id });
 
       setStage('syncing');
-      const ok = await pollForClubMembership({
-        timeoutMs: WEBHOOK_POLL_TIMEOUT_MS,
-        intervalMs: WEBHOOK_POLL_INTERVAL_MS,
-      });
-
-      if (!ok) {
-        // The Clerk org IS created and the user IS its admin in Clerk —
-        // but our `organization.created` Svix webhook hasn't been processed
-        // yet. The dashboard layout will re-poll on its own next refresh,
-        // so the safe move is to send the user to /onboarding and let
-        // its layout handle the still-syncing state on the next tick.
-        toast.warning(
-          'Club created — finalising setup. If onboarding looks empty, refresh in a few seconds.',
-        );
-      }
+      // Synchronously create the `clubs` + `club_members` rows server-
+      // side. Replaces the 30s poll-for-webhook loop with a single
+      // round-trip that returns only after the rows are committed.
+      await fetchJson<BootstrapResponse>('/api/v1/clubs/bootstrap', { method: 'POST' });
 
       router.push('/onboarding');
     } catch (err) {
@@ -184,47 +179,3 @@ export default function StartClubPage() {
   );
 }
 
-/**
- * Polls `/api/v1/me` until the Svix `organization.created` /
- * `organizationMembership.created` webhooks have populated our DB and
- * `getTenantContext()` resolves cleanly. Returns true if the
- * membership is visible within the timeout, false otherwise. Does NOT
- * throw — the caller continues to /onboarding either way and the
- * dashboard's own polling handles eventual consistency.
- */
-interface MeResponse {
-  success: true;
-  data: { memberId: string | null };
-}
-
-async function pollForClubMembership({
-  timeoutMs,
-  intervalMs,
-}: {
-  timeoutMs: number;
-  intervalMs: number;
-}): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      // `/api/v1/me` resolves a tenant context (200 with the envelope
-      // carrying `memberId`) once the `organizationMembership.created`
-      // webhook has written `club_members`. Before that lands, withAuth
-      // surfaces NO_MEMBERSHIP (503) or NO_ORGANIZATION (400) — both
-      // throw out of fetchJson and we keep polling.
-      const res = await fetchJson<MeResponse>('/api/v1/me');
-      if (res.data.memberId) {
-        return true;
-      }
-    } catch {
-      // Expected during the first ~1–3 seconds while Svix delivers and
-      // the route handler writes the rows. Retry until deadline.
-    }
-    await sleep(intervalMs);
-  }
-  return false;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
