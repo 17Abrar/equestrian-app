@@ -146,6 +146,19 @@ const isPublicRoute = createRouteMatcher([
   '/discover(.*)',
   '/c/(.*)',
   '/api/v1/discover(.*)',
+  // Legal, help, support, status — all public-by-design pages. Riders,
+  // clubs, regulators, and the public app stores all need to be able to
+  // read these without signing in.
+  '/legal(.*)',
+  '/help(.*)',
+  '/support',
+  '/status',
+  // Public-facing API endpoints driving the support and privacy intake
+  // forms. Rate-limited per IP inside the handlers.
+  '/api/v1/support/contact',
+  '/api/v1/privacy/request',
+  // security.txt + privacy/terms references for crawlers / app store review.
+  '/.well-known/(.*)',
 ]);
 
 // CORS origin allowlist — set CORS_ALLOWED_ORIGINS as comma-separated list in env.

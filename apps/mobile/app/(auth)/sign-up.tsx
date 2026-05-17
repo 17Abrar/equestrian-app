@@ -11,7 +11,13 @@ import {
 import { useSignUp } from '@clerk/clerk-expo';
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
 import { CavaliqLogo } from '../../components/cavaliq-logo';
+
+const LEGAL_BASE_URL =
+  process.env.EXPO_PUBLIC_LEGAL_BASE_URL?.replace(/\/$/, '') ?? 'https://cavaliq.com';
+const openLegal = (path: string) =>
+  void WebBrowser.openBrowserAsync(`${LEGAL_BASE_URL}${path}`);
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
@@ -222,6 +228,24 @@ export default function SignUpScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+
+            <Text className="mt-3 px-2 text-center text-xs leading-relaxed text-gray-500">
+              By creating an account, you agree to our{' '}
+              <Text
+                className="font-semibold text-gray-700 underline"
+                onPress={() => openLegal('/legal/terms/end-user')}
+              >
+                end-user terms
+              </Text>{' '}
+              and{' '}
+              <Text
+                className="font-semibold text-gray-700 underline"
+                onPress={() => openLegal('/legal/privacy')}
+              >
+                privacy policy
+              </Text>
+              .
+            </Text>
           </View>
 
           <View className="mt-8 flex-row items-center justify-center gap-1">

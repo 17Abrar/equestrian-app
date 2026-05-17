@@ -1,0 +1,39 @@
+Contact: mailto:info@cavaliq.com
+Expires: 2027-05-17T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://cavaliq.com/.well-known/security.txt
+Policy: https://cavaliq.com/legal/security
+Acknowledgments: https://cavaliq.com/legal/security#responsible-disclosure
+
+# Cavaliq — Vulnerability Disclosure
+#
+# Thank you for helping keep Cavaliq and its users safe.
+#
+# Please send a detailed report to info@cavaliq.com including:
+#   - A clear description of the issue
+#   - The steps required to reproduce it
+#   - Any proof-of-concept or supporting material
+#   - Your name (or handle) for acknowledgement, if you'd like
+#
+# Safe harbour
+#
+# We commit to NOT pursuing legal action against good-faith researchers
+# who:
+#   - Make a good-faith effort to avoid privacy violations, data
+#     destruction, and interruption of service.
+#   - Use only their own accounts (or accounts with the owner's
+#     consent) for testing.
+#   - Do not access or modify data that does not belong to them, except
+#     to the minimum extent necessary to demonstrate the vulnerability.
+#   - Give us a reasonable opportunity to remediate before disclosing
+#     publicly.
+#   - Do not perform denial-of-service or volumetric testing.
+#
+# Out of scope
+#   - Social engineering of Cavaliq staff or customers.
+#   - Physical attacks against Cavaliq offices.
+#   - Findings derived only from automated scanners with no
+#     demonstrable impact.
+#
+# We will acknowledge your report within two business days and keep
+# you updated on our progress to resolution.
