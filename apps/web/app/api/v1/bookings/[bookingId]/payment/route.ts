@@ -1,4 +1,4 @@
-import { type NextRequest } from 'next/server';
+import { type NextRequest, after } from 'next/server';
 import { z } from 'zod';
 
 // Audit F-37 + F-68 (2026-05-08 r6): narrowing schema for the
@@ -32,6 +32,7 @@ import { getAdapter } from '@/lib/payments/registry';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { withProviderRetry } from '@/lib/payments/retry';
 import { logger } from '@/lib/logger';
+import { cancelBookingForPaymentFailure } from '@/lib/bookings/cancel-on-payment-failure';
 
 // Audit F-36 (2026-05-07 r4): `.strict()` so future contributors who add
 // fields (`currency`, `idempotencyKey`, …) can't have unknown keys
@@ -425,6 +426,42 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 : err.retryable
                   ? 503
                   : 502;
+
+          // 2026-05-17: don't keep the slot held when the create-intent
+          // path can't mint a provider intent. The booking row was
+          // created at `POST /api/v1/bookings` before the rider clicked
+          // Pay, so a failure here leaves an unpaid confirmed booking
+          // holding the slot — the auto-release cron would catch it
+          // after the grace window, but the user-requested behavior
+          // is immediate release on any payment failure. CAS inside
+          // `cancelBookingForPaymentFailure` blocks if a webhook or
+          // retry has already settled the row. Fire-and-forget so the
+          // rider sees the error response promptly; the cancel/email
+          // run in `after()`.
+          after(() =>
+            cancelBookingForPaymentFailure({
+              clubId: ctx.clubId,
+              bookingId,
+              reason:
+                'We couldn’t start payment for your booking, so we released the slot. You can re-book any time from the app.',
+              source: 'create_intent',
+              logContext: {
+                requestId: ctx.requestId,
+                provider: account.provider,
+                errorCode: err.code,
+                retryable: err.retryable,
+              },
+            }).catch((cleanupErr) => {
+              logger.error('booking_payment_failure_create_intent_cleanup_failed', {
+                requestId: ctx.requestId,
+                bookingId,
+                clubId: ctx.clubId,
+                provider: account.provider,
+                error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+              });
+            }),
+          );
+
           return errorResponse(err.code, err.message, status);
         }
         throw err;
