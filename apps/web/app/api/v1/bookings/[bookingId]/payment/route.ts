@@ -344,10 +344,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           },
         );
 
+        // 2026-05-17: capture the pre-update providerPaymentId so we can
+        // log the orphan if the rider's retry replaces an abandoned PI.
+        // `setBookingPaymentRef` now allows route-driven overwrite when
+        // the booking is still in `paymentStatus=pending` (see
+        // packages/db/src/queries/bookings.ts isRouteRetry carve-out);
+        // we log the prior PI id here so ops can void it on the
+        // provider dashboard.
+        const previousProviderPaymentId = booking.providerPaymentId;
         const updated = await setBookingPaymentRef(ctx.clubId, bookingId, {
           paymentProvider: account.provider,
           providerPaymentId: result.providerPaymentId,
         });
+        if (
+          updated &&
+          previousProviderPaymentId &&
+          previousProviderPaymentId !== result.providerPaymentId
+        ) {
+          logger.warn('booking_payment_intent_replaced_on_retry', {
+            requestId: ctx.requestId,
+            bookingId,
+            clubId: ctx.clubId,
+            provider: account.provider,
+            replacedProviderPaymentId: previousProviderPaymentId,
+            newProviderPaymentId: result.providerPaymentId,
+          });
+        }
 
         // Audit follow-up (2026-05-08): `setBookingPaymentRef` now runs
         // inside `writeTransaction(... FOR UPDATE)` and returns `null`
