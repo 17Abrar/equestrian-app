@@ -18,6 +18,7 @@ import { rawDb, writeTransaction } from '@equestrian/db';
 import { bookings, clubs, clubMembers, horses } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
+import { cancelBookingForPaymentFailure } from '@/lib/bookings/cancel-on-payment-failure';
 import type { PaymentIntentStatus, WebhookEvent } from './types';
 import type { ProviderName } from './types';
 
@@ -890,6 +891,41 @@ export async function applyPaymentWebhook({
       attempted: nextStatus,
       currentStatus: bookingRef.currentPaymentStatus,
     });
+  }
+
+  // 2026-05-17: provider reported a hard payment failure. We don't
+  // keep slots held for declined cards — auto-cancel the booking and
+  // release the slot. CAS-protected so a concurrent `paid` update
+  // (race against a late retry that succeeded) blocks this branch
+  // via the `paymentStatus IN ('pending','failed')` gate inside
+  // `autoCancelBookingForPaymentFailure`. Fire-and-forget via
+  // `after()` so the webhook receiver's 200 isn't gated on the
+  // cancellation tx + email — the webhook just needs to ack the event.
+  if (updated && nextStatus === 'failed') {
+    after(() =>
+      cancelBookingForPaymentFailure({
+        clubId,
+        bookingId: bookingRef.bookingId,
+        reason:
+          'Payment was declined by your card issuer. The slot has been released — feel free to re-book any time.',
+        source: 'webhook',
+        logContext: {
+          provider,
+          providerPaymentId: event.providerPaymentId,
+          eventType: event.eventType,
+          eventId: event.eventId,
+        },
+      }).catch((err) => {
+        logger.error('booking_payment_failure_webhook_cleanup_failed', {
+          clubId,
+          bookingId: bookingRef.bookingId,
+          provider,
+          eventId: event.eventId,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        });
+      }),
+    );
   }
 
   return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };

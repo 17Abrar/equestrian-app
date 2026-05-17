@@ -1377,3 +1377,105 @@ export async function reconcileBookingMarkPaid(clubId: string, bookingId: string
     .returning();
   return result[0] ?? null;
 }
+
+/**
+ * 2026-05-17 — auto-cancel a confirmed booking whose payment has
+ * failed (provider webhook reported DECLINED/FAILED, or the
+ * create-intent flow threw a non-retryable error). Parallel to
+ * `autoCancelBookingForPaymentTimeout` but with a looser CAS gate so
+ * either entry point — webhook-driven (`paymentStatus='failed'`) or
+ * create-intent-driven (`paymentStatus='pending'`, the booking never
+ * got a provider id stamped) — can fire it. CAS still blocks rows
+ * that are already terminal (paid/refunded/partial) or already
+ * cancelled, so concurrent invocations are safe.
+ *
+ * Mirrors the timeout helper otherwise: NULL cancelled_by_member_id
+ * (no human actor), zero cancellation_fee (rider didn't get to use
+ * the slot), and a slot rider-count decrement so the slot becomes
+ * bookable again.
+ *
+ * Returns the cancelled row when the CAS won, null otherwise.
+ */
+export async function autoCancelBookingForPaymentFailure(
+  clubId: string,
+  bookingId: string,
+  reason: string,
+) {
+  return writeTransaction(async (tx) => {
+    const result = await tx
+      .update(bookings)
+      .set({
+        status: 'cancelled',
+        cancellationReason: reason,
+        cancellationFee: 0,
+        cancelledAt: new Date(),
+        cancelledByMemberId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.clubId, clubId),
+          eq(bookings.status, 'confirmed'),
+          inArray(bookings.paymentStatus, ['pending', 'failed']),
+        ),
+      )
+      .returning();
+
+    const cancelled = result[0];
+    if (cancelled) {
+      await tx
+        .update(bookingSlots)
+        .set({
+          currentRiders: sql`GREATEST(${bookingSlots.currentRiders} - 1, 0)`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(bookingSlots.id, cancelled.slotId), eq(bookingSlots.clubId, clubId)));
+    }
+    return cancelled ?? null;
+  });
+}
+
+/**
+ * 2026-05-17 — minimal join for the payment-failure cancellation
+ * email path. Returns rider/lesson/arena fields needed by the
+ * `BookingCancellation` template. Club name/logo are looked up
+ * separately via `getClubById` at the call site (matches the
+ * `findUpcomingBookingsForReminder` / `findStalePendingPaymentBookings`
+ * pattern). Guest-booking fields surface alongside member fields so
+ * the call site can pick the right recipient.
+ */
+export async function getBookingForCancellationEmail(clubId: string, bookingId: string) {
+  const rows = await db
+    .select({
+      bookingId: bookings.id,
+      clubId: bookings.clubId,
+      riderMemberId: bookings.riderMemberId,
+      riderName: clubMembers.displayName,
+      riderEmail: clubMembers.email,
+      isGuestBooking: bookings.isGuestBooking,
+      guestName: bookings.guestName,
+      guestEmail: bookings.guestEmail,
+      slotDate: bookingSlots.date,
+      slotStartTime: bookingSlots.startTime,
+      lessonTypeName: lessonTypes.name,
+      arenaName: arenas.name,
+    })
+    .from(bookings)
+    .innerJoin(
+      bookingSlots,
+      and(eq(bookingSlots.id, bookings.slotId), eq(bookingSlots.clubId, bookings.clubId)),
+    )
+    .innerJoin(
+      lessonTypes,
+      and(eq(lessonTypes.id, bookingSlots.lessonTypeId), eq(lessonTypes.clubId, bookings.clubId)),
+    )
+    .leftJoin(arenas, and(eq(arenas.id, bookingSlots.arenaId), eq(arenas.clubId, bookings.clubId)))
+    .leftJoin(
+      clubMembers,
+      and(eq(clubMembers.id, bookings.riderMemberId), eq(clubMembers.clubId, bookings.clubId)),
+    )
+    .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
