@@ -157,7 +157,19 @@ describe('setBookingPaymentRef — lifecycle CAS', () => {
     expect(result?.providerPaymentId).toBe('pi_already_set');
   });
 
-  it('refuses to overwrite a different providerPaymentId', async () => {
+  it('admits providerPaymentId overwrite on route-driven retry (no paymentStatus, current pending)', async () => {
+    // 2026-05-17 carve-out: when the create-intent route reattempts on
+    // a booking whose first PI was abandoned (rider closed PayPage,
+    // N-Genius outage mid-flow, etc.) N-Genius can mint a fresh `_id`
+    // for the same `orderReference`. The route-driven call passes no
+    // `paymentStatus` (only webhooks do — they're recording an outcome,
+    // route is attaching). With the booking still in `paymentStatus=
+    // 'pending'` the overwrite is safe — the previous PI is by
+    // definition abandoned, and late settlements on the orphan are
+    // reattached via the `descriptionForRecovery` `[booking:UUID]`
+    // marker. Pre-fix this was blocked by audit B-19 and the rider
+    // saw "This booking changed state while the payment was being
+    // set up. Please refresh and try again." on every retry.
     const { clubId, bookingId } = await seedBooking({
       status: 'confirmed',
       providerPaymentId: 'pi_first',
@@ -166,7 +178,66 @@ describe('setBookingPaymentRef — lifecycle CAS', () => {
     const result = await withTestDb(testDb.db, () =>
       setBookingPaymentRef(clubId, bookingId, {
         paymentProvider: 'stripe',
+        providerPaymentId: 'pi_retry',
+      }),
+    );
+
+    expect(result?.providerPaymentId).toBe('pi_retry');
+
+    const row = await testDb.db
+      .select({ providerPaymentId: bookings.providerPaymentId })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+    expect(row[0]?.providerPaymentId).toBe('pi_retry');
+  });
+
+  it('refuses providerPaymentId overwrite from webhook-style caller (paymentStatus passed)', async () => {
+    // Webhooks always pass `paymentStatus` (they're recording an
+    // outcome). The B-19 guard against stale-webhook PI corruption
+    // still applies for them: a late webhook for a previously-
+    // abandoned PI must NOT overwrite the row's live PI id. Belt-
+    // and-braces complement to the route-retry carve-out above.
+    const { clubId, bookingId } = await seedBooking({
+      status: 'confirmed',
+      providerPaymentId: 'pi_live',
+    });
+
+    const result = await withTestDb(testDb.db, () =>
+      setBookingPaymentRef(clubId, bookingId, {
+        paymentProvider: 'stripe',
         providerPaymentId: 'pi_stale_replacement',
+        paymentStatus: 'failed',
+      }),
+    );
+
+    expect(result).toBeNull();
+
+    const row = await testDb.db
+      .select({ providerPaymentId: bookings.providerPaymentId, paymentStatus: bookings.paymentStatus })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+    expect(row[0]?.providerPaymentId).toBe('pi_live');
+    expect(row[0]?.paymentStatus).toBe('pending');
+  });
+
+  it('refuses providerPaymentId overwrite when current paymentStatus is not pending', async () => {
+    // The route-retry carve-out is gated on `current.paymentStatus
+    // === 'pending'`. A booking already in `paid` / `refunded` /
+    // `partial` / `failed` must not have its PI id replaced by a
+    // stray route call — those are terminal-ish states the rider
+    // shouldn't be re-paying for anyway.
+    const { clubId, bookingId } = await seedBooking({
+      status: 'confirmed',
+      paymentStatus: 'failed',
+      providerPaymentId: 'pi_first',
+    });
+
+    const result = await withTestDb(testDb.db, () =>
+      setBookingPaymentRef(clubId, bookingId, {
+        paymentProvider: 'stripe',
+        providerPaymentId: 'pi_retry',
       }),
     );
 

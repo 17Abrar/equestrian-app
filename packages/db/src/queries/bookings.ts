@@ -978,9 +978,31 @@ export async function setBookingPaymentRef(
       // the live PI's id, and subsequent webhooks for the live PI would
       // miss the booking and the rider's payment status would never
       // settle (audit B-19).
+      //
+      // 2026-05-17: carve out the route-driven retry case. When the
+      // create-intent route reattempts (rider clicked Pay a second
+      // time on a booking whose first PI was abandoned mid-PayPage),
+      // N-Genius doesn't always replay the prior order — same
+      // `orderReference` can produce a fresh `_id` depending on
+      // gateway state — so the new attempt's providerPaymentId
+      // differs from the row's existing one. Refusing the overwrite
+      // here blocked legitimate retries with a confusing "state
+      // changed while setting up payment" error.
+      //
+      // Distinguish callers: webhooks always pass `paymentStatus`
+      // (they're recording an outcome), the route never does (it's
+      // attaching). When the booking is still in `pending` payment
+      // state, the route is the only legitimate caller, and the
+      // previous PI is by definition abandoned — overwrite is
+      // safe. The orphaned PI's late webhook is recovered via the
+      // `descriptionForRecovery` marker (n-genius.ts stamps
+      // `[booking:UUID]` into `merchantAttributes.cavaliqDescription`
+      // exactly for this case).
+      const isRouteRetry = !data.paymentStatus && current.paymentStatus === 'pending';
       if (
         current.providerPaymentId !== null &&
-        current.providerPaymentId !== data.providerPaymentId
+        current.providerPaymentId !== data.providerPaymentId &&
+        !isRouteRetry
       ) {
         return null;
       }
