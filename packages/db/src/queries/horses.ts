@@ -254,15 +254,14 @@ export async function getHorseById(clubId: string, horseId: string) {
 }
 
 export async function createHorse(clubId: string, data: HorseCreate) {
-  // Audit pass-2 B-6: encrypt PHI fields before write. The double
-  // `unknown` cast threads through `encryptFields<T extends Record
-  // <string, unknown>>` — interface types like `HorseCreate` don't
-  // carry an index signature, but the helper only touches the named
-  // string fields.
-  const encrypted = encryptFields(
-    data as unknown as Record<string, unknown>,
-    HORSE_PHI_FIELDS as readonly string[],
-  ) as unknown as HorseCreate;
+  // Audit pass-2 B-6: encrypt PHI fields before write.
+  //
+  // Audit I8 (2026-05-18): the double-`unknown` cast that previously
+  // threaded `data` through `Record<string, unknown>` was removed when
+  // `encryptFields` was generalized to accept any T (see crypto.ts);
+  // the return value's `T` type matches `HorseCreate` so the outer
+  // cast also disappears.
+  const encrypted = encryptFields(data, HORSE_PHI_FIELDS);
   const values = { ...toDecimalStrings(data), ...encrypted, clubId } as NewHorse;
   const result = await db.insert(horses).values(values).returning();
   const row = result[0];
@@ -273,10 +272,9 @@ export async function updateHorse(clubId: string, horseId: string, data: HorseUp
   // Audit pass-2 B-6: encrypt PHI fields. `encryptFields` only writes
   // keys present in `data`, so PATCH semantics (omitted = leave alone)
   // are preserved.
-  const encrypted = encryptFields(
-    data as unknown as Record<string, unknown>,
-    HORSE_PHI_FIELDS as readonly string[],
-  ) as unknown as HorseUpdate;
+  //
+  // Audit I8 (2026-05-18): casts removed — see createHorse / crypto.ts.
+  const encrypted = encryptFields(data, HORSE_PHI_FIELDS);
   const values = {
     ...toDecimalStrings(data),
     ...encrypted,
