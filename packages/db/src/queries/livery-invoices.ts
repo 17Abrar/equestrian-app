@@ -197,6 +197,15 @@ export async function createLiveryInvoice(input: CreateInvoiceInput) {
     dueDate: input.dueDate,
     paymentProvider: input.paymentProvider,
     providerPaymentId: input.providerPaymentId,
+    // Audit I1 (2026-05-18): when the livery cron creates an invoice
+    // with a pre-minted N-Genius pay-link (`providerPaymentId`
+    // present at insert time), stamp `providerPaymentIssuedAt` here
+    // so the N-Genius webhook freshness gate
+    // (`wasProviderPaymentIssuedRecently`) accepts the inbound
+    // webhook. Without this stamp the column stays NULL and the
+    // `gte()` predicate in the freshness gate excludes the fresh
+    // invoice, returning 401 to the N-Genius webhook.
+    providerPaymentIssuedAt: input.providerPaymentId ? new Date() : undefined,
     payLink: input.payLink,
     status: 'pending',
   };
@@ -475,11 +484,29 @@ export async function setInvoiceProviderRef(
   providerPaymentId: string,
   payLink?: string,
 ) {
+  // Audit I1 (2026-05-18): stamp `providerPaymentIssuedAt` ONLY when
+  // `providerPaymentId` is genuinely changing (NULL → set, or
+  // distinct from the existing value). The existing CAS predicate
+  // below already only matches when the row's current
+  // providerPaymentId is NULL or equal to the new value, so the
+  // "equal" case is an idempotent rewrite that should NOT re-stamp
+  // — see setBookingPaymentRef for the security rationale (forged
+  // webhook events for an existing reference must not keep extending
+  // their own validity by re-stamping issuance time).
+  //
+  // We use a `CASE WHEN` SQL expression rather than a JS branch so
+  // the decision is made inside the same statement as the update,
+  // against the row's locked state, with no read+write race.
   const result = await rawDb
     .update(liveryInvoices)
     .set({
       paymentProvider: provider,
       providerPaymentId,
+      providerPaymentIssuedAt: sql`CASE
+        WHEN ${liveryInvoices.providerPaymentId} IS DISTINCT FROM ${providerPaymentId}
+          THEN NOW()
+        ELSE ${liveryInvoices.providerPaymentIssuedAt}
+      END`,
       payLink,
       updatedAt: new Date(),
     })
@@ -814,6 +841,8 @@ export async function createLiveryInvoiceWithGeneratedNumber(
           dueDate: input.dueDate,
           paymentProvider: input.paymentProvider,
           providerPaymentId: input.providerPaymentId,
+          // Audit I1 — see createLiveryInvoice for rationale.
+          providerPaymentIssuedAt: input.providerPaymentId ? new Date() : undefined,
           payLink: input.payLink,
           status: 'pending',
         };

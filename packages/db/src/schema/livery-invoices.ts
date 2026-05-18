@@ -45,6 +45,13 @@ export const liveryInvoices = pgTable(
 
     paymentProvider: varchar('payment_provider', { length: 50 }),
     providerPaymentId: varchar('provider_payment_id', { length: 255 }),
+    // Audit I1 (2026-05-18): mirror of `bookings.providerPaymentIssuedAt`
+    // for livery invoices. Stamped by `setInvoiceProviderRef` every
+    // time `providerPaymentId` is set / replaced; read by
+    // `wasProviderPaymentIssuedRecently` so the N-Genius freshness
+    // gate keys on pay-link issuance time rather than invoice
+    // creation time.
+    providerPaymentIssuedAt: timestamp('provider_payment_issued_at', { withTimezone: true }),
     payLink: text('pay_link'),
 
     lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
