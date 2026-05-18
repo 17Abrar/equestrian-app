@@ -895,6 +895,20 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // an attacker can't measure the secret length even though the
     // residual is small (the secret value alone is the brute-force
     // surface, not its length, but defense-in-depth is cheap).
+    //
+    // Audit I3 (2026-05-18 audit pass): the compare is case-sensitive
+    // by design. Stripe/Ziina HMAC paths normalise case before
+    // compare because the signature is a hex digest with a single
+    // canonical form; N-Genius's "signature" is an operator-pasted
+    // opaque secret that may legitimately contain upper- and lower-
+    // case characters with semantic meaning (the operator pasted the
+    // exact value into the N-Genius portal AND into Cavaliq's connect
+    // form — both sides must round-trip the same bytes). Case-folding
+    // here would accept a header that should have failed. If
+    // N-Genius (or an upstream proxy) ever changes capitalisation on
+    // delivery, the symptom is `n_genius_webhook_header_mismatch`
+    // warns and a 401 to the sender — which is the correct posture;
+    // operator action is to re-issue the secret.
     const expected = input.webhookSecret;
     const provided = input.signatureHeader.trim();
 
