@@ -4,7 +4,6 @@ import {
   findBookingByIdForWebhook,
   findBookingByIdInDescription,
   findBookingByProviderPaymentId,
-  findPaymentAccountByExternalId,
   recordBookingRefund,
   recordPaymentAccountError,
   reverseBookingRefund,
@@ -229,13 +228,26 @@ export async function applyPaymentWebhook({
   overrideClubId,
   isRefundEvent,
 }: HandleWebhookOptions): Promise<ApplyPaymentWebhookResult | null> {
-  // 1. Resolve clubId via one of three paths, in priority order.
+  // 1. Resolve clubId. Every current webhook caller passes
+  //    `overrideClubId` derived from a tenant-bound source:
+  //      - Stripe: URL path `/api/webhooks/stripe/[clubId]` validated
+  //        against the club's webhook secret
+  //      - Ziina:  URL path `/api/webhooks/ziina/[clubId]`  validated
+  //        against the club's webhook secret
+  //      - N-Genius: resolved upstream from `outletReference` via the
+  //        partial-UNIQUE on (provider, external_account_id) before
+  //        applyPaymentWebhook is invoked
+  //
+  //    Audit L5 (2026-05-18) removed a legacy
+  //    `findPaymentAccountByExternalId(event.providerAccountId, provider)`
+  //    fallback that ran unscoped by club — dead today because
+  //    overrideClubId is always present, but a future caller forgetting
+  //    to pass it would have resolved the wrong tenant on an
+  //    external-id collision. We intentionally do NOT add an
+  //    `assert(overrideClubId)` here because the providerPaymentId
+  //    fallback below is still a valid second-path resolver for the
+  //    legacy livery-invoice flow.
   let clubId = overrideClubId;
-
-  if (!clubId && event.providerAccountId) {
-    const account = await findPaymentAccountByExternalId(event.providerAccountId, provider);
-    clubId = account?.clubId;
-  }
 
   // 2. Fallback: match the provider_payment_id against an existing booking.
   //    Useful for Ziina where account_id isn't always in the payload.
