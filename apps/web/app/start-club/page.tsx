@@ -68,6 +68,13 @@ export default function StartClubPage() {
   const { isLoaded: userLoaded } = useUser();
   const { isLoaded: orgsLoaded, createOrganization, setActive } = useOrganizationList();
   const [stage, setStage] = useState<'idle' | 'creating' | 'syncing'>('idle');
+  // Tracks a Clerk org that was successfully created in a previous submit
+  // whose bootstrap call subsequently failed. On retry we skip
+  // `createOrganization` to avoid orphan-org / duplicate-club drift —
+  // we only need to re-run the bootstrap step. Cleared on success
+  // (component unmounts after `router.push`) and on the rare case the
+  // user navigates away.
+  const [pendingOrgId, setPendingOrgId] = useState<string | null>(null);
 
   const form = useForm<CreateClubInput, unknown, CreateClubOutput>({
     resolver: zodResolver(createClubSchema),
@@ -80,12 +87,19 @@ export default function StartClubPage() {
       return;
     }
 
-    setStage('creating');
     try {
-      const org = await createOrganization({ name: data.name });
-      // Activate the new org so the bootstrap call (and any subsequent
-      // server-side `auth()`) sees `orgId` populated in the JWT.
-      await setActive({ organization: org.id });
+      // First attempt: create the Clerk org + activate it. Subsequent
+      // attempts (after a bootstrap failure) reuse the orgId — calling
+      // `createOrganization` a second time would create an additional
+      // Clerk org under the same user and we'd end up with two clubs
+      // for one user action, or an orphaned Clerk org once the eventual
+      // Svix webhook lands and writes a `clubs` row for it.
+      if (!pendingOrgId) {
+        setStage('creating');
+        const org = await createOrganization({ name: data.name });
+        await setActive({ organization: org.id });
+        setPendingOrgId(org.id);
+      }
 
       setStage('syncing');
       // Synchronously create the `clubs` + `club_members` rows server-
@@ -136,7 +150,10 @@ export default function StartClubPage() {
                         <Input
                           placeholder="e.g. JSR Equestrian Club"
                           autoFocus
-                          disabled={submitting || !ready}
+                          // Locked once the Clerk org has been created — the
+                          // retry only finishes the bootstrap step, so the
+                          // name is fixed at that point.
+                          disabled={submitting || !ready || !!pendingOrgId}
                           {...field}
                         />
                       </FormControl>
@@ -158,7 +175,13 @@ export default function StartClubPage() {
                       Finalising setup…
                     </>
                   )}
-                  {stage === 'idle' && (
+                  {stage === 'idle' && pendingOrgId && (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Retry setup
+                    </>
+                  )}
+                  {stage === 'idle' && !pendingOrgId && (
                     <>
                       <Plus className="mr-2 h-4 w-4" />
                       Create club & continue
