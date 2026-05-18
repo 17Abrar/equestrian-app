@@ -99,6 +99,13 @@ export default function StartClubPage() {
         const org = await createOrganization({ name: data.name });
         await setActive({ organization: org.id });
         setPendingOrgId(org.id);
+      } else {
+        // Retry path: re-assert the pending org as the active one before
+        // posting to bootstrap. If the user used Clerk's org-switcher in
+        // another tab between attempts, `auth().orgId` on the server
+        // would otherwise resolve to a DIFFERENT org and we'd provision
+        // the wrong club, leaving the first org orphaned.
+        await setActive({ organization: pendingOrgId });
       }
 
       setStage('syncing');
