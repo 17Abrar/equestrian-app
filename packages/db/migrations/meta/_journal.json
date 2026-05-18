@@ -407,6 +407,13 @@
       "when": 1779148800000,
       "tag": "0057_booking_payment_timeout_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0058_provider_payment_issued_at",
+      "breakpoints": true
     }
   ]
 }

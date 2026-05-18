@@ -42,8 +42,79 @@ import { fetchProvider } from './provider-fetch';
  *   the incoming header value against the stored secret in constant time.
  */
 
-const API_BASE_URL =
-  process.env.N_GENIUS_API_BASE_URL ?? 'https://api-gateway.ngenius-payments.com';
+const DEFAULT_API_BASE_URL = 'https://api-gateway.ngenius-payments.com';
+
+/**
+ * Allowlist of N-Genius API base hosts. The N_GENIUS_API_BASE_URL env
+ * override exists for the UAT sandbox; without an allowlist a
+ * misconfigured or compromised env var could silently repoint every
+ * payment for every N-Genius club to an attacker host (it's the only
+ * URL component in the file — host name dictates where credentials,
+ * tokens, and order payloads are sent). Workers Secrets are operator-
+ * controlled so the practical risk is bounded to insider / supply-
+ * chain, but the cost of an allowlist is one URL parse per N-Genius
+ * call.
+ *
+ * Audit L1 (2026-05-18 audit pass).
+ */
+const ALLOWED_N_GENIUS_HOSTS = [
+  'api-gateway.ngenius-payments.com', // production
+  'api-gateway.sandbox.ngenius-payments.com', // current documented sandbox
+  'api-gateway-uat.ngenius-payments.com', // legacy UAT host (still resolvable; kept for operator envs that set it during older onboarding)
+] as const;
+
+/**
+ * Resolve and validate the N-Genius API base URL. Falls back to the
+ * production host when no override is set. Throws
+ * `PROVIDER_NOT_CONFIGURED` (operator-actionable, surfaces at `error`
+ * log-level) when an override is present but invalid or off-allowlist.
+ *
+ * Deliberately deferred to call-time rather than module load: a top-
+ * level throw on Cloudflare Workers crashes the whole isolate, which
+ * would knock out unrelated providers running in the same worker. By
+ * throwing only when N-Genius is actually invoked, a misconfigured
+ * override fails loudly for N-Genius requests while leaving Stripe /
+ * Ziina / cron routes unaffected.
+ */
+function getApiBaseUrl(): string {
+  const override = process.env.N_GENIUS_API_BASE_URL;
+  // Treat unset as the production default. A *present* override that is
+  // empty or whitespace-only (e.g. a blank Workers Secret rotation) must
+  // fail loud — silently falling back to production for "looks empty"
+  // values would defeat the point of the allowlist on a payment path.
+  if (override === undefined) return DEFAULT_API_BASE_URL;
+  if (override.trim() === '') {
+    throw new PaymentProviderError(
+      'PROVIDER_NOT_CONFIGURED',
+      'N_GENIUS_API_BASE_URL is set but is empty / whitespace-only. Unset the variable to use the production default, or set it to an allowlisted sandbox host.',
+    );
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(override);
+  } catch {
+    throw new PaymentProviderError(
+      'PROVIDER_NOT_CONFIGURED',
+      'N_GENIUS_API_BASE_URL is set but is not a valid URL.',
+    );
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new PaymentProviderError(
+      'PROVIDER_NOT_CONFIGURED',
+      `N_GENIUS_API_BASE_URL must use https:// (got ${parsed.protocol}).`,
+    );
+  }
+  if (!(ALLOWED_N_GENIUS_HOSTS as readonly string[]).includes(parsed.host)) {
+    throw new PaymentProviderError(
+      'PROVIDER_NOT_CONFIGURED',
+      `N_GENIUS_API_BASE_URL host '${parsed.host}' is not in the allowlist. Allowed: ${ALLOWED_N_GENIUS_HOSTS.join(', ')}.`,
+    );
+  }
+  // Strip trailing slash so downstream template-string concatenation
+  // produces canonical URLs (`${base}/identity/...`).
+  return override.replace(/\/$/, '');
+}
 
 const nGeniusCredentialsSchema = z.object({
   apiKey: z.string().min(1),
@@ -128,7 +199,7 @@ async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
   }
 
   const res = await fetchProvider(
-    `${API_BASE_URL}/identity/auth/access-token`,
+    `${getApiBaseUrl()}/identity/auth/access-token`,
     {
       method: 'POST',
       headers: {
@@ -389,7 +460,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     return {
       externalAccountId: creds.outletReference,
       metadata: {
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl: getApiBaseUrl(),
         hasRealmName: !!creds.realmName,
         hasWebhookHeader: !!(creds.webhookHeaderName && creds.webhookHeaderValue),
         webhookHeaderName: creds.webhookHeaderName ?? null,
@@ -480,7 +551,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     };
 
     const res = await fetchProvider(
-      `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders`,
+      `${getApiBaseUrl()}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders`,
       {
         method: 'POST',
         headers: {
@@ -573,7 +644,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // Look the order up to find the `_id` of the payment leg — refunds are
     // posted against a specific payment, not the order reference.
     const orderRes = await fetchProvider(
-      `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
+      `${getApiBaseUrl()}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
       {
         method: 'GET',
         headers: {
@@ -673,7 +744,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     }
 
     const refundRes = await fetchProvider(
-      `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}/payments/${encodeURIComponent(payment._id)}/refund`,
+      `${getApiBaseUrl()}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}/payments/${encodeURIComponent(payment._id)}/refund`,
       {
         method: 'POST',
         headers: {
@@ -720,7 +791,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     ) {
       try {
         const reconcileRes = await fetchProvider(
-          `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
+          `${getApiBaseUrl()}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
           {
             method: 'GET',
             headers: {
@@ -783,7 +854,7 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     const accessToken = await getAccessToken(creds);
 
     const res = await fetchProvider(
-      `${API_BASE_URL}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
+      `${getApiBaseUrl()}/transactions/outlets/${encodeURIComponent(creds.outletReference)}/orders/${encodeURIComponent(input.providerPaymentId)}`,
       {
         method: 'GET',
         headers: {
@@ -824,6 +895,20 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // an attacker can't measure the secret length even though the
     // residual is small (the secret value alone is the brute-force
     // surface, not its length, but defense-in-depth is cheap).
+    //
+    // Audit I3 (2026-05-18 audit pass): the compare is case-sensitive
+    // by design. Stripe/Ziina HMAC paths normalise case before
+    // compare because the signature is a hex digest with a single
+    // canonical form; N-Genius's "signature" is an operator-pasted
+    // opaque secret that may legitimately contain upper- and lower-
+    // case characters with semantic meaning (the operator pasted the
+    // exact value into the N-Genius portal AND into Cavaliq's connect
+    // form — both sides must round-trip the same bytes). Case-folding
+    // here would accept a header that should have failed. If
+    // N-Genius (or an upstream proxy) ever changes capitalisation on
+    // delivery, the symptom is `n_genius_webhook_header_mismatch`
+    // warns and a 401 to the sender — which is the correct posture;
+    // operator action is to re-issue the secret.
     const expected = input.webhookSecret;
     const provided = input.signatureHeader.trim();
 

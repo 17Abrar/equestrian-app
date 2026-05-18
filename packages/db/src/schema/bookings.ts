@@ -266,6 +266,14 @@ export const bookings = pgTable(
     // _invoices) all carry the parallel index.
     paymentProvider: paymentProviderEnum('payment_provider'),
     providerPaymentId: varchar('provider_payment_id', { length: 255 }),
+    // Audit I1 (2026-05-18): stamped by `setBookingPaymentRef` every
+    // time `providerPaymentId` is set or replaced (PR #118 allows
+    // route-driven retry to mint a fresh id on an abandoned booking).
+    // The N-Genius webhook freshness gate keys on this so a
+    // legitimate "rider came back to pay 2 days later" doesn't fail
+    // the recency check against `created_at` which would be too old
+    // to vouch for the freshly-issued pay-link.
+    providerPaymentIssuedAt: timestamp('provider_payment_issued_at', { withTimezone: true }),
 
     // Check-in
     checkedInAt: timestamp('checked_in_at', { withTimezone: true }),

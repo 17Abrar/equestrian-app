@@ -4,7 +4,6 @@ import {
   findBookingByIdForWebhook,
   findBookingByIdInDescription,
   findBookingByProviderPaymentId,
-  findPaymentAccountByExternalId,
   recordBookingRefund,
   recordPaymentAccountError,
   reverseBookingRefund,
@@ -229,13 +228,26 @@ export async function applyPaymentWebhook({
   overrideClubId,
   isRefundEvent,
 }: HandleWebhookOptions): Promise<ApplyPaymentWebhookResult | null> {
-  // 1. Resolve clubId via one of three paths, in priority order.
+  // 1. Resolve clubId. Every current webhook caller passes
+  //    `overrideClubId` derived from a tenant-bound source:
+  //      - Stripe: URL path `/api/webhooks/stripe/[clubId]` validated
+  //        against the club's webhook secret
+  //      - Ziina:  URL path `/api/webhooks/ziina/[clubId]`  validated
+  //        against the club's webhook secret
+  //      - N-Genius: resolved upstream from `outletReference` via the
+  //        partial-UNIQUE on (provider, external_account_id) before
+  //        applyPaymentWebhook is invoked
+  //
+  //    Audit L5 (2026-05-18) removed a legacy
+  //    `findPaymentAccountByExternalId(event.providerAccountId, provider)`
+  //    fallback that ran unscoped by club — dead today because
+  //    overrideClubId is always present, but a future caller forgetting
+  //    to pass it would have resolved the wrong tenant on an
+  //    external-id collision. We intentionally do NOT add an
+  //    `assert(overrideClubId)` here because the providerPaymentId
+  //    fallback below is still a valid second-path resolver for the
+  //    legacy livery-invoice flow.
   let clubId = overrideClubId;
-
-  if (!clubId && event.providerAccountId) {
-    const account = await findPaymentAccountByExternalId(event.providerAccountId, provider);
-    clubId = account?.clubId;
-  }
 
   // 2. Fallback: match the provider_payment_id against an existing booking.
   //    Useful for Ziina where account_id isn't always in the payload.
@@ -901,8 +913,23 @@ export async function applyPaymentWebhook({
   // `autoCancelBookingForPaymentFailure`. Fire-and-forget via
   // `after()` so the webhook receiver's 200 isn't gated on the
   // cancellation tx + email — the webhook just needs to ack the event.
+  //
+  // Audit I2 (2026-05-18 audit pass): mirror the F-32 / F-48 pattern
+  // used by the `attachWebhookEventClub` block above. `after()` throws
+  // when called outside a request lifecycle (the payment-timeout cron
+  // at `apps/web/app/api/cron/booking-payment-timeout/route.ts` doesn't
+  // route through `applyPaymentWebhook` today, but a future caller —
+  // including any retry path that re-runs the webhook helper from a
+  // scheduled context — would silently drop the slot-release if we
+  // don't catch the throw and fall back to `void task()`. Escalates
+  // at `error` so the
+  // `booking_payment_failure_after_unavailable` count is visible in
+  // Sentry; payment correctness is preserved because the bare promise
+  // still runs (the only risk is the isolate evicting before
+  // resolution, in which case the next webhook retry or the
+  // payment-timeout cron sweep picks up the orphaned booking).
   if (updated && nextStatus === 'failed') {
-    after(() =>
+    const cancelTask = () =>
       cancelBookingForPaymentFailure({
         clubId,
         bookingId: bookingRef.bookingId,
@@ -924,8 +951,19 @@ export async function applyPaymentWebhook({
           error: err instanceof Error ? err.message : String(err),
           stack: err instanceof Error ? err.stack : undefined,
         });
-      }),
-    );
+      });
+    try {
+      after(cancelTask);
+    } catch (err) {
+      logger.error('booking_payment_failure_after_unavailable', {
+        clubId,
+        bookingId: bookingRef.bookingId,
+        provider,
+        eventId: event.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      void cancelTask();
+    }
   }
 
   return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };

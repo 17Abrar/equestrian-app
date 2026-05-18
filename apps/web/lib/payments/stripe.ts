@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 import {
   type CreatePaymentInput,
   type CreatePaymentResult,
@@ -15,6 +16,42 @@ import {
   type PaymentIntentStatus,
   PaymentProviderError,
 } from './types';
+
+/**
+ * Stripe event types this adapter's verifyWebhook has explicit switch
+ * cases for. Exported so consumers (the per-club webhook route's
+ * HANDLED_EVENTS, future test fixtures, future event-routing code)
+ * have a programmatic view of "what this adapter can actually parse"
+ * instead of grepping the switch.
+ *
+ * The contract: any event passed to `applyPaymentWebhook` downstream
+ * MUST be in this set. An event outside it would resolve to an
+ * envelope with undefined provider fields and silently no-op against
+ * the booking ledger. The default branch of the verifyWebhook switch
+ * logs a structured warn when an unexpected type arrives, so a drift
+ * is visible in observability even if the route's filter wasn't
+ * updated atomically with this list.
+ *
+ * Adding a new event type to handle:
+ *   1. Add a `case` clause in the verifyWebhook switch below
+ *   2. Add the type to this set
+ *   3. Decide whether the route's PAID / FAILED / REFUND_EVENTS bucket
+ *      should pick it up (drives the `isRefundEvent` flag)
+ *
+ * Audit I4 (2026-05-18 audit pass).
+ */
+export const STRIPE_VERIFY_WEBHOOK_HANDLED_TYPES: ReadonlySet<Stripe.Event['type']> = new Set([
+  'payment_intent.succeeded',
+  'payment_intent.processing',
+  'payment_intent.payment_failed',
+  'payment_intent.canceled',
+  'payment_intent.requires_action',
+  'payment_intent.created',
+  'charge.refunded',
+  'charge.succeeded',
+  'charge.failed',
+  'charge.refund.updated',
+]);
 
 /**
  * Stripe adapter — direct integration. Each club pastes their own Stripe
@@ -534,7 +571,33 @@ export const stripeAdapter: PaymentProviderAdapter = {
       }
       default:
         // Unhandled event type — return the envelope so the webhook
-        // route can dedup/log it without breaking.
+        // route can dedup/log it without breaking. For event types
+        // outside the route's HANDLED_EVENTS this is benign (the
+        // route's filter discards the envelope before applying);
+        // clubs may subscribe their Stripe endpoint to "all events"
+        // and we'll see plenty of these.
+        //
+        // For an event type that someone added to the route's
+        // HANDLED_EVENTS without adding a switch case here, the
+        // envelope's provider fields would be undefined and
+        // applyPaymentWebhook would silently no-op against the
+        // booking ledger. The structured log below is the
+        // defense-in-depth signal — emitted at `info` severity (not
+        // `warn`) so it stays grep-able in observability without
+        // burning Sentry quota or paging on legitimate all-events
+        // subscriptions. Pair with the exported
+        // `STRIPE_VERIFY_WEBHOOK_HANDLED_TYPES` set above when
+        // investigating any "this event should have been handled"
+        // claim.
+        //
+        // Audit I4 (2026-05-18 audit pass). Severity dialed down to
+        // `info` based on codex review feedback that `warn` on
+        // legit-ignored events would create alert noise + Sentry
+        // quota burn.
+        logger.info('stripe_verify_webhook_unhandled_event_type', {
+          eventType: event.type,
+          eventId: event.id,
+        });
         break;
     }
 
