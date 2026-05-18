@@ -122,7 +122,8 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       // Ziina doesn't expose a stable "merchant id" we can read without extra
       // scopes; key the account on the clubId so a disconnect/reconnect after
       // an API-key rotation produces the same external id and the
-      // findPaymentAccountByExternalId fallback continues to resolve.
+      // (provider, external_account_id) partial-UNIQUE in payment_accounts
+      // continues to resolve the same row.
       externalAccountId: `ziina_${input.clubId}`,
       metadata: {
         apiBaseUrl: API_BASE_URL,
