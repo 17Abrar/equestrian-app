@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getTenantContext, TenantError } from '@/lib/tenant';
 import { AccountSetupPlaceholder } from '@/components/onboarding/account-setup-placeholder';
+import { AccessRevokedPlaceholder } from '@/components/onboarding/access-revoked-placeholder';
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   let ctx;
@@ -26,6 +27,12 @@ export default async function OnboardingLayout({ children }: { children: React.R
         // is in flight. Without this branch the throw bubbled into the
         // RSC boundary and Sentry logged it as an unhandled error.
         return <AccountSetupPlaceholder />;
+      }
+      if (error.code === 'MEMBERSHIP_DEACTIVATED') {
+        // Permanent — the membership row exists with `is_active=false`.
+        // No amount of polling will resolve it. Render the access-
+        // revoked surface with a sign-out affordance instead.
+        return <AccessRevokedPlaceholder />;
       }
     }
     throw error;

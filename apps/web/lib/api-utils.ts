@@ -432,8 +432,17 @@ export async function withAuth(
       // NO_MEMBERSHIP (audit auth-5) → 503 so the rider's UI can prompt
       // "your account is being set up — refresh in a moment". The error
       // is transient (Clerk webhook delivery race), not a hard 401/403.
+      // MEMBERSHIP_DEACTIVATED (audit pass-3 follow-up) → 403: the row
+      // exists but is inactive, and no client-side retry will resolve
+      // it. Distinct status keeps clients from looping on retry.
       const status =
-        error.code === 'UNAUTHORIZED' ? 401 : error.code === 'NO_MEMBERSHIP' ? 503 : 400;
+        error.code === 'UNAUTHORIZED'
+          ? 401
+          : error.code === 'MEMBERSHIP_DEACTIVATED'
+            ? 403
+            : error.code === 'NO_MEMBERSHIP'
+              ? 503
+              : 400;
       return errorResponse(error.code, error.message, status);
     }
 
