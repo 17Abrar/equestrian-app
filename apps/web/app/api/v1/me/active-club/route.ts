@@ -13,6 +13,7 @@ import {
 } from '@/lib/api-utils';
 import { ACTIVE_CLUB_COOKIE } from '@/lib/tenant';
 import { ACTIVE_CLUB_COOKIE_TTL_SECONDS } from '@equestrian/shared/constants';
+import { isSameOriginRequest } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 
 const setActiveClubSchema = z
@@ -20,35 +21,6 @@ const setActiveClubSchema = z
     clubId: z.string().uuid(),
   })
   .strict();
-
-// Same allowlist the CORS middleware reads. We re-check at the route level
-// so a cookie-mutating request from a non-cavaliq origin is refused even
-// if Clerk's session validation lets the request through (audit G-18).
-// Today Clerk's allowed-origins config catches this for browsers, but the
-// extra layer survives a Clerk config change and is cheap.
-const CSRF_ALLOWED_ORIGINS = new Set(
-  (process.env.CORS_ALLOWED_ORIGINS ?? '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean),
-);
-
-function isSameOriginRequest(request: NextRequest): boolean {
-  const origin = request.headers.get('origin');
-  // Audit F-6 (2026-05-06): require either a known Origin OR our custom
-  // CSRF header. The previous fall-open on missing Origin trusted a
-  // bigger surface than the comment claimed (legacy form submissions,
-  // some embedded WebViews omit Origin). The custom header is set by
-  // every `fetchJson` call; a cross-site form post can't set it without
-  // a CORS preflight the server refuses. Server-to-server callers
-  // (curl, monitoring probes) can pass either Origin or the header.
-  if (request.headers.get('x-cavaliq-csrf') === '1') return true;
-  if (!origin) return false;
-  // Always-allow the request's own URL origin (handles localhost, preview
-  // domains) plus the explicit allowlist for production.
-  if (origin === request.nextUrl.origin) return true;
-  return CSRF_ALLOWED_ORIGINS.has(origin);
-}
 
 /**
  * Rider-facing stable switcher. Sets a cookie that `getTenantContext()`

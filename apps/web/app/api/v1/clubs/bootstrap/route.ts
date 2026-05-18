@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { successResponse, errorResponse } from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { bootstrapClubAndMembership, ClubBootstrapError } from '@/lib/club-bootstrap';
+import { isSameOriginRequest } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 
 /**
@@ -27,8 +28,21 @@ import { logger } from '@/lib/logger';
  * Convergent with the webhook: whichever path lands first wins; the
  * other no-ops on the unique constraint.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // CSRF defense: this route bypasses `withAuth` (necessarily — withAuth
+    // resolves a tenant context this endpoint is the one to CREATE), so
+    // it must implement the same-origin guard itself. Without this, an
+    // authenticated browser request from an attacker-controlled origin
+    // could trigger a club bootstrap for the victim's currently-active
+    // Clerk org. Mirrors /api/v1/me/active-club's check via shared lib.
+    if (!isSameOriginRequest(request)) {
+      logger.warn('bootstrap_cross_origin_blocked', {
+        origin: request.headers.get('origin'),
+      });
+      return errorResponse('FORBIDDEN', 'Cross-origin request blocked', 403);
+    }
+
     const session = await auth();
     const userId = session.userId;
     const orgId = session.orgId;

@@ -88,12 +88,31 @@ vi.mock('@/lib/api-utils', () => ({
     }),
 }));
 
+import { NextRequest } from 'next/server';
 import { POST } from './route';
 
 const USER_ID = 'user_test_abc';
 const ORG_ID = 'org_test_xyz';
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
+
+// Helper: build a NextRequest with the `x-cavaliq-csrf: 1` header that
+// `fetchJson` sends. The route refuses cross-origin requests without
+// this header (or a known Origin); a missing-header test below covers
+// the rejection path.
+function makeRequest(opts: { csrf?: boolean; origin?: string | null } = {}): NextRequest {
+  const headers = new Headers();
+  if (opts.csrf !== false) {
+    headers.set('x-cavaliq-csrf', '1');
+  }
+  if (opts.origin) {
+    headers.set('origin', opts.origin);
+  }
+  return new NextRequest('https://cavaliq.com/api/v1/clubs/bootstrap', {
+    method: 'POST',
+    headers,
+  });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -124,11 +143,38 @@ beforeEach(() => {
   });
 });
 
+describe('CSRF guard — same-origin / x-cavaliq-csrf required', () => {
+  it('returns 403 FORBIDDEN when neither Origin nor x-cavaliq-csrf is set', async () => {
+    // Cross-site form post: no Origin header, no custom header. Without
+    // this guard the route would happily bootstrap a club for the
+    // victim's currently-active Clerk org if their session cookie
+    // rode the request.
+    const res = await POST(makeRequest({ csrf: false }));
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(authMock).not.toHaveBeenCalled();
+    expect(bootstrapMock).not.toHaveBeenCalled();
+    expect(warnMock).toHaveBeenCalledWith(
+      'bootstrap_cross_origin_blocked',
+      expect.any(Object),
+    );
+  });
+
+  it('returns 403 FORBIDDEN when Origin is set but not the request URL origin (cross-site)', async () => {
+    const res = await POST(makeRequest({ csrf: false, origin: 'https://evil.example.com' }));
+
+    expect(res.status).toBe(403);
+    expect(bootstrapMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('auth gating', () => {
   it('returns 401 when no Clerk session', async () => {
     authMock.mockResolvedValueOnce({ userId: null, orgId: null });
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: { code: string } };
@@ -139,7 +185,7 @@ describe('auth gating', () => {
   it('returns 400 NO_ACTIVE_ORG when session has userId but no orgId', async () => {
     authMock.mockResolvedValueOnce({ userId: USER_ID, orgId: null });
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
@@ -157,7 +203,7 @@ describe('rate limit', () => {
       retryAfterMs: 5000,
     });
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('5');
@@ -172,7 +218,7 @@ describe('Clerk Backend API as source of truth', () => {
       data: [{ publicUserData: { userId: 'someone_else' }, role: 'org:admin' }],
     });
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: { code: string } };
@@ -189,7 +235,7 @@ describe('Clerk Backend API as source of truth', () => {
     // to a 10-row first page. In an org with >10 members where the
     // caller's row falls on page 2+, find() returns undefined and we'd
     // return a false 403 NOT_ORG_MEMBER to a legitimate member.
-    await POST();
+    await POST(makeRequest());
 
     expect(listMembershipsMock).toHaveBeenCalledWith(
       expect.objectContaining({ organizationId: ORG_ID, userId: [USER_ID] }),
@@ -199,7 +245,7 @@ describe('Clerk Backend API as source of truth', () => {
   it('returns 503 CLERK_API_UNAVAILABLE on Clerk API outage', async () => {
     getOrgMock.mockRejectedValueOnce(new Error('clerk 500'));
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: { code: string } };
@@ -217,7 +263,7 @@ describe('Clerk Backend API as source of truth', () => {
       data: [{ publicUserData: { userId: USER_ID }, role: 'org:admin' }],
     });
 
-    await POST();
+    await POST(makeRequest());
 
     expect(bootstrapMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -233,7 +279,7 @@ describe('Clerk Backend API as source of truth', () => {
 
 describe('successful bootstrap', () => {
   it('returns 201 with the bootstrap result envelope', async () => {
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
@@ -258,7 +304,7 @@ describe('successful bootstrap', () => {
       primaryEmailAddress: { emailAddress: 'alice@example.com' },
     });
 
-    await POST();
+    await POST(makeRequest());
 
     expect(bootstrapMock).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: 'aliceadmin' }),
@@ -272,7 +318,7 @@ describe('bootstrap library error handling', () => {
       new FakeClubBootstrapError('SLUG_EXHAUSTED', 'no slugs left'),
     );
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: { code: string } };
@@ -291,7 +337,7 @@ describe('bootstrap library error handling', () => {
       ),
     );
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: { code: string; message: string } };
@@ -308,7 +354,7 @@ describe('bootstrap library error handling', () => {
   it('returns 500 INTERNAL_ERROR when the lib throws an unknown error', async () => {
     bootstrapMock.mockRejectedValueOnce(new Error('unexpected'));
 
-    const res = await POST();
+    const res = await POST(makeRequest());
 
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: { code: string } };
