@@ -36,7 +36,13 @@ const REQUEST_TYPE_LABEL: Record<z.infer<typeof dsarSchema>['requestType'], stri
  * relay against info@cavaliq.com.
  *
  * Identity verification happens out-of-band: the privacy team replies to
- * the email address and asks for proof before fulfilling.
+ * the email address and asks for proof before fulfilling. That manual
+ * reply is ALSO the first email the requester receives — we deliberately
+ * do NOT send an automated acknowledgement to the submitted address,
+ * because the address is attacker-controlled and an auto-reply would
+ * make this endpoint a low-volume harassment / brand-mediated spam
+ * vector. In-browser confirmation is the only feedback returned to the
+ * submitter at intake time.
  */
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -104,33 +110,13 @@ export async function POST(request: NextRequest) {
     replyTo: data.email,
   });
 
-  // Confirmation back to the requester.
-  const userBody = [
-    `Hi ${data.name},`,
-    '',
-    "We've received your privacy request. Here's a summary of what you sent:",
-    '',
-    `  Request type: ${REQUEST_TYPE_LABEL[data.requestType]}`,
-    data.clubName ? `  Club referenced: ${data.clubName}` : '',
-    '',
-    "Before we act on the request we'll verify your identity — expect a reply",
-    'to this address asking for proof.',
-    '',
-    "We aim to complete the request within 30 days. If we need longer (for",
-    "complex requests) we'll tell you why.",
-    '',
-    'Read more about our privacy posture at https://cavaliq.com/legal/privacy',
-    '',
-    '— The Cavaliq privacy team',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  sendOperationalEmailAsync({
-    to: data.email,
-    subject: 'Your Cavaliq privacy request',
-    text: userBody,
-  });
+  // No automated email back to data.email: the submitter address is
+  // attacker-controlled at this point (no auth, no prior relationship
+  // required) and an auto-reply would turn this endpoint into a low-
+  // volume harassment vector for arbitrary "Cavaliq privacy request"
+  // emails. The privacy team's manual reply (using replyTo above) is the
+  // first email the requester receives. In-browser confirmation
+  // (successResponse below) is the only feedback returned at intake.
 
   logger.info('privacy_request_received', {
     requestType: data.requestType,
