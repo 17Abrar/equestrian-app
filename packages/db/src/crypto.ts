@@ -104,41 +104,68 @@ export function decryptField(ciphertext: string | null | undefined): string | nu
 }
 
 /**
- * Encrypts every listed field on an object in place, returning a new object.
- * Useful for insert/update values where multiple sensitive columns need the
- * same treatment.
+ * Encrypts the listed fields on an object, returning a NEW object that
+ * contains ONLY the encrypted fields (those present on the input as a
+ * string or `null`). Callers spread the result into a larger
+ * insert/update values object so the encrypted columns overlay any
+ * plaintext they may have set elsewhere.
+ *
+ * Audit I8 (2026-05-18): two intertwined changes from the original
+ * `T extends Record<string, unknown> → T` shape:
+ *   1. Generic bound widened to plain `T` + `K extends keyof T`. Typed
+ *      interfaces like `HorseCreate` / `RiderProfileUpdate` don't
+ *      carry an implicit index signature; under the old bound every
+ *      call site laundered via `data as unknown as Record<string,
+ *      unknown>` (audit F-29 documented the cast as intentional but
+ *      the cast itself was the smell).
+ *   2. Return type narrowed from full `T` to `Partial<Pick<T, K>>`.
+ *      Returning the full input with encrypted columns replaced had a
+ *      latent bug — callers spread `{ ...toDecimalStrings(data),
+ *      ...encrypted, clubId }`, and the `...encrypted` spread silently
+ *      overrode `toDecimalStrings`'s numeric→string conversion
+ *      because `encrypted` carried back the original numeric
+ *      `weightKg` from `data`. Surfaced by the I8 CI typecheck.
+ *      Returning only the encrypted keys eliminates that
+ *      spread-clobber path. Undefined fields are skipped entirely so
+ *      PATCH semantics (omitted ≠ null) survive the spread.
  */
-export function encryptFields<T extends Record<string, unknown>>(
+export function encryptFields<T, K extends keyof T>(
   data: T,
-  fields: readonly (keyof T)[],
-): T {
-  const result: Record<string, unknown> = { ...data };
+  fields: readonly K[],
+): Partial<Pick<T, K>> {
+  const result: Partial<Pick<T, K>> = {};
   for (const field of fields) {
     const value = data[field];
     if (typeof value === 'string') {
-      result[field as string] = encryptField(value);
+      // Safe internal cast: callers list only string-valued keys.
+      result[field] = encryptField(value) as T[K];
     } else if (value === null) {
-      result[field as string] = null;
+      result[field] = null as T[K];
     }
-    // undefined is left as-is so partial updates don't overwrite existing values
+    // undefined: don't set the key on `result` — preserves PATCH
+    // semantics (the caller's spread won't introduce an `undefined`
+    // value that would clobber whatever the column already holds).
   }
-  return result as T;
+  return result;
 }
 
 /**
  * Decrypts every listed field on a row object, returning a new object with
  * plaintext values. Fields that weren't encrypted pass through unchanged.
+ *
+ * Audit I8 (2026-05-18): bound widened to plain `T`. See `encryptFields`
+ * for the full rationale.
  */
-export function decryptFields<T extends Record<string, unknown>>(
+export function decryptFields<T, K extends keyof T>(
   row: T,
-  fields: readonly (keyof T)[],
+  fields: readonly K[],
 ): T {
-  const result: Record<string, unknown> = { ...row };
+  const result: T = { ...row };
   for (const field of fields) {
     const value = row[field];
     if (typeof value === 'string') {
-      result[field as string] = decryptField(value);
+      result[field] = decryptField(value) as T[K];
     }
   }
-  return result as T;
+  return result;
 }
