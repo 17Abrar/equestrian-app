@@ -714,8 +714,20 @@ export async function findBookingByIdForWebhook(
  * NOT load-bearing — the freshness window is the primary fix. This is
  * belt-and-braces. The query checks both `bookings.providerPaymentId`
  * (booking flow) and `liveryInvoices.providerPaymentId` (livery flow).
- * Returns true if either has a row created in the last 24h whose
- * provider_payment_id matches AND clubId matches the URL-bound club.
+ * Returns true if either has a row whose provider_payment_id matches
+ * AND was issued within the window AND clubId matches the URL-bound
+ * club.
+ *
+ * Audit I1 (2026-05-18 audit pass): the recency window now keys on
+ * `provider_payment_issued_at` (stamped by `setBookingPaymentRef` /
+ * `setInvoiceProviderRef` every time providerPaymentId is set or
+ * replaced — migration 0058 added the column and backfilled existing
+ * rows from `created_at`). Previously the gate keyed on
+ * `bookings.created_at`, which is the wrong axis: a row created N
+ * hours ago whose pay-link was minted seconds ago via a route-driven
+ * retry (PR #118) would have failed the gate even though the
+ * provider_payment_id was genuinely fresh. The new key restores
+ * tight 24h bounds without rejecting legitimate delayed completions.
  */
 export async function wasProviderPaymentIssuedRecently(
   providerPaymentId: string,
@@ -724,6 +736,10 @@ export async function wasProviderPaymentIssuedRecently(
   windowMs: number = 24 * 60 * 60 * 1000,
 ): Promise<boolean> {
   const cutoff = new Date(Date.now() - windowMs);
+  // gte against `provider_payment_issued_at` — NULL rows (those that
+  // never went through a payment flow) are excluded by the predicate,
+  // which is the correct posture: a row with no recorded issuance
+  // time has no claim to "issued recently".
   const bookingHit = await rawDb
     .select({ id: bookings.id })
     .from(bookings)
@@ -732,7 +748,7 @@ export async function wasProviderPaymentIssuedRecently(
         eq(bookings.providerPaymentId, providerPaymentId),
         eq(bookings.paymentProvider, provider),
         eq(bookings.clubId, clubId),
-        gte(bookings.createdAt, cutoff),
+        gte(bookings.providerPaymentIssuedAt, cutoff),
       ),
     )
     .limit(1);
@@ -746,7 +762,7 @@ export async function wasProviderPaymentIssuedRecently(
         eq(liveryInvoices.providerPaymentId, providerPaymentId),
         eq(liveryInvoices.paymentProvider, provider),
         eq(liveryInvoices.clubId, clubId),
-        gte(liveryInvoices.createdAt, cutoff),
+        gte(liveryInvoices.providerPaymentIssuedAt, cutoff),
       ),
     )
     .limit(1);

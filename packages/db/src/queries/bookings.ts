@@ -1046,11 +1046,29 @@ export async function setBookingPaymentRef(
       }
     }
 
+    // Audit I1 (2026-05-18): stamp `providerPaymentIssuedAt` ONLY
+    // when `providerPaymentId` is genuinely changing (NULL → set, or
+    // old id → new id). Idempotent webhook rewrites that arrive with
+    // the SAME id we already have must NOT re-stamp — otherwise
+    // every accepted webhook event slides the freshness window
+    // forward, turning the 24h reference-recency gate into "24h
+    // since the last accepted webhook for this reference" and
+    // letting a forged event keep extending its own validity.
+    //
+    // The mint event is the route's `setBookingPaymentRef` call at
+    // payment init (or PR #118's route-driven retry replacing an
+    // abandoned id). The webhook arrives with the same id moments
+    // to days later; that arrival should not move the issuance
+    // timestamp.
+    const isProviderPaymentIdChanging =
+      Boolean(data.providerPaymentId) &&
+      data.providerPaymentId !== current.providerPaymentId;
     const result = await tx
       .update(bookings)
       .set({
         ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
         ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
+        ...(isProviderPaymentIdChanging ? { providerPaymentIssuedAt: new Date() } : {}),
         ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
         updatedAt: new Date(),
       })
