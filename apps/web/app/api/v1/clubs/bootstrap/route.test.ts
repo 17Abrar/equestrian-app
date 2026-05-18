@@ -34,8 +34,8 @@ const {
   // for the `ClubBootstrapError` export. Shape mirrors the real class
   // so `instanceof` checks in the route handler fire identically.
   class FakeClubBootstrapError extends Error {
-    code: 'SLUG_EXHAUSTED' | 'INSERT_FAILED';
-    constructor(code: 'SLUG_EXHAUSTED' | 'INSERT_FAILED', message: string) {
+    code: 'SLUG_EXHAUSTED' | 'INSERT_FAILED' | 'KICKED';
+    constructor(code: 'SLUG_EXHAUSTED' | 'INSERT_FAILED' | 'KICKED', message: string) {
       super(message);
       this.code = code;
       this.name = 'ClubBootstrapError';
@@ -184,6 +184,18 @@ describe('Clerk Backend API as source of truth', () => {
     );
   });
 
+  it('passes userId filter to getOrganizationMembershipList so it scales past Clerk SDK default limit=10', async () => {
+    // Regression: without the userId filter, the unfiltered list defaults
+    // to a 10-row first page. In an org with >10 members where the
+    // caller's row falls on page 2+, find() returns undefined and we'd
+    // return a false 403 NOT_ORG_MEMBER to a legitimate member.
+    await POST();
+
+    expect(listMembershipsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: ORG_ID, userId: [USER_ID] }),
+    );
+  });
+
   it('returns 503 CLERK_API_UNAVAILABLE on Clerk API outage', async () => {
     getOrgMock.mockRejectedValueOnce(new Error('clerk 500'));
 
@@ -268,6 +280,28 @@ describe('bootstrap library error handling', () => {
     expect(errorMock).toHaveBeenCalledWith(
       'bootstrap_failed',
       expect.objectContaining({ code: 'SLUG_EXHAUSTED' }),
+    );
+  });
+
+  it('returns 403 KICKED when the lib throws KICKED — admin-deactivated member must NOT be auto-restored (Audit J-1 / pass-3)', async () => {
+    bootstrapMock.mockRejectedValueOnce(
+      new FakeClubBootstrapError(
+        'KICKED',
+        'Membership was deactivated by a club admin and cannot be restored via bootstrap.',
+      ),
+    );
+
+    const res = await POST();
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('KICKED');
+    // Distinct from the generic NOT_ORG_MEMBER copy — this user was
+    // deliberately kicked and needs to be re-invited.
+    expect(body.error.message).toContain('revoked by a club admin');
+    expect(warnMock).toHaveBeenCalledWith(
+      'bootstrap_refused_kicked',
+      expect.objectContaining({ userId: USER_ID, clerkOrgId: ORG_ID }),
     );
   });
 

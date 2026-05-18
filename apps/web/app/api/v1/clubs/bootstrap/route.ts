@@ -78,8 +78,17 @@ export async function POST() {
       // trust the JWT `orgRole` claim because it can be 60s stale after
       // a role change; using the live API ensures we map the correct
       // role into `club_members.role` on first write.
+      //
+      // Pass `userId: [userId]` so Clerk filters server-side. The SDK's
+      // unfiltered `getOrganizationMembershipList` defaults to limit=10;
+      // for any org with more than 10 members where the caller's row
+      // isn't on page 1, an unfiltered list would `.find()` over the
+      // wrong page and we'd return a false 403 NOT_ORG_MEMBER to a
+      // legitimate member. The userId filter is an exact-match
+      // server-side query — O(1) regardless of org size.
       const memberships = await clerk.organizations.getOrganizationMembershipList({
         organizationId: orgId,
+        userId: [userId],
       });
       const callerMembership = memberships.data.find((m) => m.publicUserData?.userId === userId);
       if (!callerMembership) {
@@ -140,6 +149,22 @@ export async function POST() {
       });
     } catch (err) {
       if (err instanceof ClubBootstrapError) {
+        // `KICKED` means the membership row exists with a non-null
+        // `deactivated_by_admin_at` stamp. Surface as 403 with a distinct
+        // user-facing message — these users were deliberately removed by
+        // a club admin and must NOT be auto-restored via bootstrap.
+        // Audit J-1 / pass-3 defense.
+        if (err.code === 'KICKED') {
+          logger.warn('bootstrap_refused_kicked', {
+            userId,
+            clerkOrgId: orgId,
+          });
+          return errorResponse(
+            'KICKED',
+            'Your membership in this organization was revoked by a club admin. Contact them to be re-invited.',
+            403,
+          );
+        }
         logger.error('bootstrap_failed', {
           userId,
           clerkOrgId: orgId,

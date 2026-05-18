@@ -1,6 +1,6 @@
 import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { TRIAL_DURATION_DAYS } from '@equestrian/shared/constants';
 import { mapClerkRoleToAppRole } from '@/lib/clerk-roles';
 import { logger } from '@/lib/logger';
@@ -72,7 +72,7 @@ export interface BootstrapResult {
 
 export class ClubBootstrapError extends Error {
   constructor(
-    public code: 'SLUG_EXHAUSTED' | 'INSERT_FAILED',
+    public code: 'SLUG_EXHAUSTED' | 'INSERT_FAILED' | 'KICKED',
     message: string,
   ) {
     super(message);
@@ -137,14 +137,43 @@ export async function bootstrapClubAndMembership(input: BootstrapInput): Promise
 
   const role = mapClerkRoleToAppRole(clerkRole);
 
-  // `onConflictDoUpdate` on the (club_id, clerk_user_id) unique. Active=true
-  // intentionally — re-bootstrapping a previously-deactivated membership
-  // is NOT possible via this path because the route handler that calls us
-  // only runs when an authenticated user is the org admin in their *current*
-  // Clerk session. A deactivated user whose Clerk session was retained
-  // would still have orgRole, but Clerk also removes the org membership
-  // (see `removeClerkOrgMembership`) on deactivation, so they cannot reach
-  // here with the same orgId paired in the JWT.
+  // Audit J-1 / pass-3 defense: refuse to reactivate an admin-kicked
+  // member. `removeClerkOrgMembership` is fail-open by design (see its
+  // docstring — a Clerk 5xx must NOT roll back the DB-side deactivation),
+  // so a kicked user can retain `orgId` in their JWT for the session TTL
+  // even after `deactivated_by_admin_at` is stamped. If they then POST
+  // to this endpoint, an unconditional `isActive: true` upsert would
+  // silently restore them. Pre-check the column and refuse; the route
+  // surfaces 403 KICKED. Same shape as `joinClubInstantly` (see
+  // packages/db/src/queries/discovery.ts).
+  const existing = await db
+    .select({
+      id: clubMembers.id,
+      deactivatedByAdminAt: clubMembers.deactivatedByAdminAt,
+    })
+    .from(clubMembers)
+    .where(and(eq(clubMembers.clubId, club.id), eq(clubMembers.clerkUserId, clerkUserId)))
+    .limit(1);
+
+  if (existing[0]?.deactivatedByAdminAt) {
+    logger.warn('club_bootstrap_refused_kicked_member', {
+      clerkOrgId,
+      clerkUserId,
+      clubId: club.id,
+      memberId: existing[0].id,
+    });
+    throw new ClubBootstrapError(
+      'KICKED',
+      'Membership was deactivated by a club admin and cannot be restored via bootstrap.',
+    );
+  }
+
+  // `onConflictDoUpdate` on the (club_id, clerk_user_id) unique. The
+  // `isActive` SET uses a CASE expression that only flips the row to
+  // active when `deactivated_by_admin_at IS NULL`. The pre-check above
+  // already returned for that case, but a TOCTOU between the SELECT and
+  // INSERT could let a concurrent admin DELETE land in between; the CASE
+  // re-evaluates the column at upsert time and closes that window.
   const memberRows = await db
     .insert(clubMembers)
     .values({
@@ -160,11 +189,11 @@ export async function bootstrapClubAndMembership(input: BootstrapInput): Promise
         role,
         displayName: displayName ?? undefined,
         email: email ?? undefined,
-        isActive: true,
+        isActive: sql`CASE WHEN ${clubMembers.deactivatedByAdminAt} IS NULL THEN true ELSE ${clubMembers.isActive} END`,
         updatedAt: new Date(),
       },
     })
-    .returning({ id: clubMembers.id });
+    .returning({ id: clubMembers.id, isActive: clubMembers.isActive });
 
   const member = memberRows[0];
   if (!member) {
@@ -176,6 +205,24 @@ export async function bootstrapClubAndMembership(input: BootstrapInput): Promise
     throw new ClubBootstrapError(
       'INSERT_FAILED',
       'Membership row insert returned no row — unexpected driver state.',
+    );
+  }
+
+  // If a concurrent admin DELETE landed between our pre-check and the
+  // upsert, the CASE leaves `isActive` false. Treat that as KICKED rather
+  // than returning a member id whose row is inactive — TenantContext
+  // resolution downstream would throw NO_MEMBERSHIP and the user would
+  // see a misleading error instead of the kicked state.
+  if (member.isActive === false) {
+    logger.warn('club_bootstrap_race_with_admin_deactivation', {
+      clerkOrgId,
+      clerkUserId,
+      clubId: club.id,
+      memberId: member.id,
+    });
+    throw new ClubBootstrapError(
+      'KICKED',
+      'Membership was deactivated by a club admin and cannot be restored via bootstrap.',
     );
   }
 
