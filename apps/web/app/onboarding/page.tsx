@@ -855,7 +855,30 @@ export default function OnboardingPage() {
       router.push('/');
     } catch (err) {
       reportMutationError('onboarding.complete', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to complete onboarding');
+      // Audit pass-5 LOW-10 (2026-05-21): admins can deactivate a
+      // user's membership while the user is mid-onboarding (rare but
+      // not impossible — admin does it in the staff page while the
+      // user is filling out the wizard in a parallel tab). The server
+      // returns 403 `MEMBERSHIP_DEACTIVATED`. The default toast already
+      // surfaces the server's message ("Your membership in this club
+      // was deactivated by an admin.") thanks to `err.message`, but
+      // the UX otherwise looks like a transient network error: the
+      // user hits Complete again and loops on the same toast. Show a
+      // sticky, longer-lived toast for this specific code with a
+      // sign-out action so they can re-auth under a different
+      // membership (or take it up with the admin).
+      const errWithCode = err as Error & { code?: string };
+      if (errWithCode?.code === 'MEMBERSHIP_DEACTIVATED') {
+        toast.error(errWithCode.message, {
+          duration: 15_000,
+          action: {
+            label: 'Sign out',
+            onClick: () => router.push('/sign-out'),
+          },
+        });
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Failed to complete onboarding');
+      }
     } finally {
       setCompleting(false);
     }
