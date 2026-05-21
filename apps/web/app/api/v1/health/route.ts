@@ -7,6 +7,53 @@ import { getClientIp } from '@/lib/request-ip';
 import { logger } from '@/lib/logger';
 
 /**
+ * Audit pass-5 LOW-7 (2026-05-21): scrub host/DSN shapes out of a
+ * subsystem-probe error before logging. Driver errors at the network
+ * layer (Postgres / Redis / R2) commonly embed the hostname or the
+ * full connection string in the message — e.g. `getaddrinfo ENOTFOUND
+ * ep-xyz-east-1.aws.neon.tech` or `postgres://user:pass@host/db`.
+ * That's configuration/targeting metadata operators don't need to see
+ * in the structured log (Sentry's exception capture, for whoever is
+ * on call). Classify generically and truncate.
+ *
+ * Returns one of: `'connection_failed'`, `'auth_failed'`, `'timeout'`,
+ * `'unknown'`, plus a generic-only first 80 chars of the message with
+ * URI authorities and bare hostnames blanked out.
+ */
+function sanitizeProbeError(raw: string | undefined): { class: string; preview: string } {
+  if (!raw) return { class: 'unknown', preview: '' };
+  const lower = raw.toLowerCase();
+  let cls = 'unknown';
+  if (
+    lower.includes('enotfound') ||
+    lower.includes('econnrefused') ||
+    lower.includes('econnreset') ||
+    lower.includes('network') ||
+    lower.includes('connect ')
+  ) {
+    cls = 'connection_failed';
+  } else if (
+    lower.includes('authentication') ||
+    lower.includes('password') ||
+    lower.includes('401') ||
+    lower.includes('unauthorized')
+  ) {
+    cls = 'auth_failed';
+  } else if (lower.includes('timeout') || lower.includes('timed out')) {
+    cls = 'timeout';
+  }
+  const preview = raw
+    // Strip URI authorities: `scheme://user:pass@host[:port]/...` → `scheme://[REDACTED]/...`
+    .replace(/([a-z]+:\/\/)[^\s/]+/gi, '$1[REDACTED]')
+    // Strip ENOTFOUND <hostname>, ECONNREFUSED <hostname:port>
+    .replace(/(ENOTFOUND|ECONNREFUSED|ECONNRESET)\s+\S+/g, '$1 [HOST]')
+    // Strip standalone hostnames that look like DNS names (3+ dotted labels)
+    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+){2,}\b/gi, '[HOST]')
+    .slice(0, 80);
+  return { class: cls, preview };
+}
+
+/**
  * Public probe — Cloudflare's external health checks hit this
  * unauthenticated, so we cannot gate on Clerk. IP-keyed rate limit caps
  * abuse without breaking the legitimate probe.
@@ -109,12 +156,22 @@ export async function GET(request: NextRequest) {
 
   const allOk = Object.values(subsystems).every((s) => s.ok);
   if (!allOk) {
-    // Full error detail lands here (and only here) for operators.
+    // Audit pass-5 LOW-7 (2026-05-21): the public response sanitizes
+    // subsystem failures down to `{ok:false}` but the log used to
+    // include the full raw error message, which on Postgres/Redis
+    // connection failures contains the host and sometimes the DSN-
+    // shaped connection string (e.g. `getaddrinfo ENOTFOUND
+    // ep-xyz-east-1.aws.neon.tech` or `postgres://user:pass@host/db`).
+    // Operators on call only need to know WHICH subsystem failed and
+    // a rough class of failure; the host/DSN is configuration metadata
+    // an attacker who reads logs could use to target the database
+    // host directly. Strip URI authorities + `ENOTFOUND <host>` shapes
+    // before logging, and truncate.
     logger.error('health_deep_probe_failed', {
       subsystems: Object.fromEntries(
         Object.entries(subsystems).map(([k, v]) => [
           k,
-          { ok: v.ok, error: v.ok ? undefined : subsystemErrors[k] },
+          { ok: v.ok, error: v.ok ? undefined : sanitizeProbeError(subsystemErrors[k]) },
         ]),
       ),
     });
