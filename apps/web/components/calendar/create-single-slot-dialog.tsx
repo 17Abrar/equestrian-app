@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -95,6 +95,25 @@ export function CreateSingleSlotDialog({
       date: todayInClub,
     },
   });
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` on first render. If `useClubSettings` is still
+  // loading at that moment, the form initializes with the browser-
+  // local fallback and never picks up the club's actual tz when it
+  // arrives — which is exactly the scenario the fix was meant to
+  // close. Sync the date field once `clubTimezone` resolves, but only
+  // when the user hasn't already touched the field (`dirtyFields.date`
+  // is unset). `shouldDirty: false` keeps RHF's dirty-state honest so
+  // a subsequent `form.reset()` after submit still works.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.date) {
+      form.setValue('date', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
 
   async function onSubmit(data: CreateBookingSlotInput) {
     try {

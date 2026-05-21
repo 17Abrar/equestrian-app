@@ -11,12 +11,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import {
-  formatTime,
-  getTodayDateString,
-  getTodayLocalDateString,
-} from '@equestrian/shared/utils';
-import { useClubSettings } from '@/hooks/use-settings';
+import { formatTime, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 
 interface RiderProfile {
@@ -123,7 +118,6 @@ function ProgressSkeleton() {
 }
 
 export default function RiderProgressPage() {
-  const settingsQuery = useClubSettings();
   const {
     data: profileData,
     isLoading: profileLoading,
@@ -179,18 +173,17 @@ export default function RiderProgressPage() {
           icon={TrendingUp}
           label="This Month"
           value={
-            // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: the
-            // "this month" window is the club's calendar month — bookings
-            // are dated in the club's tz. Compute the YYYY-MM prefix
-            // from the club's stored timezone. Fall back to browser-local
-            // while settings load.
+            // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: this
+            // page is rider-facing — `useClubSettings()` (`/api/v1/settings`)
+            // is gated by `settings:read`, which the rider/parent roles
+            // do not have, so we'd permanently 403 if we tried to read
+            // the club timezone here. Browser-local is the right semantic
+            // for a rider anyway: "lessons I've taken this month, by my
+            // watch." Strictly better than the original UTC bug (which
+            // could classify a 02:00-Dubai-local booking into the
+            // previous month for 4 hours on the 1st).
             completedBookings.filter((b) =>
-              b.slotDate.startsWith(
-                (settingsQuery.data?.data.timezone
-                  ? getTodayDateString(settingsQuery.data.data.timezone)
-                  : getTodayLocalDateString()
-                ).slice(0, 7),
-              ),
+              b.slotDate.startsWith(getTodayLocalDateString().slice(0, 7)),
             ).length
           }
         />

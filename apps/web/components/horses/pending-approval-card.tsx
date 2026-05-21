@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -190,6 +190,21 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
       liveryStartDate: todayInClub,
     },
   });
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` at first render, so when `useClubSettings()` is
+  // still resolving the date stays on the browser-local fallback even
+  // after the club tz arrives. Sync the field when settings resolve,
+  // only if the user hasn't typed a different value.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.liveryStartDate) {
+      form.setValue('liveryStartDate', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
 
   async function onSubmit(values: ApproveFormOutput) {
     // `feeMajorUnits` is `number | ''` post-resolver; the refine above

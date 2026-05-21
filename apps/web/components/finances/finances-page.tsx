@@ -784,6 +784,21 @@ function AddExpenseDialog({
     },
   });
 
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` on first render, so a slow settings query leaves
+  // the date stuck on browser-local even after `clubTimezone` arrives.
+  // Sync the date when settings resolve, but only if the user hasn't
+  // touched the field yet.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.date) {
+      form.setValue('date', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
+
   async function onSubmit(data: CreateExpenseInput) {
     try {
       await createExpense.mutateAsync(data);
