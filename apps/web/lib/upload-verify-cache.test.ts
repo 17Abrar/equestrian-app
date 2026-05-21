@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { extractR2KeyFromUrl } from './upload-verify-cache';
+import { extractR2KeyFromUrl, findNonR2OriginUrl } from './upload-verify-cache';
 
 // Audit pass-5 MED-1 (2026-05-21): the origin pin on `extractR2KeyFromUrl`
 // is the single chokepoint that prevents a staff/groom/vet account with
@@ -64,5 +64,38 @@ describe('extractR2KeyFromUrl', () => {
 
   it('treats http vs https as different origins', () => {
     expect(extractR2KeyFromUrl(`http://cdn.cavaliq.test/${VALID_KEY}`)).toBeNull();
+  });
+});
+
+// Audit pass-5 MED-2 (2026-05-21): `findNonR2OriginUrl` is the
+// persist-side helper the image-asset routes (horse photos, ownership
+// registration, club branding) use to reject attacker-origin URLs at
+// save time. The Zod schemas only validate `.url()`, so this is the
+// single chokepoint that keeps a smuggled `https://attacker.example/...`
+// out of the rendered dashboard.
+
+describe('findNonR2OriginUrl', () => {
+  beforeEach(() => {
+    process.env.R2_PUBLIC_URL = R2_PUBLIC_URL;
+  });
+
+  it('returns null when every URL is R2-origin', () => {
+    expect(
+      findNonR2OriginUrl([`${R2_PUBLIC_URL}/${VALID_KEY}`, `${R2_PUBLIC_URL}/${VALID_KEY}`]),
+    ).toBeNull();
+  });
+
+  it('returns null on an all-empty / nullish list (field cleared, not set)', () => {
+    expect(findNonR2OriginUrl([null, undefined, ''])).toBeNull();
+  });
+
+  it('returns the first non-R2-origin URL', () => {
+    const bad = 'https://attacker.example/foo.png';
+    expect(findNonR2OriginUrl([`${R2_PUBLIC_URL}/${VALID_KEY}`, bad])).toBe(bad);
+  });
+
+  it('rejects an R2-origin URL with a non-key path (no leak via path shape)', () => {
+    const bad = `${R2_PUBLIC_URL}/wrong/shape.png`;
+    expect(findNonR2OriginUrl([bad])).toBe(bad);
   });
 });

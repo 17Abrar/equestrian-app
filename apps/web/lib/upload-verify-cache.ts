@@ -166,3 +166,29 @@ export function extractR2KeyFromUrl(fileUrl: string): string | null {
     return null;
   }
 }
+
+/**
+ * Audit pass-5 MED-2 (2026-05-21): persist-side origin pin for image
+ * asset URLs (`horses.primaryPhotoUrl`/`photoUrls`, ownership
+ * registration photos, club branding logo/cover/favicon). The schemas
+ * for these fields only validate `.url()`, so a direct API caller can
+ * smuggle in `https://attacker.example/something` and the save routes
+ * happily persist it. Downstream `<Image>` / `<img>` then renders the
+ * attacker URL inside the trusted dashboard context — pixel-tracking,
+ * brand spoofing, mixed-content, etc.
+ *
+ * The origin check piggybacks on `extractR2KeyFromUrl` (which is
+ * already pinned to `R2_PUBLIC_URL` for MED-1) — when it returns
+ * null, the URL either isn't on R2 or doesn't match the canonical key
+ * shape, both of which mean we shouldn't persist it.
+ *
+ * Returns the first rejected URL, or null when every input is either
+ * empty/null (the field was cleared) or origin-valid.
+ */
+export function findNonR2OriginUrl(urls: ReadonlyArray<string | null | undefined>): string | null {
+  for (const url of urls) {
+    if (url == null || url === '') continue;
+    if (extractR2KeyFromUrl(url) === null) return url;
+  }
+  return null;
+}
