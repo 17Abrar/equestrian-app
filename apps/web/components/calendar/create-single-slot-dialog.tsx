@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { createBookingSlotSchema, type CreateBookingSlotInput } from '@equestrian/shared/schemas';
+import { getTodayDateString, getTodayLocalDateString } from '@equestrian/shared/utils';
+import { useClubSettings } from '@/hooks/use-settings';
 import { useLessonTypes, useCreateBookingSlot } from '@/hooks/use-bookings';
 import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
@@ -62,10 +64,27 @@ export function CreateSingleSlotDialog({
   const lessonTypesQuery = useLessonTypes();
   const arenasQuery = useArenas();
   const coachesQuery = useCoachMembers();
+  const settingsQuery = useClubSettings();
 
   const lessonTypes = lessonTypesQuery.data?.data ?? [];
   const arenas = arenasQuery.data?.data ?? [];
   const coaches = coachesQuery.data?.data ?? [];
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: the booking-slot
+  // server validates against the CLUB's timezone via
+  // `isDateInPast(data.date, clubTimezone)`. The first MED-3 fix used
+  // browser-local time, but when admin tz differs from club tz (e.g.
+  // a US-Pacific admin managing a Dubai club at 23:00 PT — still
+  // yesterday by the browser but today in Dubai) the default landed on
+  // a date the server rejects as past. Pull the club's stored tz from
+  // settings; fall back to browser-local during the first render before
+  // settings have loaded (matches the pre-codex behavior in that
+  // window, but settings is cached after the first dashboard navigation
+  // so the fallback is effectively unreachable in practice).
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const todayInClub = clubTimezone
+    ? getTodayDateString(clubTimezone)
+    : getTodayLocalDateString();
 
   const form = useForm<SlotFormValues, unknown, CreateBookingSlotInput>({
     resolver: zodResolver(createBookingSlotSchema),
@@ -73,9 +92,28 @@ export function CreateSingleSlotDialog({
       startTime: '09:00',
       endTime: '10:00',
       maxRiders: 6,
-      date: new Date().toISOString().split('T')[0],
+      date: todayInClub,
     },
   });
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` on first render. If `useClubSettings` is still
+  // loading at that moment, the form initializes with the browser-
+  // local fallback and never picks up the club's actual tz when it
+  // arrives — which is exactly the scenario the fix was meant to
+  // close. Sync the date field once `clubTimezone` resolves, but only
+  // when the user hasn't already touched the field (`dirtyFields.date`
+  // is unset). `shouldDirty: false` keeps RHF's dirty-state honest so
+  // a subsequent `form.reset()` after submit still works.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.date) {
+      form.setValue('date', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
 
   async function onSubmit(data: CreateBookingSlotInput) {
     try {
