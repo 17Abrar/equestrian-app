@@ -110,7 +110,19 @@ function HorseCard({ horse }: { horse: Horse }) {
 
   return (
     <View className="flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3">
-      <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
+      {/* Audit pass-5 LOW-9 (2026-05-21): the horse photo had no
+          accessibility label. VoiceOver/TalkBack would either announce
+          the raw image URL or skip the element entirely, and the
+          fallback paw icon had no label either. Wire `accessible` +
+          `accessibilityLabel` so screen-reader users hear "Photo of
+          <horse name>" instead. */}
+      <View
+        className="h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-gray-100"
+        accessible
+        accessibilityLabel={
+          horse.primaryPhotoUrl ? `Photo of ${horse.name}` : `No photo set for ${horse.name}`
+        }
+      >
         {horse.primaryPhotoUrl ? (
           <Image
             source={{ uri: horse.primaryPhotoUrl }}
