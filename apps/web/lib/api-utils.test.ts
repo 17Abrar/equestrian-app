@@ -232,4 +232,25 @@ describe('parseRequiredBody', () => {
     const req = makeJsonRequest(undefined, { contentLength: MAX_REQUEST_BODY_BYTES + 1 });
     await expect(parseRequiredBody(req, schema)).rejects.toThrow(PayloadTooLargeError);
   });
+
+  // Audit pass-5 LOW-5 (2026-05-21): the post-read cap used `text.length`,
+  // which counts UTF-16 units, not bytes. A multi-byte UTF-8 body whose
+  // byte count is over `maxBytes` but whose UTF-16 length is under would
+  // slip past the post-read check. With `TextEncoder.encode(text).byteLength`
+  // we measure the actual byte cost. This test uses a 4-byte CJK char to
+  // make the gap obvious — 350K such chars is ~1.05MB bytes vs ~350K UTF-16
+  // units, well under the previous .length-based cap and over the byte cap.
+  it('throws PayloadTooLargeError when post-read body exceeds the byte cap (multibyte UTF-8)', async () => {
+    // CJK char 中 encodes to 3 bytes in UTF-8 (1 UTF-16 unit). With a 1 MB cap
+    // and a body of 400_000 such chars: byte size = 1.2 MB, text.length = 400K.
+    const bigBody = JSON.stringify({ name: '中'.repeat(400_000) });
+    // Pass an undeclared content-length so the pre-read fast path doesn't
+    // catch it — this exercises the byte-accurate post-read fallback only.
+    const req = new Request('https://example.test/v1/horses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: bigBody,
+    });
+    await expect(parseRequiredBody(req, schema)).rejects.toThrow(PayloadTooLargeError);
+  });
 });
