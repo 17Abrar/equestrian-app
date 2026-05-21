@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useClerk } from '@clerk/nextjs';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -844,6 +845,7 @@ function StaffStep({ onComplete, onBack }: StaffStepProps) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { signOut } = useClerk();
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
 
@@ -872,8 +874,14 @@ export default function OnboardingPage() {
         toast.error(errWithCode.message, {
           duration: 15_000,
           action: {
+            // Codex review follow-up: this app has no `/sign-out` route;
+            // navigating there would land on a 404 with the Clerk
+            // session still valid, leaving the user stuck. Invoke
+            // Clerk's `signOut` directly so the session is actually
+            // cleared and the user lands on `/sign-in` — matches the
+            // pattern in `components/onboarding/access-revoked-placeholder.tsx`.
             label: 'Sign out',
-            onClick: () => router.push('/sign-out'),
+            onClick: () => signOut({ redirectUrl: '/sign-in' }),
           },
         });
       } else {
@@ -882,7 +890,7 @@ export default function OnboardingPage() {
     } finally {
       setCompleting(false);
     }
-  }, [router]);
+  }, [router, signOut]);
 
   return (
     <div className="from-background to-muted/30 min-h-screen bg-gradient-to-b">
