@@ -134,21 +134,18 @@ export async function PATCH(request: NextRequest) {
       // have it rendered on every dashboard page header (logo/cover) or
       // in browser tabs (favicon).
       //
-      // Codex review follow-up: `clubs.logoUrl` is seeded from Clerk's
-      // `orgData.image_url` (typically `https://img.clerk.com/...`) at
-      // bootstrap and on the Clerk organization webhook. A settings save
-      // that touches only phone or brand colors still re-submits the
-      // existing logo value via the form, so the R2-only check would
-      // reject every Clerk-seeded club's unrelated settings save.
-      // Allow img.clerk.com explicitly — Clerk-hosted images are
-      // already trusted by CSP `img-src` and by `next.config.ts`
-      // remotePatterns, and a single curated CDN origin is a narrow
-      // exception compared to "any URL."
-      const rejectedAsset = findNonR2OriginUrl(
-        [merged.logoUrl, merged.coverPhotoUrl, merged.faviconUrl],
-        ['https://img.clerk.com'],
-      );
-      if (rejectedAsset) {
+      // Codex review follow-up: `clubs.logoUrl` (and ONLY logoUrl) is
+      // seeded from Clerk's `orgData.image_url` (typically
+      // `https://img.clerk.com/...`) at bootstrap and on the Clerk
+      // organization webhook. A settings save that touches only phone
+      // or brand colors still re-submits the existing logo value, so
+      // the R2-only check would lock Clerk-seeded clubs out of editing
+      // unrelated fields. `coverPhotoUrl` and `faviconUrl` are NEVER
+      // seeded from Clerk — they exist only as R2 uploads — so the
+      // Clerk exception applies to logoUrl alone.
+      const rejectedLogo = findNonR2OriginUrl([merged.logoUrl], ['https://img.clerk.com']);
+      const rejectedOther = findNonR2OriginUrl([merged.coverPhotoUrl, merged.faviconUrl]);
+      if (rejectedLogo || rejectedOther) {
         return errorResponse(
           'INVALID_BRANDING_URL',
           'Branding asset URLs must be R2 objects produced by /api/v1/upload',
