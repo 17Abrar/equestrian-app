@@ -206,7 +206,12 @@ function AddDocumentDialog({
 
   const form = useForm<DocumentFormValues, unknown, CreateDocumentInput>({
     resolver: zodResolver(createDocumentSchema),
-    defaultValues: { fileName: '', fileUrl: '', category: 'other' },
+    // Audit pass-5 MED-1 (2026-05-21): `fileType` is no longer a
+    // user-typed input — FileUpload's onChange now hands back the
+    // MIME the server verified against, and we mirror it into form
+    // state on upload. Default to '' so an empty submission fails the
+    // schema's `min(1)` rather than reaching the route.
+    defaultValues: { fileName: '', fileUrl: '', fileType: '', category: 'other' },
   });
 
   async function onSubmit(data: CreateDocumentInput) {
@@ -244,8 +249,17 @@ function AddDocumentDialog({
                   <FormControl>
                     <FileUpload
                       value={field.value}
-                      onChange={(url) => {
+                      onChange={(url, contentType) => {
                         field.onChange(url);
+                        // Audit pass-5 MED-1 (2026-05-21): persist the MIME
+                        // the server just verified against. The route's
+                        // R2 verify gate compares the cached (key,
+                        // contentType) tuple against this value, so it
+                        // MUST be the file's actual MIME — never a
+                        // user-typed approximation like "pdf".
+                        if (contentType) {
+                          form.setValue('fileType', contentType);
+                        }
                         // Auto-fill file name from URL
                         if (url && !form.getValues('fileName')) {
                           const name =
@@ -275,45 +289,30 @@ function AddDocumentDialog({
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="fileType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>File Type</FormLabel>
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <Input placeholder="e.g. pdf, jpg" {...field} />
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                    <SelectContent>
+                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="description"
