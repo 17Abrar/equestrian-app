@@ -160,9 +160,23 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
   // every Ziina webhook for the club returns 401 and bookings stay
   // forever-pending. Removed entirely. The URL's clubId + per-club
   // `webhook_signing_secret` (verified above) already prove tenancy
-  // — a misconfigured-shared-secret scenario is the only residual,
-  // and operators can detect it by comparing clubId-vs-payload-merchant
-  // in the dashboard if they need to.
+  // — a misconfigured-shared-secret scenario is the only residual.
+  //
+  // Audit pass-5 LOW-6 (2026-05-21): emit the event's account_id when
+  // Ziina populates it as an info-level observability signal so a
+  // misconfigured shared webhook secret across two clubs surfaces as
+  // an account_id↔clubId mismatch in the dashboard event stream rather
+  // than as silent acceptance. We still can't compare it in code (the
+  // stored value is synthesized; see above), but the log line lets an
+  // operator notice "two clubs are seeing the same account_id."
+  if (event.providerAccountId) {
+    logger.info('ziina_webhook_provider_account_observed', {
+      clubId,
+      providerAccountId: event.providerAccountId,
+      eventType: event.eventType,
+      eventId: event.eventId,
+    });
+  }
 
   const claim = await claimWebhookEvent('ziina', event.eventId);
 
