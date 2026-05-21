@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { createBookingSlotSchema, type CreateBookingSlotInput } from '@equestrian/shared/schemas';
+import { getTodayLocalDateString } from '@equestrian/shared/utils';
 import { useLessonTypes, useCreateBookingSlot } from '@/hooks/use-bookings';
 import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
@@ -73,7 +74,13 @@ export function CreateSingleSlotDialog({
       startTime: '09:00',
       endTime: '10:00',
       maxRiders: 6,
-      date: new Date().toISOString().split('T')[0],
+      // Audit pass-5 MED-3 (2026-05-21): `getTodayLocalDateString()`
+      // returns today in the browser/device tz. The prior
+      // `new Date().toISOString().split('T')[0]` returned the UTC date,
+      // which is wrong before 04:00 local in Dubai — a 02:00 admin would
+      // see yesterday as the default and create a "today" slot on the
+      // wrong day.
+      date: getTodayLocalDateString(),
     },
   });
 

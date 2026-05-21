@@ -16,7 +16,12 @@ import {
   type CreateCouponFormValues,
   type CreateCouponInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney, toMajorUnits, formatDate } from '@equestrian/shared/utils';
+import {
+  formatMoney,
+  toMajorUnits,
+  formatDate,
+  getTodayLocalDateString,
+} from '@equestrian/shared/utils';
 import {
   useFinanceOverview,
   useExpenses,
@@ -759,7 +764,12 @@ function AddExpenseDialog({
     defaultValues: {
       category: 'feed',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      // Audit pass-5 MED-3 (2026-05-21): `getTodayLocalDateString()`
+      // returns today in the browser/device tz. Replaced
+      // `new Date().toISOString().split('T')[0]` which returned the UTC
+      // date — wrong before 04:00 local in Dubai (would default the
+      // expense to yesterday).
+      date: getTodayLocalDateString(),
       currency: 'AED',
     },
   });

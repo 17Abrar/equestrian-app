@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { Check, X, Rabbit } from 'lucide-react';
-import { formatDate } from '@equestrian/shared/utils';
+import { formatDate, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -166,11 +166,14 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
   const approve = useApproveHorseOwnership(horse.id);
 
   // Default start date = today in the admin's local TZ. ISO YYYY-MM-DD.
+  // Audit pass-5 MED-3 (2026-05-21): the prior `new Date().toISOString().slice(0, 10)`
+  // claimed "admin's local TZ" but actually returned UTC — wrong before
+  // 04:00 local in Dubai. `getTodayLocalDateString()` reads the browser tz.
   const form = useForm<ApproveFormValues, unknown, ApproveFormOutput>({
     resolver: zodResolver(approveFormSchema),
     defaultValues: {
       feeMajorUnits: '',
-      liveryStartDate: new Date().toISOString().slice(0, 10),
+      liveryStartDate: getTodayLocalDateString(),
     },
   });
 

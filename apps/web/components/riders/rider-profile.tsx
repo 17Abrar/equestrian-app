@@ -13,7 +13,7 @@ import {
 } from '@equestrian/shared/schemas';
 import { useRider, useUpdateRider } from '@/hooks/use-riders';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
-import { formatMoney } from '@equestrian/shared/utils';
+import { formatMoney, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -467,7 +467,11 @@ function RiderBookings({ riderMemberId }: { riderMemberId: string }) {
   // Upcoming are on or after today's date (string compare is safe because the
   // API returns ISO YYYY-MM-DD). Past includes cancelled + no-show so admins
   // can see the whole history at a glance.
-  const today = new Date().toISOString().slice(0, 10);
+  // Audit pass-5 MED-3 (2026-05-21): `getTodayLocalDateString()` reads
+  // the browser tz. The prior `new Date().toISOString().slice(0, 10)`
+  // returned UTC, so a Dubai admin at 02:00 local would see today's
+  // bookings classified as "past" until 04:00.
+  const today = getTodayLocalDateString();
   const upcoming = bookings.filter((b) => b.slotDate >= today && b.status !== 'cancelled');
   const past = bookings.filter((b) => !upcoming.includes(b));
 

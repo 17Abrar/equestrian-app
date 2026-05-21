@@ -11,7 +11,7 @@ import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import { formatTime } from '@equestrian/shared/utils';
+import { formatTime, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 
 interface RiderProfile {
@@ -173,9 +173,10 @@ export default function RiderProgressPage() {
           icon={TrendingUp}
           label="This Month"
           value={
-            completedBookings.filter((b) =>
-              b.slotDate.startsWith(new Date().toISOString().slice(0, 7)),
-            ).length
+            // Audit pass-5 MED-3 (2026-05-21): use the browser-local
+            // year-month so a Dubai user at 02:00 local on the 1st sees
+            // the new month, not the still-previous-month UTC value.
+            completedBookings.filter((b) => b.slotDate.startsWith(getTodayLocalDateString().slice(0, 7))).length
           }
         />
       </div>
