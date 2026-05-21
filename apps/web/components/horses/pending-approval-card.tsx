@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { Check, X, Rabbit } from 'lucide-react';
-import { formatDate } from '@equestrian/shared/utils';
+import {
+  formatDate,
+  getTodayDateString,
+  getTodayLocalDateString,
+} from '@equestrian/shared/utils';
+import { useClubSettings } from '@/hooks/use-settings';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -164,15 +169,42 @@ interface DialogProps {
 
 function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
   const approve = useApproveHorseOwnership(horse.id);
+  const settingsQuery = useClubSettings();
 
-  // Default start date = today in the admin's local TZ. ISO YYYY-MM-DD.
+  // Default start date = today in the CLUB's stored timezone. ISO YYYY-MM-DD.
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: livery start
+  // dates are billed in the club's tz, so the default must be computed
+  // there — not in the admin's browser tz. The pre-MED-3 code used UTC
+  // (wrong before 04:00 local in Dubai); the first MED-3 fix used
+  // browser-local (wrong when admin tz ≠ club tz). Fall back to
+  // browser-local while settings load — same as MED-3 v1 in that window.
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const todayInClub = clubTimezone
+    ? getTodayDateString(clubTimezone)
+    : getTodayLocalDateString();
+
   const form = useForm<ApproveFormValues, unknown, ApproveFormOutput>({
     resolver: zodResolver(approveFormSchema),
     defaultValues: {
       feeMajorUnits: '',
-      liveryStartDate: new Date().toISOString().slice(0, 10),
+      liveryStartDate: todayInClub,
     },
   });
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` at first render, so when `useClubSettings()` is
+  // still resolving the date stays on the browser-local fallback even
+  // after the club tz arrives. Sync the field when settings resolve,
+  // only if the user hasn't typed a different value.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.liveryStartDate) {
+      form.setValue('liveryStartDate', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
 
   async function onSubmit(values: ApproveFormOutput) {
     // `feeMajorUnits` is `number | ''` post-resolver; the refine above

@@ -16,7 +16,13 @@ import {
   type CreateCouponFormValues,
   type CreateCouponInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney, toMajorUnits, formatDate } from '@equestrian/shared/utils';
+import {
+  formatMoney,
+  toMajorUnits,
+  formatDate,
+  getTodayDateString,
+  getTodayLocalDateString,
+} from '@equestrian/shared/utils';
 import {
   useFinanceOverview,
   useExpenses,
@@ -753,16 +759,45 @@ function AddExpenseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createExpense = useCreateExpense();
+  const settingsQuery = useClubSettings();
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: expense dates are
+  // club accounting dates, so today must be computed in the club's stored
+  // timezone rather than the admin's browser tz. The first MED-3 fix
+  // used `getTodayLocalDateString()` (browser-local) which is wrong when
+  // the admin is in a different tz than the club. Fall back to browser-
+  // local when settings haven't loaded yet — same as the prior version
+  // in that narrow window, and settings is cached for stable data so the
+  // fallback is effectively unreachable in normal navigation.
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const todayInClub = clubTimezone
+    ? getTodayDateString(clubTimezone)
+    : getTodayLocalDateString();
 
   const form = useForm<CreateExpenseFormValues, unknown, CreateExpenseInput>({
     resolver: zodResolver(createExpenseSchema),
     defaultValues: {
       category: 'feed',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: todayInClub,
       currency: 'AED',
     },
   });
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` on first render, so a slow settings query leaves
+  // the date stuck on browser-local even after `clubTimezone` arrives.
+  // Sync the date when settings resolve, but only if the user hasn't
+  // touched the field yet.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.date) {
+      form.setValue('date', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
 
   async function onSubmit(data: CreateExpenseInput) {
     try {

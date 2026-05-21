@@ -239,7 +239,17 @@ async function readBodyTextWithCap(request: Request, maxBytes: number): Promise<
     }
   }
   const text = await request.text();
-  if (text.length > maxBytes) {
+  // Audit pass-5 LOW-5 (2026-05-21): the previous post-read check used
+  // `text.length`, which counts UTF-16 code units — NOT bytes. A body
+  // dominated by multi-byte UTF-8 (CJK text, emoji-heavy notes, names
+  // with diacritics) can easily push the byte count well past `maxBytes`
+  // while `text.length` stays under, so the cap was advisory at best for
+  // any non-ASCII payload. The middleware-level Content-Length check is
+  // the primary defense (audit pass-5 LOW-5 also makes that 411 on
+  // missing Content-Length), but this byte-accurate fallback closes the
+  // gap when a client lied about its declared length or omitted it on
+  // a route that didn't go through middleware.
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
     throw new PayloadTooLargeError();
   }
   return text;
