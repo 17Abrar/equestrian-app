@@ -248,21 +248,56 @@ export default clerkMiddleware(async (auth, request) => {
       );
     }
 
+    // Audit pass-5 LOW-5 (2026-05-21): the previous block only rejected
+    // oversized bodies when Content-Length was present and failed silent
+    // when both Content-Length AND Transfer-Encoding were absent — the
+    // request slipped past the cap and reached the route handler with
+    // whatever bytes the runtime accepted. The comment above already
+    // claimed "the same guard refuses a bodied request that omits
+    // Content-Length entirely," so this is documentation catching up
+    // with the code. `Number.isFinite(declared)` also covers the
+    // `Number("0x1") = NaN` parse edge and a negative declared length.
     const contentLength = request.headers.get('content-length');
-    if (contentLength) {
-      const declared = Number(contentLength);
-      if (Number.isFinite(declared) && declared > 1 * 1024 * 1024) {
-        return new NextResponse(
-          JSON.stringify({
-            success: false,
-            error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 1 MB cap' },
-          }),
-          {
-            status: 413,
-            headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+    if (!contentLength) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: 'LENGTH_REQUIRED',
+            message:
+              'Mutating requests must declare a Content-Length header so the body cap can be enforced.',
           },
-        );
-      }
+        }),
+        {
+          status: 411,
+          headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+        },
+      );
+    }
+    const declared = Number(contentLength);
+    if (!Number.isFinite(declared) || declared < 0) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: { code: 'LENGTH_REQUIRED', message: 'Content-Length must be a non-negative integer.' },
+        }),
+        {
+          status: 411,
+          headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+        },
+      );
+    }
+    if (declared > 1 * 1024 * 1024) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 1 MB cap' },
+        }),
+        {
+          status: 413,
+          headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+        },
+      );
     }
   }
 
