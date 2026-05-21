@@ -131,16 +131,33 @@ const KEY_PATTERN = /^[0-9a-f-]{36}\/[a-z][a-z0-9_/-]*\/\d+-[a-z0-9._-]+$/;
 
 /**
  * Parses an R2 key out of a stored fileUrl. Returns null when the URL
- * doesn't carry a recognizable key shape (e.g. an external URL the
- * route shouldn't have accepted in the first place).
+ * doesn't carry a recognizable key shape OR when its origin does not
+ * match `R2_PUBLIC_URL`.
  *
- * Called by persist routes that store fileUrl rather than the raw
- * key. The existing `documents` POST already accepts `fileUrl` from
- * the client; this helper extracts the key for the verify gate.
+ * Audit pass-5 MED-1 (2026-05-21): the previous implementation accepted
+ * any origin so long as the pathname matched `KEY_PATTERN`. A caller
+ * could post `fileUrl: "https://attacker.example/<valid-r2-path>"` —
+ * `requireVerifiedR2Object` would verify the real R2 object at the path
+ * and pass, but the row stored the attacker URL, which then rendered as
+ * a trusted "document" link in the dashboard. Pinning the origin to
+ * `R2_PUBLIC_URL` closes that channel.
+ *
+ * If `R2_PUBLIC_URL` is unset or unparseable the helper returns null —
+ * uploads can't work without the env anyway (`storage.ts` throws), and
+ * a missing env should never silently downgrade the security boundary.
  */
 export function extractR2KeyFromUrl(fileUrl: string): string | null {
+  const r2PublicUrl = process.env.R2_PUBLIC_URL;
+  if (!r2PublicUrl) return null;
+  let r2Origin: string;
+  try {
+    r2Origin = new URL(r2PublicUrl).origin;
+  } catch {
+    return null;
+  }
   try {
     const url = new URL(fileUrl);
+    if (url.origin !== r2Origin) return null;
     // Strip leading slash from the pathname.
     const path = url.pathname.replace(/^\//, '');
     if (!KEY_PATTERN.test(path)) return null;
