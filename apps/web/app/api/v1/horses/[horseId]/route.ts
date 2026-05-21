@@ -9,6 +9,7 @@ import {
   validateUuidParam,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
+import { findNonR2OriginUrl } from '@/lib/upload-verify-cache';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -51,6 +52,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     validateUuidParam('horseId', horseId);
     // Audit F-63 (2026-05-07 r5).
     const data = await parseRequiredBody(request, updateHorseSchema);
+
+    // Audit pass-5 MED-2 (2026-05-21): origin-pin photo URLs (see
+    // horses POST route for rationale). Only checks fields the caller
+    // is actually setting; `findNonR2OriginUrl` skips null/undefined/''.
+    const rejected = findNonR2OriginUrl([data.primaryPhotoUrl, ...(data.photoUrls ?? [])]);
+    if (rejected) {
+      return errorResponse(
+        'INVALID_PHOTO_URL',
+        'Photo URLs must be R2 objects produced by /api/v1/upload',
+        400,
+      );
+    }
 
     const canEditAny = hasPermission(ctx.orgRole, 'horses:update');
     const canEditOwn = hasPermission(ctx.orgRole, 'horses:update_own');

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { extractR2KeyFromUrl } from './upload-verify-cache';
+import { extractR2KeyFromUrl, findNonR2OriginUrl } from './upload-verify-cache';
 
 // Audit pass-5 MED-1 (2026-05-21): the origin pin on `extractR2KeyFromUrl`
 // is the single chokepoint that prevents a staff/groom/vet account with
@@ -64,5 +64,58 @@ describe('extractR2KeyFromUrl', () => {
 
   it('treats http vs https as different origins', () => {
     expect(extractR2KeyFromUrl(`http://cdn.cavaliq.test/${VALID_KEY}`)).toBeNull();
+  });
+});
+
+// Audit pass-5 MED-2 (2026-05-21): `findNonR2OriginUrl` is the
+// persist-side helper the image-asset routes (horse photos, ownership
+// registration, club branding) use to reject attacker-origin URLs at
+// save time. The Zod schemas only validate `.url()`, so this is the
+// single chokepoint that keeps a smuggled `https://attacker.example/...`
+// out of the rendered dashboard.
+
+describe('findNonR2OriginUrl', () => {
+  beforeEach(() => {
+    process.env.R2_PUBLIC_URL = R2_PUBLIC_URL;
+  });
+
+  it('returns null when every URL is R2-origin', () => {
+    expect(
+      findNonR2OriginUrl([`${R2_PUBLIC_URL}/${VALID_KEY}`, `${R2_PUBLIC_URL}/${VALID_KEY}`]),
+    ).toBeNull();
+  });
+
+  it('returns null on an all-empty / nullish list (field cleared, not set)', () => {
+    expect(findNonR2OriginUrl([null, undefined, ''])).toBeNull();
+  });
+
+  it('returns the first non-R2-origin URL', () => {
+    const bad = 'https://attacker.example/foo.png';
+    expect(findNonR2OriginUrl([`${R2_PUBLIC_URL}/${VALID_KEY}`, bad])).toBe(bad);
+  });
+
+  it('rejects an R2-origin URL with a non-key path (no leak via path shape)', () => {
+    const bad = `${R2_PUBLIC_URL}/wrong/shape.png`;
+    expect(findNonR2OriginUrl([bad])).toBe(bad);
+  });
+
+  // Codex review on PR #151 caught that the settings PATCH route locks
+  // out Clerk-seeded clubs because `clubs.logoUrl` is bootstrapped from
+  // `https://img.clerk.com/...`. The escape hatch below is the fix.
+  it('accepts an extra-allowed origin (e.g. img.clerk.com for seeded logos)', () => {
+    const clerk = 'https://img.clerk.com/avatars/abc.png';
+    expect(findNonR2OriginUrl([clerk], ['https://img.clerk.com'])).toBeNull();
+  });
+
+  it('still rejects a different origin even when the allow-list is non-empty', () => {
+    const bad = 'https://attacker.example/foo.png';
+    expect(findNonR2OriginUrl([bad], ['https://img.clerk.com'])).toBe(bad);
+  });
+
+  it('does not interpret an unparseable extra-allowed origin as a wildcard', () => {
+    // Junk in `extraAllowedOrigins` falls out via the URL parse + filter,
+    // so a malformed entry doesn't accidentally let everything through.
+    const bad = 'https://attacker.example/foo.png';
+    expect(findNonR2OriginUrl([bad], ['not-a-url'])).toBe(bad);
   });
 });

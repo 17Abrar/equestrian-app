@@ -14,6 +14,7 @@ import {
 } from '@equestrian/shared/schemas';
 import { getClubById, updateClubSettings } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
+import { findNonR2OriginUrl } from '@/lib/upload-verify-cache';
 
 // Settings PATCH composes 5 sub-schemas, each `safeParse`d against the
 // raw body. parseRequiredBody only enforces the body cap + JSON shape;
@@ -123,6 +124,33 @@ export async function PATCH(request: NextRequest) {
 
       if (Object.keys(merged).length === 0) {
         return errorResponse('VALIDATION_ERROR', 'No valid fields provided', 400);
+      }
+
+      // Audit pass-5 MED-2 (2026-05-21): origin-pin the three branding
+      // image URLs (and `logoUrl` again — it appears in PROFILE_KEYS too
+      // for historical reasons, both schemas accept it; merged has the
+      // canonical value either way). The Zod `nullableOptionalUrl` only
+      // validates `.url()`, so an attacker could set an external URL and
+      // have it rendered on every dashboard page header (logo/cover) or
+      // in browser tabs (favicon).
+      //
+      // Codex review follow-up: `clubs.logoUrl` (and ONLY logoUrl) is
+      // seeded from Clerk's `orgData.image_url` (typically
+      // `https://img.clerk.com/...`) at bootstrap and on the Clerk
+      // organization webhook. A settings save that touches only phone
+      // or brand colors still re-submits the existing logo value, so
+      // the R2-only check would lock Clerk-seeded clubs out of editing
+      // unrelated fields. `coverPhotoUrl` and `faviconUrl` are NEVER
+      // seeded from Clerk — they exist only as R2 uploads — so the
+      // Clerk exception applies to logoUrl alone.
+      const rejectedLogo = findNonR2OriginUrl([merged.logoUrl], ['https://img.clerk.com']);
+      const rejectedOther = findNonR2OriginUrl([merged.coverPhotoUrl, merged.faviconUrl]);
+      if (rejectedLogo || rejectedOther) {
+        return errorResponse(
+          'INVALID_BRANDING_URL',
+          'Branding asset URLs must be R2 objects produced by /api/v1/upload',
+          400,
+        );
       }
 
       // Split out the numeric fee fields and rebuild the payload — Drizzle's
