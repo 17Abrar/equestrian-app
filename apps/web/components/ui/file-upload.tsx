@@ -11,8 +11,15 @@ import { safeHref } from '@/lib/safe-href';
 interface FileUploadProps {
   /** Current file URL (displays existing file) */
   value?: string;
-  /** Called with the public R2 URL after successful upload */
-  onChange: (url: string) => void;
+  /**
+   * Called with the public R2 URL after successful upload. The second
+   * argument is the file's MIME content type (e.g. `application/pdf`),
+   * the same value that was bound into R2's signed PUT and passed to
+   * `/api/v1/upload/verify`. Forms that need `fileType` should read it
+   * from this second argument — never from a user-typed input, since
+   * the server's magic-byte gate compares against the exact MIME.
+   */
+  onChange: (url: string, contentType?: string) => void;
   /** File type filter: "image/*" or "image/*,.pdf" */
   accept?: string;
   /** R2 folder path: "horses/photos", "horses/documents", "club/logo" */
@@ -136,8 +143,11 @@ export function FileUpload({
           body: JSON.stringify({ key, contentType: file.type }),
         });
 
-        // Step 4: Pass the public URL back to the form
-        onChange(publicUrl);
+        // Step 4: Pass the public URL back to the form, along with the
+        // MIME the server just verified against. Forms that persist
+        // `fileType` (horse documents) read it from this second arg —
+        // see audit pass-5 MED-1.
+        onChange(publicUrl, file.type);
       } catch (err) {
         reportMutationError('upload.file', err, { folder });
         setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
