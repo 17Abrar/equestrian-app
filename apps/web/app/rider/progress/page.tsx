@@ -11,7 +11,12 @@ import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
-import { formatTime, getTodayLocalDateString } from '@equestrian/shared/utils';
+import {
+  formatTime,
+  getTodayDateString,
+  getTodayLocalDateString,
+} from '@equestrian/shared/utils';
+import { useClubSettings } from '@/hooks/use-settings';
 import { STALE_TIME_STABLE } from '@equestrian/shared/constants';
 
 interface RiderProfile {
@@ -118,6 +123,7 @@ function ProgressSkeleton() {
 }
 
 export default function RiderProgressPage() {
+  const settingsQuery = useClubSettings();
   const {
     data: profileData,
     isLoading: profileLoading,
@@ -173,10 +179,19 @@ export default function RiderProgressPage() {
           icon={TrendingUp}
           label="This Month"
           value={
-            // Audit pass-5 MED-3 (2026-05-21): use the browser-local
-            // year-month so a Dubai user at 02:00 local on the 1st sees
-            // the new month, not the still-previous-month UTC value.
-            completedBookings.filter((b) => b.slotDate.startsWith(getTodayLocalDateString().slice(0, 7))).length
+            // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: the
+            // "this month" window is the club's calendar month — bookings
+            // are dated in the club's tz. Compute the YYYY-MM prefix
+            // from the club's stored timezone. Fall back to browser-local
+            // while settings load.
+            completedBookings.filter((b) =>
+              b.slotDate.startsWith(
+                (settingsQuery.data?.data.timezone
+                  ? getTodayDateString(settingsQuery.data.data.timezone)
+                  : getTodayLocalDateString()
+                ).slice(0, 7),
+              ),
+            ).length
           }
         />
       </div>

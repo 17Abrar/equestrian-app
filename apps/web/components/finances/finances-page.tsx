@@ -20,6 +20,7 @@ import {
   formatMoney,
   toMajorUnits,
   formatDate,
+  getTodayDateString,
   getTodayLocalDateString,
 } from '@equestrian/shared/utils';
 import {
@@ -758,18 +759,27 @@ function AddExpenseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createExpense = useCreateExpense();
+  const settingsQuery = useClubSettings();
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: expense dates are
+  // club accounting dates, so today must be computed in the club's stored
+  // timezone rather than the admin's browser tz. The first MED-3 fix
+  // used `getTodayLocalDateString()` (browser-local) which is wrong when
+  // the admin is in a different tz than the club. Fall back to browser-
+  // local when settings haven't loaded yet — same as the prior version
+  // in that narrow window, and settings is cached for stable data so the
+  // fallback is effectively unreachable in normal navigation.
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const todayInClub = clubTimezone
+    ? getTodayDateString(clubTimezone)
+    : getTodayLocalDateString();
 
   const form = useForm<CreateExpenseFormValues, unknown, CreateExpenseInput>({
     resolver: zodResolver(createExpenseSchema),
     defaultValues: {
       category: 'feed',
       description: '',
-      // Audit pass-5 MED-3 (2026-05-21): `getTodayLocalDateString()`
-      // returns today in the browser/device tz. Replaced
-      // `new Date().toISOString().split('T')[0]` which returned the UTC
-      // date — wrong before 04:00 local in Dubai (would default the
-      // expense to yesterday).
-      date: getTodayLocalDateString(),
+      date: todayInClub,
       currency: 'AED',
     },
   });

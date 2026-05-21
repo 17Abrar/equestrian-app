@@ -6,7 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { createBookingSlotSchema, type CreateBookingSlotInput } from '@equestrian/shared/schemas';
-import { getTodayLocalDateString } from '@equestrian/shared/utils';
+import { getTodayDateString, getTodayLocalDateString } from '@equestrian/shared/utils';
+import { useClubSettings } from '@/hooks/use-settings';
 import { useLessonTypes, useCreateBookingSlot } from '@/hooks/use-bookings';
 import { useArenas } from '@/hooks/use-bookings';
 import { useCoachMembers } from '@/hooks/use-staff';
@@ -63,10 +64,27 @@ export function CreateSingleSlotDialog({
   const lessonTypesQuery = useLessonTypes();
   const arenasQuery = useArenas();
   const coachesQuery = useCoachMembers();
+  const settingsQuery = useClubSettings();
 
   const lessonTypes = lessonTypesQuery.data?.data ?? [];
   const arenas = arenasQuery.data?.data ?? [];
   const coaches = coachesQuery.data?.data ?? [];
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: the booking-slot
+  // server validates against the CLUB's timezone via
+  // `isDateInPast(data.date, clubTimezone)`. The first MED-3 fix used
+  // browser-local time, but when admin tz differs from club tz (e.g.
+  // a US-Pacific admin managing a Dubai club at 23:00 PT — still
+  // yesterday by the browser but today in Dubai) the default landed on
+  // a date the server rejects as past. Pull the club's stored tz from
+  // settings; fall back to browser-local during the first render before
+  // settings have loaded (matches the pre-codex behavior in that
+  // window, but settings is cached after the first dashboard navigation
+  // so the fallback is effectively unreachable in practice).
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const todayInClub = clubTimezone
+    ? getTodayDateString(clubTimezone)
+    : getTodayLocalDateString();
 
   const form = useForm<SlotFormValues, unknown, CreateBookingSlotInput>({
     resolver: zodResolver(createBookingSlotSchema),
@@ -74,13 +92,7 @@ export function CreateSingleSlotDialog({
       startTime: '09:00',
       endTime: '10:00',
       maxRiders: 6,
-      // Audit pass-5 MED-3 (2026-05-21): `getTodayLocalDateString()`
-      // returns today in the browser/device tz. The prior
-      // `new Date().toISOString().split('T')[0]` returned the UTC date,
-      // which is wrong before 04:00 local in Dubai — a 02:00 admin would
-      // see yesterday as the default and create a "today" slot on the
-      // wrong day.
-      date: getTodayLocalDateString(),
+      date: todayInClub,
     },
   });
 
