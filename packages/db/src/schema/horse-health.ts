@@ -321,7 +321,11 @@ export const horseDocuments = pgTable(
     fileName: varchar('file_name', { length: 255 }).notNull(),
     fileUrl: text('file_url').notNull(),
     fileSizeBytes: integer('file_size_bytes'),
-    fileType: varchar('file_type', { length: 50 }),
+    // Audit pass-5 MED-1 (2026-05-21): widened from 50 → 127 to fit
+    // openxmlformats MIME types (DOCX = 71 chars, PPTX = 73, XLSX = 79).
+    // The previous 50-char cap rejected the row insert after the upload
+    // had already succeeded. See migration 0059.
+    fileType: varchar('file_type', { length: 127 }),
     category: fileCategoryEnum('category').notNull().default('other'),
     description: text('description'),
     // Audit F-8 (2026-05-06 comprehensive): single-column FK dropped in
