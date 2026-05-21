@@ -8,13 +8,17 @@ import {
   getRiderById,
   getRiderByMemberId,
   getMemberById,
+  getMemberByIdIncludingDeactivated,
   getArenaById,
   getLessonTypeById,
   getExpenseById,
   getAudienceById,
   getCompetitionById,
   getCompetitionEntryById,
+  getCompetitionClassById,
+  getMedicationByIds,
 } from '../queries';
+import { horseMedications } from '../schema/horse-health';
 import { bookings, bookingSlots, lessonTypes, arenas } from '../schema/bookings';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
@@ -72,6 +76,9 @@ interface Seeded {
   classB: string;
   entryA: string;
   entryB: string;
+  /** Audit pass-5 (2026-05-21) extensions — medication helpers. */
+  medicationA: string;
+  medicationB: string;
 }
 
 /**
@@ -304,6 +311,32 @@ async function seedTwoClubs(db: typeof testDb.db): Promise<Seeded> {
     })
     .returning({ id: competitionEntries.id });
 
+  // Audit pass-5 (2026-05-21): seed one medication per club so the
+  // `getMedicationByIds` byId helper has a real cross-tenant target.
+  // Each medication binds to the same-club horse via the composite FK.
+  const [medicationA] = await db
+    .insert(horseMedications)
+    .values({
+      clubId: clubA!.id,
+      horseId: horseA!.id,
+      medicationName: 'Bute',
+      dosage: '1g',
+      frequency: 'daily',
+      startDate: '2026-05-01',
+    })
+    .returning({ id: horseMedications.id });
+  const [medicationB] = await db
+    .insert(horseMedications)
+    .values({
+      clubId: clubB!.id,
+      horseId: horseB!.id,
+      medicationName: 'Bute',
+      dosage: '1g',
+      frequency: 'daily',
+      startDate: '2026-05-01',
+    })
+    .returning({ id: horseMedications.id });
+
   return {
     clubA: clubA!.id,
     clubB: clubB!.id,
@@ -331,6 +364,8 @@ async function seedTwoClubs(db: typeof testDb.db): Promise<Seeded> {
     classB: classB!.id,
     entryA: entryA!.id,
     entryB: entryB!.id,
+    medicationA: medicationA!.id,
+    medicationB: medicationB!.id,
   };
 }
 
@@ -552,6 +587,84 @@ describe('tenant isolation — competitions', () => {
     const seeded = await seedTwoClubs(testDb.db);
     const result = await withTestDb(testDb.db, () =>
       getCompetitionEntryById(seeded.clubA, seeded.entryB),
+    );
+    expect(result).toBeNull();
+  });
+});
+
+// ─── Audit pass-5 (2026-05-21) — three byId helpers the prior pass
+//     (L4) added test coverage for the broader byId family but missed.
+//     Each takes a `clubId` and filters on it; we lock that in.
+
+describe('tenant isolation — competition classes', () => {
+  it('getCompetitionClassById(clubA, classA) returns the class', async () => {
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getCompetitionClassById(seeded.clubA, seeded.classA),
+    );
+    expect(result?.id).toBe(seeded.classA);
+  });
+
+  it('getCompetitionClassById(clubA, classB) returns null — cross-tenant read blocked', async () => {
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getCompetitionClassById(seeded.clubA, seeded.classB),
+    );
+    expect(result).toBeNull();
+  });
+});
+
+describe('tenant isolation — members (incl. deactivated)', () => {
+  it('getMemberByIdIncludingDeactivated(clubA, memberA) returns the member', async () => {
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getMemberByIdIncludingDeactivated(seeded.clubA, seeded.memberA),
+    );
+    expect(result?.id).toBe(seeded.memberA);
+  });
+
+  it('getMemberByIdIncludingDeactivated(clubA, memberB) returns null — cross-tenant read blocked', async () => {
+    // The "IncludingDeactivated" variant lifts the `is_active=true` filter
+    // so it can resolve revoked-but-historically-relevant members. The
+    // tenant filter MUST stay even when the active filter doesn't — this
+    // test prevents a regression where someone drops both filters at
+    // once.
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getMemberByIdIncludingDeactivated(seeded.clubA, seeded.memberB),
+    );
+    expect(result).toBeNull();
+  });
+});
+
+describe('tenant isolation — horse medications', () => {
+  it('getMedicationByIds(clubA, horseA, medicationA) returns the medication', async () => {
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getMedicationByIds(seeded.clubA, seeded.horseA, seeded.medicationA),
+    );
+    expect(result?.id).toBe(seeded.medicationA);
+  });
+
+  it('getMedicationByIds(clubA, horseA, medicationB) returns null — cross-tenant medication read blocked', async () => {
+    // The medication belongs to club B even though we pass clubA + horseA.
+    // The query's three-way AND on (clubId, horseId, medicationId) must
+    // reject this — without the clubId clause, the medicationB id alone
+    // would resolve.
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getMedicationByIds(seeded.clubA, seeded.horseA, seeded.medicationB),
+    );
+    expect(result).toBeNull();
+  });
+
+  it('getMedicationByIds(clubA, horseB, medicationA) returns null — cross-tenant horse read blocked via isHorseActiveInClub', async () => {
+    // `getMedicationByIds` first verifies the horse belongs to the club
+    // (via `isHorseActiveInClub`). horseB is club B's; calling with
+    // clubA + horseB returns null before the medication query even runs.
+    const seeded = await seedTwoClubs(testDb.db);
+    const result = await withTestDb(testDb.db, () =>
+      getMedicationByIds(seeded.clubA, seeded.horseB, seeded.medicationA),
     );
     expect(result).toBeNull();
   });
