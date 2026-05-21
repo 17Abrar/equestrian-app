@@ -107,7 +107,20 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
     } | null;
 
     if (!res.ok) {
-      throw new Error(data?.error?.message ?? 'Request failed');
+      // Audit pass-5 LOW-10 (2026-05-21): the thrown error used to be a
+      // plain Error with just the message. Attach `code` (and `status`)
+      // so callers that want to branch on the server-emitted error code
+      // (e.g. onboarding showing a dedicated UX for
+      // `MEMBERSHIP_DEACTIVATED`) can read them off the caught error
+      // instead of regex-matching message text. Plain-error callers see
+      // no behavior change.
+      const err = new Error(data?.error?.message ?? 'Request failed') as Error & {
+        code?: string;
+        status?: number;
+      };
+      if (data?.error?.code) err.code = data.error.code;
+      err.status = res.status;
+      throw err;
     }
 
     // Routes returning HTML / a 502 gateway page / bare data fall through to

@@ -2,17 +2,20 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getPublicClubBySlug } from '@equestrian/db/queries';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { successResponse, errorResponse } from '@/lib/api-utils';
+import { getClientIp } from '@/lib/request-ip';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const ip =
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  // Audit pass-5 LOW-8 (2026-05-21): the sibling list route uses
+  // `getClientIp` for the same rate-limit key, but this slug route
+  // inlined a hand-rolled header chain that drifts from the helper as
+  // it evolves (canonical Workers header order, IPv6 zone-id, etc.).
+  // Use the shared helper so both discover routes resolve the same
+  // client identity for throttling.
+  const ip = getClientIp(request);
   // Slug-detail returns 404 vs 200 in measurable time — this route is the
   // obvious target for slug enumeration. Throttle per source IP.
   // Audit D-1: failClosed so a Redis outage doesn't drop the throttle
