@@ -881,7 +881,13 @@ export default function OnboardingPage() {
             // cleared and the user lands on `/sign-in` — matches the
             // pattern in `components/onboarding/access-revoked-placeholder.tsx`.
             label: 'Sign out',
-            onClick: () => signOut({ redirectUrl: '/sign-in' }),
+            // signOut returns a Promise; sonner's `action.onClick` is typed
+            // as a `void`-returning function. Clerk handles the navigation
+            // internally on resolve, so fire-and-forget with `void` to
+            // satisfy `@typescript-eslint/no-misused-promises`.
+            onClick: () => {
+              void signOut({ redirectUrl: '/sign-in' });
+            },
           },
         });
       } else {
