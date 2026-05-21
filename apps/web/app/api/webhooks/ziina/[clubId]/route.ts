@@ -162,17 +162,33 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
   // `webhook_signing_secret` (verified above) already prove tenancy
   // — a misconfigured-shared-secret scenario is the only residual.
   //
-  // Audit pass-5 LOW-6 (2026-05-21): emit the event's account_id when
-  // Ziina populates it as an info-level observability signal so a
-  // misconfigured shared webhook secret across two clubs surfaces as
-  // an account_id↔clubId mismatch in the dashboard event stream rather
-  // than as silent acceptance. We still can't compare it in code (the
-  // stored value is synthesized; see above), but the log line lets an
-  // operator notice "two clubs are seeing the same account_id."
+  // Audit pass-5 LOW-6 (2026-05-21): emit a stable fingerprint of the
+  // event's account_id (when Ziina populates it) so a misconfigured
+  // shared webhook secret across two clubs surfaces as the same
+  // fingerprint showing up under two different clubIds in the
+  // structured-log stream. We still can't compare account_id in code
+  // (the stored `externalAccountId` is the synthesized `ziina_<clubId>`;
+  // see comment above), so log-side correlation is the available signal.
+  //
+  // Codex review on the first pass: the natural key name
+  // `providerAccountId` is in the logger's `SENSITIVE_KEYS` set
+  // (`apps/web/lib/logger.ts`) and is redacted to `[REDACTED]` for every
+  // event, which defeats the entire observability purpose. Hash the
+  // value via SHA-256, hex-truncate to 12 chars (~48 bits — enough to
+  // make collisions astronomically unlikely across the active set), and
+  // log it under a non-sensitive key (`accountFingerprint`) so the
+  // redactor passes it through.
   if (event.providerAccountId) {
-    logger.info('ziina_webhook_provider_account_observed', {
+    const digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(event.providerAccountId),
+    );
+    const accountFingerprint = Array.from(new Uint8Array(digest).slice(0, 6))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    logger.info('ziina_webhook_account_observed', {
       clubId,
-      providerAccountId: event.providerAccountId,
+      accountFingerprint,
       eventType: event.eventType,
       eventId: event.eventId,
     });
