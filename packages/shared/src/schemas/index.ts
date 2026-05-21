@@ -963,7 +963,13 @@ export const createDocumentSchema = z
     fileName: z.string().min(1, 'File name is required').max(255),
     fileUrl: z.string().url('Valid URL required').max(2000),
     fileSizeBytes: optionalNumeric(z.number().int().positive()),
-    fileType: z.string().max(50).optional(),
+    // Audit pass-5 MED-1 (2026-05-21): required, not optional. The route's
+    // server-side R2-origin + magic-byte verification (`requireVerifiedR2Object`)
+    // keys off `fileType` — when it was optional, a direct API caller could omit
+    // it and skip the gate entirely, persisting an arbitrary `fileUrl` (including
+    // an attacker-origin URL) as a "horse document." Web UI always sends file.type
+    // from the upload form, so requiring it here is a no-op for in-app callers.
+    fileType: z.string().min(1).max(50),
     category: z.enum(FILE_CATEGORIES).default('other'),
     description: z.string().max(2000).optional(),
   })
