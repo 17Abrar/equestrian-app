@@ -43,11 +43,13 @@ describe('extractR2KeyFromUrl', () => {
   });
 
   it('returns null when R2_PUBLIC_URL is unset (refuses to silently downgrade)', () => {
-    // The web Worker runtime declares all env vars as required strings via
-    // `cloudflare-env.d.ts`, so plain `delete process.env.R2_PUBLIC_URL`
-    // and `… = undefined` both fail strict TS. Reach through the looser
-    // index signature on `globalThis.process` to clear it for this test.
-    (process.env as Record<string, string | undefined>).R2_PUBLIC_URL = undefined;
+    // Codex review nit: `process.env.X = undefined` in Node coerces to the
+    // string `"undefined"`, which exercises the unparseable-env branch
+    // instead of the genuinely-missing-env branch. Use `delete` with the
+    // looser index-signature cast so the strict Worker env types don't
+    // refuse the operator while we actually drive `process.env.X ===
+    // undefined`.
+    delete (process.env as Record<string, string | undefined>).R2_PUBLIC_URL;
     expect(extractR2KeyFromUrl(`${R2_PUBLIC_URL}/${VALID_KEY}`)).toBeNull();
   });
 
