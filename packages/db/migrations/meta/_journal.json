@@ -414,6 +414,13 @@
       "when": 1779235200000,
       "tag": "0058_provider_payment_issued_at",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0059_audit_pass_5_widen_horse_document_file_type",
+      "breakpoints": true
     }
   ]
 }
