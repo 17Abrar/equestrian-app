@@ -22,7 +22,6 @@ interface FetchOptions {
 interface ApiClientConfig {
   baseUrl: string;
   getToken: () => Promise<string | null>;
-  getOrganizationId: () => string | null;
   /**
    * Hook called when a request fails — invoked for both network errors
    * (fetch threw) and shape errors (server returned a body that didn't
@@ -151,7 +150,6 @@ export function createApiClient(config: ApiClientConfig) {
     const { method = 'GET', body, headers = {}, signal, schema } = options;
 
     const token = await config.getToken();
-    const orgId = config.getOrganizationId();
 
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -160,10 +158,6 @@ export function createApiClient(config: ApiClientConfig) {
 
     if (token) {
       requestHeaders['Authorization'] = `Bearer ${token}`;
-    }
-
-    if (orgId) {
-      requestHeaders['X-Organization-Id'] = orgId;
     }
 
     const requestSignal = createRequestSignal(signal);
@@ -251,7 +245,6 @@ export function createApiClient(config: ApiClientConfig) {
     const { method = 'GET', body, headers = {}, signal, schema } = options;
 
     const token = await config.getToken();
-    const orgId = config.getOrganizationId();
 
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -260,10 +253,6 @@ export function createApiClient(config: ApiClientConfig) {
 
     if (token) {
       requestHeaders['Authorization'] = `Bearer ${token}`;
-    }
-
-    if (orgId) {
-      requestHeaders['X-Organization-Id'] = orgId;
     }
 
     const requestSignal = createRequestSignal(signal);
