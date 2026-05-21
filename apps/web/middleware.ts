@@ -248,10 +248,56 @@ export default clerkMiddleware(async (auth, request) => {
       );
     }
 
-    const contentLength = request.headers.get('content-length');
-    if (contentLength) {
+    // Audit pass-5 LOW-5 (2026-05-21): the previous block only rejected
+    // oversized bodies when Content-Length was present and failed silent
+    // when both Content-Length AND Transfer-Encoding were absent — a
+    // bodied request that omitted both slipped past the cap and reached
+    // the route handler. The comment above already claimed "the same
+    // guard refuses a bodied request that omits Content-Length
+    // entirely," so this is documentation catching up with the code.
+    //
+    // Codex review on the first version of this fix: bodyless mutations
+    // (DELETE without payload, bodyless POST/PATCH) legitimately omit
+    // Content-Length and several `fetchJson(..., { method: 'DELETE' })`
+    // hooks in this codebase rely on that. Only require Content-Length
+    // when there IS a body (`request.body !== null`); a bodyless request
+    // has nothing to cap, so it falls through to the rest of middleware
+    // unchanged.
+    if (request.body !== null) {
+      const contentLength = request.headers.get('content-length');
+      if (!contentLength) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'LENGTH_REQUIRED',
+              message:
+                'Mutating requests with a body must declare a Content-Length header so the body cap can be enforced.',
+            },
+          }),
+          {
+            status: 411,
+            headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+          },
+        );
+      }
       const declared = Number(contentLength);
-      if (Number.isFinite(declared) && declared > 1 * 1024 * 1024) {
+      if (!Number.isFinite(declared) || declared < 0) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'LENGTH_REQUIRED',
+              message: 'Content-Length must be a non-negative integer.',
+            },
+          }),
+          {
+            status: 411,
+            headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+          },
+        );
+      }
+      if (declared > 1 * 1024 * 1024) {
         return new NextResponse(
           JSON.stringify({
             success: false,
