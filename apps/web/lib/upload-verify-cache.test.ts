@@ -98,4 +98,24 @@ describe('findNonR2OriginUrl', () => {
     const bad = `${R2_PUBLIC_URL}/wrong/shape.png`;
     expect(findNonR2OriginUrl([bad])).toBe(bad);
   });
+
+  // Codex review on PR #151 caught that the settings PATCH route locks
+  // out Clerk-seeded clubs because `clubs.logoUrl` is bootstrapped from
+  // `https://img.clerk.com/...`. The escape hatch below is the fix.
+  it('accepts an extra-allowed origin (e.g. img.clerk.com for seeded logos)', () => {
+    const clerk = 'https://img.clerk.com/avatars/abc.png';
+    expect(findNonR2OriginUrl([clerk], ['https://img.clerk.com'])).toBeNull();
+  });
+
+  it('still rejects a different origin even when the allow-list is non-empty', () => {
+    const bad = 'https://attacker.example/foo.png';
+    expect(findNonR2OriginUrl([bad], ['https://img.clerk.com'])).toBe(bad);
+  });
+
+  it('does not interpret an unparseable extra-allowed origin as a wildcard', () => {
+    // Junk in `extraAllowedOrigins` falls out via the URL parse + filter,
+    // so a malformed entry doesn't accidentally let everything through.
+    const bad = 'https://attacker.example/foo.png';
+    expect(findNonR2OriginUrl([bad], ['not-a-url'])).toBe(bad);
+  });
 });

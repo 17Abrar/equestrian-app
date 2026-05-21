@@ -133,11 +133,21 @@ export async function PATCH(request: NextRequest) {
       // validates `.url()`, so an attacker could set an external URL and
       // have it rendered on every dashboard page header (logo/cover) or
       // in browser tabs (favicon).
-      const rejectedAsset = findNonR2OriginUrl([
-        merged.logoUrl,
-        merged.coverPhotoUrl,
-        merged.faviconUrl,
-      ]);
+      //
+      // Codex review follow-up: `clubs.logoUrl` is seeded from Clerk's
+      // `orgData.image_url` (typically `https://img.clerk.com/...`) at
+      // bootstrap and on the Clerk organization webhook. A settings save
+      // that touches only phone or brand colors still re-submits the
+      // existing logo value via the form, so the R2-only check would
+      // reject every Clerk-seeded club's unrelated settings save.
+      // Allow img.clerk.com explicitly — Clerk-hosted images are
+      // already trusted by CSP `img-src` and by `next.config.ts`
+      // remotePatterns, and a single curated CDN origin is a narrow
+      // exception compared to "any URL."
+      const rejectedAsset = findNonR2OriginUrl(
+        [merged.logoUrl, merged.coverPhotoUrl, merged.faviconUrl],
+        ['https://img.clerk.com'],
+      );
       if (rejectedAsset) {
         return errorResponse(
           'INVALID_BRANDING_URL',

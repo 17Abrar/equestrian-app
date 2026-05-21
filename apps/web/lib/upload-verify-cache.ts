@@ -182,13 +182,44 @@ export function extractR2KeyFromUrl(fileUrl: string): string | null {
  * null, the URL either isn't on R2 or doesn't match the canonical key
  * shape, both of which mean we shouldn't persist it.
  *
+ * `extraAllowedOrigins` is an opt-in escape hatch for routes that
+ * have a legitimate non-R2 source. Settings PATCH passes
+ * `https://img.clerk.com` because `clubs.logoUrl` is seeded from
+ * Clerk's `orgData.image_url` at bootstrap (and on the Clerk
+ * organization webhook) — a settings save that doesn't touch the
+ * logo still re-submits the existing value, and rejecting it would
+ * lock every Clerk-seeded club out of editing unrelated fields until
+ * they re-upload a logo.
+ *
  * Returns the first rejected URL, or null when every input is either
  * empty/null (the field was cleared) or origin-valid.
  */
-export function findNonR2OriginUrl(urls: ReadonlyArray<string | null | undefined>): string | null {
+export function findNonR2OriginUrl(
+  urls: ReadonlyArray<string | null | undefined>,
+  extraAllowedOrigins: ReadonlyArray<string> = [],
+): string | null {
+  const extras = new Set(
+    extraAllowedOrigins
+      .map((origin) => {
+        try {
+          return new URL(origin).origin;
+        } catch {
+          return null;
+        }
+      })
+      .filter((o): o is string => o !== null),
+  );
   for (const url of urls) {
     if (url == null || url === '') continue;
-    if (extractR2KeyFromUrl(url) === null) return url;
+    if (extractR2KeyFromUrl(url) !== null) continue;
+    if (extras.size > 0) {
+      try {
+        if (extras.has(new URL(url).origin)) continue;
+      } catch {
+        // Unparseable URL falls through to rejection below.
+      }
+    }
+    return url;
   }
   return null;
 }
