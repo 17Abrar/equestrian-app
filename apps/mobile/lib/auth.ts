@@ -54,4 +54,24 @@ export const tokenCache: TokenCache = {
       throw err;
     }
   },
+  // Audit pass-6 (2026-05-22 LOW-1): without an explicit clearToken,
+  // Clerk's signOut() left the previously-saved JWT material in
+  // SecureStore until the next saveToken overwrote it on a fresh
+  // sign-in. The server has already revoked the session by then, but
+  // defense-in-depth says: when the user asks to be signed out, scrub
+  // the credential at rest. Errors are swallowed (after Sentry capture)
+  // because Clerk's sign-out flow shouldn't block on a SecureStore
+  // delete that may legitimately race a keychain lock.
+  async clearToken(key: string) {
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch (err) {
+      captureMobileException(err, 'clerk_token_cache_clear_failed', { key });
+      // eslint-disable-next-line no-console
+      console.error('[clerk-token-cache] clearToken failed', {
+        key,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  },
 };
