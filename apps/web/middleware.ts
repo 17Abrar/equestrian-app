@@ -132,6 +132,14 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/booking-reminders',
   '/api/cron/horse-care-reminders',
   '/api/cron/audit-prune',
+  // Audit pass-6 (2026-05-22 HIGH-1): the */10 booking-payment-timeout
+  // sweep landed in PR #113 (2026-05-16) but its public-route entry was
+  // missed. Without it, `auth.protect()` rejected every internal POST
+  // from `worker-entry.mjs:168-170`, surfacing only as
+  // `cron_scheduled_non_ok` in tail logs — the slot-release sweep was
+  // dead in prod for ~6 days. New cron routes MUST be added here when
+  // they ship.
+  '/api/cron/booking-payment-timeout',
   // F-43 (2026-05-07 r4): cold-start env-binding self-check. The folder
   // name dropped its leading underscore in Lambda-tris because Next.js
   // App Router treats `_<name>` directories as private (excluded from

@@ -1,5 +1,5 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/clerk-expo';
@@ -54,6 +54,22 @@ function AuthGuard() {
       router.replace('/(tabs)');
     }
   }, [isSignedIn, isLoaded, inAuthGroup, router]);
+
+  // Audit pass-6 (2026-05-22 MED-1): drop the TanStack Query cache on
+  // every signed-in → signed-out transition. Query keys like
+  // ['horses', filters] / ['myBookings'] / ['bookingSlots'] are not
+  // user-scoped, so on a shared device the next sign-in would briefly
+  // serve the prior user's cached data before refetch. Centralized here
+  // so every sign-out path (profile tab, delete-account screen, future
+  // call sites) is covered without per-callsite plumbing.
+  const wasSignedIn = useRef(false);
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (wasSignedIn.current && !isSignedIn) {
+      queryClient.clear();
+    }
+    wasSignedIn.current = isSignedIn ?? false;
+  }, [isSignedIn, isLoaded]);
 
   if (!guardSatisfied) {
     return <View style={{ flex: 1, backgroundColor: '#0d1f34' }} />;
