@@ -37,7 +37,12 @@
       "  Clerk Expo's Solana/RPC websocket transitive tree. Pin to patched",
       "  11.1.x without crossing a major boundary.",
       "- fast-xml-parser: GHSA-gh4j-gqv2-49f6 (moderate XML delimiter",
-      "  injection). Reaches us via AWS SDK XML builder. Pin to patched 5.x."
+      "  injection). Reaches us via AWS SDK XML builder. Pin to patched 5.x.",
+      "- js-cookie: GHSA-qjx8-664m-686j (high — per-instance prototype",
+      "  hijack in assign() enables cookie-attribute injection). Reaches",
+      "  us via apps/mobile > @clerk/clerk-expo > @clerk/shared > js-",
+      "  cookie. Patched in >=3.0.7; Clerk transitively pins the older",
+      "  version. Pin direct. (Audit pass-6, 2026-05-22.)"
     ],
     "packageExtensions": {
       "drizzle-orm": {
@@ -52,6 +57,7 @@
       "fast-xml-builder": ">=1.1.7",
       "fast-uri": ">=3.1.1",
       "fast-xml-parser": "5.7.0",
+      "js-cookie": ">=3.0.7",
       "postcss": "8.5.12",
       "uuid": "11.1.1"
     }
