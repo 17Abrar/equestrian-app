@@ -13,9 +13,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { API_BASE_URL } from '@/lib/api';
 import { captureMobileException } from '@/lib/sentry';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 interface DeleteResponseSuccess {
   success: true;
