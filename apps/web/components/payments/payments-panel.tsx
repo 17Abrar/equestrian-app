@@ -525,10 +525,16 @@ function NGeniusConnectDialog({ label }: { label: string }) {
               name="realmName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Realm Name (optional)</FormLabel>
+                  <FormLabel>Realm Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Tenant realm, if your outlet requires one" {...field} />
+                    <Input placeholder="e.g. acme-equestrian-prod" {...field} />
                   </FormControl>
+                  <FormDescription className="text-xs">
+                    Required for multi-tenant N-Genius accounts. Find it in the portal URL after
+                    sign-in (the slug in <code>portal.ngenius-payments.com/&lt;realmName&gt;</code>)
+                    or under Account &rarr; Settings. Leave blank only if you have a single-tenant
+                    account.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

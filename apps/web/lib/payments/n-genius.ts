@@ -215,6 +215,23 @@ async function getAccessToken(creds: NGeniusCredentials): Promise<string> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // 2026-05-22: N-Genius returns a confusing 404 with the body fields
+    // `message: "Not Found"`, `localizedMessage: "Duplicate tenant
+    // name"`, `errorCode: "realmNameNotAvailable"` when the API key
+    // doesn't belong to the supplied realm (or no realm was supplied
+    // for a multi-tenant account). The `Duplicate tenant name` copy
+    // is N-Genius's misleading default for this condition — surfacing
+    // it raw leaves the operator chasing a phantom collision. Detect
+    // the errorCode and rewrite with actionable guidance pointing at
+    // the realm-name field that they almost certainly need to fill in.
+    if (res.status === 404 && /realmNameNotAvailable/i.test(text)) {
+      throw new PaymentProviderError(
+        'AUTH_FAILED',
+        creds.realmName
+          ? `N-Genius didn't recognise the realm "${creds.realmName}" for this API key. Verify the realm in the N-Genius portal (it's a slug in the URL after sign-in, like \`portal.ngenius-payments.com/<realmName>/dashboard\`) and confirm the Service Account API key belongs to that realm.`
+          : `N-Genius couldn't find a tenant for this API key. Your account is multi-tenant and needs a Realm Name — find it in the N-Genius portal URL after sign-in (the slug in \`portal.ngenius-payments.com/<realmName>/dashboard\`) or under Account → Settings.`,
+      );
+    }
     throw new PaymentProviderError(
       'AUTH_FAILED',
       `N-Genius auth failed (${res.status}): ${safeProviderPreview(text)}`,
