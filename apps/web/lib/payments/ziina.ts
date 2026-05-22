@@ -125,12 +125,22 @@ export const ziinaAdapter: PaymentProviderAdapter = {
         'AUTH_FAILED',
         'Ziina rejected the API key — copy it from the Ziina business dashboard and try again.',
       );
-    } else if (probe.status >= 500 || probe.status === 429) {
-      // Transient: Ziina outage / rate-limit. Caller (the connect
-      // route) surfaces a retryable error; operator can paste again
-      // once Ziina recovers.
+    } else if (probe.status === 429) {
+      // Codex review (2026-05-22 PR-6 review): the connect route maps
+      // `AUTH_FAILED` / `INVALID_CREDENTIALS` → HTTP 422 (operator's
+      // input is bad) and any other `PaymentProviderError` code → HTTP
+      // 502 (provider issue). A 429 / 5xx here is a transient provider
+      // failure, NOT a bad credential, so use `RATE_LIMITED` /
+      // `SERVER_ERROR` — the operator sees "try again in a few
+      // minutes" rather than "your credential is invalid".
       throw new PaymentProviderError(
-        'AUTH_FAILED',
+        'RATE_LIMITED',
+        'Ziina rate-limited the credential check — wait a few seconds and try again.',
+        { retryable: true },
+      );
+    } else if (probe.status >= 500) {
+      throw new PaymentProviderError(
+        'SERVER_ERROR',
         `Ziina credential probe returned ${probe.status} — Ziina may be experiencing an outage. Try again in a few minutes.`,
         { retryable: true },
       );
@@ -138,10 +148,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       // Anything else (200, other 4xx, redirects with bodies the
       // adapter doesn't expect): refuse to accept the credential
       // rather than silently store it. A future Ziina API change that
-      // alters the bogus-intent response surface lands here.
+      // alters the bogus-intent response surface lands here. Use
+      // `SERVER_ERROR` so the operator sees a provider-issue 502
+      // rather than a credential-validation 422 — the pasted key
+      // might actually be fine; Ziina just shifted under us.
       throw new PaymentProviderError(
-        'AUTH_FAILED',
-        `Ziina credential probe returned an unexpected status ${probe.status} — verify the API key in the Ziina dashboard.`,
+        'SERVER_ERROR',
+        `Ziina credential probe returned an unexpected status ${probe.status} — Ziina may have changed its API. Verify the key in the Ziina dashboard, or contact support.`,
       );
     }
 
