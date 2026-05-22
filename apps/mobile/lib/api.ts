@@ -15,7 +15,13 @@ function resolveApiBaseUrl(): string {
   return url;
 }
 
-const API_BASE_URL = resolveApiBaseUrl();
+// Audit pass-6 (2026-05-22 LOW-2): exported so screens that fall outside
+// the `useApiClient()` hook (e.g. `app/delete-account.tsx`, which uses a
+// raw `fetch` because the API client doesn't yet model the
+// /v1/account/delete endpoint) can share the same fail-loud guard
+// instead of duplicating a `?? 'http://localhost:3000'` fallback that
+// would silently target the device's loopback in a release build.
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export function useApiClient(): ApiClient {
   const { getToken } = useAuth();
