@@ -101,7 +101,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
 
     // Ziina doesn't publish a lightweight "validate this token" endpoint.
     // Probe `GET /payment_intent/<bogus>`: a valid token → 404, an invalid
-    // token → 401/403. We accept 404 as proof the credential is usable.
+    // token → 401/403. Audit pass-6 (2026-05-22 codex-1): require the
+    // exact 404 — the previous "anything that isn't 401/403 means
+    // success" branch silently stored credentials when Ziina returned
+    // 5xx / 429 (e.g. during a Ziina outage or rate-limit) or a 200
+    // (shouldn't happen for a bogus intent but defensive). The
+    // operator only discovered the bad credentials on the rider's
+    // first payment attempt. Fail-loud at connect-time instead.
     const probe = await fetchProvider(
       `${API_BASE_URL}/payment_intent/ping_00000000`,
       {
@@ -111,10 +117,31 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       { provider: 'Ziina', operation: 'credential probe' },
     );
 
-    if (probe.status === 401 || probe.status === 403) {
+    if (probe.status === 404) {
+      // Authenticated as expected — Ziina recognised the token, refused
+      // the bogus intent. Continue.
+    } else if (probe.status === 401 || probe.status === 403) {
       throw new PaymentProviderError(
         'AUTH_FAILED',
         'Ziina rejected the API key — copy it from the Ziina business dashboard and try again.',
+      );
+    } else if (probe.status >= 500 || probe.status === 429) {
+      // Transient: Ziina outage / rate-limit. Caller (the connect
+      // route) surfaces a retryable error; operator can paste again
+      // once Ziina recovers.
+      throw new PaymentProviderError(
+        'AUTH_FAILED',
+        `Ziina credential probe returned ${probe.status} — Ziina may be experiencing an outage. Try again in a few minutes.`,
+        { retryable: true },
+      );
+    } else {
+      // Anything else (200, other 4xx, redirects with bodies the
+      // adapter doesn't expect): refuse to accept the credential
+      // rather than silently store it. A future Ziina API change that
+      // alters the bogus-intent response surface lands here.
+      throw new PaymentProviderError(
+        'AUTH_FAILED',
+        `Ziina credential probe returned an unexpected status ${probe.status} — verify the API key in the Ziina dashboard.`,
       );
     }
 
