@@ -9,6 +9,7 @@ import {
   numeric,
   jsonb,
   index,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { subscriptionStatusEnum, subscriptionTierEnum, joinPolicyEnum } from './enums';
@@ -158,6 +159,17 @@ export const clubs = pgTable(
     index('idx_clubs_public_listing')
       .on(table.isPublicListing)
       .where(sql`is_public_listing = true AND deleted_at IS NULL`),
+    // Audit pass-6 (2026-05-22 LOW-3): mirror of migration 0057's
+    // `clubs_booking_payment_timeout_minutes_range` CHECK so the TS
+    // schema stays the source of truth. Without this declaration,
+    // `drizzle-kit generate` would emit a `DROP CONSTRAINT` migration,
+    // weakening the DB-side guardrail behind the per-club tunable
+    // grace window (the route-level Zod also enforces 1..60, but
+    // direct writes / future bypass paths would lose the floor).
+    check(
+      'clubs_booking_payment_timeout_minutes_range',
+      sql`${table.bookingPaymentTimeoutMinutes} BETWEEN 1 AND 60`,
+    ),
   ],
 );
 

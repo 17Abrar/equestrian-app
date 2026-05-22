@@ -326,6 +326,18 @@ export const bookings = pgTable(
     index('idx_bookings_horse').on(table.horseId),
     index('idx_bookings_status').on(table.clubId, table.status),
     index('idx_bookings_date').on(table.clubId, table.createdAt),
+    // Audit pass-6 (2026-05-22 LOW-3): mirror of migration 0058's
+    // composite index backing `wasProviderPaymentIssuedRecently`. This
+    // is the hot-path lookup for the N-Genius webhook freshness gate;
+    // without the declaration here, `drizzle-kit generate` would emit
+    // a DROP for it on the next regenerate pass and the gate would
+    // start full-table-scanning the 24h window check.
+    index('idx_bookings_provider_payment_issued_at').on(
+      table.clubId,
+      table.paymentProvider,
+      table.providerPaymentId,
+      table.providerPaymentIssuedAt,
+    ),
     // Audit F-18 (2026-05-06 r2). DB-level CHECK that money columns
     // can't go negative. App layer enforces this on every write path,
     // but a direct DB write or a future bug that bypasses route
