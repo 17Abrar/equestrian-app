@@ -583,6 +583,20 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      // 2026-05-22: N-Genius returns a 403 with errorCode
+      // `accessDenied` and domain `processing` when the outlet exists
+      // and authenticates but isn't approved for live card processing
+      // yet — typically a manual flip on N-Genius support's side. The
+      // raw body also leaks the un-substituted localization template
+      // `{error.processing.accessDenied}`, which is itself a signal
+      // that N-Genius's pipeline knows this outlet but can't surface
+      // a localized message for it. Rewrite to actionable guidance.
+      if (res.status === 403 && /accessDenied/i.test(text) && /processing/i.test(text)) {
+        throw new PaymentProviderError(
+          'CREATE_PAYMENT_FAILED',
+          `N-Genius refused to create the order with "Access Denied" on the processing domain. This usually means the outlet ${creds.outletReference} is registered but has not been activated for live card processing yet. Contact N-Genius support to request live-processing activation, or verify the outlet status in the merchant portal under Outlet → Status. (Defensive note: also occurs when the order amount is below the outlet's configured minimum — verify the amount is at least 2 AED.)`,
+        );
+      }
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
         `N-Genius order creation failed (${res.status}): ${safeProviderPreview(text)}`,
