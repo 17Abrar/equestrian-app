@@ -83,6 +83,17 @@ export const liveryInvoices = pgTable(
     index('idx_livery_invoices_provider_payment')
       .on(table.providerPaymentId)
       .where(sql`provider_payment_id IS NOT NULL`),
+    // Audit pass-6 (2026-05-22 LOW-3): mirror of migration 0058's
+    // composite index backing `wasProviderPaymentIssuedRecently` on
+    // livery invoices. Same drizzle-kit-regenerate safety as the
+    // bookings sibling index; the N-Genius freshness gate relies on
+    // this for cron-time index-only scans.
+    index('idx_livery_invoices_provider_payment_issued_at').on(
+      table.clubId,
+      table.paymentProvider,
+      table.providerPaymentId,
+      table.providerPaymentIssuedAt,
+    ),
     // Audit F-14 (2026-05-07 r5): unique on `(club_id, invoice_number)`
     // declared by migration 0022. The runtime depends on this — the 23505
     // retry loop in `createLiveryInvoiceWithGeneratedNumber` catches this
