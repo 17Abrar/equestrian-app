@@ -40,11 +40,45 @@ function optionalNumeric(schema: z.ZodNumber = z.number()) {
 //                           the underlying column is nullable so admins can
 //                           explicitly clear the value, not just leave it
 //                           unchanged)
-const optionalUrl = z.union([z.string().url().max(2000), z.literal('')]).optional();
-const nullableOptionalUrl = z
-  .union([z.string().url().max(2000), z.literal('')])
-  .nullable()
-  .optional();
+//
+// Audit pass-7 (2026-05-24 HIGH-1): `z.string().url()` accepts `javascript:`,
+// `data:`, `mailto:`, `tel:`, and any other URI scheme that satisfies the WHATWG
+// URL grammar. A `javascript:` URL rendered into an `<a href>` triggers code
+// execution in the visitor's session on click — stored XSS. The `.refine()` here
+// is the input-time defence; `safeHref()` at the render boundary is the
+// belt-and-braces second layer (existing helper). Both must stay.
+const HTTPS_URL_RE = /^https?:\/\//i;
+const httpsUrl = z
+  .string()
+  .url()
+  .max(2000)
+  .refine((v) => HTTPS_URL_RE.test(v), { message: 'URL must start with http:// or https://' });
+const optionalUrl = z.union([httpsUrl, z.literal('')]).optional();
+const nullableOptionalUrl = z.union([httpsUrl, z.literal('')]).nullable().optional();
+
+// Audit pass-7 (2026-05-24 MED-1): social-profile fields previously accepted
+// any string up to 255 chars, so a club admin could persist
+// `socialInstagram = "https://evil.com/phish"` and the public profile
+// `/c/[slug]` page rendered it under an "Instagram" badge — phishing surface.
+// Constrain to either a bare handle (`@handle` or `handle`) or a URL on the
+// matching platform host. The render-time helpers in `apps/web/lib/social-link.ts`
+// extract the handle and rebuild the platform URL regardless of what is stored,
+// so legacy data is also defended at the render boundary.
+const INSTAGRAM_HANDLE_RE = /^@?[A-Za-z0-9._]{1,30}$/;
+const INSTAGRAM_URL_RE = /^https?:\/\/(?:www\.)?instagram\.com\/[A-Za-z0-9._/-]{1,100}\/?$/i;
+const FACEBOOK_HANDLE_RE = /^@?[A-Za-z0-9.]{3,80}$/;
+const FACEBOOK_URL_RE = /^https?:\/\/(?:www\.|m\.)?facebook\.com\/[A-Za-z0-9.\-_/]{1,100}\/?$/i;
+const TIKTOK_HANDLE_RE = /^@?[A-Za-z0-9._]{2,24}$/;
+const TIKTOK_URL_RE = /^https?:\/\/(?:www\.)?tiktok\.com\/@?[A-Za-z0-9._\-/]{1,100}\/?$/i;
+function socialHandleOrUrl(handleRe: RegExp, urlRe: RegExp, platform: string) {
+  return z
+    .string()
+    .max(255)
+    .refine((v) => handleRe.test(v) || urlRe.test(v), {
+      message: `Enter a ${platform} handle or full ${platform} URL`,
+    })
+    .optional();
+}
 
 // Audit F-38 (2026-05-07 r5): a datetime-local input emits
 // `2026-12-31T23:59` (no timezone) — `z.string().datetime()` rejects
@@ -596,9 +630,9 @@ export const updateClubProfileSchema = z
     // from the profile editor too, not just set a new one.
     logoUrl: nullableOptionalUrl,
     websiteUrl: optionalUrl,
-    socialInstagram: z.string().max(255).optional(),
-    socialFacebook: z.string().max(255).optional(),
-    socialTiktok: z.string().max(255).optional(),
+    socialInstagram: socialHandleOrUrl(INSTAGRAM_HANDLE_RE, INSTAGRAM_URL_RE, 'Instagram'),
+    socialFacebook: socialHandleOrUrl(FACEBOOK_HANDLE_RE, FACEBOOK_URL_RE, 'Facebook'),
+    socialTiktok: socialHandleOrUrl(TIKTOK_HANDLE_RE, TIKTOK_URL_RE, 'TikTok'),
     description: z.string().max(2000).optional(),
   })
   .strict();

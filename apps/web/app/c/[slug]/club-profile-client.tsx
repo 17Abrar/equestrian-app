@@ -8,11 +8,13 @@ import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
-import { ArrowLeft, MapPin, Globe, Instagram, Facebook, Users, LogIn, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Globe, Instagram, Facebook, Music2, Users, LogIn, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CavaliqLogo } from '@/components/brand/cavaliq-logo';
+import { safeHref } from '@/lib/safe-href';
+import { instagramUrl, facebookUrl, tiktokUrl } from '@/lib/social-link';
 
 interface PublicClub {
   id: string;
@@ -235,57 +237,56 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
                   <p className="mt-1 font-medium">{club.timezone}</p>
                 </div>
 
-                {(club.websiteUrl ||
-                  club.socialInstagram ||
-                  club.socialFacebook ||
-                  club.socialTiktok) && (
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    {club.websiteUrl && (
-                      <a
-                        href={club.websiteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Website"
-                      >
-                        <Badge variant="outline" className="gap-1">
-                          <Globe className="h-3 w-3" /> Website
-                        </Badge>
-                      </a>
-                    )}
-                    {club.socialInstagram && (
-                      <a
-                        href={
-                          club.socialInstagram.startsWith('http')
-                            ? club.socialInstagram
-                            : `https://instagram.com/${club.socialInstagram.replace(/^@/, '')}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Instagram"
-                      >
-                        <Badge variant="outline" className="gap-1">
-                          <Instagram className="h-3 w-3" /> Instagram
-                        </Badge>
-                      </a>
-                    )}
-                    {club.socialFacebook && (
-                      <a
-                        href={
-                          club.socialFacebook.startsWith('http')
-                            ? club.socialFacebook
-                            : `https://facebook.com/${club.socialFacebook}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Facebook"
-                      >
-                        <Badge variant="outline" className="gap-1">
-                          <Facebook className="h-3 w-3" /> Facebook
-                        </Badge>
-                      </a>
-                    )}
-                  </div>
-                )}
+                {/* Audit pass-7 (2026-05-24): `websiteUrl` is routed through
+                  * `safeHref()` (defence-in-depth — input is already constrained
+                  * to http(s) by the schema); social handles are normalized into
+                  * canonical platform URLs by `social-link.ts` so legacy rows
+                  * that contain `https://evil.com/phish` collapse to `null`
+                  * instead of escaping under an "Instagram" badge.
+                  */}
+                {(() => {
+                  const instagram = instagramUrl(club.socialInstagram);
+                  const facebook = facebookUrl(club.socialFacebook);
+                  const tiktok = tiktokUrl(club.socialTiktok);
+                  if (!club.websiteUrl && !instagram && !facebook && !tiktok) return null;
+                  return (
+                    <div className="flex flex-wrap items-center gap-2 pt-2">
+                      {club.websiteUrl && (
+                        <a
+                          href={safeHref(club.websiteUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Website"
+                        >
+                          <Badge variant="outline" className="gap-1">
+                            <Globe className="h-3 w-3" /> Website
+                          </Badge>
+                        </a>
+                      )}
+                      {instagram && (
+                        <a href={instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+                          <Badge variant="outline" className="gap-1">
+                            <Instagram className="h-3 w-3" /> Instagram
+                          </Badge>
+                        </a>
+                      )}
+                      {facebook && (
+                        <a href={facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook">
+                          <Badge variant="outline" className="gap-1">
+                            <Facebook className="h-3 w-3" /> Facebook
+                          </Badge>
+                        </a>
+                      )}
+                      {tiktok && (
+                        <a href={tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok">
+                          <Badge variant="outline" className="gap-1">
+                            <Music2 className="h-3 w-3" /> TikTok
+                          </Badge>
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </aside>
