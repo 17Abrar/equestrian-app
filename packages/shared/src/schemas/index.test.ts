@@ -4,6 +4,8 @@ import {
   updateHorseSchema,
   transferHorseOwnerSchema,
   createBookingSchema,
+  updateClubProfileSchema,
+  updateBrandingSchema,
 } from './index';
 
 describe('updateHorseSchema — mass-assignment guard', () => {
@@ -134,5 +136,83 @@ describe('createBookingSchema', () => {
         },
       }),
     ).toThrow();
+  });
+});
+
+describe('updateClubProfileSchema — XSS / phishing surface (audit pass-7 HIGH-1, MED-1)', () => {
+  // Audit pass-7 (2026-05-24 HIGH-1): `z.string().url()` accepts `javascript:`
+  // URIs. Without the `.refine()` in `httpsUrl`, a club admin could persist
+  // `websiteUrl = "javascript:fetch('/api/whatever')"` and the public
+  // `/c/[slug]` page would render it into an `<a href>` — stored XSS on click.
+  it('rejects a javascript: websiteUrl (XSS vector)', () => {
+    const result = updateClubProfileSchema.safeParse({
+      websiteUrl: "javascript:alert('xss')",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a data: URL websiteUrl (XSS vector via HTML payload)', () => {
+    const result = updateClubProfileSchema.safeParse({
+      websiteUrl: 'data:text/html,<script>alert(1)</script>',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a normal https websiteUrl', () => {
+    const result = updateClubProfileSchema.safeParse({ websiteUrl: 'https://myclub.com' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an empty string websiteUrl (clears the field)', () => {
+    const result = updateClubProfileSchema.safeParse({ websiteUrl: '' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a javascript: logoUrl on the branding schema (same XSS surface)', () => {
+    const result = updateBrandingSchema.safeParse({
+      logoUrl: 'javascript:void(0)',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // Audit pass-7 (2026-05-24 MED-1): social fields previously accepted any
+  // string. A club admin could store `socialInstagram = "https://evil.com/phish"`
+  // and the public profile would render it under an "Instagram" badge.
+  it('rejects an off-platform URL stored as socialInstagram (phishing surface)', () => {
+    const result = updateClubProfileSchema.safeParse({
+      socialInstagram: 'https://evil.com/phish',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a bare Instagram handle', () => {
+    const result = updateClubProfileSchema.safeParse({ socialInstagram: 'myclub' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an @-prefixed Instagram handle', () => {
+    const result = updateClubProfileSchema.safeParse({ socialInstagram: '@myclub' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a canonical Instagram URL', () => {
+    const result = updateClubProfileSchema.safeParse({
+      socialInstagram: 'https://instagram.com/myclub',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an off-platform URL stored as socialFacebook', () => {
+    const result = updateClubProfileSchema.safeParse({
+      socialFacebook: 'https://evil.com/phish',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an off-platform URL stored as socialTiktok', () => {
+    const result = updateClubProfileSchema.safeParse({
+      socialTiktok: 'https://evil.com/phish',
+    });
+    expect(result.success).toBe(false);
   });
 });
