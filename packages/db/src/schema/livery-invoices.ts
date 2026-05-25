@@ -118,5 +118,15 @@ export const liveryInvoices = pgTable(
     // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 —
     // schema drift fix.
     check('livery_invoices_period_range_check', sql`${table.periodStart} <= ${table.periodEnd}`),
+    // Audit pass-7 (2026-05-25 MED-2): see migration 0060. `payment_provider`
+    // is `varchar(50)` rather than the `payment_provider` enum because
+    // `platform_subscription_invoices.payment_provider` stores
+    // `'ziina_platform'` (not an enum member) and we keep both invoice
+    // tables on the same column type. The CHECK constraint gives us the
+    // typo-protection of the enum without forcing the type change.
+    check(
+      'livery_invoices_payment_provider_check',
+      sql`${table.paymentProvider} IS NULL OR ${table.paymentProvider} IN ('stripe', 'n_genius', 'ziina')`,
+    ),
   ],
 );
