@@ -126,11 +126,22 @@ function getClient(creds: StripeCredentials): Stripe {
   // SDK upgrade can't quietly bump the API surface our adapter is
   // built against (e.g. a Stripe webhook event payload reshape between
   // versions, or a property rename on PaymentIntent/Charge that we
-  // currently access without a guard). Matches `stripe@18.5.0`'s
-  // declared `LatestApiVersion`. Bumping is a deliberate change —
+  // currently access without a guard). Bumping is a deliberate change —
   // version bumps to this constant should ride with adapter testing.
+  //
+  // Audit pass-7 integration audit (2026-05-25): bumped 2025-08-27.basil
+  // → 2026-04-22.dahlia + SDK ^18.1.0 → ^22.1.1. Dahlia is the current
+  // Stripe API GA (released April 2026); the prior pin was one major
+  // version behind and would have missed new error codes
+  // (`action_blocked`, `approval_required`) introduced on
+  // `PaymentIntent.last_payment_error`. Per the SDK 22.x changelog, the
+  // only behaviour we touch that could shift is `Discount.coupon` →
+  // `Discount.source.coupon` (we don't read discounts on PaymentIntents)
+  // and `decimal_string` fields becoming `Stripe.Decimal` (we only read
+  // `amount` / `amount_received` / `amount_refunded`, all integers).
+  // V2 API surface, OAuth, and Node ≤16 changes are not in scope.
   return new Stripe(creds.secretKey, {
-    apiVersion: '2025-08-27.basil',
+    apiVersion: '2026-04-22.dahlia',
     typescript: true,
     timeout: 15_000,
     maxNetworkRetries: 0,
@@ -195,12 +206,15 @@ export const stripeAdapter: PaymentProviderAdapter = {
       webhookSigningSecret: input.credentials.webhookSigningSecret,
     });
 
-    // Round-trip the secret against `accounts.retrieve()` so we reject bad
-    // keys at connect time instead of at first payment. No argument =
-    // retrieve the account THIS API key belongs to.
+    // Round-trip the secret against `accounts.retrieve(null)` so we reject
+    // bad keys at connect time instead of at first payment. Audit pass-7
+    // integration audit (2026-05-25): SDK 22.x changed the no-args overload
+    // — passing `null` as the id now means "retrieve the account THIS API
+    // key belongs to" (verified in stripe-node v22 types). Prior to SDK 22
+    // the same behaviour was the no-args call.
     let account: Stripe.Account;
     try {
-      account = await getClient(creds).accounts.retrieve();
+      account = await getClient(creds).accounts.retrieve(null);
     } catch (err) {
       throw new PaymentProviderError(
         'AUTH_FAILED',
