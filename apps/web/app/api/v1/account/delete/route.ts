@@ -44,9 +44,18 @@ export async function POST(request: NextRequest) {
       return errorResponse('UNAUTHORIZED', 'Authentication required', 401);
     }
 
+    // Audit pass-7 (2026-05-24 LOW-1): `failClosed: true` matches the
+    // sibling `privacy/request` + `support/contact` routes. Without it, an
+    // Upstash blip degrades to per-isolate in-memory counters, which on
+    // Cloudflare Workers barely throttles (each isolate has its own
+    // counter). One valid session + a Redis outage = an attacker can fan
+    // out the deletion-request mailer to `info@cavaliq.com` AND the user's
+    // primary email, hurting Resend reputation. Better to bounce a real
+    // user during a Redis blip — they can retry — than leave abuse open.
     const rl = await checkRateLimit(`account:delete:${userId}`, {
       maxRequests: 3,
       windowMs: 24 * 60 * 60 * 1000,
+      failClosed: true,
     });
     if (!rl.allowed) {
       const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
