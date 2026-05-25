@@ -398,10 +398,39 @@ export async function POST(request: NextRequest) {
         // Coupon gates re-checked under FOR UPDATE in createBooking. These
         // surface only when validateCoupon's pre-flight passed but a
         // concurrent booking by the same rider (or any rider against a
-        // global maxUses) consumed the remaining quota in between.
+        // global maxUses) consumed the remaining quota in between, OR an
+        // admin tightened the coupon (paused/expired/raised minimum/etc)
+        // between pre-flight and lock — audit pass-7 codex MED-1.
         if (err instanceof Error) {
           if (err.message === 'COUPON_NOT_FOUND') {
             return errorResponse('INVALID_COUPON', 'Promo code is no longer valid', 422);
+          }
+          if (err.message === 'COUPON_INACTIVE') {
+            return errorResponse(
+              'INVALID_COUPON',
+              'This promo code is no longer active',
+              422,
+            );
+          }
+          if (err.message === 'COUPON_EXPIRED') {
+            return errorResponse('INVALID_COUPON', 'This promo code has expired', 422);
+          }
+          if (err.message === 'COUPON_NOT_STARTED') {
+            return errorResponse('INVALID_COUPON', 'This promo code is not yet active', 422);
+          }
+          if (err.message === 'COUPON_CURRENCY_MISMATCH') {
+            return errorResponse(
+              'INVALID_COUPON',
+              "This promo code can't be applied to a booking in this currency",
+              422,
+            );
+          }
+          if (err.message === 'COUPON_MIN_AMOUNT_NOT_MET') {
+            return errorResponse(
+              'INVALID_COUPON',
+              "This booking doesn't meet the promo code's minimum amount",
+              422,
+            );
           }
           if (err.message === 'COUPON_MAX_USES_REACHED') {
             return errorResponse(
