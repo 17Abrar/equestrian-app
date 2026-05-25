@@ -125,6 +125,11 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhooks/n-genius',
   '/api/webhooks/ziina/(.*)',
   '/api/webhooks/ziina-platform',
+  // Audit pass-7 integration MED (2026-05-25): Resend email events
+  // (bounced / complained / failed / delivery_delayed). Svix signature
+  // is the auth — no user context. Phase 1 ingest is log-only; phase 2
+  // will add a suppression list checked by `sendEmail`.
+  '/api/webhooks/resend',
   // Cron endpoints authenticate via x-cron-secret header, not Clerk session.
   // Cloudflare's scheduled() invocation has no user context.
   '/api/cron/livery-billing',
