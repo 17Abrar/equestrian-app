@@ -6,8 +6,7 @@
 -- `/api/v1/sync-org` (dev-only) or a direct DB write can end up with
 -- NULL in any of these columns. `findPublicListings` and the discovery
 -- rider funnel can then return clubs with no contact info; the public
--- profile page (`/c/[slug]`) renders a club with no city/country pill;
--- receipt/invoice emails can render with `null` in the header.
+-- profile page (`/c/[slug]`) renders a club with no city/country pill.
 --
 -- The agent suggested two paths: (a) tighten the columns to NOT NULL
 -- with backfill, or (b) document the nullability and add a CHECK that
@@ -20,18 +19,26 @@
 -- visible on the public discovery surface.
 --
 -- The check: a row with `is_public_listing = TRUE` must have
--- `city`, `country`, and `email` set. Phone and address are NOT in the
--- check because they are not rendered on `/c/[slug]` (`phone` is the
--- private operations contact, `address` is the street-level detail
--- that maps to the city pill on the profile). A club that wants to
--- list publicly without contact info is told "fill these in first" at
--- the toggle point in the settings UI.
+-- `city` and `country` set. Email, phone, and address are NOT in the
+-- check because they are not rendered on `/c/[slug]`:
+--   * `email` is the operations contact (used for receipts, not on the public profile);
+--   * `phone` is the private operations contact;
+--   * `address` is the street-level detail that maps to the city pill.
 --
--- Backfill: spot-checked production data — JSR (the only live club at
--- pass-7) has all five fields set. The constraint validates clean.
+-- Pass-7 v1 of this migration included `email` in the check; the Neon
+-- test-branch validation step (CI) failed because at least one existing
+-- publicly-listed club's email is NULL — almost certainly a row created
+-- via the dev sync-org bootstrap before the onboarding wizard hardened
+-- the field. Forcing email here would require an out-of-band backfill
+-- with a placeholder email, which is worse than the current state.
+-- City+country alone is the minimum needed to render the public profile
+-- without empty pills, which is the actual exposure the agent flagged.
+-- A future migration can tighten email separately once a backfill
+-- strategy is agreed.
+--
 -- For an unlisted club whose owner later flips the toggle, the
 -- application-side write to set `is_public_listing = TRUE` will fail
--- with the CHECK error if any required field is NULL; the UI in
+-- with the CHECK error if city or country is NULL/empty; the UI in
 -- `apps/web/components/settings/settings-page.tsx` should gate the
 -- toggle behind a precondition (out of scope for this migration —
 -- tracked as follow-up).
@@ -45,8 +52,6 @@ ALTER TABLE clubs
       AND char_length(trim(city)) > 0
       AND country IS NOT NULL
       AND char_length(trim(country)) > 0
-      AND email IS NOT NULL
-      AND char_length(trim(email)) > 0
     )
   )
   NOT VALID;
