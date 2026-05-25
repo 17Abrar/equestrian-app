@@ -477,6 +477,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let refundStatus: WebhookEvent['refundStatus'];
     let refundAmountMinor: number | undefined;
     let refundCumulativeMinor: number | undefined;
+    let providerRefundId: string | undefined;
     let currency: string | undefined;
 
     function piPaymentIntentId(
@@ -522,6 +523,10 @@ export const stripeAdapter: PaymentProviderAdapter = {
           if (latest) {
             refundStatus = latest.status as WebhookEvent['refundStatus'];
             refundAmountMinor = latest.amount;
+            // Audit pass-7 codex HIGH-1 (2026-05-25): surface the refund's
+            // own ID so `applyProviderRefund` can dedup against an admin
+            // route call that already recorded this refund.
+            providerRefundId = latest.id;
           }
         } else {
           // Audit HIGH-3 (2026-05-05): empty `refunds.data` means
@@ -562,6 +567,8 @@ export const stripeAdapter: PaymentProviderAdapter = {
         providerPaymentId = piPaymentIntentId(refund.payment_intent);
         refundStatus = refund.status as WebhookEvent['refundStatus'];
         refundAmountMinor = refund.amount;
+        // Audit pass-7 codex HIGH-1 (2026-05-25).
+        providerRefundId = refund.id;
         currency = refund.currency?.toUpperCase();
         const md = refund.metadata;
         if (md && typeof md.bookingId === 'string') {
@@ -616,6 +623,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
       refundStatus,
       refundAmountMinor,
       refundCumulativeMinor,
+      providerRefundId,
       data: event,
     };
   },

@@ -1,5 +1,6 @@
 import { after } from 'next/server';
 import {
+  applyProviderRefund,
   attachWebhookEventClub,
   findBookingByIdForWebhook,
   findBookingByIdInDescription,
@@ -516,19 +517,28 @@ export async function applyPaymentWebhook({
   }
 
   // Successful refund event with a known delta — increment the booking's
-  // running refund total via `recordBookingRefund`. This handles three
-  // important cases (audit C-1, H-3):
+  // running refund total. This handles three important cases (audit C-1,
+  // H-3):
   //
   // 1. Out-of-band refund issued from the provider dashboard (Stripe / Ziina)
   //    that the admin refund route never saw. The refund delta is on the
-  //    event; the route's own call would have already incremented the ledger
-  //    if it had run, so the optimistic-CAS in `recordBookingRefund` makes
-  //    this a safe no-op when there's no delta to apply.
+  //    event; `applyProviderRefund` records the (booking_id,
+  //    provider_refund_id) pair atomically with the ledger increment.
   // 2. N-Genius partial refund (`PARTIALLY_REFUNDED`) issued from the
   //    portal — the booking's previous status is `paid`, refundedAmountMinor
   //    is 0, and the delta is the partial refund value.
-  // 3. Replay of a refund event we already processed via the route — the CAS
-  //    fails because `refundedAmountMinor` already equals the new value.
+  // 3. Replay of a refund event we already processed (admin route or prior
+  //    webhook delivery) — the UNIQUE constraint on (booking_id,
+  //    provider_refund_id) in `booking_refunds` rejects the second insert,
+  //    `applyProviderRefund` returns `{recorded: false}`, and the ledger
+  //    stays untouched.
+  //
+  // Audit pass-7 codex HIGH-1 (2026-05-25): the prior comment claimed that
+  // the optimistic-CAS in `recordBookingRefund` made case (3) safe. It did
+  // not — the CAS only protected concurrent races, not sequential
+  // same-delta calls (admin route at T0 records 50; webhook at T1 reads
+  // ledger=50, records again, ledger=100). The new
+  // `(booking_id, provider_refund_id)` UNIQUE is the real dedup primitive.
   // Audit HIGH-3 (2026-05-05): if the adapter signalled a CUMULATIVE
   // refund total (Stripe `charge.refunded` empty-`refunds.data` path),
   // convert to delta by subtracting the booking's existing ledger total.
@@ -647,27 +657,80 @@ export async function applyPaymentWebhook({
   }
 
   if (isRefundEvent && event.refundStatus === 'succeeded' && explicitDelta && explicitDelta > 0) {
-    const recorded = await recordBookingRefund(clubId, bookingRef.bookingId, explicitDelta);
-    if (recorded) {
-      logger.info('booking_refund_recorded_from_webhook', {
-        clubId,
-        bookingId: bookingRef.bookingId,
-        eventType: event.eventType,
-        refundAmountMinor: explicitDelta,
-        newPaymentStatus: recorded.paymentStatus,
-        newRefundedAmountMinor: recorded.refundedAmountMinor,
+    // Audit pass-7 codex HIGH-1 (2026-05-25): use `applyProviderRefund`
+    // when the adapter surfaced a `providerRefundId` — it dedups against
+    // the admin route's prior record by (booking_id, provider_refund_id)
+    // so the same refund event can't double-count the ledger.
+    //
+    // Fall back to the legacy `recordBookingRefund` when no ID is
+    // available (e.g. a partial-refund payload where the adapter
+    // couldn't extract the refund's own ID — N-Genius payloads
+    // occasionally omit `_embedded.cnp:refund._id`). The fallback path
+    // remains the original bug surface, but it's narrower than the
+    // pre-fix code; the legacy behaviour is preserved AND a warn-level
+    // log fires so operators can see when dedup degrades.
+    if (event.providerRefundId) {
+      const applied = await applyProviderRefund(clubId, bookingRef.bookingId, explicitDelta, {
+        providerRefundId: event.providerRefundId,
+        provider,
       });
+      if (!applied) {
+        logger.info('booking_refund_record_skipped', {
+          clubId,
+          bookingId: bookingRef.bookingId,
+          eventType: event.eventType,
+          providerRefundId: event.providerRefundId,
+          refundAmountMinor: explicitDelta,
+          currentPaymentStatus: bookingRef.currentPaymentStatus,
+          reason: 'overflow_or_missing_booking',
+        });
+      } else if (!applied.recorded) {
+        logger.info('booking_refund_dedup_no_op', {
+          clubId,
+          bookingId: bookingRef.bookingId,
+          eventType: event.eventType,
+          providerRefundId: event.providerRefundId,
+          refundAmountMinor: explicitDelta,
+        });
+      } else {
+        logger.info('booking_refund_recorded_from_webhook', {
+          clubId,
+          bookingId: bookingRef.bookingId,
+          eventType: event.eventType,
+          providerRefundId: event.providerRefundId,
+          refundAmountMinor: explicitDelta,
+          newPaymentStatus: applied.state.paymentStatus,
+          newRefundedAmountMinor: applied.state.refundedAmountMinor,
+        });
+      }
     } else {
-      // CAS conflict OR ledger already at this total OR the refund would
-      // exceed the booking total. The first two are expected (idempotency
-      // / replay); the third is a data-integrity concern.
-      logger.info('booking_refund_record_skipped', {
+      logger.warn('booking_refund_no_provider_refund_id', {
         clubId,
         bookingId: bookingRef.bookingId,
         eventType: event.eventType,
+        provider,
         refundAmountMinor: explicitDelta,
-        currentPaymentStatus: bookingRef.currentPaymentStatus,
+        reason: 'adapter did not surface providerRefundId — falling back to legacy non-deduped path',
       });
+      const recorded = await recordBookingRefund(clubId, bookingRef.bookingId, explicitDelta);
+      if (recorded) {
+        logger.info('booking_refund_recorded_from_webhook_legacy', {
+          clubId,
+          bookingId: bookingRef.bookingId,
+          eventType: event.eventType,
+          refundAmountMinor: explicitDelta,
+          newPaymentStatus: recorded.paymentStatus,
+          newRefundedAmountMinor: recorded.refundedAmountMinor,
+        });
+      } else {
+        logger.info('booking_refund_record_skipped', {
+          clubId,
+          bookingId: bookingRef.bookingId,
+          eventType: event.eventType,
+          refundAmountMinor: explicitDelta,
+          currentPaymentStatus: bookingRef.currentPaymentStatus,
+        });
+      }
     }
     return { kind: 'matched', clubId, bookingId: bookingRef.bookingId };
   }
