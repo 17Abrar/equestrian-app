@@ -128,6 +128,27 @@ export function validateInput<S extends ZodTypeAny>(schema: S, data: unknown): S
 //
 // Returns `null` when authorized (caller continues). Returns a
 // NextResponse to be returned directly when not authorized.
+//
+// Audit pass-7 codex LOW (2026-05-25): dual-secret support for zero-
+// downtime rotation. Pass-6 documented this as deferred ("rotation drops
+// 1-2 ticks on a 10-min cron, acceptable trade-off until proper rotation
+// tooling exists"). Codex re-found it and we're closing it now.
+//
+// Rotation procedure:
+//   1. `wrangler secret put CRON_SECRET_NEXT` with the new value;
+//      deploy. Both secrets now accepted by the route; worker-entry.mjs
+//      still uses CRON_SECRET (the old value) for outgoing cron POSTs,
+//      so live crons keep running.
+//   2. After the deploy is verified live (every isolate sees both vars),
+//      `wrangler secret put CRON_SECRET` with the NEW value AND
+//      `wrangler secret delete CRON_SECRET_NEXT`; deploy. The route now
+//      accepts only the new value; worker-entry.mjs sends the new value.
+//
+// The dual-accept window in step 1 lets cron ticks fire continuously
+// across the deploy. Without this, a `wrangler secret put CRON_SECRET`
+// flip drops every cron tick whose POST is in flight during the partial
+// isolate update — same shape as the pass-6 HIGH-1 bug (cron silently
+// dead for 6 days).
 export async function requireCronSecret(
   request: Request,
   eventName: string,
@@ -135,6 +156,7 @@ export async function requireCronSecret(
   const { timingSafeEqual } = await import('node:crypto');
   const headerSecret = request.headers.get('x-cron-secret');
   const expected = process.env.CRON_SECRET;
+  const expectedNext = process.env.CRON_SECRET_NEXT;
 
   if (!expected) {
     logger.error(`${eventName}_secret_not_configured`);
@@ -160,6 +182,7 @@ export async function requireCronSecret(
     logger.warn(`${eventName}_bad_secret`, {
       headerPresent: headerSecret !== null,
       ip: getClientIp(request),
+      nextSecretConfigured: typeof expectedNext === 'string' && expectedNext.length > 0,
     });
   }
 
@@ -169,25 +192,45 @@ export async function requireCronSecret(
   }
 
   const provided = Buffer.from(headerSecret, 'utf8');
-  const target = Buffer.from(expected, 'utf8');
 
-  // Audit F-38 (2026-05-08 r6): when a header IS present but doesn't
-  // match, escalate to error level so secret-rotation drift becomes
-  // visible. Distinguishes the "operator forgot to set secret" case
-  // (already error-logged at line 151 above) from "wrangler updated
-  // CRON_SECRET but the running isolate still binds the old value"
-  // — operators-on-call need both signals. The header-missing case
-  // stays at warn (most likely just a bad probe / misconfigured
-  // monitor, not secret drift).
-  if (provided.length !== target.length || !timingSafeEqual(provided, target)) {
-    logger.error(`${eventName}_secret_mismatch`, {
-      headerPresent: true,
-      ip: getClientIp(request),
-    });
-    return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
+  // Try CRON_SECRET first (the steady-state path).
+  const matchesCurrent = (() => {
+    const target = Buffer.from(expected, 'utf8');
+    return provided.length === target.length && timingSafeEqual(provided, target);
+  })();
+
+  if (matchesCurrent) {
+    return null;
   }
 
-  return null;
+  // Try CRON_SECRET_NEXT if set (active rotation window). Compare with
+  // timingSafeEqual against the second secret too — leaking which secret
+  // matched via timing would let a probe distinguish "old still works"
+  // from "new now active", but the bigger risk is letting a length
+  // mismatch short-circuit before the constant-time compare. Same
+  // pattern as `matchesCurrent` above.
+  if (typeof expectedNext === 'string' && expectedNext.length > 0) {
+    const targetNext = Buffer.from(expectedNext, 'utf8');
+    if (provided.length === targetNext.length && timingSafeEqual(provided, targetNext)) {
+      // Visibility signal during rotation — operators can grep tail logs
+      // for this event to confirm the new secret is being used before
+      // they swap CRON_SECRET to the new value + drop CRON_SECRET_NEXT.
+      logger.info(`${eventName}_secret_matched_next`, {
+        ip: getClientIp(request),
+      });
+      return null;
+    }
+  }
+
+  // Audit F-38 (2026-05-08 r6): when a header IS present but doesn't
+  // match (either secret), escalate to error level so secret-rotation
+  // drift becomes visible.
+  logger.error(`${eventName}_secret_mismatch`, {
+    headerPresent: true,
+    ip: getClientIp(request),
+    nextSecretConfigured: typeof expectedNext === 'string' && expectedNext.length > 0,
+  });
+  return errorResponse('UNAUTHORIZED', 'Invalid cron secret', 401);
 }
 
 const uuidParamSchema = z.string().uuid();
