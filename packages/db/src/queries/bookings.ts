@@ -572,6 +572,13 @@ export async function createBooking(clubId: string, data: BookingCreate) {
           discountType: coupons.discountType,
           discountValue: coupons.discountValue,
           maxDiscount: coupons.maxDiscount,
+          // Audit pass-7 followup (2026-05-25): pull these too so the
+          // post-lock recheck covers the full eligibility contract from
+          // `validateCoupon` (queries/finances.ts). Previously the MED-1
+          // fix shipped status/dates/currency/minimum but left
+          // firstTimeOnly + applicableTypes as TODO.
+          firstTimeOnly: coupons.firstTimeOnly,
+          applicableTypes: coupons.applicableTypes,
         })
         .from(coupons)
         .where(and(eq(coupons.id, data.couponId), eq(coupons.clubId, clubId)))
@@ -624,6 +631,56 @@ export async function createBooking(clubId: string, data: BookingCreate) {
           );
         if ((riderCount[0]?.count ?? 0) >= c.maxUsesPerRider) {
           throw new Error('COUPON_RIDER_MAX_USES_REACHED');
+        }
+      }
+
+      // Audit pass-7 followup (2026-05-25): firstTimeOnly recheck under
+      // the lock. Mirrors `validateCoupon` (queries/finances.ts:594-613).
+      // "First-time" = the rider has no non-cancelled bookings prior to
+      // this one — counted in this same transaction so a concurrent
+      // booking attempt by the same rider doesn't both pass.
+      if (c.firstTimeOnly) {
+        const priorBookings = await tx
+          .select({ id: bookings.id })
+          .from(bookings)
+          .where(
+            and(
+              eq(bookings.clubId, clubId),
+              eq(bookings.riderMemberId, data.riderMemberId),
+              sql`${bookings.status} <> 'cancelled'`,
+            ),
+          )
+          .limit(1);
+        if (priorBookings.length > 0) {
+          throw new Error('COUPON_FIRST_TIME_ONLY');
+        }
+      }
+
+      // Audit pass-7 followup (2026-05-25): applicableTypes recheck under
+      // the lock. The coupon's `applicable_types` is an array of lesson-type
+      // slugs (e.g. ['dressage', 'jumping']). The slot the rider is booking
+      // points at a `lesson_types` row whose `type` column is the slug we
+      // compare. Skip the gate if the coupon has no restriction (null or
+      // empty array) — matches the pre-flight's behaviour. The lesson-type
+      // lookup is a single primary-key SELECT, cheap to do under lock.
+      if (c.applicableTypes && c.applicableTypes.length > 0) {
+        const slotLesson = await tx
+          .select({ lessonType: lessonTypes.type })
+          .from(bookingSlots)
+          .innerJoin(
+            lessonTypes,
+            and(
+              eq(bookingSlots.lessonTypeId, lessonTypes.id),
+              eq(lessonTypes.clubId, clubId),
+            ),
+          )
+          .where(and(eq(bookingSlots.id, data.slotId), eq(bookingSlots.clubId, clubId)))
+          .limit(1);
+        const lessonTypeSlug = slotLesson[0]?.lessonType;
+        // If we can't resolve the lesson type, fail closed — better to
+        // reject the coupon than let it apply against an unknown lesson type.
+        if (!lessonTypeSlug || !c.applicableTypes.includes(lessonTypeSlug)) {
+          throw new Error('COUPON_LESSON_TYPE_NOT_ALLOWED');
         }
       }
 
