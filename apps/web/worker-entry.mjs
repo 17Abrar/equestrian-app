@@ -21,6 +21,7 @@
 // other.
 
 import worker from './.open-next/worker.js';
+import * as Sentry from '@sentry/cloudflare';
 
 // Re-export any Durable Object classes the generated worker exports so
 // Cloudflare can still bind them. OpenNext currently exports these three;
@@ -31,6 +32,34 @@ export {
   DOShardedTagCache,
   BucketCachePurge,
 } from './.open-next/worker.js';
+
+// Audit pass-7 followup ③ (2026-05-25): `@sentry/cloudflare` wired in.
+// Resolves audit H-6 / F-35 (2026-05-06). Before this, every cron-fetch
+// failure (`cron_scheduled_failed`, `cron_scheduled_non_ok`,
+// `cron_secret_binding_*`) only landed in Cloudflare's tail logs — fine
+// for incident playback, but invisible to Sentry alerts the on-call
+// rotation watches. Now the failures fire `captureException` so they
+// page like every other server-side error.
+//
+// `withSentry` wraps both the `fetch` and `scheduled` exports below; the
+// SDK reads `env.SENTRY_DSN` (matches `process.env.SENTRY_DSN` used by
+// `sentry.server.config.ts` for the Next.js side). Sample rates +
+// scrubbers are not configured here because the failures we care about
+// (cron + binding-check) are explicit `captureException` calls — the
+// background trace sampling that `withSentry` enables for fetch is a
+// secondary benefit, not the goal.
+const sentryOptions = (env) => ({
+  dsn: env.SENTRY_DSN,
+  // Background trace sampling. 10% mirrors `sentry.server.config.ts`.
+  // Worker fetches go through Next.js where the existing
+  // `@sentry/nextjs` instrumentation also samples — this is the gate at
+  // the Worker level, before Next.js takes over.
+  tracesSampleRate: 0.1,
+  // Don't capture for unset DSNs in dev/preview — same pattern as
+  // sentry.server.config.ts. Without this `Sentry.captureException`
+  // logs a noisy "No DSN configured" warning per call.
+  enabled: !!env.SENTRY_DSN,
+});
 
 // Audit F-43 (2026-05-07 r4): one-shot env-binding self-check. Per
 // isolate, fire a single GET to `/api/cron/self-check` with the
@@ -86,6 +115,15 @@ async function verifyCronSecretBinding(env, ctx) {
         routeErrorCode: errorCode,
         routeErrorMessage: errorMessage,
       });
+      // Audit pass-7 followup ③ (2026-05-25): cron-secret binding drift
+      // is a paging-priority signal — page the on-call rotation, not
+      // just leave it in tail logs. captureMessage rather than
+      // captureException because we don't have a real error stack.
+      Sentry.captureMessage('cron_secret_binding_mismatch', {
+        level: 'error',
+        tags: { component: 'worker-entry', signal: 'cron_secret_binding_mismatch' },
+        extra: { routeErrorCode, routeErrorMessage, status: res.status },
+      });
     } else if (res.status === 401) {
       console.error('cron_secret_binding_drift', {
         message:
@@ -94,11 +132,21 @@ async function verifyCronSecretBinding(env, ctx) {
         routeErrorCode: errorCode,
         routeErrorMessage: errorMessage,
       });
+      Sentry.captureMessage('cron_secret_binding_drift', {
+        level: 'error',
+        tags: { component: 'worker-entry', signal: 'cron_secret_binding_drift' },
+        extra: { routeErrorCode, routeErrorMessage, status: res.status },
+      });
     } else if (res.status !== 200) {
       console.error('cron_secret_binding_unexpected', {
         status: res.status,
         routeErrorCode: errorCode,
         routeErrorMessage: errorMessage,
+      });
+      Sentry.captureMessage('cron_secret_binding_unexpected', {
+        level: 'warning',
+        tags: { component: 'worker-entry', signal: 'cron_secret_binding_unexpected' },
+        extra: { routeErrorCode, routeErrorMessage, status: res.status },
       });
     }
   } catch (err) {
@@ -109,10 +157,19 @@ async function verifyCronSecretBinding(env, ctx) {
     console.error('cron_secret_binding_check_failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    Sentry.captureException(err, {
+      tags: { component: 'worker-entry', signal: 'cron_secret_binding_check_failed' },
+    });
   }
 }
 
-export default {
+// Audit pass-7 followup ③ (2026-05-25): wrap the default export with
+// `withSentry` from @sentry/cloudflare. This initialises the Sentry SDK
+// per-isolate so `Sentry.captureException` / `Sentry.captureMessage`
+// calls above actually hit the wire. Also adds automatic background
+// trace sampling for fetch invocations (10% — matches the
+// `sentry.server.config.ts` rate).
+export default Sentry.withSentry(sentryOptions, {
   fetch: worker.fetch,
 
   /**
@@ -210,6 +267,21 @@ export default {
               target: target.label,
               status: res.status,
             });
+            // Audit pass-7 followup ③ (2026-05-25): a non-ok response is
+            // operator-actionable — page Sentry. The route itself may
+            // have already captured server-side context via
+            // `@sentry/nextjs`; this captureMessage gives the on-call
+            // a worker-side anchor too (the in-isolate fetch path is
+            // missing from Next's request span).
+            Sentry.captureMessage('cron_scheduled_non_ok', {
+              level: 'error',
+              tags: {
+                component: 'worker-entry',
+                signal: 'cron_scheduled_non_ok',
+                cron_label: target.label,
+              },
+              extra: { cron: event.cron, status: res.status, path: target.path },
+            });
           } else {
             console.log('cron_scheduled_ok', {
               cron: event.cron,
@@ -221,15 +293,22 @@ export default {
         .catch((err) => {
           // Fetch-level throw: the request never made it to the route, so
           // there's no Sentry-connected logger.error inside Next.js to
-          // emit a tagged event. Best-effort signal via console.error so
-          // it lands in Cloudflare's observability tail. Operators
-          // monitoring `cron_scheduled_failed` need a separate Logpush
-          // alert rule until @sentry/cloudflare is wired into this entry —
-          // tracked by audit H-6 / F-35 (2026-05-06).
+          // emit a tagged event. Audit pass-7 followup ③ (2026-05-25):
+          // now also captureException via @sentry/cloudflare so the
+          // failure pages on-call instead of only landing in Cloudflare's
+          // tail logs. Closes audit H-6 / F-35.
           console.error('cron_scheduled_failed', {
             cron: event.cron,
             target: target.label,
             error: err instanceof Error ? err.message : String(err),
+          });
+          Sentry.captureException(err, {
+            tags: {
+              component: 'worker-entry',
+              signal: 'cron_scheduled_failed',
+              cron_label: target.label,
+            },
+            extra: { cron: event.cron, path: target.path },
           });
         });
     });
@@ -243,4 +322,4 @@ export default {
     // defence-in-depth primitive for fan-out + fire-and-forget.
     ctx.waitUntil(Promise.allSettled(tasks));
   },
-};
+});
