@@ -126,6 +126,34 @@ export async function PATCH(request: NextRequest) {
         return errorResponse('VALIDATION_ERROR', 'No valid fields provided', 400);
       }
 
+      // Audit pass-7 LOW-5 follow-up (2026-05-25): when the patch flips
+      // `is_public_listing = true`, precondition on `city` + `country`
+      // being set (either in the same patch or already on the club row).
+      // Without this, the DB CHECK `clubs_public_listing_requires_contact_check`
+      // (migration 0061) fires as a Postgres 23514, the route's catch-all
+      // surfaces a 500, and the operator sees "Something went wrong"
+      // instead of a friendly "Add a city and country before listing
+      // publicly." Friendly error → user can self-serve fix; 500 →
+      // support ticket.
+      if (merged.isPublicListing === true) {
+        const currentClub = await getClubById(ctx.clubId);
+        const effectiveCity = merged.city ?? currentClub?.city ?? null;
+        const effectiveCountry = merged.country ?? currentClub?.country ?? null;
+        const cityOk = typeof effectiveCity === 'string' && effectiveCity.trim().length > 0;
+        const countryOk =
+          typeof effectiveCountry === 'string' && effectiveCountry.trim().length > 0;
+        if (!cityOk || !countryOk) {
+          return errorResponse(
+            'PUBLIC_LISTING_MISSING_LOCATION',
+            'Add a city and country before listing your club publicly.',
+            422,
+            {
+              missing: [...(!cityOk ? ['city'] : []), ...(!countryOk ? ['country'] : [])],
+            },
+          );
+        }
+      }
+
       // Audit pass-5 MED-2 (2026-05-21): origin-pin the three branding
       // image URLs (and `logoUrl` again — it appears in PROFILE_KEYS too
       // for historical reasons, both schemas accept it; merged has the
