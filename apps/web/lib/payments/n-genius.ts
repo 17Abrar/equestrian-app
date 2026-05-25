@@ -305,6 +305,14 @@ function extractOrderFields(order: unknown): {
    *  per-refund object (REFUNDED events embed the refund as the latest
    *  entry in `payment.refunds`). Undefined for non-refund events. */
   lastRefundAmountMinor: number | undefined;
+  /** Audit pass-7 codex HIGH-1 (2026-05-25): the per-refund `_id` for the
+   *  same entry that surfaced `lastRefundAmountMinor`. Used as the dedup
+   *  key in `applyProviderRefund` so admin route + webhook for the same
+   *  refund collapse to a single ledger increment. Undefined when the
+   *  payload didn't embed the refund object (rare on PARTIALLY_REFUNDED;
+   *  the webhook helper falls back to the non-deduped path in that case
+   *  and warns). */
+  lastRefundId: string | undefined;
   /** Audit F-22 / F-24 (2026-05-07 r5): the description we stamped at
    *  create-time in `merchantAttributes.cavaliqDescription`. N-Genius
    *  echoes merchantAttributes back in webhook order payloads. The
@@ -321,6 +329,7 @@ function extractOrderFields(order: unknown): {
       amountCurrency: undefined,
       refundedTotalMinor: undefined,
       lastRefundAmountMinor: undefined,
+      lastRefundId: undefined,
       cavaliqDescription: undefined,
     };
   }
@@ -370,12 +379,17 @@ function extractOrderFields(order: unknown): {
         _embedded?: {
           // N-Genius nests refunds under 'cnp:refund' (or just 'refund' on
           // some payloads). Each entry has its own amount.value + state.
+          // Audit pass-7 codex HIGH-1: `_id` is the per-refund identifier
+          // used by `applyProviderRefund` to dedup admin-route + webhook
+          // double-records.
           'cnp:refund'?: Array<{
+            _id?: string;
             state?: string;
             amount?: { value?: number };
             createdDate?: string;
           }>;
           refund?: Array<{
+            _id?: string;
             state?: string;
             amount?: { value?: number };
             createdDate?: string;
@@ -409,6 +423,9 @@ function extractOrderFields(order: unknown): {
   // The most recently appended refund — by createdDate when available, else
   // the last array entry.
   let lastRefundAmountMinor: number | undefined;
+  // Audit pass-7 codex HIGH-1: capture the per-refund `_id` from the same
+  // latest entry so `applyProviderRefund` has a dedup key.
+  let lastRefundId: string | undefined;
   if (refunds.length > 0) {
     const sorted = [...refunds].sort((a, b) => {
       const at = a.createdDate ? Date.parse(a.createdDate) : 0;
@@ -418,6 +435,9 @@ function extractOrderFields(order: unknown): {
     const latest = sorted[0];
     if (typeof latest?.amount?.value === 'number') {
       lastRefundAmountMinor = latest.amount.value;
+    }
+    if (typeof latest?._id === 'string' && latest._id.length > 0) {
+      lastRefundId = latest._id;
     }
   }
 
@@ -447,6 +467,7 @@ function extractOrderFields(order: unknown): {
     amountCurrency: payment?.amount?.currencyCode,
     refundedTotalMinor,
     lastRefundAmountMinor,
+    lastRefundId,
     cavaliqDescription: o.merchantAttributes?.cavaliqDescription,
   };
 }
@@ -1136,6 +1157,8 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       currency: fields.amountCurrency?.toUpperCase(),
       refundAmountMinor,
       refundCumulativeMinor,
+      // Audit pass-7 codex HIGH-1 (2026-05-25): per-refund ID for dedup.
+      providerRefundId: fields.lastRefundId,
       // For partial refunds, signal `succeeded` so the webhook helper
       // can use `recordBookingRefund` (mirrors Stripe's path). Full
       // refund still goes through the existing `'refunded'` mapping.
