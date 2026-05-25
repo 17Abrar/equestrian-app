@@ -170,6 +170,26 @@ export const clubs = pgTable(
       'clubs_booking_payment_timeout_minutes_range',
       sql`${table.bookingPaymentTimeoutMinutes} BETWEEN 1 AND 60`,
     ),
+    // Audit pass-7 (2026-05-25 LOW-5): a publicly-listed club MUST have
+    // the location fields that the `/c/[slug]` profile page renders.
+    // The application enforces this at the onboarding-wizard write
+    // boundary, but `sync-org` (dev) and direct DB writes bypass that,
+    // and the row would render with empty city/country pills. See
+    // migration 0061. Email, phone, address are NOT in the check —
+    // email is operations contact (receipts, not public profile); phone
+    // is private; address is the street-level detail that maps to the
+    // city pill. Pass-7 v1 included email but at least one existing
+    // publicly-listed prod row has email = NULL (sync-org bootstrap
+    // legacy); tightening email needs a backfill plan first — tracked
+    // as follow-up.
+    check(
+      'clubs_public_listing_requires_contact_check',
+      sql`${table.isPublicListing} = FALSE
+        OR (
+          ${table.city} IS NOT NULL AND char_length(trim(${table.city})) > 0
+          AND ${table.country} IS NOT NULL AND char_length(trim(${table.country})) > 0
+        )`,
+    ),
   ],
 );
 
