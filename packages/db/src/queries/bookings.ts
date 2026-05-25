@@ -551,9 +551,21 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     let recomputedAmount: number | null = null;
     let recomputedDiscount: number | null = null;
     if (data.couponId) {
+      // Audit pass-7 codex MED-1 (2026-05-25): the locked SELECT now
+      // pulls every field the pre-flight `validateCoupon` checks, so the
+      // post-lock recheck below covers the full eligibility contract —
+      // not just the usage counters. Before this, a coupon that was
+      // paused / expired / currency-tightened / minimum-raised between
+      // the route's `validateCoupon` call and this `FOR UPDATE` would
+      // still be redeemable. Now the lock catches it.
       const lockedCoupon = await tx
         .select({
           id: coupons.id,
+          status: coupons.status,
+          startsAt: coupons.startsAt,
+          expiresAt: coupons.expiresAt,
+          currency: coupons.currency,
+          minimumAmount: coupons.minimumAmount,
           maxUses: coupons.maxUses,
           maxUsesPerRider: coupons.maxUsesPerRider,
           usageCount: coupons.usageCount,
@@ -569,6 +581,30 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       const c = lockedCoupon[0];
       if (!c) {
         throw new Error('COUPON_NOT_FOUND');
+      }
+
+      // Audit pass-7 codex MED-1: status / window / currency rechecks
+      // under the lock. These mirror `validateCoupon` (queries/finances.ts)
+      // exactly so a coupon tightened mid-booking-flow is rejected here
+      // even though the pre-flight already passed. The route maps these
+      // throws back to 422 INVALID_COUPON for the rider.
+      if (c.status !== 'active') {
+        throw new Error('COUPON_INACTIVE');
+      }
+      const now = new Date();
+      if (c.expiresAt && now > c.expiresAt) {
+        throw new Error('COUPON_EXPIRED');
+      }
+      if (c.startsAt && now < c.startsAt) {
+        throw new Error('COUPON_NOT_STARTED');
+      }
+      // Booking currency defaults to AED upstream when unset — same as
+      // `validateCoupon`'s `params.currency` fallback. The comparison
+      // upper-cases both sides for tolerance against case-drift between
+      // adapters / storage.
+      const bookingCurrency = (data.currency ?? 'AED').toUpperCase();
+      if (c.currency && c.currency.toUpperCase() !== bookingCurrency) {
+        throw new Error('COUPON_CURRENCY_MISMATCH');
       }
 
       if (c.maxUses != null && c.usageCount >= c.maxUses) {
@@ -595,6 +631,16 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       // is omitted (legacy callers); the recompute then derives the
       // pre-discount value as amount + discountAmount.
       const gross = data.grossAmount ?? (data.amount ?? 0) + (data.discountAmount ?? 0);
+
+      // Audit pass-7 codex MED-1: minimumAmount recheck against the
+      // post-lock value. An admin who raised `minimumAmount` between
+      // pre-flight and now no longer leaks the looser pre-flight gate.
+      // `minimumAmount` is in the coupon's currency (verified parity
+      // above) so the comparison is meaningful.
+      if (c.minimumAmount != null && gross < c.minimumAmount) {
+        throw new Error('COUPON_MIN_AMOUNT_NOT_MET');
+      }
+
       recomputedDiscount = calculateCouponDiscount({
         amount: gross,
         discountType: c.discountType as 'percentage' | 'fixed',
