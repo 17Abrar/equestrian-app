@@ -464,6 +464,12 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       ? (payload.data?.payment_intent_id ?? payload.data?.id)
       : payload.data?.id;
 
+    // Audit pass-7 codex HIGH-1 (2026-05-25): for refund events, `payload.data.id`
+    // IS the refund's own ID — surface as `providerRefundId` so
+    // `applyProviderRefund` dedups admin-route + webhook double-records.
+    const providerRefundId =
+      isRefundEvent && typeof payload.data?.id === 'string' ? payload.data.id : undefined;
+
     return {
       eventId,
       eventType: payload.event ?? 'unknown',
@@ -474,6 +480,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       currency,
       refundStatus,
       refundAmountMinor,
+      providerRefundId,
       // Audit F-22 / F-24 (2026-05-07 r5): description for recovery
       // when neither provider_payment_id nor metadata.bookingId resolves
       // the booking (instant-succeed race window).
