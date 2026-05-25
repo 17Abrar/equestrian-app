@@ -20,7 +20,15 @@
   // `worker-entry.mjs` wraps `.open-next/worker.js` and adds a `scheduled()`
   // export for the livery billing cron trigger. See that file for details.
   "main": "worker-entry.mjs",
-  "compatibility_date": "2025-11-01",
+  // Audit pass-7 integration LOW (2026-05-25): bumped 2025-11-01 →
+  // 2026-03-17 to match OpenNext-Cloudflare's current baseline. The
+  // 2026-03-17 date auto-enables `nodejs:worker_threads`,
+  // `nodejs:child_process`, `nodejs:perf_hooks`, etc. — we don't use
+  // any today, but staying on a 2025 date will gradually accumulate
+  // long-tail incompat surface. No runtime behaviour expected to
+  // change for our code; verify cron dispatch + Clerk middleware in
+  // smoke after deploy.
+  "compatibility_date": "2026-03-17",
   // Audit 2026-05-13 (P1): `global_fetch_strictly_public` matches the
   // OpenNext-Cloudflare `get-started` baseline. Without it,
   // `worker-entry.mjs`'s `https://internal.worker/...` fetch to dispatch
