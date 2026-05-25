@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { Webhook } from 'svix';
 import {
+  addEmailSuppression,
   claimWebhookEvent,
   markWebhookEventFailed,
   markWebhookEventProcessed,
@@ -142,9 +143,24 @@ export async function POST(request: Request) {
         bounceType: data.bounce?.subType,
         bounceMessage: data.bounce?.message,
       });
+      // Audit pass-7 followup ⑤ (2026-05-25): suppress every bounced
+      // recipient. `sendEmail` checks `isEmailSuppressed` before posting
+      // to Resend, so we won't re-send to this address until an operator
+      // retires the suppression. Suppress on ANY bounce subtype (hard /
+      // soft / undetermined) — soft is theoretically transient but
+      // operationally we'd rather a club admin manually retire than
+      // re-burn the recipient mid-incident.
+      for (const recipient of recipients) {
+        await addEmailSuppression({
+          email: recipient,
+          reason: 'bounced',
+          source: 'resend_webhook',
+          bounceSubtype: data.bounce?.subType,
+        });
+      }
     } else if (event.type === 'email.complained') {
       // Spam complaint — most severe. Same recipient should never be
-      // emailed again. Phase 2 will add to a suppression list.
+      // emailed again.
       logger.error('resend_email_complained', {
         requestId,
         svixId,
@@ -154,6 +170,14 @@ export async function POST(request: Request) {
         subject: data.subject,
         feedbackType: data.complaint?.feedbackType,
       });
+      // Audit pass-7 followup ⑤ (2026-05-25): suppress every complainant.
+      for (const recipient of recipients) {
+        await addEmailSuppression({
+          email: recipient,
+          reason: 'complained',
+          source: 'resend_webhook',
+        });
+      }
     } else if (event.type === 'email.failed') {
       logger.warn('resend_email_failed', {
         requestId,

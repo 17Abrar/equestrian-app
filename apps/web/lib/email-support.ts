@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { after } from 'next/server';
+import { isEmailSuppressed } from '@equestrian/db/queries';
 import { logger } from './logger';
 
 const RESEND_BASE_URL = process.env.RESEND_BASE_URL ?? 'https://api.resend.com';
@@ -43,6 +44,19 @@ async function postOperationalEmail(args: SendArgs): Promise<void> {
     return;
   }
   const from = envFrom ?? 'Cavaliq <onboarding@resend.dev>';
+
+  // Audit pass-7 followup ⑤ (2026-05-25): suppression-list check —
+  // mirrors `sendEmail`. Operational mail (privacy intake replies,
+  // account-deletion notices, support replies) still hits Resend's
+  // sender-reputation pool, so a bounced operational address is just
+  // as harmful as a bounced rider address.
+  if (await isEmailSuppressed(args.to)) {
+    logger.warn('operational_email_skipped_by_suppression', {
+      to: args.to,
+      subject: args.subject,
+    });
+    return;
+  }
 
   try {
     const response = await fetch(`${RESEND_BASE_URL}/emails`, {
