@@ -15,7 +15,7 @@ import {
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { LiveryPaymentReceived } from '@equestrian/email-templates/livery-payment-received';
 import { rawDb, writeTransaction } from '@equestrian/db';
-import { bookings, clubs, clubMembers, horses } from '@equestrian/db/schema';
+import { bookingRefunds, bookings, clubs, clubMembers, horses } from '@equestrian/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { cancelBookingForPaymentFailure } from '@/lib/bookings/cancel-on-payment-failure';
@@ -74,6 +74,15 @@ async function applyCumulativeRefundFromWebhook(args: {
   bookingId: string;
   cumulativeTarget: number;
   eventType: string;
+  // Audit pass-7 followup (2026-05-25): provider + eventId let us write
+  // a corresponding `booking_refunds` row when the cumulative-derived
+  // delta is non-zero, so cumulative-path refunds also show up in the
+  // dedup table. The provider-side dedup is already handled by
+  // `webhook_events` (PRIMARY KEY on (provider, event_id)), so this is
+  // primarily about audit-trail completeness — every advance to the
+  // booking ledger has a corresponding row in `booking_refunds`.
+  provider: 'stripe' | 'n_genius' | 'ziina';
+  eventId: string;
 }): Promise<CumulativeRefundResult> {
   let lastSeenLedger = 0;
   for (let attempt = 0; attempt < CUMULATIVE_REFUND_RETRY_ATTEMPTS; attempt += 1) {
@@ -136,6 +145,28 @@ async function applyCumulativeRefundFromWebhook(args: {
       if (!updatedRow) {
         return { kind: 'cas_skip' as const, liveLedger };
       }
+
+      // Audit pass-7 followup (2026-05-25): mirror the explicit-delta
+      // path by recording the cumulative-derived delta in
+      // `booking_refunds`. Synthetic provider_refund_id keyed on the
+      // event_id with a `cumulative:` prefix so it can never collide
+      // with a real per-refund ID surfaced by an adapter (which are
+      // opaque provider strings like `re_…`, `pi_…`, hex hashes).
+      // ON CONFLICT DO NOTHING — if the same cumulative event somehow
+      // re-fires past the webhook_events dedup (it shouldn't, but
+      // belt-and-braces), we don't double-insert.
+      await tx
+        .insert(bookingRefunds)
+        .values({
+          clubId: args.clubId,
+          bookingId: args.bookingId,
+          provider: args.provider,
+          providerRefundId: `cumulative:${args.eventId}`,
+          amountMinorUnits: delta,
+        })
+        .onConflictDoNothing({
+          target: [bookingRefunds.bookingId, bookingRefunds.providerRefundId],
+        });
 
       return {
         kind: 'recorded' as const,
@@ -589,6 +620,8 @@ export async function applyPaymentWebhook({
       bookingId: bookingRef.bookingId,
       cumulativeTarget,
       eventType: event.eventType,
+      provider,
+      eventId: event.eventId,
     });
 
     if (result.kind === 'recorded') {
