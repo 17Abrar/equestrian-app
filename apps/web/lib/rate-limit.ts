@@ -1,4 +1,5 @@
 import { Ratelimit } from '@upstash/ratelimit';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getRedis as getSharedRedis } from './redis';
 import { logger } from './logger';
 
@@ -66,6 +67,33 @@ async function upstashCheck(key: string, config: RateLimitConfig): Promise<RateL
   if (!limiter) return null;
   const result = await limiter.limit(key);
   const retryAfterMs = result.success ? null : Math.max(0, result.reset - Date.now());
+
+  // Audit pass-7 followup ② (2026-05-25): hand the limiter's `pending`
+  // promise to Cloudflare's `ctx.waitUntil` so the multi-region
+  // replication / cache writes (the Lua script's tail work) survive the
+  // response flush. Without this, a cold-start isolate that's about to
+  // be torn down right after returning the rate-limit decision can drop
+  // the replication side-effect, leaving downstream regions briefly
+  // out-of-sync on the counter.
+  //
+  // `getCloudflareContext()` throws when called outside the Workers
+  // runtime (e.g. unit tests). Wrap in try/catch — failing to enroll the
+  // pending task isn't a correctness bug for the immediate request, just
+  // a slight regression to the pre-followup behaviour. `analytics: false`
+  // in `getLimiter` already keeps the pending work narrow.
+  // Compare to undefined explicitly — `if (result.pending)` would trip
+  // `@typescript-eslint/no-misused-promises` (truthy check on a Promise
+  // is misleading; a never-resolved promise is still truthy and a
+  // contributor might assume awaiting is intended).
+  if (result.pending !== undefined) {
+    try {
+      const cf = getCloudflareContext();
+      cf.ctx.waitUntil(result.pending);
+    } catch {
+      // Not in a Workers runtime — silent. Same effect as pre-followup.
+    }
+  }
+
   return {
     allowed: result.success,
     remaining: Math.max(0, result.remaining),
