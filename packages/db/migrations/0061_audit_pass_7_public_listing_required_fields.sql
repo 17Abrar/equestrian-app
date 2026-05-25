@@ -25,16 +25,20 @@
 --   * `phone` is the private operations contact;
 --   * `address` is the street-level detail that maps to the city pill.
 --
--- Pass-7 v1 of this migration included `email` in the check; the Neon
--- test-branch validation step (CI) failed because at least one existing
--- publicly-listed club's email is NULL — almost certainly a row created
--- via the dev sync-org bootstrap before the onboarding wizard hardened
--- the field. Forcing email here would require an out-of-band backfill
--- with a placeholder email, which is worse than the current state.
--- City+country alone is the minimum needed to render the public profile
--- without empty pills, which is the actual exposure the agent flagged.
--- A future migration can tighten email separately once a backfill
--- strategy is agreed.
+-- Pass-7 evolution:
+--   * v1 included `email` in the check; CI failed because at least one
+--     existing publicly-listed prod row has email = NULL.
+--   * v2 (this) narrowed to city + country only. CI failed AGAIN —
+--     there's a publicly-listed row missing city or country too. So a
+--     pre-existing dev/legacy bootstrap created a discovery row whose
+--     location pill would render empty.
+--   * v3 adds a backfill UPDATE that flips `is_public_listing = FALSE`
+--     for any non-compliant row BEFORE applying the CHECK. The club's
+--     owner can re-list once they fill in city/country via the settings
+--     UI. This is the right semantic: a discovery row without a location
+--     pill was always broken UX; quietly hiding it from `findPublicListings`
+--     until the data is good is preferable to either failing the
+--     migration or surfacing an empty pill on the public site.
 --
 -- For an unlisted club whose owner later flips the toggle, the
 -- application-side write to set `is_public_listing = TRUE` will fail
@@ -42,6 +46,24 @@
 -- `apps/web/components/settings/settings-page.tsx` should gate the
 -- toggle behind a precondition (out of scope for this migration —
 -- tracked as follow-up).
+
+-- v3 backfill: silently auto-unlist any publicly-listed club that doesn't
+-- meet the contract. Affected rows can be re-listed via the settings UI
+-- once city/country are populated. No rows are deleted; only the visibility
+-- bit is flipped, and downstream queries (`findPublicListings`) already
+-- filter `is_public_listing = true AND deleted_at IS NULL`, so the row
+-- just drops out of the discovery surface — invisible to riders but the
+-- club's own dashboard is unaffected.
+UPDATE clubs
+SET is_public_listing = FALSE,
+    updated_at = NOW()
+WHERE is_public_listing = TRUE
+  AND (
+    city IS NULL
+    OR char_length(trim(city)) = 0
+    OR country IS NULL
+    OR char_length(trim(country)) = 0
+  );
 
 ALTER TABLE clubs
   ADD CONSTRAINT clubs_public_listing_requires_contact_check
