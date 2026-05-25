@@ -170,6 +170,23 @@ export const clubs = pgTable(
       'clubs_booking_payment_timeout_minutes_range',
       sql`${table.bookingPaymentTimeoutMinutes} BETWEEN 1 AND 60`,
     ),
+    // Audit pass-7 (2026-05-25 LOW-5): a publicly-listed club MUST have
+    // the contact fields that the `/c/[slug]` profile page and the
+    // discovery rider funnel surface. The application enforces this at
+    // the onboarding-wizard write boundary, but `sync-org` (dev) and
+    // direct DB writes bypass that, and the row would render with
+    // `null` city/country pills + empty receipt `From:` headers. See
+    // migration 0061. Phone and address are NOT in the check because
+    // they are private operations contacts, not public profile fields.
+    check(
+      'clubs_public_listing_requires_contact_check',
+      sql`${table.isPublicListing} = FALSE
+        OR (
+          ${table.city} IS NOT NULL AND char_length(trim(${table.city})) > 0
+          AND ${table.country} IS NOT NULL AND char_length(trim(${table.country})) > 0
+          AND ${table.email} IS NOT NULL AND char_length(trim(${table.email})) > 0
+        )`,
+    ),
   ],
 );
 
