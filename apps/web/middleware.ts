@@ -71,7 +71,12 @@ function buildCsp(nonce: string): string {
     // public-read host where uploaded objects live (already in img-src
     // for previews; not needed for connect since we don't fetch them
     // via JS).
-    `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://*.r2.cloudflarestorage.com https://maps.googleapis.com`,
+    // Audit pass-7 integration LOW (2026-05-25): dropped
+    // `https://maps.googleapis.com` from connect-src — recursive search
+    // of `apps/web` + `apps/mobile` found zero references to Google Maps
+    // SDKs or that host. CSP least-privilege: re-add when (and if) the
+    // Maps feature ships.
+    `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://*.r2.cloudflarestorage.com`,
     `frame-src 'self' ${CLERK_FRAME} ${STRIPE_FRAME}`,
     "worker-src 'self' blob:",
     "object-src 'none'",

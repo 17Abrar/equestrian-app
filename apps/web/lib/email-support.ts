@@ -25,7 +25,24 @@ async function postOperationalEmail(args: SendArgs): Promise<void> {
     logger.warn('operational_email_skipped_no_key', { to: args.to, subject: args.subject });
     return;
   }
-  const from = process.env.EMAIL_FROM ?? 'Cavaliq <onboarding@resend.dev>';
+  // Audit pass-7 integration LOW (2026-05-25): match the audit D-2 fix
+  // on `lib/email.ts` — refuse to fall back to `onboarding@resend.dev`
+  // in production. A privacy-intake or support reply going from the
+  // Resend sandbox sender in prod confuses the recipient (they don't
+  // recognise the from-address as Cavaliq) and burns Resend's shared
+  // sandbox reputation. Triggers if EMAIL_FROM is somehow unset during
+  // a partial rotation; bail to a structured error log so on-call
+  // sees the misconfiguration immediately.
+  const envFrom = process.env.EMAIL_FROM;
+  if (!envFrom && process.env.NODE_ENV === 'production') {
+    logger.error('operational_email_from_unset_in_prod', {
+      to: args.to,
+      subject: args.subject,
+      note: 'EMAIL_FROM is unset; refusing to send from sandbox sender. Operator-actionable.',
+    });
+    return;
+  }
+  const from = envFrom ?? 'Cavaliq <onboarding@resend.dev>';
 
   try {
     const response = await fetch(`${RESEND_BASE_URL}/emails`, {

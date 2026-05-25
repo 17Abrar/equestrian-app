@@ -762,6 +762,8 @@ These are real bugs that were written and shipped in this project before. Do NOT
 
 10. **Next.js Image component**: Don't use `<img>` tags. Use `next/image` `<Image>` component with proper `width`, `height`, and `alt` props. If using external URLs, configure `remotePatterns` in `next.config.js`.
 
+11. **`@neondatabase/serverless` pinned to `0.10.4` (exact, no caret)**: `1.0.0` introduced tagged-template enforcement that breaks `drizzle-orm/neon-http` (drizzle-orm issue #5208, still unresolved as of May 2026). If you `pnpm up @neondatabase/serverless` blindly, every HTTP query through Drizzle will silently fail at runtime — `tsc --noEmit` won't catch it because the change is at the SQL-tagged-template behaviour layer. Both `apps/web/package.json` and `packages/db/package.json` are exact-pinned. Don't add a caret; don't bump without first verifying drizzle-orm has shipped a compatible release.
+
 **If you're about to write code that touches any of these areas, STOP and re-read the relevant pitfall first.**
 
 ---

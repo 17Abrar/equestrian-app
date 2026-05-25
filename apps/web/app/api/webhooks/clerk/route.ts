@@ -279,6 +279,13 @@ async function handlePost(request: Request) {
       case 'organization.updated': {
         const orgData = (event as OrganizationEvent).data;
 
+        // Audit pass-7 integration LOW (2026-05-25): intentionally NOT
+        // mirroring Clerk org `slug` renames to `clubs.slug`. Cavaliq
+        // owns the public discovery URL (`/c/[slug]`); Clerk's org slug
+        // is internal billing/dashboard scaffolding. The two slugs were
+        // only co-equal at `organization.created` time. A future change
+        // that "fixes" this would silently break every published club
+        // discovery URL the moment an admin renames their org in Clerk.
         await db
           .update(clubs)
           .set({
