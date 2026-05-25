@@ -322,12 +322,22 @@ export const stripeAdapter: PaymentProviderAdapter = {
       };
     } catch (err) {
       if (err instanceof PaymentProviderError) throw err;
+      // Audit pass-7 integration MED-1 (2026-05-25): mirror the refund-path
+      // retryable expression — `createHostedCheckout` is wrapped by
+      // `withProviderRetry` in the booking payment route, but pre-fix the
+      // catch never set `retryable:true` so transient Stripe 5xx surfaced
+      // immediately.
+      const isStripeRetryable =
+        err instanceof Stripe.errors.StripeConnectionError ||
+        (err instanceof Stripe.errors.StripeAPIError &&
+          typeof err.statusCode === 'number' &&
+          (err.statusCode >= 500 || err.statusCode === 429));
       throw new PaymentProviderError(
         'CREATE_CHECKOUT_FAILED',
         err instanceof Error
           ? scrubStripeErrorMessage(err.message)
           : 'Stripe Checkout Session creation failed',
-        { cause: err },
+        { cause: err, retryable: isStripeRetryable },
       );
     }
   },
@@ -373,12 +383,22 @@ export const stripeAdapter: PaymentProviderAdapter = {
       };
     } catch (err) {
       if (err instanceof PaymentProviderError) throw err;
+      // Audit pass-7 integration MED-1 (2026-05-25): mirror the refund-path
+      // retryable expression here. Previously only `StripeConnectionError`
+      // was marked retryable on the create path, so a transient Stripe 5xx
+      // would surface 502 to the rider with no retry, while the refund
+      // path correctly retried 5xx/429. Asymmetric — closing it.
+      const isStripeRetryable =
+        err instanceof Stripe.errors.StripeConnectionError ||
+        (err instanceof Stripe.errors.StripeAPIError &&
+          typeof err.statusCode === 'number' &&
+          (err.statusCode >= 500 || err.statusCode === 429));
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
         err instanceof Error
           ? scrubStripeErrorMessage(err.message)
           : 'Stripe PaymentIntent creation failed',
-        { cause: err, retryable: err instanceof Stripe.errors.StripeConnectionError },
+        { cause: err, retryable: isStripeRetryable },
       );
     }
   },
