@@ -596,6 +596,16 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/vnd.ni-payment.v2+json',
           Accept: 'application/vnd.ni-payment.v2+json',
+          // Audit pass-7 integration LOW-4 (2026-05-25): symmetric with
+          // the refund POST (added in codex HIGH-2). The `orderReference`
+          // hash (`merchantOrderReference`) already provides resource-
+          // side dedup — N-Genius rejects a duplicate ref with HTTP 409
+          // — but sending the standard Idempotency-Key header too gives
+          // us protocol-level replay protection on transient retries
+          // (e.g. when `withProviderRetry` re-attempts after a 5xx).
+          // The route mints `booking_${booking.id}` as the stable key,
+          // so the gateway treats a retry as the same operation.
+          'Idempotency-Key': input.idempotencyKey,
         },
         body: JSON.stringify(body),
       },
