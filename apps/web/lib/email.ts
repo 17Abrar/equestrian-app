@@ -4,6 +4,7 @@ import { render } from '@react-email/components';
 import { after } from 'next/server';
 import { rawDb } from '@equestrian/db';
 import { clubs, type NotificationPreferences } from '@equestrian/db/schema';
+import { isEmailSuppressed } from '@equestrian/db/queries';
 import { eq } from 'drizzle-orm';
 import { logger } from './logger';
 import type { ReactElement } from 'react';
@@ -156,6 +157,22 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailSendResul
     return { sent: false, error: 'EMAIL_FROM not configured in production' };
   }
 
+  // Audit pass-7 followup ⑤ (2026-05-25): suppression-list check. The
+  // Resend webhook handler inserts rows on `email.bounced` /
+  // `email.complained` events; this short-circuit prevents us from
+  // re-sending to a recipient whose mailbox is gone or who marked us
+  // as spam. Critical for protecting Resend sender reputation in a
+  // multi-tenant SaaS where one club's bad list would burn deliverability
+  // for every other club. Operator can retire a suppression via
+  // `retireEmailSuppression` when the recipient asks to be re-added.
+  if (await isEmailSuppressed(params.to)) {
+    logger.warn('email_skipped_by_suppression', {
+      to: params.to,
+      subject: params.subject,
+    });
+    return { sent: false, error: 'recipient is on the suppression list' };
+  }
+
   try {
     const html = await render(params.template);
 
@@ -198,6 +215,17 @@ export async function sendPlainTextEmail(
   const fromAddress = resolveFromAddress();
   if (!fromAddress) {
     return { sent: false, error: 'EMAIL_FROM not configured in production' };
+  }
+
+  // Audit pass-7 followup ⑤ (2026-05-25): suppression-list check —
+  // mirrors `sendEmail`. Plain-text path is used for system notices,
+  // same suppression contract applies.
+  if (await isEmailSuppressed(params.to)) {
+    logger.warn('email_skipped_by_suppression', {
+      to: params.to,
+      subject: params.subject,
+    });
+    return { sent: false, error: 'recipient is on the suppression list' };
   }
 
   const result = await postResendEmail({
