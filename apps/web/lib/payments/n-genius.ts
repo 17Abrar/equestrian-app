@@ -782,6 +782,27 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/vnd.ni-payment.v2+json',
           Accept: 'application/vnd.ni-payment.v2+json',
+          // Audit pass-7 codex HIGH-2 (2026-05-25): without an
+          // idempotency reference, a 5xx/429 + retry can issue the
+          // refund twice. The route's `withProviderRetry` wrapper
+          // unconditionally retries on `retryable:true`; the adapter
+          // marks 5xx/429 as retryable below. Before this header was
+          // added, that combination was the bug.
+          //
+          // N-Genius v2 API accepts `Idempotency-Key` on the refund
+          // endpoint (per Network International TPP docs). The route
+          // already mints a stable key keyed on
+          // `refund_<bookingId>_<refundedSoFar>_<finalAmount>` so two
+          // calls for the same logical refund collide on the gateway
+          // side too — even if our DB dedup (booking_refunds, PR-1)
+          // already prevents Cavaliq from re-recording, this prevents
+          // the provider from actually charging-back the rider twice.
+          //
+          // If a future gateway version rejects this header (e.g. 400
+          // with `unrecognized header` body), pull `Idempotency-Key`
+          // out and instead set `retryable: false` on the throw below
+          // — operators get a clean error and can manually reissue.
+          'Idempotency-Key': input.idempotencyKey,
         },
         body: JSON.stringify({
           amount: {
@@ -798,6 +819,10 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
       // Audit F-10 (2026-05-08 r6): mark 5xx / 429 retryable so the
       // route's `withProviderRetry` wrapper actually re-attempts.
       // Mirrors `createPayment` posture at line 368.
+      // Audit pass-7 codex HIGH-2 (2026-05-25): retry is now safe
+      // because the `Idempotency-Key` header above guarantees the
+      // gateway treats the second request as a replay (returns the
+      // original refund result, doesn't issue a second one).
       throw new PaymentProviderError(
         'REFUND_FAILED',
         `N-Genius refund failed (${refundRes.status}): ${safeProviderPreview(text)}`,
