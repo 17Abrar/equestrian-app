@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import {
   adminGetPaymentAccountByProvider,
+  applyProviderRefund,
   getBookingById,
-  recordBookingRefund,
 } from '@equestrian/db/queries';
 import { writeTransaction } from '@equestrian/db';
 import { bookings as bookingsTable } from '@equestrian/db/schema';
@@ -264,13 +264,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             };
           }
 
-          // Inside the transaction, the CAS in recordBookingRefund is a
-          // tautology — we hold the row lock — but it's cheap and
-          // protects against a future caller that bypasses the lock.
-          const updated = await recordBookingRefund(ctx.clubId, bookingId, finalAmount);
-          if (!updated) {
-            // Should be unreachable under FOR UPDATE; logged anyway so a
-            // bypass surfaces.
+          // Audit pass-7 codex HIGH-1 (2026-05-25): switched from
+          // `recordBookingRefund` to `applyProviderRefund` which dedups
+          // by (booking_id, provider_refund_id) in the new
+          // `booking_refunds` table. The matching provider webhook will
+          // later arrive carrying the same `providerRefundId` and will
+          // no-op cleanly instead of double-counting.
+          const applied = await applyProviderRefund(ctx.clubId, bookingId, finalAmount, {
+            providerRefundId: refund.providerRefundId,
+            provider,
+          });
+          if (!applied) {
+            // Booking missing or refund-exceeds-amount overflow. The
+            // pre-lock check + FOR UPDATE serialisation should make this
+            // unreachable for the happy path; log and surface as race.
             logger.error('booking_refund_ledger_conflict', {
               bookingId,
               clubId: ctx.clubId,
@@ -282,10 +289,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return { kind: 'race' as const, refundId: refund.providerRefundId };
           }
 
+          // `applied.recorded === false` here would mean the provider
+          // returned a refundId we'd already applied — extremely rare
+          // (would require the adapter retry to dedup on the provider
+          // side too). Surface as a soft success: the prior apply already
+          // moved the ledger; report current state.
+          if (!applied.recorded) {
+            logger.warn('booking_refund_already_applied_at_admin_route', {
+              bookingId,
+              clubId: ctx.clubId,
+              provider,
+              providerRefundId: refund.providerRefundId,
+              requestedAmount: finalAmount,
+            });
+          }
+
           return {
             kind: 'ok' as const,
             refund,
-            updated,
+            updated: applied.state,
             liveSoFar,
             liveCancellationFee,
             finalAmount,
