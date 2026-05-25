@@ -485,3 +485,45 @@ export const auditLog = pgTable(
     }).onDelete('set null'),
   ],
 );
+
+/**
+ * Audit pass-7 integration followup ⑤ (2026-05-25): Resend bounce /
+ * complaint suppression list. The Resend webhook handler (`POST
+ * /api/webhooks/resend`) inserts a row whenever an `email.bounced` or
+ * `email.complained` event arrives, and `sendEmail` / operational mail
+ * paths check `isEmailSuppressed(email)` before posting to Resend.
+ *
+ * Migration 0063 — see that file for design notes.
+ */
+export const emailSuppressions = pgTable(
+  'email_suppressions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: varchar('email', { length: 320 }).notNull(),
+    reason: varchar('reason', { length: 20 }).notNull(),
+    bounceSubtype: varchar('bounce_subtype', { length: 20 }),
+    source: varchar('source', { length: 20 }).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Non-null retires the suppression so a future re-bounce / re-complaint
+    // can re-insert without violating UNIQUE(email). Preserves history.
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+  },
+  (table) => [
+    unique('email_suppressions_email_unique').on(table.email),
+    // The hot path is `isSuppressed(email)`. Partial index on the
+    // non-retired rows keeps it index-only. Mirrored from migration 0063.
+    index('idx_email_suppressions_active').on(table.email).where(sql`retired_at IS NULL`),
+    // CHECK constraints from migration 0063 — mirrored so a future
+    // drizzle-kit regenerate doesn't strip them. Same shape as
+    // `livery_invoices_payment_provider_check` pattern.
+    check(
+      'email_suppressions_reason_check',
+      sql`${table.reason} IN ('bounced', 'complained', 'manual')`,
+    ),
+    check(
+      'email_suppressions_source_check',
+      sql`${table.source} IN ('resend_webhook', 'manual')`,
+    ),
+  ],
+);
