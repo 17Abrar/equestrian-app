@@ -8,7 +8,9 @@ import {
   text,
   index,
   unique,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { liveryInvoiceStatusEnum, subscriptionTierEnum } from './enums';
 import { clubs } from './clubs';
 
@@ -81,5 +83,16 @@ export const platformSubscriptionInvoices = pgTable(
     index('idx_platform_invoices_club').on(table.clubId),
     index('idx_platform_invoices_status_due').on(table.status, table.dueDate),
     index('idx_platform_invoices_provider_payment').on(table.providerPaymentId),
+    // Audit pass-7 (2026-05-25 MED-2): see migration 0060. `payment_provider`
+    // stays `varchar(50)` rather than the `payment_provider` enum because
+    // `'ziina_platform'` (the only value in use today) is intentionally
+    // distinct from `'ziina'` — it disambiguates Cavaliq's platform Ziina
+    // account from a club's own connected Ziina account during webhook
+    // dispatch (see `apps/web/app/api/webhooks/ziina-platform/route.ts`).
+    // The CHECK constraint still gives us typo-protection.
+    check(
+      'platform_subscription_invoices_payment_provider_check',
+      sql`${table.paymentProvider} IS NULL OR ${table.paymentProvider} IN ('ziina_platform')`,
+    ),
   ],
 );
