@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
-import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
+import { bookingSlots, bookings, lessonTypes, arenas, bookingRefunds } from '../schema/bookings';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
@@ -891,6 +891,135 @@ export async function recordBookingRefund(
       });
 
     return result[0] ?? null;
+  });
+}
+
+/**
+ * Audit pass-7 codex HIGH-1 (2026-05-25): idempotent-by-provider-refund-id
+ * sibling of `recordBookingRefund`.
+ *
+ * Before this function existed, the admin refund route and the matching
+ * provider webhook BOTH called `recordBookingRefund(amount)` for the same
+ * refund. The CAS predicate in `recordBookingRefund` only protects
+ * concurrent races — it does NOT prevent sequential same-delta calls.
+ * Real exposure: N-Genius `PARTIALLY_REFUNDED` events carry per-event
+ * deltas; an admin partial refund + the matching webhook double-recorded.
+ *
+ * This function:
+ *   1. INSERTs (booking_id, provider_refund_id) into `booking_refunds`
+ *      with ON CONFLICT DO NOTHING.
+ *   2. If the row was inserted: advances the booking ledger via the same
+ *      shape as `recordBookingRefund` and returns the new state.
+ *   3. If a conflict fired (the refund was already recorded): returns the
+ *      current booking state without touching the ledger.
+ *
+ * Both call sites — admin route + webhook explicit-delta path — pass the
+ * provider's refund ID, so the second caller no-ops cleanly.
+ *
+ * The cumulative path (`charge.refunded` with empty `refunds.data`) is
+ * self-correcting (`delta = max(0, cumulative - current_ledger)`) and
+ * continues to use `recordBookingRefund` directly — no dedup table needed.
+ *
+ * Returns:
+ *   * `{ recorded: true,  state }`  on the first apply (new ledger state).
+ *   * `{ recorded: false, state }`  on duplicate (current ledger state).
+ *   * `null`                        on booking-not-found, amount-zero,
+ *                                   or overflow (refund > booking amount).
+ */
+export async function applyProviderRefund(
+  clubId: string,
+  bookingId: string,
+  amountMinor: number,
+  options: {
+    providerRefundId: string;
+    provider: 'stripe' | 'n_genius' | 'ziina';
+  },
+): Promise<{
+  recorded: boolean;
+  state: { id: string; paymentStatus: string; refundedAmountMinor: number };
+} | null> {
+  if (amountMinor <= 0) return null;
+  if (!options.providerRefundId || options.providerRefundId.length === 0) return null;
+
+  return writeTransaction(async (tx) => {
+    // FOR UPDATE on the booking row before we touch either table —
+    // serialises any concurrent admin/webhook race on the same booking.
+    const existing = await tx
+      .select({
+        id: bookings.id,
+        amount: bookings.amount,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+        paymentStatus: bookings.paymentStatus,
+      })
+      .from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .for('update')
+      .limit(1);
+
+    const current = existing[0];
+    if (!current || current.amount == null) return null;
+
+    // Try to claim the refund. ON CONFLICT DO NOTHING returns an empty
+    // array on duplicate; otherwise the inserted row.
+    const claimed = await tx
+      .insert(bookingRefunds)
+      .values({
+        clubId,
+        bookingId,
+        provider: options.provider,
+        providerRefundId: options.providerRefundId,
+        amountMinorUnits: amountMinor,
+      })
+      .onConflictDoNothing({
+        target: [bookingRefunds.bookingId, bookingRefunds.providerRefundId],
+      })
+      .returning({ id: bookingRefunds.id });
+
+    if (claimed.length === 0) {
+      // Duplicate — this (booking_id, provider_refund_id) was already
+      // applied (either by the admin route or by a prior webhook
+      // delivery). Return the current ledger state without re-applying.
+      return {
+        recorded: false,
+        state: {
+          id: current.id,
+          paymentStatus: current.paymentStatus,
+          refundedAmountMinor: current.refundedAmountMinor,
+        },
+      };
+    }
+
+    // First time we've seen this refund — advance the ledger. Same shape
+    // as `recordBookingRefund` but the CAS predicate is dropped because
+    // we already hold the row lock from the SELECT FOR UPDATE above and
+    // the dedup table guards against the original double-call bug.
+    const newRefunded = current.refundedAmountMinor + amountMinor;
+    if (newRefunded > current.amount) {
+      // Defensive: shouldn't happen if upstream validated, but a
+      // refund event for more than the booking amount would corrupt
+      // the ledger. Bail and surface to operator triage.
+      return null;
+    }
+    const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
+
+    const result = await tx
+      .update(bookings)
+      .set({
+        refundedAmountMinor: newRefunded,
+        paymentStatus: newStatus,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .returning({
+        id: bookings.id,
+        paymentStatus: bookings.paymentStatus,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+      });
+
+    const updated = result[0];
+    if (!updated) return null;
+
+    return { recorded: true, state: updated };
   });
 }
 

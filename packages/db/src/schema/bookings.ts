@@ -559,3 +559,65 @@ export const waitlist = pgTable(
     }).onDelete('cascade'),
   ],
 );
+
+/**
+ * Audit pass-7 codex HIGH-1 (2026-05-25): per-refund idempotency record.
+ *
+ * The admin refund route and the matching provider webhook both used to
+ * call `recordBookingRefund(amount)` for the same refund — the CAS
+ * inside the function only protected concurrent races, not sequential
+ * same-delta calls. Real exposure: N-Genius `PARTIALLY_REFUNDED` events
+ * carry per-event deltas; an admin partial refund + the matching
+ * webhook double-recorded.
+ *
+ * Each row here represents one provider-side refund. The new helper
+ * `applyProviderRefund(...)` does an INSERT ... ON CONFLICT DO NOTHING
+ * and only advances the booking ledger on a successful insert. Both
+ * call sites pass the provider's refund ID, so the second caller no-ops
+ * cleanly.
+ *
+ * The `reversed_at` column marks the refund as later reversed by a
+ * `pending → failed` provider webhook (audit B-4) without deleting the
+ * row — preserving the dedup record so a duplicate succeeded-event for
+ * the same refund doesn't re-record after the reversal.
+ *
+ * The cumulative path (`charge.refunded` with empty `refunds.data`) is
+ * self-correcting (`delta = max(0, cumulative - current_ledger)`) and
+ * doesn't use this table; it stays on the original `recordBookingRefund`.
+ */
+export const bookingRefunds = pgTable(
+  'booking_refunds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clubId: uuid('club_id')
+      .notNull()
+      .references(() => clubs.id, { onDelete: 'cascade' }),
+    bookingId: uuid('booking_id').notNull(),
+    provider: paymentProviderEnum('provider').notNull(),
+    providerRefundId: varchar('provider_refund_id', { length: 255 }).notNull(),
+    amountMinorUnits: integer('amount_minor_units').notNull(),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The core idempotency key. `applyProviderRefund` relies on the
+    // 23505 raised by this constraint to detect a replayed refund.
+    unique('booking_refunds_booking_provider_refund_unique').on(
+      table.bookingId,
+      table.providerRefundId,
+    ),
+    index('idx_booking_refunds_club_booking').on(table.clubId, table.bookingId),
+    // Lookup by `(provider, provider_refund_id)` when a webhook needs to
+    // find an existing record to mark reversed.
+    index('idx_booking_refunds_provider_refund').on(table.provider, table.providerRefundId),
+    foreignKey({
+      name: 'booking_refunds_booking_club_fk',
+      columns: [table.bookingId, table.clubId],
+      foreignColumns: [bookings.id, bookings.clubId],
+    }).onDelete('cascade'),
+    // Positive amount only. Reversals don't insert negative rows — they
+    // set `reversed_at` on the existing positive row and decrement the
+    // booking ledger.
+    check('booking_refunds_amount_positive_check', sql`${table.amountMinorUnits} > 0`),
+  ],
+);
