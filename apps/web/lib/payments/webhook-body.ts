@@ -57,4 +57,9 @@ export const WEBHOOK_BODY_CAPS = {
   clerk: 256 * 1024, // 256 KB — org events with member arrays trend larger
   n_genius: 16 * 1024, // 16 KB
   ziina: 16 * 1024, // 16 KB
+  // Resend email events are small (event type + to/from + diagnostic).
+  // Bounce events occasionally include the bounce reason string from the
+  // destination mail server — bounded to a few KB. 16 KB has comfortable
+  // headroom and rejects obvious abuse.
+  resend: 16 * 1024,
 } as const;
