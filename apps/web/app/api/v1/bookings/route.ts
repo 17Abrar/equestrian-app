@@ -442,6 +442,20 @@ export async function POST(request: NextRequest) {
           if (err.message === 'COUPON_RIDER_MAX_USES_REACHED') {
             return errorResponse('INVALID_COUPON', 'You have already used this promo code', 422);
           }
+          if (err.message === 'COUPON_FIRST_TIME_ONLY') {
+            return errorResponse(
+              'INVALID_COUPON',
+              'This promo is for first-time riders only',
+              422,
+            );
+          }
+          if (err.message === 'COUPON_LESSON_TYPE_NOT_ALLOWED') {
+            return errorResponse(
+              'INVALID_COUPON',
+              'This promo code is not valid for this lesson type',
+              422,
+            );
+          }
         }
         // Catch unique-index violations from idx_bookings_unique_rider_slot
         // and idx_bookings_unique_guest_slot. Postgres raises 23505 for these.
