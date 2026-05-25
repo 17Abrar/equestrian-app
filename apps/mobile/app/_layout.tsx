@@ -8,7 +8,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
-import { tokenCache } from '@/lib/auth';
+import * as SecureStore from 'expo-secure-store';
+import { tokenCache, CLERK_SESSION_JWT_KEY } from '@/lib/auth';
+import { captureMobileException } from '@/lib/sentry';
 import { queryClient } from '@/lib/query-client';
 import { initSentry } from '@/lib/sentry';
 import '../global.css';
@@ -62,11 +64,27 @@ function AuthGuard() {
   // serve the prior user's cached data before refetch. Centralized here
   // so every sign-out path (profile tab, delete-account screen, future
   // call sites) is covered without per-callsite plumbing.
+  //
+  // Audit pass-7 (2026-05-25 codex MED-3 / pass-6 LOW-1 deferred from
+  // PR #156): co-locate the SecureStore Clerk-JWT wipe with the cache
+  // clear. `@clerk/clerk-expo@2.x` does NOT call `tokenCache.clearToken`
+  // on `signOut()` — only on publishable-key hot-swap (verified at
+  // `createClerkInstance.js:60`). Without an explicit
+  // `SecureStore.deleteItemAsync(CLERK_SESSION_JWT_KEY)`, the JWT
+  // survives sign-out on a shared device and a hostile cold-start can
+  // resurrect the prior user's session before the auto-refresh fails.
+  // Fire-and-forget — failing the wipe shouldn't block the sign-out UX
+  // (the route-guard above already redirects to /sign-in).
   const wasSignedIn = useRef(false);
   useEffect(() => {
     if (!isLoaded) return;
     if (wasSignedIn.current && !isSignedIn) {
       queryClient.clear();
+      SecureStore.deleteItemAsync(CLERK_SESSION_JWT_KEY).catch((err: unknown) => {
+        captureMobileException(err, 'clerk_session_jwt_wipe_failed', {
+          key: CLERK_SESSION_JWT_KEY,
+        });
+      });
     }
     wasSignedIn.current = isSignedIn ?? false;
   }, [isSignedIn, isLoaded]);
