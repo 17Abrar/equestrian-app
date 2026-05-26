@@ -1,8 +1,4 @@
-// Audit 2026-05-13 (P2): no client APIs in use — this is a static
-// placeholder. Dropped the `'use client'` directive so the page can
-// render as a Server Component and shave the client bundle.
-import { Users } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { NotifyMeCard } from '@/components/community/notify-me-card';
 
 export default function RiderCommunityPage() {
   return (
@@ -11,18 +7,12 @@ export default function RiderCommunityPage() {
         <h1 className="text-2xl font-bold">Community</h1>
         <p className="text-muted-foreground">Connect with fellow riders at your club</p>
       </div>
-
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="bg-accent flex h-16 w-16 items-center justify-center rounded-full">
-            <Users className="text-muted-foreground h-8 w-8" />
-          </div>
-          <h3 className="mt-4 text-lg font-semibold">Coming Soon</h3>
-          <p className="text-muted-foreground mt-2 max-w-sm text-center text-sm">
-            Club discussions, photo sharing, and event updates will be available here. Stay tuned!
-          </p>
-        </CardContent>
-      </Card>
+      {/* Audit P0-C (2026-05-26): replaced the static "Coming soon" card
+          with an actionable waitlist signup. Email pre-fills from the
+          signed-in Clerk user. NotifyMeCard is a client component, so
+          this page is no longer a Server Component — acceptable trade
+          for the live form. */}
+      <NotifyMeCard source="web_rider" variant="rider" />
     </div>
   );
 }
