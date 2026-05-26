@@ -123,6 +123,11 @@ function generateNonce(): string {
 // without an explicit secret check. Add new public routes here
 // deliberately.
 const isPublicRoute = createRouteMatcher([
+  // Marketing landing page (2026-05-26): `/` is the public intro to
+  // Cavaliq. Signed-in admins still see it; the header offers a "Go to
+  // dashboard" CTA. The authenticated dashboard home moved to
+  // `/dashboard`.
+  '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks/stripe/(.*)',

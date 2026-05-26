@@ -854,7 +854,7 @@ export default function OnboardingPage() {
     try {
       await fetchJson('/api/v1/onboarding', { method: 'POST' });
       toast.success('Setup complete! Welcome to your dashboard.');
-      router.push('/');
+      router.push('/dashboard');
     } catch (err) {
       reportMutationError('onboarding.complete', err);
       // Audit pass-5 LOW-10 (2026-05-21): admins can deactivate a

@@ -11,14 +11,16 @@ interface PageProps {
  * Two sign-in paths that differ by post-auth destination:
  *
  *   /sign-in            → rider. Lands on /rider (rider portal home).
- *   /sign-in?as=stable  → stable owner. Lands on /, which the dashboard
- *                         layout renders as the admin overview.
+ *   /sign-in?as=stable  → stable owner. Lands on /dashboard, the admin
+ *                         overview. (2026-05-26: the public landing page
+ *                         now lives at /, so the admin home moved to
+ *                         /dashboard.)
  *
  * If the user's actual role doesn't match where the URL sends them — e.g.
  * a rider clicks "I run a stable" and signs in — the dashboard layout
- * bounces them to the right place (/rider for riders, / for admins).
- * So the URL is a *hint* about intent, not a hard gate: nobody gets locked
- * out of their actual portal.
+ * bounces them to the right place (/rider for riders, /dashboard for
+ * admins). So the URL is a *hint* about intent, not a hard gate: nobody
+ * gets locked out of their actual portal.
  *
  * `?redirect_url=` from e.g. /c/[slug] always wins.
  */
@@ -30,7 +32,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
   // Clerk's allowed-origins list in the dashboard is the first line of
   // defence; this stops an open-redirect even if that allowlist regresses.
   const safeRedirect = safeSameOriginPath(redirect_url);
-  const postSignInUrl = safeRedirect ?? (isStable ? '/' : '/rider');
+  const postSignInUrl = safeRedirect ?? (isStable ? '/dashboard' : '/rider');
 
   return (
     <div className="bg-background flex min-h-screen flex-col items-center justify-center px-4 py-10">

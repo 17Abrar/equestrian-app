@@ -13,13 +13,15 @@ const RIDER_ROLES: UserRole[] = ['rider', 'parent'];
  * CTA in that case, instead of bouncing them to /select-org.
  *
  * If the user DOES have a club and their role is admin/manager/coach/etc.,
- * we send them back to `/` so they land on the admin dashboard.
+ * we send them back to `/dashboard` so they land on the admin dashboard.
+ * (2026-05-26: admin dashboard moved from `/` to `/dashboard` when the
+ * public marketing page took over the root URL.)
  */
 export default async function RiderLayout({ children }: { children: React.ReactNode }) {
   try {
     const ctx = await getTenantContext();
     if (!RIDER_ROLES.includes(ctx.orgRole)) {
-      redirect('/');
+      redirect('/dashboard');
     }
   } catch (error) {
     if (error instanceof TenantError) {

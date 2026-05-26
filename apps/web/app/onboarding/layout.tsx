@@ -40,7 +40,7 @@ export default async function OnboardingLayout({ children }: { children: React.R
 
   // If onboarding is already done, go to dashboard
   if (ctx.onboardingCompleted) {
-    redirect('/');
+    redirect('/dashboard');
   }
 
   // Only club admins can complete onboarding
