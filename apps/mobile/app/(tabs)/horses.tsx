@@ -6,9 +6,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useHorses, type Horse } from '@/hooks/use-horses';
 import { HorseListSkeleton } from '@/components/skeletons';
 
-// Map the `horse_status` enum to a display tone + label. Kept in sync with
-// packages/db/src/schema/enums.ts `horseStatusEnum`.
-const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
+// Display tone + label for the rider-visible status badge. This screen
+// renders rider-OWNED horses (from `/api/v1/me/horses`), so the badge has
+// to reflect the rider's relationship to the horse, not just its
+// operational status. Priority order: ownership state (pending /
+// declined / retired) overrides the operational status, since a
+// pending registration with `status='available'` would otherwise read
+// as "Available" with no review context.
+//
+// Kept in sync with `horseStatusEnum` and `ownershipStatusEnum` in
+// `packages/db/src/schema/enums.ts`.
+type BadgeStyle = { bg: string; text: string; label: string };
+
+const OPERATIONAL_STATUS_STYLE: Record<string, BadgeStyle> = {
   available: { bg: 'bg-green-100', text: 'text-green-800', label: 'Available' },
   resting: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Resting' },
   injured: { bg: 'bg-red-100', text: 'text-red-800', label: 'Injured' },
@@ -16,6 +26,29 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> 
   off_site: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Off-site' },
   sold: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Sold' },
 };
+
+const OWNERSHIP_STATUS_STYLE: Record<string, BadgeStyle> = {
+  pending: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Pending review' },
+  declined: { bg: 'bg-red-100', text: 'text-red-800', label: 'Declined' },
+  retired: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Retired' },
+};
+
+function resolveBadge(horse: Horse): BadgeStyle {
+  // Ownership state takes priority — a pending or declined registration
+  // is the most important thing the owner needs to see, regardless of
+  // the horse's operational status.
+  if (horse.ownershipStatus !== 'active') {
+    const ownership = OWNERSHIP_STATUS_STYLE[horse.ownershipStatus];
+    if (ownership) return ownership;
+  }
+  return (
+    OPERATIONAL_STATUS_STYLE[horse.status] ?? {
+      bg: 'bg-gray-100',
+      text: 'text-gray-700',
+      label: horse.status,
+    }
+  );
+}
 
 export default function HorsesScreen() {
   const { data, isLoading, refetch } = useHorses();
@@ -30,12 +63,14 @@ export default function HorsesScreen() {
   // API client returns the discriminated union — split success/error for UI.
   const errorMessage = data && !data.success ? data.error.message : null;
 
-  // Audit F-7 (2026-05-07 r5 PR Sigma): `useHorses` now returns
-  // `PaginatedApiResponse<Horse>`. Narrowing on `data.success` is
-  // sufficient — the cast to `Horse[]` is gone.
+  // Audit feature-walkthrough P0-A (2026-05-26): `useHorses` now hits
+  // `/api/v1/me/horses` and returns `ApiResponse<{horses, memberships,
+  // pagination}>`. The rider-scoped envelope nests the array under
+  // `data.horses` (the previous paginated route returned the array
+  // directly under `data`).
   const horses = useMemo<Horse[]>(() => {
     if (!data || !data.success) return [];
-    return data.data;
+    return data.data.horses;
   }, [data]);
 
   return (
@@ -46,9 +81,11 @@ export default function HorsesScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View className="px-6 pb-2 pt-4">
-          <Text className="text-2xl font-bold text-gray-900">Horses</Text>
+          <Text className="text-2xl font-bold text-gray-900">My horses</Text>
           <Text className="mt-1 text-base text-gray-500">
-            {horses.length > 0 ? `${horses.length} in the stable` : 'Your stable roster'}
+            {horses.length > 0
+              ? `${horses.length} ${horses.length === 1 ? 'horse' : 'horses'} you own`
+              : 'Horses you own across your stables'}
           </Text>
         </View>
 
@@ -78,7 +115,7 @@ export default function HorsesScreen() {
             <Ionicons name="paw-outline" size={40} color="#9ca3af" />
             <Text className="mt-3 text-lg font-semibold text-gray-700">No horses yet</Text>
             <Text className="mt-1 text-center text-sm text-gray-400">
-              Once your stable adds horses, you&apos;ll see them listed here.
+              Register a horse with one of your stables and it will appear here.
             </Text>
           </View>
         )}
@@ -100,13 +137,12 @@ export default function HorsesScreen() {
 // ─── Card ────────────────────────────────────────────────────────────
 
 function HorseCard({ horse }: { horse: Horse }) {
-  const statusStyle = STATUS_STYLE[horse.status] ?? {
-    bg: 'bg-gray-100',
-    text: 'text-gray-700',
-    label: horse.status,
-  };
+  const statusStyle = resolveBadge(horse);
 
-  const subtitle = [horse.breed, horse.color].filter(Boolean).join(' · ');
+  // /me/horses is cross-club, so the rider needs to see WHICH stable
+  // this horse is at. Subtitle: "<club> · <breed> · <color>" with
+  // empties stripped.
+  const subtitle = [horse.clubName, horse.breed, horse.color].filter(Boolean).join(' · ');
 
   return (
     <View className="flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3">
