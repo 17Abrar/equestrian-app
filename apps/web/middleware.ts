@@ -180,6 +180,11 @@ const isPublicRoute = createRouteMatcher([
   // forms. Rate-limited per IP inside the handlers.
   '/api/v1/support/contact',
   '/api/v1/privacy/request',
+  // Community waitlist signup (audit P0-C, 2026-05-26). Public so
+  // signed-out prospects on the marketing page (when community ships)
+  // and the mobile / web rider tab visitors can both submit. Tight
+  // per-IP rate limit inside the handler.
+  '/api/v1/community/notify-me',
   // security.txt + privacy/terms references for crawlers / app store review.
   '/.well-known/(.*)',
 ]);
