@@ -5,6 +5,13 @@
 
 export interface RevenueDataPoint {
   date: string;
+  /**
+   * Audit P1 (2026-05-26): ISO-4217 currency code from the underlying
+   * `bookings.currency`. A club with bookings in multiple currencies
+   * produces one row per `(date, currency)` pair — the consumer must
+   * render and aggregate per currency rather than summing across them.
+   */
+  currency: string;
   revenue: number;
   count: number;
 }

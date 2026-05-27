@@ -46,17 +46,32 @@ export function ReportsPage() {
   const horses = useHorseUtilizationReport(dateFrom, dateTo);
   const cancellations = useCancellationReport(dateFrom, dateTo);
   const settingsQuery = useClubSettings();
-  // Audit F-53 (2026-05-08 r6): the AED fallback only applies while
-  // loading. On settings fetch error, render `Couldn't load` on the
-  // currency-bearing summary cards rather than mislabel SAR/KWD/QAR
-  // tenants. Mirrors the F-51 hasError surface on SummaryCard.
+  // The club's default currency is now only used as a label
+  // placeholder during loading or when the period has zero rows in
+  // every currency. Each revenue row carries its own currency (audit
+  // P1, 2026-05-26), so a settings fetch error no longer corrupts the
+  // displayed revenue figure — the per-row currency is always right.
   const currency = settingsQuery.data?.data.currency ?? 'AED';
-  const settingsErrored = settingsQuery.isError;
 
-  const totalRevenue = useMemo(() => {
-    if (!revenue.data?.data) return 0;
-    return revenue.data.data.reduce((sum, d) => sum + d.revenue, 0);
+  // Audit P1 (2026-05-26): revenue rolls up per currency. A club
+  // with AED + SAR bookings used to sum the integer minor units
+  // together and label them with the club default currency — visibly
+  // wrong as soon as both currencies are non-trivial. Group by
+  // currency, then render the dominant total in the summary card with
+  // a "+N currencies" hint when more than one is present.
+  const revenueByCurrency = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!revenue.data?.data) return map;
+    for (const row of revenue.data.data) {
+      map.set(row.currency, (map.get(row.currency) ?? 0) + row.revenue);
+    }
+    return map;
   }, [revenue.data]);
+
+  const sortedRevenueCurrencies = useMemo(
+    () => Array.from(revenueByCurrency.entries()).sort(([, a], [, b]) => b - a),
+    [revenueByCurrency],
+  );
 
   const totalBookings = useMemo(() => {
     if (!revenue.data?.data) return 0;
@@ -95,12 +110,18 @@ export function ReportsPage() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard
-          title="Revenue"
-          value={formatMoney(totalRevenue, currency)}
-          icon={TrendingUp}
+        <RevenueSummaryCard
           loading={revenue.isLoading}
-          hasError={revenue.isError || settingsErrored}
+          // Surface a settings error too when the rollup would
+          // otherwise fall back to the AED label — without this a
+          // non-AED club with zero rows in the period sees `AED 0`
+          // when their settings query fails. Codex P3 (2026-05-26).
+          hasError={
+            revenue.isError ||
+            (sortedRevenueCurrencies.length === 0 && settingsQuery.isError)
+          }
+          rollup={sortedRevenueCurrencies}
+          fallbackCurrency={currency}
         />
         <SummaryCard
           title="Bookings"
@@ -205,11 +226,18 @@ export function ReportsPage() {
                 <p className="text-muted-foreground text-sm">No revenue data in this period.</p>
               ) : (
                 revenue.data.data.map((d) => (
-                  <div key={d.date} className="flex items-center justify-between text-sm">
+                  // Key on (date, currency) — a single date can yield
+                  // multiple rows when the club bills in more than one
+                  // currency. Each row formats with its own currency,
+                  // not the club's default.
+                  <div
+                    key={`${d.date}-${d.currency}`}
+                    className="flex items-center justify-between text-sm"
+                  >
                     <span className="text-muted-foreground">{d.date}</span>
                     <div className="flex items-center gap-4">
                       <span className="text-muted-foreground">{d.count} bookings</span>
-                      <span className="font-medium">{formatMoney(d.revenue, currency)}</span>
+                      <span className="font-medium">{formatMoney(d.revenue, d.currency)}</span>
                     </div>
                   </div>
                 ))
@@ -219,6 +247,64 @@ export function ReportsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Audit P1 (2026-05-26): Revenue summary that respects per-currency
+ * bookings. The dominant currency shows in the main metric slot; any
+ * additional currencies are listed underneath with their own totals so
+ * the operator never sees a mislabeled rollup.
+ *
+ * `fallbackCurrency` is the club default — used only as a label
+ * placeholder during the loading state (where the rollup is empty)
+ * and when the period has zero bookings.
+ */
+function RevenueSummaryCard({
+  loading,
+  hasError,
+  rollup,
+  fallbackCurrency,
+}: {
+  loading: boolean;
+  hasError: boolean;
+  rollup: ReadonlyArray<[string, number]>;
+  fallbackCurrency: string;
+}) {
+  const [primary, ...rest] = rollup;
+  const primaryLabel = primary
+    ? formatMoney(primary[1], primary[0])
+    : formatMoney(0, fallbackCurrency);
+
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-4 p-6">
+        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+          <TrendingUp className="text-muted-foreground h-6 w-6" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-sm">Revenue</p>
+          {loading ? (
+            <Skeleton className="h-7 w-20" />
+          ) : hasError ? (
+            <p className="text-destructive text-sm font-medium" title="Failed to load">
+              Couldn&apos;t load
+            </p>
+          ) : (
+            <>
+              <p className="text-2xl font-bold">{primaryLabel}</p>
+              {rest.length > 0 && (
+                <div className="text-muted-foreground mt-1 space-y-0.5 text-xs">
+                  {rest.map(([cur, amt]) => (
+                    <div key={cur}>{formatMoney(amt, cur)}</div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

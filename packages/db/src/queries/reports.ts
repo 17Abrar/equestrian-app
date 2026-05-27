@@ -22,9 +22,17 @@ export async function getRevenueReport(clubId: string, range: DateRange) {
   // Net revenue per slot date = sum of (booking.amount - refunded total)
   // for paid/partial bookings that fall in the range. Confirmed paid
   // bookings only; pending and failed don't count toward revenue.
+  //
+  // Audit P1 (2026-05-26): per-currency rollup. A club with bookings
+  // in AED and SAR was previously folded into a single revenue total
+  // displayed under the club's default currency — over- or under-
+  // counting depending on which side outweighed. Group by currency so
+  // the dashboard can render one row per (date, currency); the UI
+  // separates them and uses each currency's `formatMoney`.
   const result = await db
     .select({
       date: sql<string>`${bookingSlots.date}`,
+      currency: bookings.currency,
       revenue: sql<number>`coalesce(sum(${bookings.amount} - ${bookings.refundedAmountMinor}), 0)::int`,
       count: sql<number>`count(*)::int`,
     })
@@ -43,7 +51,7 @@ export async function getRevenueReport(clubId: string, range: DateRange) {
         sql`${bookingSlots.date} <= ${range.dateTo}`,
       ),
     )
-    .groupBy(bookingSlots.date)
+    .groupBy(bookingSlots.date, bookings.currency)
     .orderBy(bookingSlots.date);
 
   return result;

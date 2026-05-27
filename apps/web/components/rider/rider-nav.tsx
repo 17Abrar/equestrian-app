@@ -16,6 +16,9 @@ import {
   User,
   Compass,
   Rabbit,
+  Receipt,
+  MessageCircle,
+  MoreHorizontal,
   ChevronDown,
   Building2,
   Check,
@@ -42,15 +45,27 @@ interface NavItem {
 
 // "Stables" is the rider-facing term for /discover — riders think in stables,
 // the admin side uses "club" to match the DB schema.
+//
+// Desktop renders every item; mobile bottom-nav shows the first 5 plus a
+// chevron-less "More" entry that opens the rest. This keeps the bottom-
+// bar legible at narrow widths even with 9 destinations.
+//
+// Audit P1 (2026-05-26): Invoices and Community were previously
+// unreachable from RiderNav — Invoices was only linked from a per-horse
+// "Receipt" button on /rider/horses, and Community was fully orphan-routed.
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/rider', icon: Home },
   { label: 'Book', href: '/rider/book', icon: CalendarPlus },
   { label: 'Bookings', href: '/rider/bookings', icon: CalendarCheck },
   { label: 'Stables', href: '/discover', icon: Compass },
   { label: 'Horses', href: '/rider/horses', icon: Rabbit },
+  { label: 'Invoices', href: '/rider/invoices', icon: Receipt },
   { label: 'Progress', href: '/rider/progress', icon: TrendingUp },
+  { label: 'Community', href: '/rider/community', icon: MessageCircle },
   { label: 'Profile', href: '/rider/profile', icon: User },
 ];
+
+const MOBILE_PRIMARY_COUNT = 5;
 
 export function RiderNav() {
   const pathname = usePathname();
@@ -100,13 +115,16 @@ export function RiderNav() {
         />
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav: first 5 primary items + a "More" dropdown
+          for the rest. 9 items in a single bottom bar gets cramped on
+          a 375px viewport (~40px per slot), so we overflow Invoices /
+          Progress / Community / Profile into a sheet. */}
       <nav
         className="bg-card fixed inset-x-0 bottom-0 z-50 border-t sm:hidden"
         aria-label="Mobile navigation"
       >
         <div className="flex items-center justify-around py-2">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.slice(0, MOBILE_PRIMARY_COUNT).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -120,9 +138,54 @@ export function RiderNav() {
               {item.label}
             </Link>
           ))}
+          <MobileMoreMenu activeOverflow={NAV_ITEMS.slice(MOBILE_PRIMARY_COUNT).some((i) => isActive(i.href))} />
         </div>
       </nav>
     </header>
+  );
+}
+
+/**
+ * "More" trigger in the mobile bottom-nav. Opens a dropdown listing
+ * the overflow items (Invoices / Progress / Community / Profile). The
+ * trigger styles itself as active when one of the overflow routes is
+ * the current page, mirroring the single-link active treatment of the
+ * primary items.
+ */
+function MobileMoreMenu({ activeOverflow }: { activeOverflow: boolean }) {
+  const pathname = usePathname();
+  const overflowItems = NAV_ITEMS.slice(MOBILE_PRIMARY_COUNT);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="More navigation"
+        className={cn(
+          'flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors',
+          activeOverflow ? 'text-foreground font-medium' : 'text-muted-foreground',
+        )}
+      >
+        <MoreHorizontal className="h-5 w-5" aria-hidden />
+        More
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={8} className="w-48">
+        {overflowItems.map((item) => {
+          const isCurrent =
+            item.href === '/rider' ? pathname === '/rider' : pathname.startsWith(item.href);
+          return (
+            <DropdownMenuItem key={item.href} asChild>
+              <Link
+                href={item.href}
+                aria-current={isCurrent ? 'page' : undefined}
+                className="flex items-center gap-2"
+              >
+                <item.icon className="h-4 w-4" aria-hidden />
+                <span>{item.label}</span>
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

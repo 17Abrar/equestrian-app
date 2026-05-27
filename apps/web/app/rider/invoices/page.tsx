@@ -1,7 +1,8 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, ExternalLink, CheckCircle2, Clock, AlertCircle, Ban } from 'lucide-react';
+import { Receipt, ExternalLink, CheckCircle2, Clock, AlertCircle, Ban, Sparkles } from 'lucide-react';
 import { fetchJson } from '@/lib/fetch-json';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import { safeHref } from '@/lib/safe-href';
 import { type ApiSuccessResponse } from '@equestrian/shared/types';
 import { formatCurrency, formatDate } from '@equestrian/shared/utils';
 import { STALE_TIME_FREQUENT } from '@equestrian/shared/constants';
+import { useBookings, type Booking } from '@/hooks/use-bookings';
 
 type InvoiceStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
@@ -33,10 +35,7 @@ interface MyLiveryInvoice {
   payLink: string | null;
 }
 
-// Audit F-5 (2026-05-07 r5): row-shaped skeleton mirroring InvoiceCard
-// (icon block + horse-name/club/period column + amount/due column on
-// the right). The previous bare h-24 rectangles caused a layout shift
-// when the real cards arrived.
+// Audit F-5 (2026-05-07 r5): row-shaped skeleton mirroring InvoiceCard.
 function InvoicesListSkeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-3">
@@ -63,7 +62,6 @@ function InvoicesListSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-// Audit E-7: shared fetchJson helper.
 function useMyLiveryInvoices() {
   return useQuery({
     queryKey: ['me', 'livery-invoices'],
@@ -72,68 +70,159 @@ function useMyLiveryInvoices() {
   });
 }
 
+/**
+ * Audit P1 (2026-05-26): previously this page only surfaced livery
+ * invoices, so a rider who paid for a lesson booking online had no
+ * receipt-style ledger anywhere in the app. The rider /bookings page
+ * exists but is upcoming-focused. This page now shows BOTH:
+ *   - Livery invoices (monthly horse board billing) — unchanged path
+ *   - Booking receipts (one-off lesson / package bookings) — derived
+ *     from /api/v1/bookings filtered to `paid` and `partial`
+ * Each lives in its own section so the rider can scan either ledger
+ * without paging through the other.
+ *
+ * Codex P2 (2026-05-26): /api/v1/bookings is paginated at 50, and the
+ * payment-status filter is applied client-side after the fetch — so a
+ * rider with >50 bookings only sees the most recent 50 here. The
+ * heading copy is RECENT receipts to reflect that. A future PR can
+ * add `paymentStatus` to `bookingFiltersSchema` and lift the cap.
+ */
 export default function RiderInvoicesPage() {
-  const { data, isLoading, isError, error, refetch } = useMyLiveryInvoices();
-  const invoices = data?.data ?? [];
+  const livery = useMyLiveryInvoices();
+  // Server-side payment-status filter (audit P1 + codex follow-up,
+  // 2026-05-26): pull paid and partial bookings in two parallel
+  // queries so the receipt ledger isn't bottlenecked by page-1 of
+  // upcoming/pending rows. Each query is a single page of 50 ordered
+  // by slot date DESC; combined 100 most-recent paid+partial receipts
+  // is enough for the typical rider's invoice ledger.
+  const paidBookings = useBookings({ paymentStatus: 'paid', pageSize: 50 });
+  const partialBookings = useBookings({ paymentStatus: 'partial', pageSize: 50 });
 
-  const outstanding = invoices.filter((i) => i.status === 'pending' || i.status === 'overdue');
-  const settled = invoices.filter((i) => i.status === 'paid');
-  const cancelled = invoices.filter((i) => i.status === 'cancelled');
+  const liveryInvoices = livery.data?.data ?? [];
+  const outstandingLivery = liveryInvoices.filter(
+    (i) => i.status === 'pending' || i.status === 'overdue',
+  );
+  const settledLivery = liveryInvoices.filter((i) => i.status === 'paid');
+  const cancelledLivery = liveryInvoices.filter((i) => i.status === 'cancelled');
+
+  const bookingReceipts = useMemo(() => {
+    const paid = paidBookings.data && paidBookings.data.success ? paidBookings.data.data : [];
+    const partial =
+      partialBookings.data && partialBookings.data.success ? partialBookings.data.data : [];
+    return [...paid, ...partial].sort((a, b) => (a.slotDate < b.slotDate ? 1 : -1));
+  }, [paidBookings.data, partialBookings.data]);
+
+  const liveryError = livery.isError;
+  const bookingError = paidBookings.isError || partialBookings.isError;
+  // Loading state: show a skeleton while ANY of the three queries is
+  // still resolving — codex P3 (2026-05-26). Without this, if livery
+  // returns empty first, the page renders just the header for the
+  // time it takes the bookings queries to arrive.
+  const anyLoading = livery.isLoading || paidBookings.isLoading || partialBookings.isLoading;
+  const everythingEmpty =
+    !anyLoading &&
+    liveryInvoices.length === 0 &&
+    bookingReceipts.length === 0 &&
+    !liveryError &&
+    !bookingError;
 
   return (
     <div className="space-y-6 pb-20 sm:pb-0">
       <div>
-        <h1 className="text-2xl font-bold">Livery invoices</h1>
-        <p className="text-muted-foreground">Your monthly livery invoices across your stables</p>
+        <h1 className="text-2xl font-bold">Invoices</h1>
+        <p className="text-muted-foreground">
+          Livery bills + receipts for your recent paid bookings.
+        </p>
       </div>
 
-      {isLoading && <InvoicesListSkeleton />}
+      {anyLoading && <InvoicesListSkeleton />}
 
-      {isError && !isLoading && (
-        <ErrorState
-          message={error instanceof Error ? error.message : undefined}
-          onRetry={refetch}
-        />
-      )}
-
-      {!isLoading && !isError && invoices.length === 0 && (
+      {everythingEmpty && (
         <EmptyState
-          // Audit F-29 (2026-05-07 r5): rider invoices empty state now
-          // points to the discover flow so first-time riders that hit
-          // this page before they've registered a horse have an obvious
-          // next step.
-          title="No invoices yet"
-          description="Your stable bills livery monthly from your horse's billing anniversary. Nothing to show just yet."
+          title="Nothing here yet"
+          description="When your stable bills livery or you pay for a lesson online, the records show up here."
           action={{ label: 'Find a stable', href: '/discover' }}
         />
       )}
 
-      {outstanding.length > 0 && <Section title="Outstanding" invoices={outstanding} />}
-      {settled.length > 0 && <Section title="Paid" invoices={settled} />}
-      {cancelled.length > 0 && <Section title="Cancelled" invoices={cancelled} />}
+      {/* Livery invoices */}
+      {(outstandingLivery.length > 0 ||
+        settledLivery.length > 0 ||
+        cancelledLivery.length > 0 ||
+        liveryError) && (
+        <div className="space-y-4">
+          <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+            Livery
+          </h2>
+          {liveryError && !livery.isLoading && (
+            <ErrorState
+              message={livery.error instanceof Error ? livery.error.message : undefined}
+              onRetry={() => livery.refetch()}
+            />
+          )}
+          {outstandingLivery.length > 0 && (
+            <LiverySection title="Outstanding" invoices={outstandingLivery} />
+          )}
+          {settledLivery.length > 0 && <LiverySection title="Paid" invoices={settledLivery} />}
+          {cancelledLivery.length > 0 && (
+            <LiverySection title="Cancelled" invoices={cancelledLivery} />
+          )}
+        </div>
+      )}
+
+      {/* Booking receipts (audit P1, 2026-05-26) */}
+      {(bookingReceipts.length > 0 || bookingError) && (
+        <div className="space-y-4">
+          <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+            Recent booking receipts
+          </h2>
+          {bookingError && !paidBookings.isLoading && !partialBookings.isLoading && (
+            <ErrorState
+              message={
+                paidBookings.error instanceof Error
+                  ? paidBookings.error.message
+                  : partialBookings.error instanceof Error
+                    ? partialBookings.error.message
+                    : undefined
+              }
+              onRetry={() => {
+                void paidBookings.refetch();
+                void partialBookings.refetch();
+              }}
+            />
+          )}
+          {bookingReceipts.length > 0 && (
+            <div className="space-y-3">
+              {bookingReceipts.map((b) => (
+                <BookingReceiptCard key={b.id} booking={b} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function Section({ title, invoices }: { title: string; invoices: MyLiveryInvoice[] }) {
+function LiverySection({ title, invoices }: { title: string; invoices: MyLiveryInvoice[] }) {
   return (
     <section>
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
           {title}
-        </h2>
+        </h3>
         <Badge variant="secondary">{invoices.length}</Badge>
       </div>
       <div className="space-y-3">
         {invoices.map((inv) => (
-          <InvoiceCard key={inv.id} invoice={inv} />
+          <LiveryInvoiceCard key={inv.id} invoice={inv} />
         ))}
       </div>
     </section>
   );
 }
 
-function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
+function LiveryInvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
   const payable = invoice.status === 'pending' || invoice.status === 'overdue';
   return (
     <Card>
@@ -145,7 +234,7 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate font-semibold">{invoice.horseName}</p>
-            <StatusBadge status={invoice.status} />
+            <LiveryStatusBadge status={invoice.status} />
           </div>
           <p className="text-muted-foreground text-xs">
             {invoice.clubName} · {invoice.invoiceNumber}
@@ -165,10 +254,6 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
           {payable && <p className="text-muted-foreground text-xs">Due {invoice.dueDate}</p>}
           {payable && invoice.payLink && (
             <Button size="sm" asChild className="mt-1">
-              {/* Audit F-18 (2026-05-06): server-stored URL still goes
-                  through safeHref — defense-in-depth at the render
-                  boundary. Mirrors the helper's adoption in
-                  livery-tab.tsx, subscription-panel.tsx, etc. */}
               <a href={safeHref(invoice.payLink)} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                 Pay now
@@ -184,7 +269,71 @@ function InvoiceCard({ invoice }: { invoice: MyLiveryInvoice }) {
   );
 }
 
-function StatusBadge({ status }: { status: InvoiceStatus }) {
+function BookingReceiptCard({ booking }: { booking: Booking }) {
+  const isPartial = booking.paymentStatus === 'partial';
+  // `bookings.amount` was NOT NULL after migration 0028 (the column
+  // type is still `number | null` in TS — pre-tightening — but every
+  // row carries a value). Skip the card if a stale row leaks through
+  // rather than rendering NaN. `paymentMethod` and `lessonTypePrice`
+  // are intentionally NOT used here: the list projection in
+  // `getBookingsByClub` doesn't include them — codex P3 (2026-05-26).
+  if (booking.amount === null) return null;
+  // Net amount after any partial refund — matches the finance-side
+  // accounting (`getRevenueReport` already subtracts the same field).
+  // Codex P2 (2026-05-26): without this, a partially-refunded receipt
+  // showed the gross captured amount and over-stated what the rider
+  // actually paid.
+  const netAmount = booking.amount - (booking.refundedAmountMinor ?? 0);
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-start gap-4 p-4">
+        <div className="bg-muted rounded-md p-3">
+          <Sparkles className="text-muted-foreground h-5 w-5" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-semibold">{booking.lessonTypeName}</p>
+            <Badge
+              variant="secondary"
+              className={
+                isPartial
+                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-100'
+                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100'
+              }
+            >
+              {isPartial ? (
+                <AlertCircle className="mr-1 h-3 w-3" />
+              ) : (
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+              )}
+              {isPartial ? 'Partially refunded' : 'Paid'}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            {booking.slotDate} · {booking.slotStartTime}–{booking.slotEndTime}
+          </p>
+          {booking.arenaName && (
+            <p className="text-muted-foreground mt-1 text-xs">{booking.arenaName}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col items-end gap-1">
+          <p className="text-base font-semibold">
+            {formatCurrency(netAmount, booking.currency)}
+          </p>
+          {isPartial && (
+            <p className="text-muted-foreground text-xs">
+              {formatCurrency(booking.refundedAmountMinor, booking.currency)} refunded
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LiveryStatusBadge({ status }: { status: InvoiceStatus }) {
   const map = {
     pending: {
       label: 'Pending',

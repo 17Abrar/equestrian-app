@@ -505,6 +505,15 @@ export const cancelBookingSchema = z
 export const bookingFiltersSchema = z
   .object({
     status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
+    // Audit P1 (2026-05-26): `paymentStatus` filter lets the rider
+    // invoices ledger request only paid/partial bookings via a single
+    // API page. Without it, the page-1-by-slot-date fetch could be
+    // dominated by upcoming/pending bookings and hide older paid
+    // receipts. The enum mirrors `paymentStatusEnum` in
+    // `packages/db/src/schema/enums.ts`.
+    paymentStatus: z
+      .enum(['pending', 'paid', 'partial', 'refunded', 'failed', 'overdue'])
+      .optional(),
     date: z.string().max(50).optional(),
     lessonTypeId: z.string().uuid().optional(),
     riderMemberId: z.string().uuid().optional(),
