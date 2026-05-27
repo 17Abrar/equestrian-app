@@ -93,10 +93,13 @@ interface HealthTabProps {
 }
 
 export function HealthTab({ horseId }: HealthTabProps) {
+  // Audit P1 (2026-05-26): MedicationsSection was previously rendered
+  // here too. It has its own top-level horse-profile tab now so the
+  // feature is discoverable (the audit flagged medications as
+  // under-promoted product-plan terminology).
   return (
     <div className="space-y-6">
       <HealthRecordsSection horseId={horseId} />
-      <MedicationsSection horseId={horseId} />
     </div>
   );
 }
@@ -469,8 +472,11 @@ function AddHealthRecordDialog({
 }
 
 // ─── Medications ──────────────────────────────────────────────────────
+// Audit P1 (2026-05-26): exported so the medications-tab.tsx wrapper
+// can mount this section at the top-level horse-profile tab without
+// duplicating ~285 lines of dialog + card code.
 
-function MedicationsSection({ horseId }: { horseId: string }) {
+export function MedicationsSection({ horseId }: { horseId: string }) {
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isError, error, refetch } = useMedications(horseId, !showAll);
   // Audit F-50 (2026-05-08 r6): lift Add-dialog state to section root.

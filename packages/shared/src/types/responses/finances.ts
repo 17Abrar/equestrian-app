@@ -78,6 +78,12 @@ export interface Coupon {
   code: string;
   discountType: CouponDiscountType;
   discountValue: number;
+  /**
+   * Audit P1 (2026-05-26): the coupon's currency. Fixed-amount
+   * coupons render in this currency; `validateCoupon` enforces that
+   * the booking's currency matches before applying.
+   */
+  currency: string;
   maxDiscount: number | null;
   maxUses: number | null;
   maxUsesPerRider: number | null;

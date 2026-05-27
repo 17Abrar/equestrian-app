@@ -92,7 +92,11 @@ import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
-import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
+import {
+  DEFAULT_PAGE_SIZE,
+  SUPPORTED_CURRENCIES,
+  type SupportedCurrency,
+} from '@equestrian/shared/constants';
 
 export function FinancesPage() {
   return (
@@ -990,7 +994,11 @@ function CouponsTab() {
                   <TableCell>
                     {c.discountType === 'percentage'
                       ? `${c.discountValue}%`
-                      : formatMoney(c.discountValue, currency)}
+                      : // Audit P1 (2026-05-26): the coupon's OWN currency,
+                        // not the club default. A multi-currency club's
+                        // fixed-amount coupon is locked to a single
+                        // currency by the validateCoupon path.
+                        formatMoney(c.discountValue, c.currency ?? currency)}
                   </TableCell>
                   <TableCell>
                     {c.usageCount}
@@ -1097,6 +1105,17 @@ function AddCouponDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createCoupon = useCreateCoupon();
+  // Audit P1 (2026-05-26): coupon currency is now a first-class form
+  // field. The DB column has existed since migration 0055 with a
+  // backfill from `clubs.currency`, but the create dialog never
+  // surfaced it — so a fixed-amount coupon in a multi-currency club
+  // was ambiguous and inherited the club default at the route layer.
+  const settingsQuery = useClubSettings();
+  // Cast: club settings stores a 3-letter currency string; we narrow
+  // to the SupportedCurrency union for form-typing. An unknown
+  // currency in the DB would surface as a `formatMoney` fallback at
+  // render rather than a runtime crash.
+  const clubCurrency = (settingsQuery.data?.data.currency ?? 'AED') as SupportedCurrency;
 
   const form = useForm<CreateCouponFormValues, unknown, CreateCouponInput>({
     resolver: zodResolver(createCouponSchema),
@@ -1105,6 +1124,7 @@ function AddCouponDialog({
       discountType: 'percentage',
       firstTimeOnly: false,
       isStackable: false,
+      currency: clubCurrency,
     },
   });
 
@@ -1190,6 +1210,43 @@ function AddCouponDialog({
                 )}
               />
             </div>
+            {/* Currency picker: only fixed-amount coupons need it.
+                Percentage discounts are currency-agnostic — `validateCoupon`
+                still uses the booking's currency for the apply logic, so
+                we hide the picker to keep the form simple. Audit P1
+                (2026-05-26). */}
+            {form.watch('discountType') === 'fixed' && (
+              <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency *</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value ?? clubCurrency}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SUPPORTED_CURRENCIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-muted-foreground text-xs">
+                      Coupon applies only to bookings priced in this currency.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
