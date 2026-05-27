@@ -642,6 +642,48 @@ export async function declineHorseOwnership(clubId: string, horseId: string, rea
   return result[0] ?? null;
 }
 
+/**
+ * Audit P1 (2026-05-26): owner-initiated re-activation of a retired
+ * horse. Flips ownership from `retired` back to `pending` so the
+ * club admin re-approves with a fresh livery fee (mirrors the
+ * original registration flow). Clears `liveryEndDate` so the
+ * billing cron doesn't see a stale termination date when the admin
+ * approves and Round-8.5 prorating resumes.
+ *
+ * `liveryStartDate` is NOT changed here — the admin sets it on the
+ * approve step. `monthlyLiveryFeeMinor` is left untouched too; the
+ * admin can adjust on approve.
+ *
+ * Returns the updated horse row or null if not found / not retired.
+ */
+export async function reactivateRetiredOwnership(
+  clubId: string,
+  horseId: string,
+): Promise<{ id: string; clubId: string; ownershipStatus: string } | null> {
+  const result = await db
+    .update(horses)
+    .set({
+      ownershipStatus: 'pending',
+      liveryEndDate: null,
+      ownershipSubmittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(horses.id, horseId),
+        eq(horses.clubId, clubId),
+        eq(horses.ownershipStatus, 'retired'),
+        isNull(horses.deletedAt),
+      ),
+    )
+    .returning({
+      id: horses.id,
+      clubId: horses.clubId,
+      ownershipStatus: horses.ownershipStatus,
+    });
+  return result[0] ?? null;
+}
+
 export async function retireHorseOwnership(
   clubId: string,
   horseId: string,

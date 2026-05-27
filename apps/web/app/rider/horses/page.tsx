@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
-import { Plus, Clock, CheckCircle2, XCircle, Archive, Rabbit, Receipt } from 'lucide-react';
+import { Plus, Clock, CheckCircle2, XCircle, Archive, RotateCcw, Rabbit, Receipt } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -89,10 +89,31 @@ function useRetireHorse() {
   });
 }
 
+// Audit P1 (2026-05-26): rider-initiated reactivation of a retired
+// horse. Flips ownership back to `pending` so the club admin
+// re-approves with a fresh livery fee; closes the audit gap where
+// reactivation required the rider to DM the stable.
+function useReactivateHorse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (horseId: string) =>
+      fetchJson<ApiSuccessResponse<{ id: string }>>(`/api/v1/me/horses/${horseId}/reactivate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me', 'horses'] });
+    },
+  });
+}
+
 export default function RiderHorsesPage() {
   const { data, isLoading, isError, error, refetch } = useMyHorses();
   const [retiring, setRetiring] = useState<MyHorse | null>(null);
+  const [reactivating, setReactivating] = useState<MyHorse | null>(null);
   const retire = useRetireHorse();
+  const reactivate = useReactivateHorse();
 
   const horses = useMemo(() => data?.data.horses ?? [], [data]);
   const memberships = data?.data.memberships ?? [];
@@ -119,6 +140,18 @@ export default function RiderHorsesPage() {
     } catch (err) {
       reportMutationError('rider.horse.retire', err, { horseId: retiring.id });
       toast.error(err instanceof Error ? err.message : 'Failed to retire');
+    }
+  }
+
+  async function onConfirmReactivate() {
+    if (!reactivating) return;
+    try {
+      await reactivate.mutateAsync(reactivating.id);
+      toast.success(`${reactivating.name} sent back to ${reactivating.clubName} for re-approval`);
+      setReactivating(null);
+    } catch (err) {
+      reportMutationError('rider.horse.reactivate', err, { horseId: reactivating.id });
+      toast.error(err instanceof Error ? err.message : 'Failed to reactivate');
     }
   }
 
@@ -183,6 +216,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.pending}
             onRetire={null}
+            onReactivate={null}
           />
           <Section
             title="Active"
@@ -190,6 +224,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.active}
             onRetire={(h) => setRetiring(h)}
+            onReactivate={null}
           />
           <Section
             title="Declined"
@@ -197,6 +232,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.declined}
             onRetire={null}
+            onReactivate={null}
           />
           <Section
             title="Retired"
@@ -204,6 +240,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.retired}
             onRetire={null}
+            onReactivate={(h) => setReactivating(h)}
           />
         </div>
       )}
@@ -213,14 +250,35 @@ export default function RiderHorsesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Retire {retiring?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This stops livery billing going forward. Your stable can reactivate the ownership if
-              needed — just message them.
+              This stops livery billing going forward. You can reactivate from the Retired
+              section later — the stable will re-approve with a fresh livery fee.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={retire.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={onConfirmRetire} disabled={retire.isPending}>
               {retire.isPending ? 'Retiring…' : 'Retire'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!reactivating}
+        onOpenChange={(open) => !open && setReactivating(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reactivate {reactivating?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {reactivating?.clubName} will see this horse as a pending registration again and
+              re-approve with a fresh livery fee. They&apos;ll be notified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reactivate.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onConfirmReactivate} disabled={reactivate.isPending}>
+              {reactivate.isPending ? 'Sending…' : 'Reactivate'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -267,9 +325,10 @@ interface SectionProps {
   emptyHint: string | null;
   horses: MyHorse[];
   onRetire: ((h: MyHorse) => void) | null;
+  onReactivate: ((h: MyHorse) => void) | null;
 }
 
-function Section({ title, count, horses, onRetire }: SectionProps) {
+function Section({ title, count, horses, onRetire, onReactivate }: SectionProps) {
   if (count === 0) return null;
   return (
     <section>
@@ -281,7 +340,7 @@ function Section({ title, count, horses, onRetire }: SectionProps) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {horses.map((h) => (
-          <HorseCard key={h.id} horse={h} onRetire={onRetire} />
+          <HorseCard key={h.id} horse={h} onRetire={onRetire} onReactivate={onReactivate} />
         ))}
       </div>
     </section>
@@ -291,9 +350,11 @@ function Section({ title, count, horses, onRetire }: SectionProps) {
 function HorseCard({
   horse,
   onRetire,
+  onReactivate,
 }: {
   horse: MyHorse;
   onRetire: ((h: MyHorse) => void) | null;
+  onReactivate: ((h: MyHorse) => void) | null;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -365,6 +426,19 @@ function HorseCard({
             >
               <Archive className="mr-1 h-3.5 w-3.5" />
               Retire
+            </Button>
+          )}
+
+          {horse.ownershipStatus === 'retired' && onReactivate && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground mt-2 h-8 px-2 text-xs"
+              onClick={() => onReactivate(horse)}
+            >
+              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              Reactivate
             </Button>
           )}
         </div>

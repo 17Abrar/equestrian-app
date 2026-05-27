@@ -396,7 +396,30 @@ function nextBillingPeriod(
   anchor: { periodStart: string } | null,
   today: string,
 ): NextPeriod | null {
-  const startBase = anchor ? addMonths(anchor.periodStart, 1) : horse.liveryStartDate;
+  // Audit P1 codex (2026-05-26): the rider-reactivate flow lets a
+  // retired horse re-enter the billing pipeline with a NEW
+  // `liveryStartDate`. Old invoices issued under the prior livery
+  // contract MUST NOT anchor the new contract — they belong to a
+  // distinct billing period that has already been retired (and the
+  // retire flow cancels any pending ones). If the anchor falls
+  // before the current `liveryStartDate`, ignore it and start fresh
+  // from `liveryStartDate`.
+  //
+  // KNOWN EDGE CASE: an admin who reactivates with a
+  // `liveryStartDate` exactly equal to the last-issued (old-contract)
+  // invoice's periodStart will under-bill by one period — the anchor
+  // is kept and the cron advances to anchor+1mo, skipping the first
+  // new-contract period. Using `>` instead of `>=` would re-issue
+  // the same period for a continuously-billed horse on its first
+  // billing run. The cleaner fix is a per-contract anchor (column or
+  // archive-on-reactivate flow); queued as task #23 follow-up. The
+  // continuously-billed path is unaffected by the current floor.
+  const effectiveAnchor =
+    anchor && anchor.periodStart >= horse.liveryStartDate ? anchor : null;
+
+  const startBase = effectiveAnchor
+    ? addMonths(effectiveAnchor.periodStart, 1)
+    : horse.liveryStartDate;
 
   // If the next period hasn't started yet, don't bill in advance.
   if (startBase > today) return null;
