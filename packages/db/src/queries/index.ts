@@ -2,6 +2,7 @@ export * from './clubs';
 export * from './club-members';
 export * from './horses';
 export * from './horse-health';
+export * from './horse-leases';
 export * from './riders';
 export * from './arenas';
 export * from './lesson-types';
