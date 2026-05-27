@@ -4,6 +4,7 @@ export * from './club-members';
 export * from './rider-profiles';
 export * from './horses';
 export * from './horse-health';
+export * from './horse-leases';
 export * from './bookings';
 export * from './packages';
 export * from './competitions';

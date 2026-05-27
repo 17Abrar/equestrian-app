@@ -1027,3 +1027,62 @@ export const createDocumentSchema = z
   .strict();
 
 export type CreateDocumentInput = z.output<typeof createDocumentSchema>;
+
+// ─── Horse Leases ─────────────────────────────────────────────────────
+// Feature 2026-05-27. See packages/db/migrations/0064_horse_leases.sql
+// + packages/db/src/schema/horse-leases.ts + queries/horse-leases.ts.
+
+const LEASE_TYPES = ['half', 'full'] as const;
+const LEASE_STATUSES = ['pending', 'active', 'ended', 'cancelled'] as const;
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Real-calendar-date check — the regex above only verifies SHAPE. A
+// regex-passing string like `2026-02-31` would otherwise survive Zod
+// and bomb the Postgres `date` insert with a 500. Codex P2
+// (2026-05-27).
+function isRealCalendarDate(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  // Date constructor accepts overflow (Feb 31 → Mar 3). Round-trip
+  // through ISO and compare to detect the silent normalisation.
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
+const calendarDateField = z
+  .string()
+  .regex(ISO_DATE_RE, 'Use YYYY-MM-DD')
+  .refine(isRealCalendarDate, { message: 'Not a real calendar date' });
+
+export const createHorseLeaseSchema = z
+  .object({
+    lesseeMemberId: z.string().uuid('Invalid lessee member id'),
+    leaseType: z.enum(LEASE_TYPES),
+    // Minor currency units. Bounded above by `MAX_MONTHLY_LIVERY_FEE_MINOR`
+    // (same cap the livery fee uses — both fields go into a Postgres
+    // integer column). Without the upper bound, a typo at the form
+    // boundary would bomb the insert. Codex P2 (2026-05-27).
+    monthlyFeeMinor: numericField(z.number().int().min(0).max(MAX_MONTHLY_LIVERY_FEE_MINOR)),
+    currency: currencyField,
+    startDate: calendarDateField,
+    endDate: calendarDateField,
+    notes: z.string().max(2000).optional(),
+  })
+  .strict()
+  .refine((d) => d.startDate <= d.endDate, {
+    message: 'End date must be on or after start date',
+    path: ['endDate'],
+  });
+
+export type CreateHorseLeaseFormValues = z.input<typeof createHorseLeaseSchema>;
+export type CreateHorseLeaseInput = z.output<typeof createHorseLeaseSchema>;
+
+export const setLeaseStatusSchema = z
+  .object({
+    // Only the destination is exposed to the client. The route refuses
+    // disallowed transitions (e.g., ended → pending).
+    status: z.enum(LEASE_STATUSES),
+  })
+  .strict();
+
+export type SetLeaseStatusInput = z.output<typeof setLeaseStatusSchema>;

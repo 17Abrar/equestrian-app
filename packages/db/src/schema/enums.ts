@@ -114,6 +114,17 @@ export const ownershipStatusEnum = pgEnum('ownership_status', [
   'declined',
 ]);
 
+// Horse leasing (user feature 2026-05-27). Half-lease = lessee pays
+// half the monthly fee + has ~half-time access; full-lease = pays
+// full fee with near-exclusive access. See migration 0064.
+export const leaseTypeEnum = pgEnum('lease_type', ['half', 'full']);
+export const leaseStatusEnum = pgEnum('lease_status', [
+  'pending',
+  'active',
+  'ended',
+  'cancelled',
+]);
+
 export const liveryInvoiceStatusEnum = pgEnum('livery_invoice_status', [
   'pending',
   'paid',
