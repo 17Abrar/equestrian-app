@@ -54,6 +54,13 @@ interface BookingSlotFilters {
 
 interface BookingFilters {
   status?: string;
+  /**
+   * Audit P1 (2026-05-26): match by `payment_status`. The rider
+   * invoices page uses this to pull a single page of paid/partial
+   * bookings so older receipts aren't hidden behind newer pending
+   * rows on the date-sorted page-1 fetch.
+   */
+  paymentStatus?: string;
   date?: string;
   lessonTypeId?: string;
   riderMemberId?: string;
@@ -363,6 +370,10 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
     conditions.push(sql`${bookings.status} = ${filters.status}`);
   }
 
+  if (filters.paymentStatus) {
+    conditions.push(sql`${bookings.paymentStatus} = ${filters.paymentStatus}`);
+  }
+
   if (filters.date) {
     conditions.push(sql`${bookingSlots.date} = ${filters.date}`);
   }
@@ -398,6 +409,12 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
         status: bookings.status,
         paymentStatus: bookings.paymentStatus,
         amount: bookings.amount,
+        // Audit P1 (2026-05-26): include the running refund total so
+        // consumers (rider invoices page, admin lists) can render the
+        // NET amount on partially-refunded rows. Without this, a
+        // partial-refund booking displays the original capture and
+        // overstates the receipt.
+        refundedAmountMinor: bookings.refundedAmountMinor,
         currency: bookings.currency,
         horseMatchScore: bookings.horseMatchScore,
         createdAt: bookings.createdAt,

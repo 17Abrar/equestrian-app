@@ -73,6 +73,13 @@ export interface Booking {
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod | null;
   amount: number | null;
+  /**
+   * Audit P1 (2026-05-26): running refund total in minor units.
+   * Subtract from `amount` to display the net captured value for
+   * partially-refunded bookings. Always >= 0; never null after
+   * migration 0028's backfill.
+   */
+  refundedAmountMinor: number;
   currency: string;
   horseMatchScore: number | null;
   createdAt: string;
