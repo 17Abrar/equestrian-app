@@ -398,6 +398,13 @@ export async function getCouponsByClub(clubId: string, filters: CouponFilters) {
         code: coupons.code,
         discountType: coupons.discountType,
         discountValue: coupons.discountValue,
+        // Audit P1 (2026-05-26): include the per-coupon currency in
+        // the listing so the finance UI can label a fixed-amount
+        // coupon with its own currency rather than the club default.
+        // Existed in the DB since migration 0055 but was never
+        // projected. `validateCoupon` already locks application to
+        // matching booking currency — this just surfaces it.
+        currency: coupons.currency,
         maxDiscount: coupons.maxDiscount,
         applicableTypes: coupons.applicableTypes,
         minimumAmount: coupons.minimumAmount,
