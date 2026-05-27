@@ -4,6 +4,7 @@ import { horseLeases } from '../schema/horse-leases';
 import { horses } from '../schema/horses';
 import { type leaseTypeEnum, type leaseStatusEnum } from '../schema/enums';
 import { clubMembers } from '../schema/club-members';
+import { clubs } from '../schema/clubs';
 
 /**
  * Horse leasing queries. Every helper takes `clubId` first and
@@ -110,6 +111,61 @@ export async function listLeasesForLessee(clubId: string, lesseeMemberId: string
       and(
         eq(horseLeases.clubId, clubId),
         eq(horseLeases.lesseeMemberId, lesseeMemberId),
+      ),
+    )
+    .orderBy(desc(horseLeases.createdAt));
+}
+
+/**
+ * Cross-club lessee view — returns every active or recent lease
+ * where the Clerk-authenticated user is the lessee, regardless of
+ * which active tenant they're currently looking at. Used by
+ * `/api/v1/me/leases`. Scoped by `clerkUserId` (same security model
+ * as `/me/horses` — the user is reading their own roster of
+ * arrangements across stables).
+ *
+ * Soft-deleted clubs are excluded so a tombstoned stable's leases
+ * don't surface in the rider's view (mirrors `getHorsesOwnedByUser`
+ * F-1).
+ */
+export async function listLeasesForLesseeUser(clerkUserId: string) {
+  return db
+    .select({
+      id: horseLeases.id,
+      clubId: horseLeases.clubId,
+      clubName: clubs.name,
+      clubSlug: clubs.slug,
+      horseId: horseLeases.horseId,
+      horseName: horses.name,
+      horsePhotoUrl: horses.primaryPhotoUrl,
+      leaseType: horseLeases.leaseType,
+      monthlyFeeMinor: horseLeases.monthlyFeeMinor,
+      currency: horseLeases.currency,
+      startDate: horseLeases.startDate,
+      endDate: horseLeases.endDate,
+      status: horseLeases.status,
+      notes: horseLeases.notes,
+      createdAt: horseLeases.createdAt,
+    })
+    .from(horseLeases)
+    .innerJoin(
+      clubMembers,
+      and(
+        eq(horseLeases.lesseeMemberId, clubMembers.id),
+        eq(horseLeases.clubId, clubMembers.clubId),
+      ),
+    )
+    .innerJoin(horses, and(eq(horseLeases.horseId, horses.id), eq(horseLeases.clubId, horses.clubId)))
+    .innerJoin(clubs, eq(horseLeases.clubId, clubs.id))
+    .where(
+      and(
+        eq(clubMembers.clerkUserId, clerkUserId),
+        eq(clubMembers.isActive, true),
+        sql`${clubs.deletedAt} IS NULL`,
+        // Codex P2 (2026-05-27): exclude soft-deleted horses so a
+        // lease for an archived horse doesn't surface in the rider
+        // portal after the rest of the app has retired the horse.
+        sql`${horses.deletedAt} IS NULL`,
       ),
     )
     .orderBy(desc(horseLeases.createdAt));
