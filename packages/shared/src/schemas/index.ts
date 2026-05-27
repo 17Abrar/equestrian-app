@@ -201,6 +201,89 @@ export const updateHorseSchema = createHorseSchema
 
 export type UpdateHorseInput = z.infer<typeof updateHorseSchema>;
 
+// ─── Bulk horse import ──────────────────────────────────────────────
+// Feature 2026-05-27. Reuses createHorseSchema row-by-row but omits
+// `ownerMemberId` — ownership must go through the explicit
+// `POST /api/v1/horses/[horseId]/owner` flow that validates the
+// member's role (`rider`/`horse_owner`). Allowing bulk to set
+// `ownerMemberId` would bypass that role check; codex P2 flagged.
+//
+// Hard cap at 50 horses per upload — small enough that even
+// sequential inserts comfortably fit under the client's 15s
+// fetchJson timeout (50 × ~100ms ≈ 5s; with concurrent batching,
+// 1-2s). The previous 100 cap risked timeouts on max-sized imports
+// in production latency, which would leave the UI with an error
+// while horses had already been created — encouraging a retry that
+// duplicates rows. Codex P2 (2026-05-28).
+//
+// `.strict()` on the outer object so a typo'd top-level key (e.g.
+// `riders: [...]`) fails fast instead of silently importing zero.
+export const BULK_HORSES_MAX = 50;
+
+// Date columns in the bulk path are LOCKED to a real
+// YYYY-MM-DD calendar date. The single-horse `createHorseSchema`
+// accepts any short string for `dateOfBirth`/`insuranceExpiry`
+// (the UI form provides a date picker, so the input format is
+// controlled). The bulk path receives CSV strings the operator
+// types in their spreadsheet tool — without this gate:
+//   - Postgres would silently accept locale formats like
+//     `03/12/2015` and interpret them via its DateStyle setting,
+//     storing the wrong date.
+//   - A shape-only check (`/^\d{4}-\d{2}-\d{2}$/`) would let an
+//     impossible date like `2026-13-01` reach the DB and 500 the
+//     row only after `createHorse` was called.
+// The refine round-trips through `Date` and compares the
+// normalised ISO output to detect Feb-31-style overflow. Codex P2
+// (2026-05-28).
+function isRealIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
+const strictIsoDateOptional = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+  .refine(isRealIsoDate, { message: 'Not a real calendar date' })
+  .optional();
+
+// Exported so the client-side preview validator uses the SAME schema
+// as the server's bulk endpoint. Codex P2 (2026-05-28): a separate
+// preview schema let invalid dates slip through preview only to bomb
+// the final submit, leaving the operator with no per-row feedback.
+export const bulkCreateHorseRowSchema = createHorseSchema
+  .omit({ ownerMemberId: true })
+  .extend({
+    dateOfBirth: strictIsoDateOptional,
+    insuranceExpiry: strictIsoDateOptional,
+  });
+export type BulkCreateHorseRowInput = z.output<typeof bulkCreateHorseRowSchema>;
+
+export const bulkCreateHorsesSchema = z
+  .object({
+    horses: z
+      .array(bulkCreateHorseRowSchema)
+      .min(1, 'Upload at least one horse')
+      .max(BULK_HORSES_MAX, `Limit is ${BULK_HORSES_MAX} horses per upload — split larger files`),
+    /**
+     * Optional 1-based CSV row numbers parallel to `horses`. When the
+     * client filters out invalid rows before submit, the post-import
+     * result view needs the ORIGINAL CSV row number to point the
+     * operator at the right line in their spreadsheet. The server
+     * just echoes these back; if absent we fall back to the array
+     * index. Codex P3 (2026-05-27).
+     */
+    csvRowNumbers: z.array(z.number().int().positive()).optional(),
+  })
+  .strict()
+  .refine(
+    (d) => !d.csvRowNumbers || d.csvRowNumbers.length === d.horses.length,
+    { message: 'csvRowNumbers length must match horses length' },
+  );
+
+export type BulkCreateHorsesInput = z.output<typeof bulkCreateHorsesSchema>;
+
 // Audit F-24 (2026-05-06): the schema can't enforce that `ownerMemberId`
 // resolves to a member with role `'horse_owner'` or `'rider'` — the role
 // isn't in the request body. The caller MUST follow the same pattern as
