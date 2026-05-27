@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { PendingApprovalCard } from './pending-approval-card';
+import { BulkImportButton } from './bulk-import-dialog';
 import { HORSE_STATUS_COLORS } from '@/lib/ui-constants';
 import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
@@ -117,12 +118,17 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
           <p className="text-muted-foreground mt-1">Manage your stable&apos;s horses</p>
         </div>
         {canCreate && (
-          <Button asChild>
-            <Link href="/horses/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Horse
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* Bulk import — feature 2026-05-27. CSV template + upload + preview
+                + batch create. See bulk-import-dialog.tsx for the flow. */}
+            <BulkImportButton />
+            <Button asChild>
+              <Link href="/horses/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Horse
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
 
