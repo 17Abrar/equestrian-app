@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Send, Users, AtSign } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -139,6 +140,13 @@ function ComposeTab() {
   // recipient (existing) and audience broadcast (new). The mode toggle
   // is local to this tab; we don't persist it because re-opening the
   // page should default to the safer single-recipient form.
+  //
+  // Audit P1 (2026-05-26): `?to=` from rider/owner profile send-email
+  // CTAs forces single-recipient mode and pre-fills the form. Keeps
+  // the broadcast tab out of the way when the operator clearly wants
+  // a one-to-one send.
+  const searchParams = useSearchParams();
+  const prefillTo = searchParams.get('to') ?? '';
   const [mode, setMode] = useState<'single' | 'audience'>('single');
 
   return (
@@ -162,7 +170,7 @@ function ComposeTab() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="single" className="mt-4">
-            <SingleRecipientForm />
+            <SingleRecipientForm prefillTo={prefillTo} />
           </TabsContent>
           <TabsContent value="audience" className="mt-4">
             <BroadcastForm />
@@ -173,10 +181,10 @@ function ComposeTab() {
   );
 }
 
-function SingleRecipientForm() {
+function SingleRecipientForm({ prefillTo }: { prefillTo?: string }) {
   const form = useForm<ComposeEmailValues>({
     resolver: zodResolver(composeEmailSchema),
-    defaultValues: { to: '', subject: '', body: '' },
+    defaultValues: { to: prefillTo ?? '', subject: '', body: '' },
   });
 
   async function onSubmit(values: ComposeEmailValues) {
