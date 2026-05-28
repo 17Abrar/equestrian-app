@@ -68,7 +68,11 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const updated = await reactivateRetiredOwnership(ownership.clubId, horseId);
+      const updated = await reactivateRetiredOwnership(
+        ownership.clubId,
+        horseId,
+        ownership.ownerMemberId,
+      );
       if (!updated) {
         // Race: admin / another flow advanced the row between the read
         // and the update. The status precondition isn't met anymore.
