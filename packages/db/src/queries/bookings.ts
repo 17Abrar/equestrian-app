@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, writeTransaction } from '../index';
-import { bookingSlots, bookings, lessonTypes, arenas } from '../schema/bookings';
+import { bookingSlots, bookings, lessonTypes, arenas, bookingRefunds } from '../schema/bookings';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
 import { horses } from '../schema/horses';
@@ -54,6 +54,13 @@ interface BookingSlotFilters {
 
 interface BookingFilters {
   status?: string;
+  /**
+   * Audit P1 (2026-05-26): match by `payment_status`. The rider
+   * invoices page uses this to pull a single page of paid/partial
+   * bookings so older receipts aren't hidden behind newer pending
+   * rows on the date-sorted page-1 fetch.
+   */
+  paymentStatus?: string;
   date?: string;
   lessonTypeId?: string;
   riderMemberId?: string;
@@ -363,6 +370,10 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
     conditions.push(sql`${bookings.status} = ${filters.status}`);
   }
 
+  if (filters.paymentStatus) {
+    conditions.push(sql`${bookings.paymentStatus} = ${filters.paymentStatus}`);
+  }
+
   if (filters.date) {
     conditions.push(sql`${bookingSlots.date} = ${filters.date}`);
   }
@@ -397,7 +408,18 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
         horseId: bookings.horseId,
         status: bookings.status,
         paymentStatus: bookings.paymentStatus,
+        // Codex #18 iter-3 P3 (2026-05-28): list rows need
+        // paymentMethod so the admin UI can hide the provider-refund
+        // action on offline-settled bookings (refund route requires
+        // provider refs which markBookingPaidOffline clears).
+        paymentMethod: bookings.paymentMethod,
         amount: bookings.amount,
+        // Audit P1 (2026-05-26): include the running refund total so
+        // consumers (rider invoices page, admin lists) can render the
+        // NET amount on partially-refunded rows. Without this, a
+        // partial-refund booking displays the original capture and
+        // overstates the receipt.
+        refundedAmountMinor: bookings.refundedAmountMinor,
         currency: bookings.currency,
         horseMatchScore: bookings.horseMatchScore,
         createdAt: bookings.createdAt,
@@ -551,15 +573,34 @@ export async function createBooking(clubId: string, data: BookingCreate) {
     let recomputedAmount: number | null = null;
     let recomputedDiscount: number | null = null;
     if (data.couponId) {
+      // Audit pass-7 codex MED-1 (2026-05-25): the locked SELECT now
+      // pulls every field the pre-flight `validateCoupon` checks, so the
+      // post-lock recheck below covers the full eligibility contract —
+      // not just the usage counters. Before this, a coupon that was
+      // paused / expired / currency-tightened / minimum-raised between
+      // the route's `validateCoupon` call and this `FOR UPDATE` would
+      // still be redeemable. Now the lock catches it.
       const lockedCoupon = await tx
         .select({
           id: coupons.id,
+          status: coupons.status,
+          startsAt: coupons.startsAt,
+          expiresAt: coupons.expiresAt,
+          currency: coupons.currency,
+          minimumAmount: coupons.minimumAmount,
           maxUses: coupons.maxUses,
           maxUsesPerRider: coupons.maxUsesPerRider,
           usageCount: coupons.usageCount,
           discountType: coupons.discountType,
           discountValue: coupons.discountValue,
           maxDiscount: coupons.maxDiscount,
+          // Audit pass-7 followup (2026-05-25): pull these too so the
+          // post-lock recheck covers the full eligibility contract from
+          // `validateCoupon` (queries/finances.ts). Previously the MED-1
+          // fix shipped status/dates/currency/minimum but left
+          // firstTimeOnly + applicableTypes as TODO.
+          firstTimeOnly: coupons.firstTimeOnly,
+          applicableTypes: coupons.applicableTypes,
         })
         .from(coupons)
         .where(and(eq(coupons.id, data.couponId), eq(coupons.clubId, clubId)))
@@ -569,6 +610,30 @@ export async function createBooking(clubId: string, data: BookingCreate) {
       const c = lockedCoupon[0];
       if (!c) {
         throw new Error('COUPON_NOT_FOUND');
+      }
+
+      // Audit pass-7 codex MED-1: status / window / currency rechecks
+      // under the lock. These mirror `validateCoupon` (queries/finances.ts)
+      // exactly so a coupon tightened mid-booking-flow is rejected here
+      // even though the pre-flight already passed. The route maps these
+      // throws back to 422 INVALID_COUPON for the rider.
+      if (c.status !== 'active') {
+        throw new Error('COUPON_INACTIVE');
+      }
+      const now = new Date();
+      if (c.expiresAt && now > c.expiresAt) {
+        throw new Error('COUPON_EXPIRED');
+      }
+      if (c.startsAt && now < c.startsAt) {
+        throw new Error('COUPON_NOT_STARTED');
+      }
+      // Booking currency defaults to AED upstream when unset — same as
+      // `validateCoupon`'s `params.currency` fallback. The comparison
+      // upper-cases both sides for tolerance against case-drift between
+      // adapters / storage.
+      const bookingCurrency = (data.currency ?? 'AED').toUpperCase();
+      if (c.currency && c.currency.toUpperCase() !== bookingCurrency) {
+        throw new Error('COUPON_CURRENCY_MISMATCH');
       }
 
       if (c.maxUses != null && c.usageCount >= c.maxUses) {
@@ -591,10 +656,70 @@ export async function createBooking(clubId: string, data: BookingCreate) {
         }
       }
 
+      // Audit pass-7 followup (2026-05-25): firstTimeOnly recheck under
+      // the lock. Mirrors `validateCoupon` (queries/finances.ts:594-613).
+      // "First-time" = the rider has no non-cancelled bookings prior to
+      // this one — counted in this same transaction so a concurrent
+      // booking attempt by the same rider doesn't both pass.
+      if (c.firstTimeOnly) {
+        const priorBookings = await tx
+          .select({ id: bookings.id })
+          .from(bookings)
+          .where(
+            and(
+              eq(bookings.clubId, clubId),
+              eq(bookings.riderMemberId, data.riderMemberId),
+              sql`${bookings.status} <> 'cancelled'`,
+            ),
+          )
+          .limit(1);
+        if (priorBookings.length > 0) {
+          throw new Error('COUPON_FIRST_TIME_ONLY');
+        }
+      }
+
+      // Audit pass-7 followup (2026-05-25): applicableTypes recheck under
+      // the lock. The coupon's `applicable_types` is an array of lesson-type
+      // slugs (e.g. ['dressage', 'jumping']). The slot the rider is booking
+      // points at a `lesson_types` row whose `type` column is the slug we
+      // compare. Skip the gate if the coupon has no restriction (null or
+      // empty array) — matches the pre-flight's behaviour. The lesson-type
+      // lookup is a single primary-key SELECT, cheap to do under lock.
+      if (c.applicableTypes && c.applicableTypes.length > 0) {
+        const slotLesson = await tx
+          .select({ lessonType: lessonTypes.type })
+          .from(bookingSlots)
+          .innerJoin(
+            lessonTypes,
+            and(
+              eq(bookingSlots.lessonTypeId, lessonTypes.id),
+              eq(lessonTypes.clubId, clubId),
+            ),
+          )
+          .where(and(eq(bookingSlots.id, data.slotId), eq(bookingSlots.clubId, clubId)))
+          .limit(1);
+        const lessonTypeSlug = slotLesson[0]?.lessonType;
+        // If we can't resolve the lesson type, fail closed — better to
+        // reject the coupon than let it apply against an unknown lesson type.
+        if (!lessonTypeSlug || !c.applicableTypes.includes(lessonTypeSlug)) {
+          throw new Error('COUPON_LESSON_TYPE_NOT_ALLOWED');
+        }
+      }
+
       // Recompute. Falls back to caller-supplied `amount` when grossAmount
       // is omitted (legacy callers); the recompute then derives the
       // pre-discount value as amount + discountAmount.
       const gross = data.grossAmount ?? (data.amount ?? 0) + (data.discountAmount ?? 0);
+
+      // Audit pass-7 codex MED-1: minimumAmount recheck against the
+      // post-lock value. An admin who raised `minimumAmount` between
+      // pre-flight and now no longer leaks the looser pre-flight gate.
+      // `minimumAmount` is in the coupon's currency (verified parity
+      // above) so the comparison is meaningful.
+      if (c.minimumAmount != null && gross < c.minimumAmount) {
+        throw new Error('COUPON_MIN_AMOUNT_NOT_MET');
+      }
+
       recomputedDiscount = calculateCouponDiscount({
         amount: gross,
         discountType: c.discountType as 'percentage' | 'fixed',
@@ -849,6 +974,135 @@ export async function recordBookingRefund(
 }
 
 /**
+ * Audit pass-7 codex HIGH-1 (2026-05-25): idempotent-by-provider-refund-id
+ * sibling of `recordBookingRefund`.
+ *
+ * Before this function existed, the admin refund route and the matching
+ * provider webhook BOTH called `recordBookingRefund(amount)` for the same
+ * refund. The CAS predicate in `recordBookingRefund` only protects
+ * concurrent races — it does NOT prevent sequential same-delta calls.
+ * Real exposure: N-Genius `PARTIALLY_REFUNDED` events carry per-event
+ * deltas; an admin partial refund + the matching webhook double-recorded.
+ *
+ * This function:
+ *   1. INSERTs (booking_id, provider_refund_id) into `booking_refunds`
+ *      with ON CONFLICT DO NOTHING.
+ *   2. If the row was inserted: advances the booking ledger via the same
+ *      shape as `recordBookingRefund` and returns the new state.
+ *   3. If a conflict fired (the refund was already recorded): returns the
+ *      current booking state without touching the ledger.
+ *
+ * Both call sites — admin route + webhook explicit-delta path — pass the
+ * provider's refund ID, so the second caller no-ops cleanly.
+ *
+ * The cumulative path (`charge.refunded` with empty `refunds.data`) is
+ * self-correcting (`delta = max(0, cumulative - current_ledger)`) and
+ * continues to use `recordBookingRefund` directly — no dedup table needed.
+ *
+ * Returns:
+ *   * `{ recorded: true,  state }`  on the first apply (new ledger state).
+ *   * `{ recorded: false, state }`  on duplicate (current ledger state).
+ *   * `null`                        on booking-not-found, amount-zero,
+ *                                   or overflow (refund > booking amount).
+ */
+export async function applyProviderRefund(
+  clubId: string,
+  bookingId: string,
+  amountMinor: number,
+  options: {
+    providerRefundId: string;
+    provider: 'stripe' | 'n_genius' | 'ziina';
+  },
+): Promise<{
+  recorded: boolean;
+  state: { id: string; paymentStatus: string; refundedAmountMinor: number };
+} | null> {
+  if (amountMinor <= 0) return null;
+  if (!options.providerRefundId || options.providerRefundId.length === 0) return null;
+
+  return writeTransaction(async (tx) => {
+    // FOR UPDATE on the booking row before we touch either table —
+    // serialises any concurrent admin/webhook race on the same booking.
+    const existing = await tx
+      .select({
+        id: bookings.id,
+        amount: bookings.amount,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+        paymentStatus: bookings.paymentStatus,
+      })
+      .from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .for('update')
+      .limit(1);
+
+    const current = existing[0];
+    if (!current || current.amount == null) return null;
+
+    // Try to claim the refund. ON CONFLICT DO NOTHING returns an empty
+    // array on duplicate; otherwise the inserted row.
+    const claimed = await tx
+      .insert(bookingRefunds)
+      .values({
+        clubId,
+        bookingId,
+        provider: options.provider,
+        providerRefundId: options.providerRefundId,
+        amountMinorUnits: amountMinor,
+      })
+      .onConflictDoNothing({
+        target: [bookingRefunds.bookingId, bookingRefunds.providerRefundId],
+      })
+      .returning({ id: bookingRefunds.id });
+
+    if (claimed.length === 0) {
+      // Duplicate — this (booking_id, provider_refund_id) was already
+      // applied (either by the admin route or by a prior webhook
+      // delivery). Return the current ledger state without re-applying.
+      return {
+        recorded: false,
+        state: {
+          id: current.id,
+          paymentStatus: current.paymentStatus,
+          refundedAmountMinor: current.refundedAmountMinor,
+        },
+      };
+    }
+
+    // First time we've seen this refund — advance the ledger. Same shape
+    // as `recordBookingRefund` but the CAS predicate is dropped because
+    // we already hold the row lock from the SELECT FOR UPDATE above and
+    // the dedup table guards against the original double-call bug.
+    const newRefunded = current.refundedAmountMinor + amountMinor;
+    if (newRefunded > current.amount) {
+      // Defensive: shouldn't happen if upstream validated, but a
+      // refund event for more than the booking amount would corrupt
+      // the ledger. Bail and surface to operator triage.
+      return null;
+    }
+    const newStatus = newRefunded >= current.amount ? 'refunded' : 'partial';
+
+    const result = await tx
+      .update(bookings)
+      .set({
+        refundedAmountMinor: newRefunded,
+        paymentStatus: newStatus,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(bookings.id, bookingId), eq(bookings.clubId, clubId)))
+      .returning({
+        id: bookings.id,
+        paymentStatus: bookings.paymentStatus,
+        refundedAmountMinor: bookings.refundedAmountMinor,
+      });
+
+    const updated = result[0];
+    if (!updated) return null;
+
+    return { recorded: true, state: updated };
+  });
+}
+
+/**
  * Reverses a previously-recorded refund — used when a provider webhook
  * reports the refund transitioned `pending → failed` after we already
  * incremented the ledger (audit B-4). Decrements `refundedAmountMinor` by
@@ -1014,6 +1268,18 @@ export async function setBookingPaymentRef(
       if (current.status === 'cancelled' || current.status === 'no_show') {
         return null;
       }
+      // Codex #18 iter-4 P2 (2026-05-28): route-driven attaches (no
+      // `paymentStatus` arg — the route is recording the provider
+      // intent, not the outcome) MUST require the locked row to still
+      // be `paymentStatus='pending'`. Otherwise a concurrent
+      // `markBookingPaidOffline` between the route's intent-mint and
+      // its DB attach would let us reattach a fresh provider ref to
+      // an already-paid booking — opening duplicate collection. The
+      // route logs and surfaces an error so ops can void the orphaned
+      // intent.
+      if (!data.paymentStatus && current.paymentStatus !== 'pending') {
+        return null;
+      }
     }
 
     if (data.paymentStatus) {
@@ -1046,11 +1312,29 @@ export async function setBookingPaymentRef(
       }
     }
 
+    // Audit I1 (2026-05-18): stamp `providerPaymentIssuedAt` ONLY
+    // when `providerPaymentId` is genuinely changing (NULL → set, or
+    // old id → new id). Idempotent webhook rewrites that arrive with
+    // the SAME id we already have must NOT re-stamp — otherwise
+    // every accepted webhook event slides the freshness window
+    // forward, turning the 24h reference-recency gate into "24h
+    // since the last accepted webhook for this reference" and
+    // letting a forged event keep extending its own validity.
+    //
+    // The mint event is the route's `setBookingPaymentRef` call at
+    // payment init (or PR #118's route-driven retry replacing an
+    // abandoned id). The webhook arrives with the same id moments
+    // to days later; that arrival should not move the issuance
+    // timestamp.
+    const isProviderPaymentIdChanging =
+      Boolean(data.providerPaymentId) &&
+      data.providerPaymentId !== current.providerPaymentId;
     const result = await tx
       .update(bookings)
       .set({
         ...(data.paymentProvider ? { paymentProvider: data.paymentProvider } : {}),
         ...(data.providerPaymentId ? { providerPaymentId: data.providerPaymentId } : {}),
+        ...(isProviderPaymentIdChanging ? { providerPaymentIssuedAt: new Date() } : {}),
         ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
         updatedAt: new Date(),
       })
@@ -1394,6 +1678,77 @@ export async function reconcileBookingMarkPaid(clubId: string, bookingId: string
         eq(bookings.id, bookingId),
         eq(bookings.clubId, clubId),
         eq(bookings.paymentStatus, 'pending'),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
+// `package_credit` intentionally OMITTED — settlement against rider
+// packages requires atomic credit consumption (decrement
+// rider_packages.remaining_credits) and the booking-create path blocks
+// it for the same reason. Until that flow ships, the offline
+// settle-now button can't represent it (codex #18 P2 2026-05-28).
+type OfflinePaymentMethod = 'cash' | 'card_in_person' | 'bank_transfer';
+
+/**
+ * Task #18 (2026-05-28): admin-initiated "mark paid offline" path for the
+ * inline booking row action. Sets `payment_status='paid'` and pins the
+ * `payment_method` to the offline option the operator picked. CAS on
+ * NOT-paid statuses so an already-paid / refunded booking can't be
+ * silently overwritten — a concurrent webhook landing 'paid' wins and we
+ * return null. A 'failed' booking can be salvaged this way; a 'refunded'
+ * one cannot (a manual refund recapture would need its own flow).
+ *
+ * Lifecycle CAS (codex #18 P2 2026-05-28): also block cancelled /
+ * no_show / completed bookings. A 'no_show' or 'cancelled' booking
+ * shouldn't be retroactively marked paid — that produces phantom paid
+ * revenue against a released slot. Only `confirmed` and `pending`
+ * lifecycle states are eligible.
+ *
+ * Provider-ref clear (codex #18 P2 2026-05-28): when flipping a
+ * `failed` booking, also clear `paymentProvider` / `providerPaymentId`
+ * / `providerPaymentIssuedAt`. Without this the refund path would try
+ * to call the provider with a stale (failed/abandoned) reference.
+ *
+ * Returns the updated row when the CAS won; null otherwise.
+ */
+export async function markBookingPaidOffline(
+  clubId: string,
+  bookingId: string,
+  paymentMethod: OfflinePaymentMethod,
+) {
+  const result = await db
+    .update(bookings)
+    .set({
+      paymentStatus: 'paid',
+      paymentMethod,
+      paymentProvider: null,
+      providerPaymentId: null,
+      providerPaymentIssuedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        // Payment CAS — only flip when not already settled.
+        inArray(bookings.paymentStatus, ['pending', 'failed']),
+        // Lifecycle CAS — only when the booking is still live.
+        inArray(bookings.status, ['confirmed', 'pending']),
+        // Provider-intent guard (codex #18 iter-3 P2 2026-05-28).
+        // A `pending` booking with an active provider intent is mid-
+        // online-payment; flipping it offline while the rider's
+        // checkout still resolves causes either duplicate collection
+        // or stale provider refs reattached after the clear. Refuse
+        // and let staff cancel the provider intent first. `failed`
+        // bookings already exhausted their provider flow, so we
+        // permit them through this gate even with non-null refs (the
+        // clear above is then load-bearing).
+        sql`(
+          ${bookings.paymentStatus} = 'failed'
+          OR ${bookings.providerPaymentId} IS NULL
+        )`,
       ),
     )
     .returning();

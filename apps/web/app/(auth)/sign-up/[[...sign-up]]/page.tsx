@@ -51,6 +51,21 @@ export default async function SignUpPage({ searchParams }: PageProps) {
         signInUrl={isStable ? '/sign-in?as=stable' : '/sign-in'}
       />
 
+      <p className="text-muted-foreground mt-4 max-w-sm text-center text-xs leading-relaxed">
+        By creating an account, you agree to our{' '}
+        <Link
+          href={isStable ? '/legal/terms' : '/legal/terms/end-user'}
+          className="hover:text-foreground underline underline-offset-2"
+        >
+          {isStable ? 'Terms of Service' : 'end-user terms'}
+        </Link>{' '}
+        and{' '}
+        <Link href="/legal/privacy" className="hover:text-foreground underline underline-offset-2">
+          Privacy Policy
+        </Link>
+        .
+      </p>
+
       <div className="mt-6 flex flex-col items-center gap-2">
         {isStable ? (
           <Link

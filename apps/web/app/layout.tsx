@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Toaster } from 'sonner';
 import { Providers } from '@/components/providers';
+import { CookieBanner } from '@/components/shared/cookie-banner';
 import './globals.css';
 
 const inter = Inter({
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Providers>
             {children}
             <Toaster position="bottom-right" richColors closeButton />
+            <CookieBanner />
           </Providers>
         </ClerkProvider>
       </body>

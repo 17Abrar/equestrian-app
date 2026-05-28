@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   UserX,
   Undo2,
+  Banknote,
 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -63,7 +64,17 @@ import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
 // ─── Action Dialog Types ─────────────────────────────────────────────
 
-type ActionType = 'cancel' | 'no_show' | 'complete' | 'refund';
+type ActionType = 'cancel' | 'no_show' | 'complete' | 'refund' | 'mark_paid_offline';
+
+// Codex #18 P2 (2026-05-28): `package_credit` excluded — settling
+// against rider packages requires atomic credit consumption that
+// isn't implemented (booking-create blocks it for the same reason).
+type OfflinePaymentMethod = 'cash' | 'card_in_person' | 'bank_transfer';
+const OFFLINE_PAYMENT_METHODS: ReadonlyArray<{ value: OfflinePaymentMethod; label: string }> = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card_in_person', label: 'Card in person' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+];
 
 interface ActionDialogState {
   type: ActionType;
@@ -110,6 +121,13 @@ const ACTION_CONFIG: Record<
       'Request a full refund through the payment provider that captured this booking. The booking ledger updates only after the provider reports a succeeded refund.',
     confirmLabel: 'Issue Refund',
     variant: 'destructive',
+  },
+  mark_paid_offline: {
+    title: 'Mark as Paid (Offline)',
+    description:
+      'Record this booking as paid outside the online payment provider. Pick the method you settled with — this updates the booking ledger immediately and cannot be reversed through this dialog.',
+    confirmLabel: 'Mark Paid',
+    variant: 'default',
   },
 };
 
@@ -201,14 +219,45 @@ function useRefundBooking() {
   });
 }
 
+function useMarkPaidOffline() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookingId,
+      paymentMethod,
+    }: {
+      bookingId: string;
+      paymentMethod: OfflinePaymentMethod;
+    }) =>
+      fetchJson<ApiResponse<unknown>>(`/api/v1/bookings/${bookingId}/mark-paid-offline`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethod }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['bookings', 'list'] });
+      void qc.invalidateQueries({ queryKey: ['bookings', 'detail'] });
+      // Codex #18 P3 (2026-05-28): finance overview rolls up by
+      // payment_method, so a manual settlement here must invalidate
+      // those queries too. Otherwise the Finances tab shows stale
+      // payment-method breakdowns until the next refetch.
+      void qc.invalidateQueries({ queryKey: ['finances', 'overview'] });
+      void qc.invalidateQueries({ queryKey: ['finances', 'payments'] });
+    },
+    onError: (err) => reportMutationError('booking.mark_paid_offline', err),
+  });
+}
+
 function BookingActionDialog({ state, onClose }: ActionDialogProps) {
   const [reason, setReason] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<OfflinePaymentMethod>('cash');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const cancelBooking = useCancelBooking();
   const markNoShow = useMarkNoShow();
   const markComplete = useMarkComplete();
   const refundBooking = useRefundBooking();
+  const markPaidOffline = useMarkPaidOffline();
 
   const handleConfirm = useCallback(async () => {
     if (!state) return;
@@ -242,8 +291,18 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
         } else {
           toast.success('Refund issued');
         }
+      } else if (state.type === 'mark_paid_offline') {
+        const result = await markPaidOffline.mutateAsync({
+          bookingId: state.booking.id,
+          paymentMethod,
+        });
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
+        toast.success('Booking marked as paid');
       }
       setReason('');
+      setPaymentMethod('cash');
       onClose();
     } catch (err) {
       reportMutationError('booking.action', err, {
@@ -254,7 +313,17 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [state, reason, cancelBooking, markNoShow, markComplete, refundBooking, onClose]);
+  }, [
+    state,
+    reason,
+    paymentMethod,
+    cancelBooking,
+    markNoShow,
+    markComplete,
+    refundBooking,
+    markPaidOffline,
+    onClose,
+  ]);
 
   if (!state) return null;
 
@@ -317,6 +386,29 @@ function BookingActionDialog({ state, onClose }: ActionDialogProps) {
               onChange={(e) => setReason(e.target.value)}
               rows={2}
             />
+          </div>
+        )}
+
+        {state.type === 'mark_paid_offline' && (
+          <div className="space-y-2">
+            <label htmlFor="offline-payment-method" className="text-sm font-medium">
+              Payment method
+            </label>
+            <Select
+              value={paymentMethod}
+              onValueChange={(v) => setPaymentMethod(v as OfflinePaymentMethod)}
+            >
+              <SelectTrigger id="offline-payment-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OFFLINE_PAYMENT_METHODS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 
@@ -394,11 +486,33 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
       actions.push('complete');
       actions.push('no_show');
     }
-    // Refund is available whenever the booking has been paid and isn't
-    // already refunded. The API enforces this too, but the menu item should
-    // only surface when meaningful.
-    if (booking.paymentStatus === 'paid') {
+    // Refund is available whenever the booking has been paid AND the
+    // payment went through a provider (the refund route calls the
+    // provider's refund API and would fail with no provider id).
+    // Codex #18 iter-2 P3 (2026-05-28): an offline-settled booking
+    // has its provider refs cleared by `markBookingPaidOffline`, so a
+    // provider refund is impossible. We gate on `paymentMethod` not
+    // being one of the offline options — Booking type doesn't expose
+    // `providerPaymentId`, but `paymentMethod` is the same signal.
+    const isOfflinePaymentMethod =
+      booking.paymentMethod === 'cash' ||
+      booking.paymentMethod === 'card_in_person' ||
+      booking.paymentMethod === 'bank_transfer' ||
+      booking.paymentMethod === 'package_credit';
+    if (booking.paymentStatus === 'paid' && !isOfflinePaymentMethod) {
       actions.push('refund');
+    }
+    // Task #18 (2026-05-28): inline "Mark Paid (Offline)" closes the
+    // audit P2 gap where the only way to record a cash/transfer
+    // settlement was the Add Booking dialog. Mirror the API CAS:
+    // only when the booking is live (confirmed/pending) AND payment
+    // is in a recoverable state. Codex #18 iter-2 P3 — UI was hiding
+    // mismatched-lifecycle bookings only at the API layer; now matches.
+    if (
+      (booking.status === 'confirmed' || booking.status === 'pending') &&
+      (booking.paymentStatus === 'pending' || booking.paymentStatus === 'failed')
+    ) {
+      actions.push('mark_paid_offline');
     }
     return actions;
   }
@@ -573,6 +687,16 @@ export function BookingsList({ canCreate = true }: BookingsListProps = {}) {
                               >
                                 <XCircle className="mr-2 h-4 w-4" />
                                 Cancel Booking
+                              </DropdownMenuItem>
+                            )}
+                            {actions.includes('mark_paid_offline') && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setActionDialog({ type: 'mark_paid_offline', booking })
+                                }
+                              >
+                                <Banknote className="mr-2 h-4 w-4" />
+                                Mark Paid (Offline)
                               </DropdownMenuItem>
                             )}
                             {actions.includes('refund') && (

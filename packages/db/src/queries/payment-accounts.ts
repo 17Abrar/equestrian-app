@@ -702,28 +702,62 @@ export async function findBookingByIdForWebhook(
 
 /**
  * Audit F-20 (2026-05-07 r5): defense-in-depth check that a provider's
- * `reference` (or `provider_payment_id`) was issued by us in the last
- * 24 hours. N-Genius webhook auth is a shared-secret echo — there's no
+ * `reference` (or `provider_payment_id`) was issued by us within the
+ * window. N-Genius webhook auth is a shared-secret echo — there's no
  * body-binding. A leaked (header, body) pair lets the attacker craft
  * fresh REFUNDED / PURCHASED events for ANY reference. Pairing the
- * tightened freshness window (90 s) with this lookup adds a
- * "reference must be one we minted recently" gate so an attacker
- * needs both the secret AND a recently-issued reference to forge a
- * useful event.
+ * tightened freshness window (90 s) in the adapter with this lookup
+ * adds a "reference must be one we minted recently" gate so an
+ * attacker needs both the secret AND a recently-issued reference to
+ * forge a useful event.
  *
- * NOT load-bearing — the freshness window is the primary fix. This is
- * belt-and-braces. The query checks both `bookings.providerPaymentId`
- * (booking flow) and `liveryInvoices.providerPaymentId` (livery flow).
- * Returns true if either has a row created in the last 24h whose
- * provider_payment_id matches AND clubId matches the URL-bound club.
+ * NOT load-bearing — the adapter's freshness window is the primary
+ * fix. This is belt-and-braces. The query checks both
+ * `bookings.providerPaymentId` and `liveryInvoices.providerPaymentId`.
+ * Returns true if either has a row whose provider_payment_id matches
+ * AND was issued within the window AND clubId matches the URL-bound
+ * club.
+ *
+ * Audit I1 (2026-05-18): the recency window keys on
+ * `provider_payment_issued_at` (stamped by `setBookingPaymentRef` /
+ * `setInvoiceProviderRef`); migration 0058 added the column and
+ * backfilled from `created_at`. Previously keyed on
+ * `bookings.created_at`, which was the wrong axis — a route-driven
+ * pay-link retry on an old booking would fail the gate even though
+ * the provider_payment_id was genuinely fresh.
+ *
+ * Audit pass-7 codex MED-2 (2026-05-25): the default window widened
+ * from 24h to 30 days. The tight 24h bound was dropping legitimate
+ * delayed completions — N-Genius 3-D-Secure dropoff-then-resume can
+ * take multi-day; dashboard-issued refunds on bookings older than 24h
+ * were silently rejected and the operator only found out at
+ * reconciliation. The forgery window is now a month long, but:
+ *   * The adapter-side 90 s freshness window is still in place — that
+ *     was always the primary defence.
+ *   * Per-event-id dedup in `webhook_events` blocks any replay.
+ *   * The amount/currency reconciliation in `webhook-helpers.ts:818-877`
+ *     catches forged events with wrong amounts/currency.
+ *   * An attacker who could forge useful events 25h-30d post-payment
+ *     could already forge events 0-24h post-payment under the old
+ *     window. Widening the window doesn't open a new attack vector,
+ *     it just reduces false-positive rejections of legitimate late
+ *     events.
+ * Callers that want the previous 24h bound can pass `windowMs`
+ * explicitly.
  */
+const DEFAULT_PROVIDER_PAYMENT_RECENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 export async function wasProviderPaymentIssuedRecently(
   providerPaymentId: string,
   provider: PaymentProvider,
   clubId: string,
-  windowMs: number = 24 * 60 * 60 * 1000,
+  windowMs: number = DEFAULT_PROVIDER_PAYMENT_RECENCY_WINDOW_MS,
 ): Promise<boolean> {
   const cutoff = new Date(Date.now() - windowMs);
+  // gte against `provider_payment_issued_at` — NULL rows (those that
+  // never went through a payment flow) are excluded by the predicate,
+  // which is the correct posture: a row with no recorded issuance
+  // time has no claim to "issued recently".
   const bookingHit = await rawDb
     .select({ id: bookings.id })
     .from(bookings)
@@ -732,7 +766,7 @@ export async function wasProviderPaymentIssuedRecently(
         eq(bookings.providerPaymentId, providerPaymentId),
         eq(bookings.paymentProvider, provider),
         eq(bookings.clubId, clubId),
-        gte(bookings.createdAt, cutoff),
+        gte(bookings.providerPaymentIssuedAt, cutoff),
       ),
     )
     .limit(1);
@@ -746,7 +780,7 @@ export async function wasProviderPaymentIssuedRecently(
         eq(liveryInvoices.providerPaymentId, providerPaymentId),
         eq(liveryInvoices.paymentProvider, provider),
         eq(liveryInvoices.clubId, clubId),
-        gte(liveryInvoices.createdAt, cutoff),
+        gte(liveryInvoices.providerPaymentIssuedAt, cutoff),
       ),
     )
     .limit(1);

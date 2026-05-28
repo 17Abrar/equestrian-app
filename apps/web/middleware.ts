@@ -71,7 +71,12 @@ function buildCsp(nonce: string): string {
     // public-read host where uploaded objects live (already in img-src
     // for previews; not needed for connect since we don't fetch them
     // via JS).
-    `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://*.r2.cloudflarestorage.com https://maps.googleapis.com`,
+    // Audit pass-7 integration LOW (2026-05-25): dropped
+    // `https://maps.googleapis.com` from connect-src — recursive search
+    // of `apps/web` + `apps/mobile` found zero references to Google Maps
+    // SDKs or that host. CSP least-privilege: re-add when (and if) the
+    // Maps feature ships.
+    `connect-src 'self' ${CLERK_CONNECT} ${SENTRY_CONNECT} ${STRIPE_CONNECT} https://*.r2.cloudflarestorage.com`,
     `frame-src 'self' ${CLERK_FRAME} ${STRIPE_FRAME}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
@@ -118,6 +123,11 @@ function generateNonce(): string {
 // without an explicit secret check. Add new public routes here
 // deliberately.
 const isPublicRoute = createRouteMatcher([
+  // Marketing landing page (2026-05-26): `/` is the public intro to
+  // Cavaliq. Signed-in admins still see it; the header offers a "Go to
+  // dashboard" CTA. The authenticated dashboard home moved to
+  // `/dashboard`.
+  '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks/stripe/(.*)',
@@ -125,6 +135,11 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhooks/n-genius',
   '/api/webhooks/ziina/(.*)',
   '/api/webhooks/ziina-platform',
+  // Audit pass-7 integration MED (2026-05-25): Resend email events
+  // (bounced / complained / failed / delivery_delayed). Svix signature
+  // is the auth — no user context. Phase 1 ingest is log-only; phase 2
+  // will add a suppression list checked by `sendEmail`.
+  '/api/webhooks/resend',
   // Cron endpoints authenticate via x-cron-secret header, not Clerk session.
   // Cloudflare's scheduled() invocation has no user context.
   '/api/cron/livery-billing',
@@ -132,6 +147,14 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/booking-reminders',
   '/api/cron/horse-care-reminders',
   '/api/cron/audit-prune',
+  // Audit pass-6 (2026-05-22 HIGH-1): the */10 booking-payment-timeout
+  // sweep landed in PR #113 (2026-05-16) but its public-route entry was
+  // missed. Without it, `auth.protect()` rejected every internal POST
+  // from `worker-entry.mjs:168-170`, surfacing only as
+  // `cron_scheduled_non_ok` in tail logs — the slot-release sweep was
+  // dead in prod for ~6 days. New cron routes MUST be added here when
+  // they ship.
+  '/api/cron/booking-payment-timeout',
   // F-43 (2026-05-07 r4): cold-start env-binding self-check. The folder
   // name dropped its leading underscore in Lambda-tris because Next.js
   // App Router treats `_<name>` directories as private (excluded from
@@ -146,6 +169,24 @@ const isPublicRoute = createRouteMatcher([
   '/discover(.*)',
   '/c/(.*)',
   '/api/v1/discover(.*)',
+  // Legal, help, support, status — all public-by-design pages. Riders,
+  // clubs, regulators, and the public app stores all need to be able to
+  // read these without signing in.
+  '/legal(.*)',
+  '/help(.*)',
+  '/support',
+  '/status',
+  // Public-facing API endpoints driving the support and privacy intake
+  // forms. Rate-limited per IP inside the handlers.
+  '/api/v1/support/contact',
+  '/api/v1/privacy/request',
+  // Community waitlist signup (audit P0-C, 2026-05-26). Public so
+  // signed-out prospects on the marketing page (when community ships)
+  // and the mobile / web rider tab visitors can both submit. Tight
+  // per-IP rate limit inside the handler.
+  '/api/v1/community/notify-me',
+  // security.txt + privacy/terms references for crawlers / app store review.
+  '/.well-known/(.*)',
 ]);
 
 // CORS origin allowlist — set CORS_ALLOWED_ORIGINS as comma-separated list in env.
@@ -235,10 +276,56 @@ export default clerkMiddleware(async (auth, request) => {
       );
     }
 
-    const contentLength = request.headers.get('content-length');
-    if (contentLength) {
+    // Audit pass-5 LOW-5 (2026-05-21): the previous block only rejected
+    // oversized bodies when Content-Length was present and failed silent
+    // when both Content-Length AND Transfer-Encoding were absent — a
+    // bodied request that omitted both slipped past the cap and reached
+    // the route handler. The comment above already claimed "the same
+    // guard refuses a bodied request that omits Content-Length
+    // entirely," so this is documentation catching up with the code.
+    //
+    // Codex review on the first version of this fix: bodyless mutations
+    // (DELETE without payload, bodyless POST/PATCH) legitimately omit
+    // Content-Length and several `fetchJson(..., { method: 'DELETE' })`
+    // hooks in this codebase rely on that. Only require Content-Length
+    // when there IS a body (`request.body !== null`); a bodyless request
+    // has nothing to cap, so it falls through to the rest of middleware
+    // unchanged.
+    if (request.body !== null) {
+      const contentLength = request.headers.get('content-length');
+      if (!contentLength) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'LENGTH_REQUIRED',
+              message:
+                'Mutating requests with a body must declare a Content-Length header so the body cap can be enforced.',
+            },
+          }),
+          {
+            status: 411,
+            headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+          },
+        );
+      }
       const declared = Number(contentLength);
-      if (Number.isFinite(declared) && declared > 1 * 1024 * 1024) {
+      if (!Number.isFinite(declared) || declared < 0) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'LENGTH_REQUIRED',
+              message: 'Content-Length must be a non-negative integer.',
+            },
+          }),
+          {
+            status: 411,
+            headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
+          },
+        );
+      }
+      if (declared > 1 * 1024 * 1024) {
         return new NextResponse(
           JSON.stringify({
             success: false,

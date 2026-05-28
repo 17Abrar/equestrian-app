@@ -156,6 +156,19 @@ export interface WebhookEvent {
    * (audit B-4).
    */
   refundStatus?: 'pending' | 'succeeded' | 'failed' | 'canceled' | 'requires_action';
+  /**
+   * Audit pass-7 codex HIGH-1 (2026-05-25): the provider's identifier for
+   * the refund itself (Stripe `re_xxx`, N-Genius refund `_id`, Ziina
+   * `refund.id`). Used by `applyProviderRefund(...)` to dedup admin-route
+   * + webhook double-records. Optional because not every refund-shaped
+   * event carries one (Stripe `charge.refunded` with empty `refunds.data`
+   * has no per-event refund ID — that path uses the cumulative branch
+   * which is self-correcting). Adapters MUST populate this on any event
+   * that sets `refundStatus` AND `refundAmountMinor`; if it's missing,
+   * the webhook helper falls back to a non-deduped path and surfaces a
+   * warning log.
+   */
+  providerRefundId?: string;
   /** Amount of THIS specific refund, in minor units. Distinct from
    * `amountReceivedMinorUnits` which for charge events is the cumulative
    * refunded total. Required to reverse the right amount on a failed refund. */

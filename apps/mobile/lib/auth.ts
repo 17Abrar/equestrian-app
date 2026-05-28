@@ -21,6 +21,17 @@ import { captureMobileException } from './sentry';
  * and `saveToken` re-throws so Clerk treats the partial sign-in as a
  * failure rather than a silent success.
  */
+// Audit pass-7 (2026-05-25 MED-3 codex / pass-6 LOW-1 deferred from PR #156):
+// the Clerk session JWT is persisted under this key. Hardcoded here so the
+// explicit clear path in `apps/mobile/app/_layout.tsx` (sign-out useEffect)
+// can wipe it even though `@clerk/clerk-expo@2.x` only invokes the
+// `clearToken` cache hook during publishable-key hot-swap, NOT on normal
+// `signOut()`. Verified at `createClerkInstance.js:60` — gated by
+// `if (hasKeyChanged)`. Without explicit wipe, a shared device retains the
+// JWT in the keychain across sign-out → cold start cycles, enabling
+// session resurrection.
+export const CLERK_SESSION_JWT_KEY = '__clerk_client_jwt';
+
 export const tokenCache: TokenCache = {
   async getToken(key: string) {
     try {
@@ -53,5 +64,24 @@ export const tokenCache: TokenCache = {
       });
       throw err;
     }
+  },
+  // Audit pass-7 (2026-05-25): adding the hook even though @clerk/clerk-expo
+  // 2.x only invokes it during publishable-key hot-swap. Forward-compat for
+  // future Clerk versions that may call this on sign-out. The load-bearing
+  // sign-out cleanup is in `_layout.tsx` — see `CLERK_SESSION_JWT_KEY` above.
+  //
+  // Signature is sync (`() => void` per Clerk's `TokenCache` type) so the
+  // promise is fire-and-forget — Clerk doesn't await it anyway. Errors flow
+  // to Sentry via the `.catch()` tail; sign-out UX is never blocked on the
+  // wipe.
+  clearToken(key: string): void {
+    SecureStore.deleteItemAsync(key).catch((err: unknown) => {
+      captureMobileException(err, 'clerk_token_cache_clear_failed', { key });
+      // eslint-disable-next-line no-console
+      console.error('[clerk-token-cache] clearToken failed', {
+        key,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
   },
 };

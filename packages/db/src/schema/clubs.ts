@@ -9,6 +9,7 @@ import {
   numeric,
   jsonb,
   index,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { subscriptionStatusEnum, subscriptionTierEnum, joinPolicyEnum } from './enums';
@@ -158,6 +159,37 @@ export const clubs = pgTable(
     index('idx_clubs_public_listing')
       .on(table.isPublicListing)
       .where(sql`is_public_listing = true AND deleted_at IS NULL`),
+    // Audit pass-6 (2026-05-22 LOW-3): mirror of migration 0057's
+    // `clubs_booking_payment_timeout_minutes_range` CHECK so the TS
+    // schema stays the source of truth. Without this declaration,
+    // `drizzle-kit generate` would emit a `DROP CONSTRAINT` migration,
+    // weakening the DB-side guardrail behind the per-club tunable
+    // grace window (the route-level Zod also enforces 1..60, but
+    // direct writes / future bypass paths would lose the floor).
+    check(
+      'clubs_booking_payment_timeout_minutes_range',
+      sql`${table.bookingPaymentTimeoutMinutes} BETWEEN 1 AND 60`,
+    ),
+    // Audit pass-7 (2026-05-25 LOW-5): a publicly-listed club MUST have
+    // the location fields that the `/c/[slug]` profile page renders.
+    // The application enforces this at the onboarding-wizard write
+    // boundary, but `sync-org` (dev) and direct DB writes bypass that,
+    // and the row would render with empty city/country pills. See
+    // migration 0061. Email, phone, address are NOT in the check —
+    // email is operations contact (receipts, not public profile); phone
+    // is private; address is the street-level detail that maps to the
+    // city pill. Pass-7 v1 included email but at least one existing
+    // publicly-listed prod row has email = NULL (sync-org bootstrap
+    // legacy); tightening email needs a backfill plan first — tracked
+    // as follow-up.
+    check(
+      'clubs_public_listing_requires_contact_check',
+      sql`${table.isPublicListing} = FALSE
+        OR (
+          ${table.city} IS NOT NULL AND char_length(trim(${table.city})) > 0
+          AND ${table.country} IS NOT NULL AND char_length(trim(${table.country})) > 0
+        )`,
+    ),
   ],
 );
 

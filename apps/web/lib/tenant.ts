@@ -85,15 +85,25 @@ export async function getTenantContext(): Promise<TenantContext> {
 
     const foundClub = club[0];
     if (foundClub) {
+      // Query WITHOUT the `isActive` filter so we can distinguish the two
+      // refusal cases — a "no row at all" (webhook race, transient) from
+      // a "row exists but inactive" (admin-deactivation, permanent). Both
+      // were collapsed into NO_MEMBERSHIP before; that was safe (refuses
+      // either) but produced misleading UX downstream — a deactivated
+      // user saw "Your account is being set up" on /onboarding's
+      // auto-refreshing placeholder and would poll forever instead of
+      // seeing "Your access has been revoked." Splitting the codes lets
+      // callers render the correct surface while preserving the
+      // authorization-refusal semantics.
       const member = await db
-        .select({ id: clubMembers.id, role: clubMembers.role })
+        .select({
+          id: clubMembers.id,
+          role: clubMembers.role,
+          isActive: clubMembers.isActive,
+        })
         .from(clubMembers)
         .where(
-          and(
-            eq(clubMembers.clubId, foundClub.id),
-            eq(clubMembers.clerkUserId, userId),
-            eq(clubMembers.isActive, true),
-          ),
+          and(eq(clubMembers.clubId, foundClub.id), eq(clubMembers.clerkUserId, userId)),
         )
         .limit(1);
 
@@ -101,21 +111,22 @@ export async function getTenantContext(): Promise<TenantContext> {
 
       // Audit pass-3 (2026-05-09): NEVER fall back to the Clerk-derived
       // role when no active `club_members` row exists. Two scenarios
-      // collapsed into one safe outcome:
+      // distinguished here (previously collapsed into a single
+      // `NO_MEMBERSHIP` code):
       //
       //   1. Newly-joined user, Clerk's `organizationMembership.created`
-      //      webhook hasn't landed yet → bounded race window, retry-
-      //      within-seconds resolves it.
+      //      webhook hasn't landed yet → `NO_MEMBERSHIP`. Bounded race
+      //      window, retry-within-seconds resolves it; the /onboarding
+      //      layout renders an auto-refreshing setup placeholder.
       //   2. Deactivated user whose Clerk session is still live —
-      //      `deactivateMember` flips `is_active=false` in our DB but
-      //      doesn't (today) call Clerk `removeOrganizationMembership`,
-      //      so `orgRole` from the JWT is still 'org:admin' for an
-      //      admin who was just revoked. Falling back to that role
-      //      grants them admin powers until their JWT TTL elapses —
-      //      a real authorization-bypass window. Refusing here closes
-      //      the window unconditionally; the corresponding follow-up
-      //      is to remove the Clerk org membership at deactivate time
-      //      so the JWT itself stops carrying the stale role.
+      //      `deactivateMember` flips `is_active=false` in our DB.
+      //      `removeOrganizationMembership` is fail-open by design (see
+      //      `lib/clerk-org-membership.ts`), so a Clerk 5xx leaves the
+      //      JWT carrying the stale `org:admin` role until TTL. Refusing
+      //      here closes that authorization-bypass window unconditionally;
+      //      we surface `MEMBERSHIP_DEACTIVATED` so the UI can render
+      //      "access revoked" + sign-out instead of an infinite retry
+      //      spinner.
       //
       // Audit auth-5 supersedes: previously fell open to `'rider'` when
       // neither a `club_members` row nor an `orgRole` was present.
@@ -123,6 +134,12 @@ export async function getTenantContext(): Promise<TenantContext> {
         throw new TenantError(
           'NO_MEMBERSHIP',
           'Your account is being set up — please refresh in a moment.',
+        );
+      }
+      if (!foundMember.isActive) {
+        throw new TenantError(
+          'MEMBERSHIP_DEACTIVATED',
+          'Your membership in this club was deactivated by an admin.',
         );
       }
 

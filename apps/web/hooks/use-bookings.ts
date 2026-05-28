@@ -297,6 +297,7 @@ const bookingDetailKey = (bookingId: string) => [...BOOKINGS_KEY, 'detail', book
 export function useBookings(filters: Partial<BookingFiltersInput> = {}) {
   const params = new URLSearchParams();
   if (filters.status) params.set('status', filters.status);
+  if (filters.paymentStatus) params.set('paymentStatus', filters.paymentStatus);
   if (filters.date) params.set('date', filters.date);
   if (filters.lessonTypeId) params.set('lessonTypeId', filters.lessonTypeId);
   if (filters.riderMemberId) params.set('riderMemberId', filters.riderMemberId);

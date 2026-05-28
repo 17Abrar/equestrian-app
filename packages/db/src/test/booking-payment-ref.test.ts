@@ -250,6 +250,46 @@ describe('setBookingPaymentRef — lifecycle CAS', () => {
       .limit(1);
     expect(row[0]?.providerPaymentId).toBe('pi_first');
   });
+
+  it('refuses route-driven providerPaymentId attach when current paymentStatus is paid (markBookingPaidOffline race)', async () => {
+    // Codex #18 iter-4/5 P2 (2026-05-28) regression. The race:
+    //   1. Rider opens checkout; payment route mints a provider intent
+    //      (in-memory, no DB write yet).
+    //   2. Admin marks the booking paid offline via `markBookingPaidOffline`
+    //      — `paymentStatus='paid'`, providerPaymentId cleared to null.
+    //   3. Payment route resumes, calls setBookingPaymentRef with the
+    //      new providerPaymentId but NO paymentStatus (route attaches,
+    //      doesn't record an outcome).
+    // Without the new guard, step 3 attached the fresh ref onto an
+    // already-paid booking, opening duplicate collection. With the
+    // guard, step 3 is refused; the route's caller logs an orphaned-
+    // intent event and ops void the provider intent.
+    const { clubId, bookingId } = await seedBooking({
+      status: 'confirmed',
+      paymentStatus: 'paid',
+      providerPaymentId: null,
+    });
+
+    const result = await withTestDb(testDb.db, () =>
+      setBookingPaymentRef(clubId, bookingId, {
+        paymentProvider: 'stripe',
+        providerPaymentId: 'pi_late',
+      }),
+    );
+
+    expect(result).toBeNull();
+
+    const row = await testDb.db
+      .select({
+        providerPaymentId: bookings.providerPaymentId,
+        paymentStatus: bookings.paymentStatus,
+      })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+    expect(row[0]?.providerPaymentId).toBeNull();
+    expect(row[0]?.paymentStatus).toBe('paid');
+  });
 });
 
 describe('setBookingPaymentRef — paymentStatus terminal-state CAS', () => {

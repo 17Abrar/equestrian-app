@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useClerk } from '@clerk/nextjs';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -844,6 +845,7 @@ function StaffStep({ onComplete, onBack }: StaffStepProps) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { signOut } = useClerk();
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
 
@@ -852,14 +854,49 @@ export default function OnboardingPage() {
     try {
       await fetchJson('/api/v1/onboarding', { method: 'POST' });
       toast.success('Setup complete! Welcome to your dashboard.');
-      router.push('/');
+      router.push('/dashboard');
     } catch (err) {
       reportMutationError('onboarding.complete', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to complete onboarding');
+      // Audit pass-5 LOW-10 (2026-05-21): admins can deactivate a
+      // user's membership while the user is mid-onboarding (rare but
+      // not impossible — admin does it in the staff page while the
+      // user is filling out the wizard in a parallel tab). The server
+      // returns 403 `MEMBERSHIP_DEACTIVATED`. The default toast already
+      // surfaces the server's message ("Your membership in this club
+      // was deactivated by an admin.") thanks to `err.message`, but
+      // the UX otherwise looks like a transient network error: the
+      // user hits Complete again and loops on the same toast. Show a
+      // sticky, longer-lived toast for this specific code with a
+      // sign-out action so they can re-auth under a different
+      // membership (or take it up with the admin).
+      const errWithCode = err as Error & { code?: string };
+      if (errWithCode?.code === 'MEMBERSHIP_DEACTIVATED') {
+        toast.error(errWithCode.message, {
+          duration: 15_000,
+          action: {
+            // Codex review follow-up: this app has no `/sign-out` route;
+            // navigating there would land on a 404 with the Clerk
+            // session still valid, leaving the user stuck. Invoke
+            // Clerk's `signOut` directly so the session is actually
+            // cleared and the user lands on `/sign-in` — matches the
+            // pattern in `components/onboarding/access-revoked-placeholder.tsx`.
+            label: 'Sign out',
+            // signOut returns a Promise; sonner's `action.onClick` is typed
+            // as a `void`-returning function. Clerk handles the navigation
+            // internally on resolve, so fire-and-forget with `void` to
+            // satisfy `@typescript-eslint/no-misused-promises`.
+            onClick: () => {
+              void signOut({ redirectUrl: '/sign-in' });
+            },
+          },
+        });
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Failed to complete onboarding');
+      }
     } finally {
       setCompleting(false);
     }
-  }, [router]);
+  }, [router, signOut]);
 
   return (
     <div className="from-background to-muted/30 min-h-screen bg-gradient-to-b">

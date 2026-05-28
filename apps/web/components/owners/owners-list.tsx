@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Plus, Search, Trash2, Crown } from 'lucide-react';
+import { Plus, Search, Trash2, Crown, Mail } from 'lucide-react';
 import { createOwnerSchema, type CreateOwnerInput } from '@equestrian/shared/schemas';
 import { useOwners, useCreateOwner, useDeactivateOwner } from '@/hooks/use-staff';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { hasPermission } from '@/lib/permissions-shared';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +73,15 @@ export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
   const [page, setPage] = useState(1);
   // Audit F-20 (2026-05-07 r4): lift dialog open state for EmptyState CTA.
   const [addOpen, setAddOpen] = useState(false);
+
+  // Audit P1 codex (2026-05-26): only roles with `emails:create` see
+  // the Send-email CTA — coaches and other viewer roles would
+  // otherwise reach the composer + 403 on submit.
+  const currentUser = useCurrentUser();
+  const canSendEmail =
+    currentUser.data?.success && currentUser.data.data.role
+      ? hasPermission(currentUser.data.data.role, 'emails:create')
+      : false;
 
   const { data, isLoading, isError, error, refetch } = useOwners({
     search: debouncedSearch || undefined,
@@ -178,6 +190,18 @@ export function OwnersList({ canCreate = true }: OwnersListProps = {}) {
                   </AlertDialog>
                 </div>
                 {owner.phone && <p className="text-muted-foreground mt-2 text-sm">{owner.phone}</p>}
+                {/* Audit P1 (2026-05-26): send-email CTA so admins can
+                    contact owners without copy-pasting addresses into
+                    the Emails page. Hidden when no email on file OR
+                    when the viewer's role can't `emails:create`. */}
+                {owner.email && canSendEmail && (
+                  <Button variant="outline" size="sm" asChild className="mt-3 w-full">
+                    <Link href={`/emails?to=${encodeURIComponent(owner.email)}`}>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send email
+                    </Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

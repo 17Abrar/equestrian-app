@@ -1,4 +1,4 @@
-import { useAuth, useOrganization } from '@clerk/clerk-expo';
+import { useAuth } from '@clerk/clerk-expo';
 import { useMemo } from 'react';
 import { createApiClient, type ApiClient } from '@equestrian/api-client';
 import { captureMobileException } from './sentry';
@@ -15,18 +15,29 @@ function resolveApiBaseUrl(): string {
   return url;
 }
 
-const API_BASE_URL = resolveApiBaseUrl();
+// Audit pass-6 (2026-05-22 LOW-2): exported so screens that fall outside
+// the `useApiClient()` hook (e.g. `app/delete-account.tsx`, which uses a
+// raw `fetch` because the API client doesn't yet model the
+// /v1/account/delete endpoint) can share the same fail-loud guard
+// instead of duplicating a `?? 'http://localhost:3000'` fallback that
+// would silently target the device's loopback in a release build.
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export function useApiClient(): ApiClient {
   const { getToken } = useAuth();
-  const { organization } = useOrganization();
 
+  // Audit pass-5 LOW-4 (2026-05-21): `getOrganizationId` was wired
+  // through to set an `X-Organization-Id` request header, but the
+  // server never read it — tenant resolution uses Clerk `auth().orgId`
+  // and the active-club cookie, both server-side. The dead plumbing
+  // misled mobile consumers who assumed picking a Clerk org in the app
+  // would steer the API at the selected club; dropping it removes that
+  // false signal without changing behavior.
   return useMemo(
     () =>
       createApiClient({
         baseUrl: API_BASE_URL,
         getToken: () => getToken(),
-        getOrganizationId: () => organization?.id ?? null,
         // Audit F-49 (2026-05-08 r6): forward to Sentry via the
         // mobile wiring in `lib/sentry.ts`. The console.error stays
         // as a backstop for the no-DSN dev path so the device console
@@ -40,6 +51,6 @@ export function useApiClient(): ApiClient {
           console.error('[api-client]', context.code, context.path, error);
         },
       }),
-    [getToken, organization?.id],
+    [getToken],
   );
 }

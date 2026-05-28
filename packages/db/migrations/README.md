@@ -51,6 +51,90 @@ the deployed database is the runtime authority.
 6. Open the PR with both the schema and migration changes in the same
    commit so reviewers don't see the schema-only step in isolation.
 
+## Index creation: prefer `CONCURRENTLY` on high-volume tables
+
+Audit L6 (2026-05-18). The non-concurrent `CREATE INDEX` takes a
+`SHARE` lock on the target table for the build duration — concurrent
+readers are fine, but concurrent writers block (any INSERT / UPDATE /
+DELETE waits for the build to finish because they need to update the
+index entries). Fine for JSR-scale tables today, but once a tenant
+DB accumulates real volume on tables like `horses`, `bookings`,
+`riders`, `audit_log`, `webhook_events`, `payments`, or
+`competition_results`, a migration that lands during peak booking
+hours can produce a noticeable write-unavailability window.
+
+`migrate-neon.mjs` runs each statement individually via
+`client.query()` with no wrapping `BEGIN` (see "Authoritative runner"
+above), so `CREATE INDEX CONCURRENTLY` is supported there — unlike
+Drizzle Kit migrations which wrap each file in a transaction and
+reject `CONCURRENTLY`.
+
+### Caveat — test harness still wraps in an implicit transaction
+
+`packages/db/src/test/harness.ts` boots a fresh PGlite instance per
+test and applies each migration via a single `client.exec(sql)` call.
+PGlite treats that as an implicit transaction (Postgres's documented
+behavior for multi-statement messages on the simple Query protocol),
+and `CREATE INDEX CONCURRENTLY` errors out with
+`cannot run inside a transaction block`. The harness has no
+exclusion / skip mechanism — every journaled `.sql` is applied and
+every orphan file fails fast in CI — so a migration that uses
+`CONCURRENTLY` will break every test that calls `createTestDb()`
+until the harness is updated to split statements like
+`migrate-neon.mjs` does.
+
+So the practical rule for now:
+
+- **New migration on a high-volume table?** Bundle the test-harness
+  update (split per-statement application matching
+  `migrate-neon.mjs`) into the SAME PR as the first migration that
+  uses `CONCURRENTLY`. Either change alone is incomplete; together
+  they unlock the convention for every subsequent migration.
+- **New migration on a low-volume / lookup table?** Use plain
+  `CREATE INDEX IF NOT EXISTS …`. Document the choice in the file's
+  top comment. No harness change needed.
+- **High-volume index migration while the harness is unfixed?** If
+  the new index can wait, defer to the harness-fix PR. If it
+  genuinely can't wait, use plain `CREATE INDEX` and schedule the
+  migration during an off-peak window; document the trade-off in the
+  file's top comment.
+- **Editing an already-applied migration to add `CONCURRENTLY`?**
+  Don't — the tag-tracked `_migrations` row prevents reapplication on
+  every existing tenant, so the edit changes nothing in production
+  while breaking the test harness. (Migration 0056 is the canonical
+  example: see its top comment.)
+
+### Invalid-index recovery for `CONCURRENTLY`
+
+A `CREATE INDEX CONCURRENTLY` build that is interrupted (connection
+drop, statement_timeout, deploy rollback) leaves an `indisvalid =
+false` row in `pg_index`. On the next run, `IF NOT EXISTS` skips it
+and the migration runner records the file as applied — leaving an
+unusable performance index in place.
+
+The canonical Postgres recovery — `DROP INDEX CONCURRENTLY` — cannot
+run inside a transaction OR inside a `DO $$ ... $$` PL/pgSQL block
+(both are tx contexts). So the recovery has to be a top-level
+unconditional drop, separated from the create by a statement
+breakpoint:
+
+```sql
+-- Defensively drop any prior (potentially invalid) build.
+-- IF EXISTS makes it a no-op on the common case where no prior
+-- attempt exists. Runs only at the top level — never inside DO $$ $$
+-- because Postgres rejects DROP INDEX CONCURRENTLY in a tx block.
+DROP INDEX CONCURRENTLY IF EXISTS "idx_my_index_name";
+--> statement-breakpoint
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_my_index_name"
+  ON "..." ("...");
+```
+
+The trade-off is one wasted-DROP per re-apply on a clean DB, which is
+acceptable because tag-tracking in `_migrations` prevents re-apply on
+the production runner; tests pay the wasted DROP per test but
+PGlite's empty-index drop is microseconds.
+
 ## Why we don't regenerate meta snapshots
 
 The cost of regenerating the meta snapshots from the current schema is
