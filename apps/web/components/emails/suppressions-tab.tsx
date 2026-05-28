@@ -77,7 +77,7 @@ export function SuppressionsTab() {
       fetchJson(`/api/v1/emails/suppressions/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       toast.success('Suppression removed');
-      queryClient.invalidateQueries({ queryKey: ['email-suppressions'] });
+      void queryClient.invalidateQueries({ queryKey: ['email-suppressions'] });
     },
     onError: (err) => {
       reportMutationError('email_suppression.retire', err);
@@ -220,7 +220,7 @@ function AddSuppressionForm({ onSuccess }: { onSuccess: () => void }) {
       }),
     onSuccess: () => {
       toast.success('Address suppressed');
-      queryClient.invalidateQueries({ queryKey: ['email-suppressions'] });
+      void queryClient.invalidateQueries({ queryKey: ['email-suppressions'] });
       reset();
       onSuccess();
     },
