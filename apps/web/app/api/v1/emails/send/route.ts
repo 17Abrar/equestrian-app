@@ -97,6 +97,13 @@ export async function POST(request: NextRequest) {
           // this club's manual entries fire without affecting other
           // tenants' sends.
           clubId: ctx.clubId,
+          // Task #22 (2026-05-28): record the send for the in-app
+          // history tab. `manual_single` distinguishes one-off compose
+          // sends from broadcasts.
+          sendLog: {
+            source: 'manual_single',
+            senderMemberId: ctx.memberId,
+          },
         });
 
         if (!result.sent) {
