@@ -266,8 +266,21 @@ export async function POST(request: NextRequest) {
             // suppression check honours this club's manual list (without
             // letting other clubs' lists block our sends). Global Resend
             // bounce/complaint rows still apply across all callers.
+            //
+            // Task #22 (2026-05-28): record a per-recipient send-log row
+            // tagged with audienceId and the dispatching member.
             chunk.map((r) =>
-              sendPlainTextEmailWithRetry({ to: r.email, subject, text, clubId }),
+              sendPlainTextEmailWithRetry({
+                to: r.email,
+                subject,
+                text,
+                clubId,
+                sendLog: {
+                  source: 'manual_broadcast',
+                  audienceId,
+                  senderMemberId: ctx.memberId,
+                },
+              }),
             ),
           );
 
