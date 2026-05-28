@@ -93,6 +93,17 @@ export async function POST(request: NextRequest) {
           to: data.to,
           subject: data.subject,
           text: data.body,
+          // Task #21 (2026-05-28): club-scope the suppression check so
+          // this club's manual entries fire without affecting other
+          // tenants' sends.
+          clubId: ctx.clubId,
+          // Task #22 (2026-05-28): record the send for the in-app
+          // history tab. `manual_single` distinguishes one-off compose
+          // sends from broadcasts.
+          sendLog: {
+            source: 'manual_single',
+            senderMemberId: ctx.memberId,
+          },
         });
 
         if (!result.sent) {

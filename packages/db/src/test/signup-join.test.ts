@@ -42,6 +42,12 @@ async function seedClub(db: typeof testDb.db, slug: string) {
       clerkOrgId: `org_${slug}`,
       joinPolicy: 'open',
       isPublicListing: true,
+      // Audit pass-7 (2026-05-25 LOW-5 / migration 0061): publicly-listed
+      // clubs require city + country per
+      // `clubs_public_listing_requires_contact_check`. Seeded only to
+      // satisfy the CHECK; joinClubInstantly itself doesn't exercise them.
+      city: 'Dubai',
+      country: 'UAE',
     })
     .returning({ id: clubs.id });
   return club!.id;

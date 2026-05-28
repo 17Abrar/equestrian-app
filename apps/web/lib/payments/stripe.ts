@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 import {
   type CreatePaymentInput,
   type CreatePaymentResult,
@@ -15,6 +16,42 @@ import {
   type PaymentIntentStatus,
   PaymentProviderError,
 } from './types';
+
+/**
+ * Stripe event types this adapter's verifyWebhook has explicit switch
+ * cases for. Exported so consumers (the per-club webhook route's
+ * HANDLED_EVENTS, future test fixtures, future event-routing code)
+ * have a programmatic view of "what this adapter can actually parse"
+ * instead of grepping the switch.
+ *
+ * The contract: any event passed to `applyPaymentWebhook` downstream
+ * MUST be in this set. An event outside it would resolve to an
+ * envelope with undefined provider fields and silently no-op against
+ * the booking ledger. The default branch of the verifyWebhook switch
+ * logs a structured warn when an unexpected type arrives, so a drift
+ * is visible in observability even if the route's filter wasn't
+ * updated atomically with this list.
+ *
+ * Adding a new event type to handle:
+ *   1. Add a `case` clause in the verifyWebhook switch below
+ *   2. Add the type to this set
+ *   3. Decide whether the route's PAID / FAILED / REFUND_EVENTS bucket
+ *      should pick it up (drives the `isRefundEvent` flag)
+ *
+ * Audit I4 (2026-05-18 audit pass).
+ */
+export const STRIPE_VERIFY_WEBHOOK_HANDLED_TYPES: ReadonlySet<Stripe.Event['type']> = new Set([
+  'payment_intent.succeeded',
+  'payment_intent.processing',
+  'payment_intent.payment_failed',
+  'payment_intent.canceled',
+  'payment_intent.requires_action',
+  'payment_intent.created',
+  'charge.refunded',
+  'charge.succeeded',
+  'charge.failed',
+  'charge.refund.updated',
+]);
 
 /**
  * Stripe adapter — direct integration. Each club pastes their own Stripe
@@ -89,11 +126,22 @@ function getClient(creds: StripeCredentials): Stripe {
   // SDK upgrade can't quietly bump the API surface our adapter is
   // built against (e.g. a Stripe webhook event payload reshape between
   // versions, or a property rename on PaymentIntent/Charge that we
-  // currently access without a guard). Matches `stripe@18.5.0`'s
-  // declared `LatestApiVersion`. Bumping is a deliberate change —
+  // currently access without a guard). Bumping is a deliberate change —
   // version bumps to this constant should ride with adapter testing.
+  //
+  // Audit pass-7 integration audit (2026-05-25): bumped 2025-08-27.basil
+  // → 2026-04-22.dahlia + SDK ^18.1.0 → ^22.1.1. Dahlia is the current
+  // Stripe API GA (released April 2026); the prior pin was one major
+  // version behind and would have missed new error codes
+  // (`action_blocked`, `approval_required`) introduced on
+  // `PaymentIntent.last_payment_error`. Per the SDK 22.x changelog, the
+  // only behaviour we touch that could shift is `Discount.coupon` →
+  // `Discount.source.coupon` (we don't read discounts on PaymentIntents)
+  // and `decimal_string` fields becoming `Stripe.Decimal` (we only read
+  // `amount` / `amount_received` / `amount_refunded`, all integers).
+  // V2 API surface, OAuth, and Node ≤16 changes are not in scope.
   return new Stripe(creds.secretKey, {
-    apiVersion: '2025-08-27.basil',
+    apiVersion: '2026-04-22.dahlia',
     typescript: true,
     timeout: 15_000,
     maxNetworkRetries: 0,
@@ -158,12 +206,15 @@ export const stripeAdapter: PaymentProviderAdapter = {
       webhookSigningSecret: input.credentials.webhookSigningSecret,
     });
 
-    // Round-trip the secret against `accounts.retrieve()` so we reject bad
-    // keys at connect time instead of at first payment. No argument =
-    // retrieve the account THIS API key belongs to.
+    // Round-trip the secret against `accounts.retrieve(null)` so we reject
+    // bad keys at connect time instead of at first payment. Audit pass-7
+    // integration audit (2026-05-25): SDK 22.x changed the no-args overload
+    // — passing `null` as the id now means "retrieve the account THIS API
+    // key belongs to" (verified in stripe-node v22 types). Prior to SDK 22
+    // the same behaviour was the no-args call.
     let account: Stripe.Account;
     try {
-      account = await getClient(creds).accounts.retrieve();
+      account = await getClient(creds).accounts.retrieve(null);
     } catch (err) {
       throw new PaymentProviderError(
         'AUTH_FAILED',
@@ -271,12 +322,22 @@ export const stripeAdapter: PaymentProviderAdapter = {
       };
     } catch (err) {
       if (err instanceof PaymentProviderError) throw err;
+      // Audit pass-7 integration MED-1 (2026-05-25): mirror the refund-path
+      // retryable expression — `createHostedCheckout` is wrapped by
+      // `withProviderRetry` in the booking payment route, but pre-fix the
+      // catch never set `retryable:true` so transient Stripe 5xx surfaced
+      // immediately.
+      const isStripeRetryable =
+        err instanceof Stripe.errors.StripeConnectionError ||
+        (err instanceof Stripe.errors.StripeAPIError &&
+          typeof err.statusCode === 'number' &&
+          (err.statusCode >= 500 || err.statusCode === 429));
       throw new PaymentProviderError(
         'CREATE_CHECKOUT_FAILED',
         err instanceof Error
           ? scrubStripeErrorMessage(err.message)
           : 'Stripe Checkout Session creation failed',
-        { cause: err },
+        { cause: err, retryable: isStripeRetryable },
       );
     }
   },
@@ -322,12 +383,22 @@ export const stripeAdapter: PaymentProviderAdapter = {
       };
     } catch (err) {
       if (err instanceof PaymentProviderError) throw err;
+      // Audit pass-7 integration MED-1 (2026-05-25): mirror the refund-path
+      // retryable expression here. Previously only `StripeConnectionError`
+      // was marked retryable on the create path, so a transient Stripe 5xx
+      // would surface 502 to the rider with no retry, while the refund
+      // path correctly retried 5xx/429. Asymmetric — closing it.
+      const isStripeRetryable =
+        err instanceof Stripe.errors.StripeConnectionError ||
+        (err instanceof Stripe.errors.StripeAPIError &&
+          typeof err.statusCode === 'number' &&
+          (err.statusCode >= 500 || err.statusCode === 429));
       throw new PaymentProviderError(
         'CREATE_PAYMENT_FAILED',
         err instanceof Error
           ? scrubStripeErrorMessage(err.message)
           : 'Stripe PaymentIntent creation failed',
-        { cause: err, retryable: err instanceof Stripe.errors.StripeConnectionError },
+        { cause: err, retryable: isStripeRetryable },
       );
     }
   },
@@ -440,6 +511,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
     let refundStatus: WebhookEvent['refundStatus'];
     let refundAmountMinor: number | undefined;
     let refundCumulativeMinor: number | undefined;
+    let providerRefundId: string | undefined;
     let currency: string | undefined;
 
     function piPaymentIntentId(
@@ -485,6 +557,10 @@ export const stripeAdapter: PaymentProviderAdapter = {
           if (latest) {
             refundStatus = latest.status as WebhookEvent['refundStatus'];
             refundAmountMinor = latest.amount;
+            // Audit pass-7 codex HIGH-1 (2026-05-25): surface the refund's
+            // own ID so `applyProviderRefund` can dedup against an admin
+            // route call that already recorded this refund.
+            providerRefundId = latest.id;
           }
         } else {
           // Audit HIGH-3 (2026-05-05): empty `refunds.data` means
@@ -525,6 +601,8 @@ export const stripeAdapter: PaymentProviderAdapter = {
         providerPaymentId = piPaymentIntentId(refund.payment_intent);
         refundStatus = refund.status as WebhookEvent['refundStatus'];
         refundAmountMinor = refund.amount;
+        // Audit pass-7 codex HIGH-1 (2026-05-25).
+        providerRefundId = refund.id;
         currency = refund.currency?.toUpperCase();
         const md = refund.metadata;
         if (md && typeof md.bookingId === 'string') {
@@ -534,7 +612,33 @@ export const stripeAdapter: PaymentProviderAdapter = {
       }
       default:
         // Unhandled event type — return the envelope so the webhook
-        // route can dedup/log it without breaking.
+        // route can dedup/log it without breaking. For event types
+        // outside the route's HANDLED_EVENTS this is benign (the
+        // route's filter discards the envelope before applying);
+        // clubs may subscribe their Stripe endpoint to "all events"
+        // and we'll see plenty of these.
+        //
+        // For an event type that someone added to the route's
+        // HANDLED_EVENTS without adding a switch case here, the
+        // envelope's provider fields would be undefined and
+        // applyPaymentWebhook would silently no-op against the
+        // booking ledger. The structured log below is the
+        // defense-in-depth signal — emitted at `info` severity (not
+        // `warn`) so it stays grep-able in observability without
+        // burning Sentry quota or paging on legitimate all-events
+        // subscriptions. Pair with the exported
+        // `STRIPE_VERIFY_WEBHOOK_HANDLED_TYPES` set above when
+        // investigating any "this event should have been handled"
+        // claim.
+        //
+        // Audit I4 (2026-05-18 audit pass). Severity dialed down to
+        // `info` based on codex review feedback that `warn` on
+        // legit-ignored events would create alert noise + Sentry
+        // quota burn.
+        logger.info('stripe_verify_webhook_unhandled_event_type', {
+          eventType: event.type,
+          eventId: event.id,
+        });
         break;
     }
 
@@ -553,6 +657,7 @@ export const stripeAdapter: PaymentProviderAdapter = {
       refundStatus,
       refundAmountMinor,
       refundCumulativeMinor,
+      providerRefundId,
       data: event,
     };
   },

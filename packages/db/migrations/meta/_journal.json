@@ -407,6 +407,69 @@
       "when": 1779148800000,
       "tag": "0057_booking_payment_timeout_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0058_provider_payment_issued_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0059_audit_pass_5_widen_horse_document_file_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1779840000000,
+      "tag": "0060_audit_pass_7_payment_provider_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1779840100000,
+      "tag": "0061_audit_pass_7_public_listing_required_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1779840200000,
+      "tag": "0062_audit_pass_7_booking_refunds_dedup",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1779840300000,
+      "tag": "0063_audit_pass_7_email_suppressions",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1779840400000,
+      "tag": "0064_horse_leases",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1779840500000,
+      "tag": "0065_email_suppressions_club_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1779840600000,
+      "tag": "0066_email_send_log",
+      "breakpoints": true
     }
   ]
 }

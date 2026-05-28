@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb, withTestDb } from './harness';
-import { recordBookingRefund, reverseBookingRefund } from '../queries/bookings';
-import { bookings, bookingSlots, lessonTypes } from '../schema/bookings';
+import {
+  applyProviderRefund,
+  recordBookingRefund,
+  reverseBookingRefund,
+} from '../queries/bookings';
+import { bookings, bookingRefunds, bookingSlots, lessonTypes } from '../schema/bookings';
 import { clubs } from '../schema/clubs';
 import { clubMembers } from '../schema/club-members';
+import { eq } from 'drizzle-orm';
 
 /**
  * Integration tests for the refund ledger — the fix for the 2026-04
@@ -233,6 +238,172 @@ describe('reverseBookingRefund', () => {
       await recordBookingRefund(second.clubId, second.bookingId, 5_000);
       const result = await reverseBookingRefund(first.clubId, second.bookingId, 1_000);
       expect(result).toBeNull();
+    });
+  });
+});
+
+// Audit pass-7 codex HIGH-1 (2026-05-25): dedup by provider_refund_id.
+// The admin route + webhook both used to call `recordBookingRefund` for
+// the same refund — the CAS only protected concurrent races, not
+// sequential same-delta calls. These tests lock in the new contract:
+// (booking_id, provider_refund_id) is the idempotency key.
+describe('applyProviderRefund', () => {
+  it('first apply records the refund and advances the ledger', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    const result = await withTestDb(testDb.db, () =>
+      applyProviderRefund(clubId, bookingId, 3_000, {
+        providerRefundId: 're_first',
+        provider: 'stripe',
+      }),
+    );
+    expect(result).not.toBeNull();
+    expect(result!.recorded).toBe(true);
+    expect(result!.state.paymentStatus).toBe('partial');
+    expect(result!.state.refundedAmountMinor).toBe(3_000);
+  });
+
+  it('second apply with same providerRefundId is a no-op (ledger unchanged)', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      // First apply — admin route fires.
+      const first = await applyProviderRefund(clubId, bookingId, 3_000, {
+        providerRefundId: 're_same',
+        provider: 'stripe',
+      });
+      expect(first?.recorded).toBe(true);
+      expect(first?.state.refundedAmountMinor).toBe(3_000);
+
+      // Second apply — provider webhook arrives with the SAME refund.
+      // This is the historical double-count bug; dedup must catch it.
+      const second = await applyProviderRefund(clubId, bookingId, 3_000, {
+        providerRefundId: 're_same',
+        provider: 'stripe',
+      });
+      expect(second?.recorded).toBe(false);
+      expect(second?.state.refundedAmountMinor).toBe(3_000);
+    });
+  });
+
+  it('two refunds with different providerRefundId both apply', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      const first = await applyProviderRefund(clubId, bookingId, 2_000, {
+        providerRefundId: 're_one',
+        provider: 'n_genius',
+      });
+      expect(first?.state.refundedAmountMinor).toBe(2_000);
+
+      const second = await applyProviderRefund(clubId, bookingId, 4_000, {
+        providerRefundId: 're_two',
+        provider: 'n_genius',
+      });
+      expect(second?.recorded).toBe(true);
+      expect(second?.state.refundedAmountMinor).toBe(6_000);
+    });
+  });
+
+  it('rejects refund that would exceed the booking amount (overflow)', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    const result = await withTestDb(testDb.db, () =>
+      applyProviderRefund(clubId, bookingId, 10_001, {
+        providerRefundId: 're_overflow',
+        provider: 'ziina',
+      }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it('rejects empty providerRefundId — dedup requires a stable key', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    const result = await withTestDb(testDb.db, () =>
+      applyProviderRefund(clubId, bookingId, 1_000, {
+        providerRefundId: '',
+        provider: 'stripe',
+      }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it('rejects zero / negative amount', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      expect(
+        await applyProviderRefund(clubId, bookingId, 0, {
+          providerRefundId: 're_zero',
+          provider: 'stripe',
+        }),
+      ).toBeNull();
+      expect(
+        await applyProviderRefund(clubId, bookingId, -100, {
+          providerRefundId: 're_neg',
+          provider: 'stripe',
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it('records a row in booking_refunds with the (booking_id, provider_refund_id) pair', async () => {
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, () =>
+      applyProviderRefund(clubId, bookingId, 5_000, {
+        providerRefundId: 're_logged',
+        provider: 'stripe',
+      }),
+    );
+
+    const rows = await testDb.db
+      .select()
+      .from(bookingRefunds)
+      .where(eq(bookingRefunds.providerRefundId, 're_logged'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.bookingId).toBe(bookingId);
+    expect(rows[0]!.clubId).toBe(clubId);
+    expect(rows[0]!.amountMinorUnits).toBe(5_000);
+    expect(rows[0]!.reversedAt).toBeNull();
+  });
+
+  it('refuses to apply for a booking in another club (tenant isolation)', async () => {
+    const first = await seedPaidBooking(testDb.db, 10_000);
+    const second = await seedPaidBooking(testDb.db, 10_000);
+    const result = await withTestDb(testDb.db, () =>
+      applyProviderRefund(first.clubId, second.bookingId, 1_000, {
+        providerRefundId: 're_cross_tenant',
+        provider: 'stripe',
+      }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it('concurrent admin + webhook for the same refund collapses to one ledger increment', async () => {
+    // The core double-count scenario: admin clicks refund, route records;
+    // webhook arrives for the same refund, helper records again. Without
+    // dedup the ledger would land at 6_000; with dedup it lands at 3_000.
+    const { clubId, bookingId } = await seedPaidBooking(testDb.db, 10_000);
+    await withTestDb(testDb.db, async () => {
+      const [admin, webhook] = await Promise.all([
+        applyProviderRefund(clubId, bookingId, 3_000, {
+          providerRefundId: 're_concurrent',
+          provider: 'stripe',
+        }),
+        applyProviderRefund(clubId, bookingId, 3_000, {
+          providerRefundId: 're_concurrent',
+          provider: 'stripe',
+        }),
+      ]);
+
+      // Exactly one should be marked recorded; the other should be a
+      // no-op. Both should return the same final ledger state (3_000).
+      const recordedFlags = [admin?.recorded, webhook?.recorded].filter(Boolean);
+      expect(recordedFlags).toHaveLength(1);
+      expect(admin?.state.refundedAmountMinor).toBe(3_000);
+      expect(webhook?.state.refundedAmountMinor).toBe(3_000);
+
+      // Exactly one row in the dedup table.
+      const rows = await testDb.db
+        .select()
+        .from(bookingRefunds)
+        .where(eq(bookingRefunds.providerRefundId, 're_concurrent'));
+      expect(rows).toHaveLength(1);
     });
   });
 });

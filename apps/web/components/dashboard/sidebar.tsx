@@ -35,7 +35,7 @@ interface NavItem {
 }
 
 const ALL_NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Calendar', href: '/calendar', icon: Calendar },
   { label: 'Bookings', href: '/bookings', icon: BookOpen },
   { label: 'Horses', href: '/horses', icon: PawPrint },
@@ -54,7 +54,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
 const NAV_BY_ROLE: Record<string, string[]> = {
   club_admin: ALL_NAV_ITEMS.map((item) => item.href),
   club_manager: [
-    '/',
+    '/dashboard',
     '/calendar',
     '/bookings',
     '/horses',
@@ -68,10 +68,10 @@ const NAV_BY_ROLE: Record<string, string[]> = {
     '/reports',
     '/settings',
   ],
-  coach: ['/', '/calendar', '/bookings', '/horses', '/riders', '/competitions'],
-  horse_owner: ['/', '/horses', '/bookings', '/competitions'],
-  groom: ['/', '/horses', '/calendar'],
-  veterinarian: ['/', '/horses'],
+  coach: ['/dashboard', '/calendar', '/bookings', '/horses', '/riders', '/competitions'],
+  horse_owner: ['/dashboard', '/horses', '/bookings', '/competitions'],
+  groom: ['/dashboard', '/horses', '/calendar'],
+  veterinarian: ['/dashboard', '/horses'],
   rider: [],
   parent: [],
 };
@@ -104,7 +104,7 @@ export function Sidebar({ role }: SidebarProps) {
   const pendingHorsesError = canReviewHorses && pendingHorsesQuery.isError;
 
   function isActive(href: string): boolean {
-    if (href === '/') return pathname === '/';
+    if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   }
 
@@ -118,7 +118,7 @@ export function Sidebar({ role }: SidebarProps) {
   return (
     <aside className="bg-card flex w-64 flex-col border-r">
       <div className="flex h-16 items-center border-b px-6">
-        <Link href="/" aria-label="Cavaliq home">
+        <Link href="/dashboard" aria-label="Cavaliq dashboard">
           <CavaliqLogo height={28} priority />
         </Link>
       </div>

@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
-import { Plus, Clock, CheckCircle2, XCircle, Archive, Rabbit, Receipt } from 'lucide-react';
+import { Plus, Clock, CheckCircle2, XCircle, Archive, RotateCcw, Rabbit, Receipt, Handshake } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -89,10 +89,31 @@ function useRetireHorse() {
   });
 }
 
+// Audit P1 (2026-05-26): rider-initiated reactivation of a retired
+// horse. Flips ownership back to `pending` so the club admin
+// re-approves with a fresh livery fee; closes the audit gap where
+// reactivation required the rider to DM the stable.
+function useReactivateHorse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (horseId: string) =>
+      fetchJson<ApiSuccessResponse<{ id: string }>>(`/api/v1/me/horses/${horseId}/reactivate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me', 'horses'] });
+    },
+  });
+}
+
 export default function RiderHorsesPage() {
   const { data, isLoading, isError, error, refetch } = useMyHorses();
   const [retiring, setRetiring] = useState<MyHorse | null>(null);
+  const [reactivating, setReactivating] = useState<MyHorse | null>(null);
   const retire = useRetireHorse();
+  const reactivate = useReactivateHorse();
 
   const horses = useMemo(() => data?.data.horses ?? [], [data]);
   const memberships = data?.data.memberships ?? [];
@@ -122,6 +143,18 @@ export default function RiderHorsesPage() {
     }
   }
 
+  async function onConfirmReactivate() {
+    if (!reactivating) return;
+    try {
+      await reactivate.mutateAsync(reactivating.id);
+      toast.success(`${reactivating.name} sent back to ${reactivating.clubName} for re-approval`);
+      setReactivating(null);
+    } catch (err) {
+      reportMutationError('rider.horse.reactivate', err, { horseId: reactivating.id });
+      toast.error(err instanceof Error ? err.message : 'Failed to reactivate');
+    }
+  }
+
   return (
     <div className="space-y-6 pb-20 sm:pb-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -148,6 +181,10 @@ export default function RiderHorsesPage() {
           )}
         </div>
       </div>
+
+      {/* Leases — feature 2026-05-27 PR 3 of 3. Hidden when the rider
+          has no leases at any club. */}
+      <MyLeasesSection />
 
       {isLoading && <HorsesSkeleton />}
 
@@ -183,6 +220,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.pending}
             onRetire={null}
+            onReactivate={null}
           />
           <Section
             title="Active"
@@ -190,6 +228,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.active}
             onRetire={(h) => setRetiring(h)}
+            onReactivate={null}
           />
           <Section
             title="Declined"
@@ -197,6 +236,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.declined}
             onRetire={null}
+            onReactivate={null}
           />
           <Section
             title="Retired"
@@ -204,6 +244,7 @@ export default function RiderHorsesPage() {
             emptyHint={null}
             horses={grouped.retired}
             onRetire={null}
+            onReactivate={(h) => setReactivating(h)}
           />
         </div>
       )}
@@ -213,14 +254,35 @@ export default function RiderHorsesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Retire {retiring?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This stops livery billing going forward. Your stable can reactivate the ownership if
-              needed — just message them.
+              This stops livery billing going forward. You can reactivate from the Retired
+              section later — the stable will re-approve with a fresh livery fee.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={retire.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={onConfirmRetire} disabled={retire.isPending}>
               {retire.isPending ? 'Retiring…' : 'Retire'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!reactivating}
+        onOpenChange={(open) => !open && setReactivating(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reactivate {reactivating?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {reactivating?.clubName} will see this horse as a pending registration again and
+              re-approve with a fresh livery fee. They&apos;ll be notified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reactivate.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onConfirmReactivate} disabled={reactivate.isPending}>
+              {reactivate.isPending ? 'Sending…' : 'Reactivate'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -267,9 +329,10 @@ interface SectionProps {
   emptyHint: string | null;
   horses: MyHorse[];
   onRetire: ((h: MyHorse) => void) | null;
+  onReactivate: ((h: MyHorse) => void) | null;
 }
 
-function Section({ title, count, horses, onRetire }: SectionProps) {
+function Section({ title, count, horses, onRetire, onReactivate }: SectionProps) {
   if (count === 0) return null;
   return (
     <section>
@@ -281,7 +344,7 @@ function Section({ title, count, horses, onRetire }: SectionProps) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {horses.map((h) => (
-          <HorseCard key={h.id} horse={h} onRetire={onRetire} />
+          <HorseCard key={h.id} horse={h} onRetire={onRetire} onReactivate={onReactivate} />
         ))}
       </div>
     </section>
@@ -291,9 +354,11 @@ function Section({ title, count, horses, onRetire }: SectionProps) {
 function HorseCard({
   horse,
   onRetire,
+  onReactivate,
 }: {
   horse: MyHorse;
   onRetire: ((h: MyHorse) => void) | null;
+  onReactivate: ((h: MyHorse) => void) | null;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -367,6 +432,19 @@ function HorseCard({
               Retire
             </Button>
           )}
+
+          {horse.ownershipStatus === 'retired' && onReactivate && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground mt-2 h-8 px-2 text-xs"
+              onClick={() => onReactivate(horse)}
+            >
+              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              Reactivate
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -409,4 +487,152 @@ function formatFee(minor: number | null, currency: string): string {
   if (minor == null) return '—';
   if (minor === 0) return 'No fee';
   return formatCurrency(minor, currency);
+}
+
+// ─── Leases (feature 2026-05-27 PR 3) ───────────────────────────────
+
+type LeaseType = 'half' | 'full';
+type LeaseStatus = 'pending' | 'active' | 'ended' | 'cancelled';
+
+interface MyLeaseRow {
+  id: string;
+  clubId: string;
+  clubName: string;
+  clubSlug: string;
+  horseId: string;
+  horseName: string;
+  horsePhotoUrl: string | null;
+  leaseType: LeaseType;
+  monthlyFeeMinor: number;
+  currency: string;
+  startDate: string;
+  endDate: string;
+  status: LeaseStatus;
+  notes: string | null;
+}
+
+interface MyLeasesResponse {
+  leases: MyLeaseRow[];
+}
+
+function useMyLeases() {
+  return useQuery({
+    queryKey: ['me', 'leases'],
+    queryFn: () => fetchJson<ApiSuccessResponse<MyLeasesResponse>>('/api/v1/me/leases'),
+    staleTime: STALE_TIME_MEDIUM,
+  });
+}
+
+/**
+ * Renders the rider's leases above the owned-horses section on the
+ * rider portal. Hidden entirely when the rider has no active or
+ * pending leases — keeping the page clean for the common case of
+ * "I own horses but don't lease any".
+ */
+function MyLeasesSection() {
+  const { data, isLoading, isError, refetch } = useMyLeases();
+  // Show only active + pending in the rider portal — ended and
+  // cancelled lease history is admin-side noise the rider doesn't
+  // need to scroll past. If we ever want to surface past leases for
+  // riders, gate behind a "Show history" toggle.
+  const leases = useMemo(() => {
+    if (!data || !data.success) return [];
+    return data.data.leases.filter((l) => l.status === 'active' || l.status === 'pending');
+  }, [data]);
+
+  if (isLoading) return null;
+  // Codex P2 (2026-05-27): error surface so a failed fetch isn't
+  // indistinguishable from "no leases" — the previous early-return
+  // on empty/error left riders confused why nothing showed.
+  if (isError) {
+    return (
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Handshake className="text-muted-foreground h-4 w-4" />
+          <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+            Leasing
+          </h2>
+        </div>
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <p className="text-muted-foreground text-sm">Couldn’t load your leases.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
+  if (leases.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Handshake className="text-muted-foreground h-4 w-4" />
+        <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+          Leasing
+        </h2>
+        <Badge variant="secondary">{leases.length}</Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {leases.map((l) => (
+          <LeaseCard key={l.id} lease={l} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LeaseCard({ lease }: { lease: MyLeaseRow }) {
+  const statusClass =
+    lease.status === 'active'
+      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100'
+      : 'bg-amber-100 text-amber-800 hover:bg-amber-100';
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="flex gap-4 p-4">
+        <div className="bg-muted relative h-20 w-20 shrink-0 overflow-hidden rounded-lg">
+          {lease.horsePhotoUrl ? (
+            <Image
+              src={lease.horsePhotoUrl}
+              alt={lease.horseName}
+              fill
+              className="object-cover"
+              sizes="80px"
+            />
+          ) : (
+            <div className="text-muted-foreground flex h-full w-full items-center justify-center">
+              <Rabbit className="h-8 w-8" />
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold">{lease.horseName}</p>
+              <p className="text-muted-foreground text-xs capitalize">
+                {lease.leaseType}-lease at {lease.clubName}
+              </p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                {lease.startDate} → {lease.endDate}
+              </p>
+            </div>
+            <Badge variant="secondary" className={statusClass}>
+              {lease.status === 'active' ? (
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+              ) : (
+                <Clock className="mr-1 h-3 w-3" />
+              )}
+              {lease.status === 'active' ? 'Active' : 'Pending'}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs">
+            {formatCurrency(lease.monthlyFeeMinor, lease.currency)} / month
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

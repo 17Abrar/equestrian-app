@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Save, X, Calendar, Clock, MapPin, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Edit, Save, X, Calendar, Clock, MapPin, TrendingUp, Mail } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -12,8 +12,15 @@ import {
   type UpdateRiderProfileInput,
 } from '@equestrian/shared/schemas';
 import { useRider, useUpdateRider } from '@/hooks/use-riders';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { hasPermission } from '@/lib/permissions-shared';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
-import { formatMoney } from '@equestrian/shared/utils';
+import {
+  formatMoney,
+  getTodayDateString,
+  getTodayLocalDateString,
+} from '@equestrian/shared/utils';
+import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -90,7 +97,17 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
 export function RiderProfile({ riderId }: RiderProfileProps) {
   const { data, isLoading, isError, error, refetch } = useRider(riderId);
   const updateRider = useUpdateRider(riderId);
+  const currentUser = useCurrentUser();
   const [isEditing, setIsEditing] = useState(false);
+
+  // Audit P1 codex (2026-05-26): the send-email CTA shouldn't render
+  // for roles that can VIEW a rider profile (coaches have `riders:read`)
+  // but can't SEND emails (coaches don't have `emails:create`).
+  // Following the CTA would open the composer + 403 on submit.
+  const canSendEmail =
+    currentUser.data?.success && currentUser.data.data.role
+      ? hasPermission(currentUser.data.data.role, 'emails:create')
+      : false;
 
   // fetchJson throws on non-2xx; the single `data.success` check is the
   // minimal guard TypeScript needs to narrow the union — see audit E-5.
@@ -188,10 +205,28 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
               </Button>
             </>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
+            <>
+              {/* Audit P1 (2026-05-26): Send-email CTA so the admin
+                  doesn't have to copy the address into the Emails page
+                  manually. The composer reads `?to=` and pre-fills the
+                  single-recipient form. Hidden when:
+                    - no email on file, OR
+                    - viewer's role can't `emails:create` (e.g., coaches
+                      have `riders:read` but no email permission — the
+                      CTA would lead to a 403 toast at compose time). */}
+              {rider.email && canSendEmail && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/emails?to=${encodeURIComponent(rider.email)}`}>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Send email
+                  </Link>
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -431,6 +466,7 @@ function RiderBookings({ riderMemberId }: { riderMemberId: string }) {
     riderMemberId,
     pageSize: 50,
   });
+  const settingsQuery = useClubSettings();
 
   if (isLoading) {
     return (
@@ -467,7 +503,14 @@ function RiderBookings({ riderMemberId }: { riderMemberId: string }) {
   // Upcoming are on or after today's date (string compare is safe because the
   // API returns ISO YYYY-MM-DD). Past includes cancelled + no-show so admins
   // can see the whole history at a glance.
-  const today = new Date().toISOString().slice(0, 10);
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: bookings happen at
+  // the club, so the split point must be today IN THE CLUB'S TZ — not
+  // the admin's browser tz. The original `new Date().toISOString().slice(0, 10)`
+  // returned UTC (wrong for any non-UTC tz). The first MED-3 fix used
+  // browser-local (wrong when admin tz ≠ club tz). Fall back to browser-
+  // local while settings load.
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const today = clubTimezone ? getTodayDateString(clubTimezone) : getTodayLocalDateString();
   const upcoming = bookings.filter((b) => b.slotDate >= today && b.status !== 'cancelled');
   const past = bookings.filter((b) => !upcoming.includes(b));
 

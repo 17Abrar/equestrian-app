@@ -4,6 +4,12 @@ import { render } from '@react-email/components';
 import { after } from 'next/server';
 import { rawDb } from '@equestrian/db';
 import { clubs, type NotificationPreferences } from '@equestrian/db/schema';
+import {
+  isEmailSuppressed,
+  recordEmailSend,
+  updateEmailSendStatus,
+} from '@equestrian/db/queries';
+import type { EmailSendSource } from '@equestrian/db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from './logger';
 import type { ReactElement } from 'react';
@@ -52,12 +58,47 @@ interface SendEmailParams {
   to: string;
   subject: string;
   template: ReactElement;
+  /**
+   * Task #21 (2026-05-28): the sender's club. Passed to
+   * `isEmailSuppressed` so manual suppressions are scoped — Club A's
+   * manual entry blocks Club A's sends but not Club B's. Webhook
+   * (bounce/complaint) rows are global and always honored. Operational
+   * mail with no tenant context (system warnings, signups) leaves this
+   * undefined and runs the webhook-only check.
+   */
+  clubId?: string;
+  /**
+   * Task #22 (2026-05-28): opt-in send-log entry. Recorded before the
+   * suppression check and updated to its terminal state after Resend
+   * resolves. Skipped when omitted to keep transactional sends that
+   * don't want logging cheap. `clubId` is required when sendLog is set
+   * (the row must scope to a tenant).
+   */
+  sendLog?: SendLogContext;
+  /**
+   * Internal — when set, sendEmail SKIPS its own recordEmailSend and
+   * uses this id for the status update instead. `sendWithRetry`
+   * hoists the log row to the first attempt and reuses it across
+   * retries, so the "Recently sent" UI shows one row per logical
+   * send (codex #22 P3). Callers should pass `sendLog`, not this.
+   */
+  existingLogId?: string;
 }
 
 interface SendPlainTextEmailParams {
   to: string;
   subject: string;
   text: string;
+  clubId?: string;
+  sendLog?: SendLogContext;
+  existingLogId?: string;
+}
+
+interface SendLogContext {
+  source: EmailSendSource;
+  senderMemberId?: string | null;
+  audienceId?: string | null;
+  trigger?: string | null;
 }
 
 export interface EmailSendResult {
@@ -150,10 +191,89 @@ async function postResendEmail(payload: ResendEmailPayload): Promise<EmailSendRe
  * If RESEND_API_KEY is not set, silently skips.
  */
 export async function sendEmail(params: SendEmailParams): Promise<EmailSendResult> {
+  // Task #22 (2026-05-28): opt-in send-log row. Recorded as 'queued'
+  // up front so the UI sees the attempt even when the send itself
+  // never completes (process crash, isolate kill). Caller must
+  // provide clubId — the row must scope to a tenant.
+  //
+  // When `existingLogId` is set, sendWithRetry has already hoisted
+  // the recordEmailSend call to the first attempt and is reusing the
+  // same row across retries (codex #22 P3). Skip the insert in that
+  // case.
+  const sendLogId =
+    params.existingLogId ??
+    (params.sendLog && params.clubId
+      ? await recordEmailSend({
+          clubId: params.clubId,
+          senderMemberId: params.sendLog.senderMemberId,
+          toEmail: params.to,
+          subject: params.subject,
+          audienceId: params.sendLog.audienceId,
+          trigger: params.sendLog.trigger,
+          source: params.sendLog.source,
+          status: 'queued',
+        })
+      : null);
+
   const fromAddress = resolveFromAddress();
   if (!fromAddress) {
     // Already logged via `email_from_unset_in_prod` in resolveFromAddress.
-    return { sent: false, error: 'EMAIL_FROM not configured in production' };
+    // Codex #22 iter-2 P3 (2026-05-28): close the log row so the UI
+    // never shows a permanently-stuck 'queued' send when EMAIL_FROM
+    // is unset in prod.
+    const error = 'EMAIL_FROM not configured in production';
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'failed',
+        error,
+      });
+    }
+    return { sent: false, error };
+  }
+
+  // Audit pass-7 followup ⑤ (2026-05-25): suppression-list check. The
+  // Resend webhook handler inserts rows on `email.bounced` /
+  // `email.complained` events; this short-circuit prevents us from
+  // re-sending to a recipient whose mailbox is gone or who marked us
+  // as spam. Critical for protecting Resend sender reputation in a
+  // multi-tenant SaaS where one club's bad list would burn deliverability
+  // for every other club. Operator can retire a suppression via
+  // `retireEmailSuppression` when the recipient asks to be re-added.
+  //
+  // Codex #22 iter-5 P3 (2026-05-28): wrap in try/catch so a DB blip
+  // on the suppression lookup doesn't escape the function — that would
+  // bypass the retry catch (sendWithRetry awaits sendEmail and lets
+  // throws propagate) and leave the send-log row stuck 'queued'.
+  // Fail-open: if we can't check suppression, attempt the send. Webhook
+  // suppressions are a deliverability protection, not a hard correctness
+  // gate, and the alternative ("never send anything if the DB is
+  // flaky") would silently drop transactional mail.
+  let suppressed = false;
+  try {
+    suppressed = await isEmailSuppressed(params.to, params.clubId);
+  } catch (err) {
+    logger.warn('email_suppression_check_failed', {
+      to: params.to,
+      subject: params.subject,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  if (suppressed) {
+    logger.warn('email_skipped_by_suppression', {
+      to: params.to,
+      subject: params.subject,
+    });
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'suppressed',
+        error: 'recipient is on the suppression list',
+      });
+    }
+    return { sent: false, error: 'recipient is on the suppression list' };
   }
 
   try {
@@ -172,6 +292,14 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailSendResul
         subject: params.subject,
         error: result.error,
       });
+      if (sendLogId && params.clubId) {
+        await updateEmailSendStatus({
+          id: sendLogId,
+          clubId: params.clubId,
+          status: 'failed',
+          error: result.error ?? 'send failed',
+        });
+      }
       return result;
     }
 
@@ -181,23 +309,99 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailSendResul
       id: result.id,
     });
 
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'sent',
+        resendId: result.id ?? null,
+      });
+    }
+
     return result;
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
     logger.error('email_send_error', {
       to: params.to,
       subject: params.subject,
-      error: err instanceof Error ? err.message : 'Unknown error',
+      error: message,
     });
-    return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'failed',
+        error: message,
+      });
+    }
+    return { sent: false, error: message };
   }
 }
 
 export async function sendPlainTextEmail(
   params: SendPlainTextEmailParams,
 ): Promise<EmailSendResult> {
+  // Task #22 (2026-05-28): mirrors `sendEmail` — opt-in send-log
+  // tracking, written before the suppression check and updated to its
+  // terminal state after Resend resolves. See the same comment in
+  // `sendEmail` re: the existingLogId hoist for retries.
+  const sendLogId =
+    params.existingLogId ??
+    (params.sendLog && params.clubId
+      ? await recordEmailSend({
+          clubId: params.clubId,
+          senderMemberId: params.sendLog.senderMemberId,
+          toEmail: params.to,
+          subject: params.subject,
+          audienceId: params.sendLog.audienceId,
+          trigger: params.sendLog.trigger,
+          source: params.sendLog.source,
+          status: 'queued',
+        })
+      : null);
+
   const fromAddress = resolveFromAddress();
   if (!fromAddress) {
-    return { sent: false, error: 'EMAIL_FROM not configured in production' };
+    const error = 'EMAIL_FROM not configured in production';
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'failed',
+        error,
+      });
+    }
+    return { sent: false, error };
+  }
+
+  // Audit pass-7 followup ⑤ (2026-05-25): suppression-list check —
+  // mirrors `sendEmail`. Plain-text path is used for system notices,
+  // same suppression contract applies. See `sendEmail` for the
+  // codex #22 iter-5 P3 rationale on the fail-open try/catch.
+  let suppressed = false;
+  try {
+    suppressed = await isEmailSuppressed(params.to, params.clubId);
+  } catch (err) {
+    logger.warn('email_suppression_check_failed', {
+      to: params.to,
+      subject: params.subject,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  if (suppressed) {
+    logger.warn('email_skipped_by_suppression', {
+      to: params.to,
+      subject: params.subject,
+    });
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'suppressed',
+        error: 'recipient is on the suppression list',
+      });
+    }
+    return { sent: false, error: 'recipient is on the suppression list' };
   }
 
   const result = await postResendEmail({
@@ -213,6 +417,14 @@ export async function sendPlainTextEmail(
       subject: params.subject,
       error: result.error,
     });
+    if (sendLogId && params.clubId) {
+      await updateEmailSendStatus({
+        id: sendLogId,
+        clubId: params.clubId,
+        status: 'failed',
+        error: result.error ?? 'send failed',
+      });
+    }
     return result;
   }
 
@@ -221,6 +433,15 @@ export async function sendPlainTextEmail(
     subject: params.subject,
     id: result.id,
   });
+
+  if (sendLogId && params.clubId) {
+    await updateEmailSendStatus({
+      id: sendLogId,
+      clubId: params.clubId,
+      status: 'sent',
+      resendId: result.id ?? null,
+    });
+  }
 
   return result;
 }
@@ -274,8 +495,59 @@ async function sendWithRetry(
   return finalResult;
 }
 
+/**
+ * Task #22 (2026-05-28): hoists the recordEmailSend call so retries
+ * share a single log row (codex P3). The first attempt inserts as
+ * 'queued'; every subsequent attempt sees `existingLogId` and only
+ * updates the existing row's status.
+ */
+async function hoistSendLog(
+  params: { clubId?: string; to: string; subject: string; sendLog?: SendLogContext },
+): Promise<string | null> {
+  if (!params.sendLog || !params.clubId) return null;
+  return recordEmailSend({
+    clubId: params.clubId,
+    senderMemberId: params.sendLog.senderMemberId,
+    toEmail: params.to,
+    subject: params.subject,
+    audienceId: params.sendLog.audienceId,
+    trigger: params.sendLog.trigger,
+    source: params.sendLog.source,
+    status: 'queued',
+  });
+}
+
+/**
+ * Codex #22 iter-4 P3 (2026-05-28): when a wrapper hoists but the
+ * insert fails (recordEmailSend swallows the error and returns null),
+ * we MUST clear `sendLog` on the child params. Otherwise the
+ * primitive sendEmail/sendPlainTextEmail path falls back to a fresh
+ * insert on every retry — exactly the double-insert codex flagged.
+ * Strip sendLog so the retries treat the send as untracked.
+ */
+function buildChildParams<T extends SendEmailParams | SendPlainTextEmailParams>(
+  params: T,
+  hoistedId: string | null,
+): T {
+  if (params.existingLogId) {
+    // Caller already had a row; honour it.
+    return params;
+  }
+  if (hoistedId) {
+    return { ...params, existingLogId: hoistedId };
+  }
+  // Hoist attempted but failed (or the wrapper had no clubId/sendLog).
+  // Either way, suppress further insert attempts in the retry loop.
+  return { ...params, sendLog: undefined, existingLogId: undefined };
+}
+
 export async function sendEmailWithRetry(params: SendEmailParams): Promise<EmailSendResult> {
-  return sendWithRetry(() => sendEmail(params), {
+  // Codex #22 iter-2 P3 (2026-05-28): `existingLogId` from the caller
+  // wins — only hoist a new row when one wasn't already provided.
+  // Without this, a wrapper-of-a-wrapper would double-insert.
+  const hoistedId = params.existingLogId ? null : await hoistSendLog(params);
+  const childParams = buildChildParams(params, hoistedId);
+  return sendWithRetry(() => sendEmail(childParams), {
     to: params.to,
     subject: params.subject,
   });
@@ -284,7 +556,9 @@ export async function sendEmailWithRetry(params: SendEmailParams): Promise<Email
 export async function sendPlainTextEmailWithRetry(
   params: SendPlainTextEmailParams,
 ): Promise<EmailSendResult> {
-  return sendWithRetry(() => sendPlainTextEmail(params), {
+  const hoistedId = params.existingLogId ? null : await hoistSendLog(params);
+  const childParams = buildChildParams(params, hoistedId);
+  return sendWithRetry(() => sendPlainTextEmail(childParams), {
     to: params.to,
     subject: params.subject,
   });
@@ -304,8 +578,16 @@ export async function sendPlainTextEmailWithRetry(
  * if called outside a request context (e.g. from a script).
  */
 export function sendEmailAsync(params: SendEmailParams): void {
-  const task = () =>
-    sendWithRetry(() => sendEmail(params), {
+  const task = async () => {
+    // Codex #22 iter-3 P3 (2026-05-28): hoist the send-log row so
+    // retries share one row, matching sendEmailWithRetry. Without
+    // this, a caller passing `sendLog` would get a fresh queued/
+    // failed row per attempt. Codex #22 iter-4 P3: also clear
+    // sendLog when the hoist itself fails (recordEmailSend swallows
+    // errors), so retries don't fall through to per-attempt inserts.
+    const hoistedId = params.existingLogId ? null : await hoistSendLog(params);
+    const childParams = buildChildParams(params, hoistedId);
+    return sendWithRetry(() => sendEmail(childParams), {
       to: params.to,
       subject: params.subject,
     }).catch((err) => {
@@ -319,6 +601,7 @@ export function sendEmailAsync(params: SendEmailParams): void {
         error: err instanceof Error ? err.message : String(err),
       });
     });
+  };
   try {
     after(task);
   } catch (err) {
@@ -411,7 +694,37 @@ export async function sendTriggeredEmail(params: TriggeredEmailParams): Promise<
       error: 'Email disabled by notification preference',
     };
   }
-  return sendWithRetry(() => sendEmail(emailParams), {
+  // Task #21 (2026-05-28): forward clubId to the send so
+  // `isEmailSuppressed` honours this club's manual suppressions.
+  // Triggered emails always know their club; passing it makes per-club
+  // manual suppressions effective for every transactional path.
+  //
+  // Task #22 (2026-05-28): auto-attach a transactional send-log entry
+  // tagged with the trigger. Callers may override by passing their own
+  // `sendLog` on the params; this default fills the common case.
+  const sendLog: SendLogContext = emailParams.sendLog ?? {
+    source: 'transactional',
+    trigger,
+  };
+  // Hoist the send-log row so retries reuse it (codex #22 P3). When
+  // the caller already passed an existingLogId (e.g., a wrapper that
+  // hoisted earlier), honour that and skip the second insert (codex
+  // #22 iter-2 P3). If the hoist itself fails, strip sendLog so
+  // retries don't fall back to per-attempt inserts (codex #22 iter-4
+  // P3).
+  const hoistedId = emailParams.existingLogId
+    ? null
+    : await hoistSendLog({
+        clubId,
+        to: emailParams.to,
+        subject: emailParams.subject,
+        sendLog,
+      });
+  const childParams: SendEmailParams = buildChildParams(
+    { ...emailParams, clubId, sendLog },
+    hoistedId,
+  );
+  return sendWithRetry(() => sendEmail(childParams), {
     to: emailParams.to,
     subject: emailParams.subject,
     clubId,

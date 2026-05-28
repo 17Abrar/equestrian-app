@@ -16,7 +16,13 @@ import {
   type CreateCouponFormValues,
   type CreateCouponInput,
 } from '@equestrian/shared/schemas';
-import { formatMoney, toMajorUnits, formatDate } from '@equestrian/shared/utils';
+import {
+  formatMoney,
+  toMajorUnits,
+  formatDate,
+  getTodayDateString,
+  getTodayLocalDateString,
+} from '@equestrian/shared/utils';
 import {
   useFinanceOverview,
   useExpenses,
@@ -86,7 +92,11 @@ import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
-import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
+import {
+  DEFAULT_PAGE_SIZE,
+  SUPPORTED_CURRENCIES,
+  type SupportedCurrency,
+} from '@equestrian/shared/constants';
 
 export function FinancesPage() {
   return (
@@ -753,16 +763,45 @@ function AddExpenseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createExpense = useCreateExpense();
+  const settingsQuery = useClubSettings();
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex follow-up: expense dates are
+  // club accounting dates, so today must be computed in the club's stored
+  // timezone rather than the admin's browser tz. The first MED-3 fix
+  // used `getTodayLocalDateString()` (browser-local) which is wrong when
+  // the admin is in a different tz than the club. Fall back to browser-
+  // local when settings haven't loaded yet — same as the prior version
+  // in that narrow window, and settings is cached for stable data so the
+  // fallback is effectively unreachable in normal navigation.
+  const clubTimezone = settingsQuery.data?.data.timezone;
+  const todayInClub = clubTimezone
+    ? getTodayDateString(clubTimezone)
+    : getTodayLocalDateString();
 
   const form = useForm<CreateExpenseFormValues, unknown, CreateExpenseInput>({
     resolver: zodResolver(createExpenseSchema),
     defaultValues: {
       category: 'feed',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: todayInClub,
       currency: 'AED',
     },
   });
+
+  // Audit pass-5 MED-3 (2026-05-21) + codex v2 follow-up: RHF freezes
+  // `defaultValues` on first render, so a slow settings query leaves
+  // the date stuck on browser-local even after `clubTimezone` arrives.
+  // Sync the date when settings resolve, but only if the user hasn't
+  // touched the field yet.
+  useEffect(() => {
+    if (clubTimezone && !form.formState.dirtyFields.date) {
+      form.setValue('date', getTodayDateString(clubTimezone), {
+        shouldDirty: false,
+        shouldValidate: false,
+        shouldTouch: false,
+      });
+    }
+  }, [clubTimezone, form]);
 
   async function onSubmit(data: CreateExpenseInput) {
     try {
@@ -955,7 +994,11 @@ function CouponsTab() {
                   <TableCell>
                     {c.discountType === 'percentage'
                       ? `${c.discountValue}%`
-                      : formatMoney(c.discountValue, currency)}
+                      : // Audit P1 (2026-05-26): the coupon's OWN currency,
+                        // not the club default. A multi-currency club's
+                        // fixed-amount coupon is locked to a single
+                        // currency by the validateCoupon path.
+                        formatMoney(c.discountValue, c.currency ?? currency)}
                   </TableCell>
                   <TableCell>
                     {c.usageCount}
@@ -1062,6 +1105,17 @@ function AddCouponDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createCoupon = useCreateCoupon();
+  // Audit P1 (2026-05-26): coupon currency is now a first-class form
+  // field. The DB column has existed since migration 0055 with a
+  // backfill from `clubs.currency`, but the create dialog never
+  // surfaced it — so a fixed-amount coupon in a multi-currency club
+  // was ambiguous and inherited the club default at the route layer.
+  const settingsQuery = useClubSettings();
+  // Cast: club settings stores a 3-letter currency string; we narrow
+  // to the SupportedCurrency union for form-typing. An unknown
+  // currency in the DB would surface as a `formatMoney` fallback at
+  // render rather than a runtime crash.
+  const clubCurrency = (settingsQuery.data?.data.currency ?? 'AED') as SupportedCurrency;
 
   const form = useForm<CreateCouponFormValues, unknown, CreateCouponInput>({
     resolver: zodResolver(createCouponSchema),
@@ -1070,6 +1124,7 @@ function AddCouponDialog({
       discountType: 'percentage',
       firstTimeOnly: false,
       isStackable: false,
+      currency: clubCurrency,
     },
   });
 
@@ -1155,6 +1210,43 @@ function AddCouponDialog({
                 )}
               />
             </div>
+            {/* Currency picker: only fixed-amount coupons need it.
+                Percentage discounts are currency-agnostic — `validateCoupon`
+                still uses the booking's currency for the apply logic, so
+                we hide the picker to keep the form simple. Audit P1
+                (2026-05-26). */}
+            {form.watch('discountType') === 'fixed' && (
+              <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency *</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value ?? clubCurrency}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SUPPORTED_CURRENCIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-muted-foreground text-xs">
+                      Coupon applies only to bookings priced in this currency.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}

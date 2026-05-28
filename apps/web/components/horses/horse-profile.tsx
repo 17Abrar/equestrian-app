@@ -15,6 +15,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { HorseForm } from './horse-form';
 import { HealthTab } from './health-tab';
+import { MedicationsTab } from './medications-tab';
+import { LeasesTab } from './leases-tab';
 import { FeedingTab } from './feeding-tab';
 import { ExerciseTab } from './exercise-tab';
 import { DocumentsTab } from './documents-tab';
@@ -213,7 +215,16 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="livery">Livery</TabsTrigger>
+              {/* Feature 2026-05-27 (PR 2): leases tab next to Livery
+                  because both are commercial/billing surfaces for the
+                  horse. */}
+              <TabsTrigger value="leases">Leases</TabsTrigger>
               <TabsTrigger value="health">Health</TabsTrigger>
+              {/* Audit P1 (2026-05-26): Medications was a sub-section
+                  inside Health; promoted to a top-level tab to match
+                  product-plan terminology and the frequency vets/
+                  grooms hit this surface. */}
+              <TabsTrigger value="medications">Medications</TabsTrigger>
               <TabsTrigger value="feeding">Feeding</TabsTrigger>
               <TabsTrigger value="exercise">Exercise</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -275,8 +286,16 @@ export function HorseProfile({ horseId }: HorseProfileProps) {
               <LiveryTab horse={horse} />
             </TabsContent>
 
+            <TabsContent value="leases" className="mt-4">
+              <LeasesTab horseId={horseId} />
+            </TabsContent>
+
             <TabsContent value="health" className="mt-4">
               <HealthTab horseId={horseId} />
+            </TabsContent>
+
+            <TabsContent value="medications" className="mt-4">
+              <MedicationsTab horseId={horseId} />
             </TabsContent>
 
             <TabsContent value="feeding" className="mt-4">

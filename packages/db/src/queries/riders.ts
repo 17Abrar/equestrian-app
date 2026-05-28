@@ -243,14 +243,19 @@ export async function createRider(clubId: string, data: CreateRiderData) {
     // `RIDER_PROFILE_ENCRYPTED_FIELDS`. `encryptFields` skips undefined
     // (so omitted fields don't get a `v1:` prefix written for an empty
     // value).
+    //
+    // Audit I8 (2026-05-18): the `encryptFields` bound was widened so
+    // typed inputs no longer require an index-signature cast. The
+    // object literal below carries the exact-key shape encryptFields
+    // expects.
     const encryptedPhi = encryptFields(
       {
         emergencyContactName: data.emergencyContactName,
         emergencyContactPhone: data.emergencyContactPhone,
         emergencyContactRelation: data.emergencyContactRelation,
         medicalNotes: data.medicalNotes,
-      } as Record<string, unknown>,
-      RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
+      },
+      RIDER_PROFILE_ENCRYPTED_FIELDS,
     );
 
     const [profile] = await tx
@@ -279,14 +284,14 @@ export async function updateRiderProfile(
   // PATCH semantics: omitted ≠ null (omitted = leave alone, null =
   // clear). `encryptFields` only writes keys present in `data`, so
   // undefined fields stay omitted from the UPDATE SET — preserving
-  // existing values. Double-`unknown` cast: interface types don't
-  // carry an index signature; the helper only touches the named
-  // string fields.
+  // existing values.
+  //
+  // Audit I8 (2026-05-18): the previous double-`unknown` cast threading
+  // `data` through `Record<string, unknown>` was removed when
+  // `encryptFields` was generalized to accept any T (see
+  // packages/db/src/crypto.ts).
   const partial = toRiderDecimalStrings(data);
-  const encryptedPhi = encryptFields(
-    data as unknown as Record<string, unknown>,
-    RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
-  );
+  const encryptedPhi = encryptFields(data, RIDER_PROFILE_ENCRYPTED_FIELDS);
   const values = {
     ...partial,
     ...encryptedPhi,
@@ -336,19 +341,19 @@ export async function upsertRiderProfileByMember(
   // uses null when the caller omitted the field (first-write); UPDATE
   // path uses `encryptFields(data, …)` which preserves PATCH semantics
   // (omitted = leave alone).
+  //
+  // Audit I8 (2026-05-18): `Record<string, unknown>` casts removed —
+  // `encryptFields` was generalized to accept any T.
   const insertEncryptedPhi = encryptFields(
     {
       emergencyContactName: data.emergencyContactName ?? null,
       emergencyContactPhone: data.emergencyContactPhone ?? null,
       emergencyContactRelation: data.emergencyContactRelation ?? null,
       medicalNotes: data.medicalNotes ?? null,
-    } as Record<string, unknown>,
-    RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
+    },
+    RIDER_PROFILE_ENCRYPTED_FIELDS,
   );
-  const updateEncryptedPhi = encryptFields(
-    data as unknown as Record<string, unknown>,
-    RIDER_PROFILE_ENCRYPTED_FIELDS as readonly string[],
-  );
+  const updateEncryptedPhi = encryptFields(data, RIDER_PROFILE_ENCRYPTED_FIELDS);
 
   // For the UPDATE half, only set fields the caller actually supplied.
   // PATCH semantics: omitted ≠ null. Omitted leaves the existing column

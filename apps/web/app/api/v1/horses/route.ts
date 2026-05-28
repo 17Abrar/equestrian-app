@@ -9,6 +9,7 @@ import {
   validateInput,
   parseRequiredBody,
 } from '@/lib/api-utils';
+import { findNonR2OriginUrl } from '@/lib/upload-verify-cache';
 
 export async function GET(request: NextRequest) {
   return withAuth(
@@ -36,6 +37,23 @@ export async function POST(request: NextRequest) {
       // instead of inlining `request.json()` + `validateInput`. Mirrors
       // the pattern used by every other v1 mutation route.
       const data = await parseRequiredBody(request, createHorseSchema);
+
+      // Audit pass-5 MED-2 (2026-05-21): origin-pin photo URLs to
+      // `R2_PUBLIC_URL` at the API save boundary. The Zod schema only
+      // validates `.url()`, so without this check a direct API caller
+      // can post `primaryPhotoUrl: "https://attacker.example/foo.png"`
+      // and the horse row persists the attacker URL, which then renders
+      // inside the trusted dashboard (pixel-tracking, brand spoofing,
+      // mixed-content). `findNonR2OriginUrl` piggybacks on MED-1's
+      // already-origin-pinned `extractR2KeyFromUrl`.
+      const rejected = findNonR2OriginUrl([data.primaryPhotoUrl, ...(data.photoUrls ?? [])]);
+      if (rejected) {
+        return errorResponse(
+          'INVALID_PHOTO_URL',
+          'Photo URLs must be R2 objects produced by /api/v1/upload',
+          400,
+        );
+      }
 
       // The owner dropdown is populated from the club's owner list, but a
       // caller hitting the API directly could pass any UUID. Verify the

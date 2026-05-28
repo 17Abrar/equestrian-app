@@ -50,7 +50,6 @@ const nextConfig = {
   transpilePackages: [
     '@equestrian/shared',
     '@equestrian/db',
-    '@equestrian/api-client',
     '@equestrian/email-templates',
   ],
   images: {

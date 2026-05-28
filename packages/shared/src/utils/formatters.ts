@@ -32,7 +32,22 @@ export function formatTime(timeStr: string): string {
 export type DateFormatStyle = 'short' | 'long';
 
 export function formatDate(value: string | Date, style: DateFormatStyle = 'short'): string {
-  const date = typeof value === 'string' ? new Date(`${value}T00:00:00`) : value;
+  // 2026-05-22: callers pass both date-only strings (`YYYY-MM-DD` from
+  // `bookings.slotDate`, `coupons.expiresAt`) AND full ISO timestamps
+  // (`payment_accounts.connectedAt`, `invoices.paidAt`,
+  // `horses.ownershipSubmittedAt`, `competition_entries.registeredAt`).
+  // The previous unconditional `${value}T00:00:00` appended to an ISO
+  // timestamp produced `"2026-04-25T14:32:00ZT00:00:00"` → `Invalid
+  // Date`. Detect the 'T' (or 'Z') marker and parse directly when it's
+  // already a full timestamp; otherwise still treat a bare `YYYY-MM-DD`
+  // as midnight LOCAL (matches the prior date-only semantics so booking
+  // list cards don't shift day on tz boundaries).
+  let date: Date;
+  if (typeof value === 'string') {
+    date = /[TZ]/.test(value) ? new Date(value) : new Date(`${value}T00:00:00`);
+  } else {
+    date = value;
+  }
   const options: Intl.DateTimeFormatOptions =
     style === 'long'
       ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }

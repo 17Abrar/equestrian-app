@@ -41,13 +41,20 @@ interface MembershipEvent {
   type: string;
 }
 
+interface UserEvent {
+  data: {
+    id: string;
+  };
+  type: string;
+}
+
 /**
  * Audit F-9 (2026-05-06 r2). Pulls `clerkOrgId` / `clerkUserId` off
  * the verified event payload so post-verify logs carry the identifiers
  * an operator filters Sentry by during incident triage. Both event
  * shapes (organization.* and organizationMembership.*) are handled.
  */
-function extractClerkIds(event: OrganizationEvent | MembershipEvent): {
+function extractClerkIds(event: OrganizationEvent | MembershipEvent | UserEvent): {
   clerkOrgId: string | null;
   clerkUserId: string | null;
 } {
@@ -64,6 +71,10 @@ function extractClerkIds(event: OrganizationEvent | MembershipEvent): {
       clerkOrgId: o.data.id ?? null,
       clerkUserId: o.data.created_by ?? null,
     };
+  }
+  if (event.type.startsWith('user.')) {
+    const u = event as UserEvent;
+    return { clerkOrgId: null, clerkUserId: u.data.id ?? null };
   }
   return { clerkOrgId: null, clerkUserId: null };
 }
@@ -135,7 +146,7 @@ async function handlePost(request: Request) {
     return new Response('Webhook secret not configured', { status: 401 });
   }
 
-  let event: OrganizationEvent | MembershipEvent;
+  let event: OrganizationEvent | MembershipEvent | UserEvent;
 
   try {
     const wh = new Webhook(webhookSecret);
@@ -143,7 +154,7 @@ async function handlePost(request: Request) {
       'svix-id': svixId,
       'svix-timestamp': svixTimestamp,
       'svix-signature': svixSignature,
-    }) as OrganizationEvent | MembershipEvent;
+    }) as OrganizationEvent | MembershipEvent | UserEvent;
   } catch (error) {
     logger.error('clerk_webhook_verification_failed', {
       requestId,
@@ -279,6 +290,13 @@ async function handlePost(request: Request) {
       case 'organization.updated': {
         const orgData = (event as OrganizationEvent).data;
 
+        // Audit pass-7 integration LOW (2026-05-25): intentionally NOT
+        // mirroring Clerk org `slug` renames to `clubs.slug`. Cavaliq
+        // owns the public discovery URL (`/c/[slug]`); Clerk's org slug
+        // is internal billing/dashboard scaffolding. The two slugs were
+        // only co-equal at `organization.created` time. A future change
+        // that "fixes" this would silently break every published club
+        // discovery URL the moment an admin renames their org in Clerk.
         await db
           .update(clubs)
           .set({
@@ -454,6 +472,42 @@ async function handlePost(request: Request) {
         logger.info('member_deactivated_from_webhook', {
           clerkOrgId: orgId,
           clerkUserId: memberData.public_user_data.user_id,
+        });
+        break;
+      }
+
+      case 'user.deleted': {
+        // Audit pass-7 integration LOW (2026-05-25): defence-in-depth for
+        // the rare case where a user deletes themselves via Clerk's
+        // hosted user portal directly, bypassing our `/api/v1/account/delete`
+        // route entirely. Without this handler, the Clerk JWT is invalid
+        // (Clerk blocks the user's future sign-in attempts on their side)
+        // but our `club_members` rows still carry the orphaned
+        // `clerkUserId`. If the same email is later used to sign up again,
+        // they'd land with a NEW `clerkUserId` and no link to the old
+        // records — operationally fine, but the prior memberships sit as
+        // permanent ghosts in finance/audit reports.
+        //
+        // Deactivate every `club_members` row for the deleted user across
+        // all clubs (cross-tenant by design — one user can belong to many
+        // clubs, and we want all of them to reflect the deletion). The
+        // primary delete flow is still `/api/v1/account/delete`, which
+        // takes the same action plus emails the privacy inbox; this is
+        // the backstop for users who never opened our app.
+        const userData = (event as UserEvent).data;
+        const result = await db
+          .update(clubMembers)
+          .set({
+            isActive: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(clubMembers.clerkUserId, userData.id))
+          .returning({ id: clubMembers.id, clubId: clubMembers.clubId });
+
+        logger.info('user_deleted_from_webhook', {
+          clerkUserId: userData.id,
+          deactivatedMemberships: result.length,
+          clubIds: result.map((r) => r.clubId),
         });
         break;
       }

@@ -101,7 +101,13 @@ export const ziinaAdapter: PaymentProviderAdapter = {
 
     // Ziina doesn't publish a lightweight "validate this token" endpoint.
     // Probe `GET /payment_intent/<bogus>`: a valid token → 404, an invalid
-    // token → 401/403. We accept 404 as proof the credential is usable.
+    // token → 401/403. Audit pass-6 (2026-05-22 codex-1): require the
+    // exact 404 — the previous "anything that isn't 401/403 means
+    // success" branch silently stored credentials when Ziina returned
+    // 5xx / 429 (e.g. during a Ziina outage or rate-limit) or a 200
+    // (shouldn't happen for a bogus intent but defensive). The
+    // operator only discovered the bad credentials on the rider's
+    // first payment attempt. Fail-loud at connect-time instead.
     const probe = await fetchProvider(
       `${API_BASE_URL}/payment_intent/ping_00000000`,
       {
@@ -111,10 +117,44 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       { provider: 'Ziina', operation: 'credential probe' },
     );
 
-    if (probe.status === 401 || probe.status === 403) {
+    if (probe.status === 404) {
+      // Authenticated as expected — Ziina recognised the token, refused
+      // the bogus intent. Continue.
+    } else if (probe.status === 401 || probe.status === 403) {
       throw new PaymentProviderError(
         'AUTH_FAILED',
         'Ziina rejected the API key — copy it from the Ziina business dashboard and try again.',
+      );
+    } else if (probe.status === 429) {
+      // Codex review (2026-05-22 PR-6 review): the connect route maps
+      // `AUTH_FAILED` / `INVALID_CREDENTIALS` → HTTP 422 (operator's
+      // input is bad) and any other `PaymentProviderError` code → HTTP
+      // 502 (provider issue). A 429 / 5xx here is a transient provider
+      // failure, NOT a bad credential, so use `RATE_LIMITED` /
+      // `SERVER_ERROR` — the operator sees "try again in a few
+      // minutes" rather than "your credential is invalid".
+      throw new PaymentProviderError(
+        'RATE_LIMITED',
+        'Ziina rate-limited the credential check — wait a few seconds and try again.',
+        { retryable: true },
+      );
+    } else if (probe.status >= 500) {
+      throw new PaymentProviderError(
+        'SERVER_ERROR',
+        `Ziina credential probe returned ${probe.status} — Ziina may be experiencing an outage. Try again in a few minutes.`,
+        { retryable: true },
+      );
+    } else {
+      // Anything else (200, other 4xx, redirects with bodies the
+      // adapter doesn't expect): refuse to accept the credential
+      // rather than silently store it. A future Ziina API change that
+      // alters the bogus-intent response surface lands here. Use
+      // `SERVER_ERROR` so the operator sees a provider-issue 502
+      // rather than a credential-validation 422 — the pasted key
+      // might actually be fine; Ziina just shifted under us.
+      throw new PaymentProviderError(
+        'SERVER_ERROR',
+        `Ziina credential probe returned an unexpected status ${probe.status} — Ziina may have changed its API. Verify the key in the Ziina dashboard, or contact support.`,
       );
     }
 
@@ -122,7 +162,8 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       // Ziina doesn't expose a stable "merchant id" we can read without extra
       // scopes; key the account on the clubId so a disconnect/reconnect after
       // an API-key rotation produces the same external id and the
-      // findPaymentAccountByExternalId fallback continues to resolve.
+      // (provider, external_account_id) partial-UNIQUE in payment_accounts
+      // continues to resolve the same row.
       externalAccountId: `ziina_${input.clubId}`,
       metadata: {
         apiBaseUrl: API_BASE_URL,
@@ -423,6 +464,12 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       ? (payload.data?.payment_intent_id ?? payload.data?.id)
       : payload.data?.id;
 
+    // Audit pass-7 codex HIGH-1 (2026-05-25): for refund events, `payload.data.id`
+    // IS the refund's own ID — surface as `providerRefundId` so
+    // `applyProviderRefund` dedups admin-route + webhook double-records.
+    const providerRefundId =
+      isRefundEvent && typeof payload.data?.id === 'string' ? payload.data.id : undefined;
+
     return {
       eventId,
       eventType: payload.event ?? 'unknown',
@@ -433,6 +480,7 @@ export const ziinaAdapter: PaymentProviderAdapter = {
       currency,
       refundStatus,
       refundAmountMinor,
+      providerRefundId,
       // Audit F-22 / F-24 (2026-05-07 r5): description for recovery
       // when neither provider_payment_id nor metadata.bookingId resolves
       // the booking (instant-succeed race window).

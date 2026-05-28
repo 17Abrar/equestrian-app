@@ -7,6 +7,7 @@ import {
   getClubById,
 } from '@equestrian/db/queries';
 import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
+import { findNonR2OriginUrl } from '@/lib/upload-verify-cache';
 import { sendTriggeredEmailAsync } from '@/lib/email';
 import { logger } from '@/lib/logger';
 import { HorseRegistrationSubmitted } from '@equestrian/email-templates/horse-registration-submitted';
@@ -37,6 +38,20 @@ export async function POST(request: NextRequest) {
   return withAuth(
     async (ctx) => {
       const data = await parseRequiredBody(request, registerHorseOwnershipSchema);
+
+      // Audit pass-5 MED-2 (2026-05-21): origin-pin the registration
+      // photo URL to `R2_PUBLIC_URL`. Same rationale as the horse
+      // POST/PATCH routes: the schema only validates `.url()`, so an
+      // attacker submitting an external URL would have it rendered in
+      // the trusted dashboard once the registration is approved.
+      const rejectedPhoto = findNonR2OriginUrl([data.primaryPhotoUrl]);
+      if (rejectedPhoto) {
+        return errorResponse(
+          'INVALID_PHOTO_URL',
+          'Photo URL must be an R2 object produced by /api/v1/upload',
+          400,
+        );
+      }
 
       let horse;
       try {

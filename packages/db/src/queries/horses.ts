@@ -254,15 +254,14 @@ export async function getHorseById(clubId: string, horseId: string) {
 }
 
 export async function createHorse(clubId: string, data: HorseCreate) {
-  // Audit pass-2 B-6: encrypt PHI fields before write. The double
-  // `unknown` cast threads through `encryptFields<T extends Record
-  // <string, unknown>>` — interface types like `HorseCreate` don't
-  // carry an index signature, but the helper only touches the named
-  // string fields.
-  const encrypted = encryptFields(
-    data as unknown as Record<string, unknown>,
-    HORSE_PHI_FIELDS as readonly string[],
-  ) as unknown as HorseCreate;
+  // Audit pass-2 B-6: encrypt PHI fields before write.
+  //
+  // Audit I8 (2026-05-18): the double-`unknown` cast that previously
+  // threaded `data` through `Record<string, unknown>` was removed when
+  // `encryptFields` was generalized to accept any T (see crypto.ts);
+  // the return value's `T` type matches `HorseCreate` so the outer
+  // cast also disappears.
+  const encrypted = encryptFields(data, HORSE_PHI_FIELDS);
   const values = { ...toDecimalStrings(data), ...encrypted, clubId } as NewHorse;
   const result = await db.insert(horses).values(values).returning();
   const row = result[0];
@@ -273,10 +272,9 @@ export async function updateHorse(clubId: string, horseId: string, data: HorseUp
   // Audit pass-2 B-6: encrypt PHI fields. `encryptFields` only writes
   // keys present in `data`, so PATCH semantics (omitted = leave alone)
   // are preserved.
-  const encrypted = encryptFields(
-    data as unknown as Record<string, unknown>,
-    HORSE_PHI_FIELDS as readonly string[],
-  ) as unknown as HorseUpdate;
+  //
+  // Audit I8 (2026-05-18): casts removed — see createHorse / crypto.ts.
+  const encrypted = encryptFields(data, HORSE_PHI_FIELDS);
   const values = {
     ...toDecimalStrings(data),
     ...encrypted,
@@ -644,11 +642,82 @@ export async function declineHorseOwnership(clubId: string, horseId: string, rea
   return result[0] ?? null;
 }
 
+/**
+ * Audit P1 (2026-05-26): owner-initiated re-activation of a retired
+ * horse. Flips ownership from `retired` back to `pending` so the
+ * club admin re-approves with a fresh livery fee (mirrors the
+ * original registration flow). Clears `liveryEndDate` so the
+ * billing cron doesn't see a stale termination date when the admin
+ * approves and Round-8.5 prorating resumes.
+ *
+ * `liveryStartDate` is NOT changed here — the admin sets it on the
+ * approve step. `monthlyLiveryFeeMinor` is left untouched too; the
+ * admin can adjust on approve.
+ *
+ * Returns the updated horse row or null if not found / not retired.
+ */
+export async function reactivateRetiredOwnership(
+  clubId: string,
+  horseId: string,
+  expectedOwnerMemberId?: string | null,
+): Promise<{ id: string; clubId: string; ownershipStatus: string } | null> {
+  // Owner pin mirrors `retireHorseOwnership` (task #23 codex P2
+  // 2026-05-28). If an admin transferred ownership while the former
+  // owner's reactivate request was in flight, the WHERE refuses to
+  // fire — the new owner's retired horse isn't quietly flipped to
+  // pending by someone who no longer owns it.
+  const ownerPredicate =
+    expectedOwnerMemberId === undefined
+      ? undefined
+      : expectedOwnerMemberId === null
+        ? isNull(horses.ownerMemberId)
+        : eq(horses.ownerMemberId, expectedOwnerMemberId);
+
+  const result = await db
+    .update(horses)
+    .set({
+      ownershipStatus: 'pending',
+      liveryEndDate: null,
+      ownershipSubmittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(horses.id, horseId),
+        eq(horses.clubId, clubId),
+        eq(horses.ownershipStatus, 'retired'),
+        isNull(horses.deletedAt),
+        ...(ownerPredicate ? [ownerPredicate] : []),
+      ),
+    )
+    .returning({
+      id: horses.id,
+      clubId: horses.clubId,
+      ownershipStatus: horses.ownershipStatus,
+    });
+  return result[0] ?? null;
+}
+
 export async function retireHorseOwnership(
   clubId: string,
   horseId: string,
   liveryEndDate?: string,
+  expectedOwnerMemberId?: string | null,
 ) {
+  // Task #23 codex P2 (2026-05-28): when called via the owner-initiated
+  // endpoint, the caller passes `expectedOwnerMemberId` resolved from the
+  // ownership read. The WHERE predicate then refuses to fire if an admin
+  // transferred or cleared ownership in the gap between the read and the
+  // write — closes the TOCTOU where a former owner could retire (and
+  // cascade-cancel pending invoices for) a horse that no longer belongs to
+  // them. The admin endpoint omits the arg and retains the prior contract.
+  const ownerPredicate =
+    expectedOwnerMemberId === undefined
+      ? undefined
+      : expectedOwnerMemberId === null
+        ? isNull(horses.ownerMemberId)
+        : eq(horses.ownerMemberId, expectedOwnerMemberId);
+
   const result = await db
     .update(horses)
     .set({
@@ -664,6 +733,7 @@ export async function retireHorseOwnership(
         eq(horses.clubId, clubId),
         eq(horses.ownershipStatus, 'active'),
         isNull(horses.deletedAt),
+        ...(ownerPredicate ? [ownerPredicate] : []),
       ),
     )
     .returning();
@@ -769,6 +839,9 @@ export async function getHorseOwnershipByUser(clerkUserId: string, horseId: stri
       horseId: horses.id,
       clubId: horses.clubId,
       ownershipStatus: horses.ownershipStatus,
+      // Surface the member id the join resolved against so callers can pin
+      // their write to that exact owner (task #23 codex P2 2026-05-28).
+      ownerMemberId: clubMembers.id,
     })
     .from(horses)
     .innerJoin(

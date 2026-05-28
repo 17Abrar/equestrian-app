@@ -131,16 +131,33 @@ const KEY_PATTERN = /^[0-9a-f-]{36}\/[a-z][a-z0-9_/-]*\/\d+-[a-z0-9._-]+$/;
 
 /**
  * Parses an R2 key out of a stored fileUrl. Returns null when the URL
- * doesn't carry a recognizable key shape (e.g. an external URL the
- * route shouldn't have accepted in the first place).
+ * doesn't carry a recognizable key shape OR when its origin does not
+ * match `R2_PUBLIC_URL`.
  *
- * Called by persist routes that store fileUrl rather than the raw
- * key. The existing `documents` POST already accepts `fileUrl` from
- * the client; this helper extracts the key for the verify gate.
+ * Audit pass-5 MED-1 (2026-05-21): the previous implementation accepted
+ * any origin so long as the pathname matched `KEY_PATTERN`. A caller
+ * could post `fileUrl: "https://attacker.example/<valid-r2-path>"` —
+ * `requireVerifiedR2Object` would verify the real R2 object at the path
+ * and pass, but the row stored the attacker URL, which then rendered as
+ * a trusted "document" link in the dashboard. Pinning the origin to
+ * `R2_PUBLIC_URL` closes that channel.
+ *
+ * If `R2_PUBLIC_URL` is unset or unparseable the helper returns null —
+ * uploads can't work without the env anyway (`storage.ts` throws), and
+ * a missing env should never silently downgrade the security boundary.
  */
 export function extractR2KeyFromUrl(fileUrl: string): string | null {
+  const r2PublicUrl = process.env.R2_PUBLIC_URL;
+  if (!r2PublicUrl) return null;
+  let r2Origin: string;
+  try {
+    r2Origin = new URL(r2PublicUrl).origin;
+  } catch {
+    return null;
+  }
   try {
     const url = new URL(fileUrl);
+    if (url.origin !== r2Origin) return null;
     // Strip leading slash from the pathname.
     const path = url.pathname.replace(/^\//, '');
     if (!KEY_PATTERN.test(path)) return null;
@@ -148,4 +165,61 @@ export function extractR2KeyFromUrl(fileUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Audit pass-5 MED-2 (2026-05-21): persist-side origin pin for image
+ * asset URLs (`horses.primaryPhotoUrl`/`photoUrls`, ownership
+ * registration photos, club branding logo/cover/favicon). The schemas
+ * for these fields only validate `.url()`, so a direct API caller can
+ * smuggle in `https://attacker.example/something` and the save routes
+ * happily persist it. Downstream `<Image>` / `<img>` then renders the
+ * attacker URL inside the trusted dashboard context — pixel-tracking,
+ * brand spoofing, mixed-content, etc.
+ *
+ * The origin check piggybacks on `extractR2KeyFromUrl` (which is
+ * already pinned to `R2_PUBLIC_URL` for MED-1) — when it returns
+ * null, the URL either isn't on R2 or doesn't match the canonical key
+ * shape, both of which mean we shouldn't persist it.
+ *
+ * `extraAllowedOrigins` is an opt-in escape hatch for routes that
+ * have a legitimate non-R2 source. Settings PATCH passes
+ * `https://img.clerk.com` because `clubs.logoUrl` is seeded from
+ * Clerk's `orgData.image_url` at bootstrap (and on the Clerk
+ * organization webhook) — a settings save that doesn't touch the
+ * logo still re-submits the existing value, and rejecting it would
+ * lock every Clerk-seeded club out of editing unrelated fields until
+ * they re-upload a logo.
+ *
+ * Returns the first rejected URL, or null when every input is either
+ * empty/null (the field was cleared) or origin-valid.
+ */
+export function findNonR2OriginUrl(
+  urls: ReadonlyArray<string | null | undefined>,
+  extraAllowedOrigins: ReadonlyArray<string> = [],
+): string | null {
+  const extras = new Set(
+    extraAllowedOrigins
+      .map((origin) => {
+        try {
+          return new URL(origin).origin;
+        } catch {
+          return null;
+        }
+      })
+      .filter((o): o is string => o !== null),
+  );
+  for (const url of urls) {
+    if (url == null || url === '') continue;
+    if (extractR2KeyFromUrl(url) !== null) continue;
+    if (extras.size > 0) {
+      try {
+        if (extras.has(new URL(url).origin)) continue;
+      } catch {
+        // Unparseable URL falls through to rejection below.
+      }
+    }
+    return url;
+  }
+  return null;
 }

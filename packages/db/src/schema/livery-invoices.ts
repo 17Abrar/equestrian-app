@@ -45,6 +45,13 @@ export const liveryInvoices = pgTable(
 
     paymentProvider: varchar('payment_provider', { length: 50 }),
     providerPaymentId: varchar('provider_payment_id', { length: 255 }),
+    // Audit I1 (2026-05-18): mirror of `bookings.providerPaymentIssuedAt`
+    // for livery invoices. Stamped by `setInvoiceProviderRef` every
+    // time `providerPaymentId` is set / replaced; read by
+    // `wasProviderPaymentIssuedRecently` so the N-Genius freshness
+    // gate keys on pay-link issuance time rather than invoice
+    // creation time.
+    providerPaymentIssuedAt: timestamp('provider_payment_issued_at', { withTimezone: true }),
     payLink: text('pay_link'),
 
     lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
@@ -76,6 +83,17 @@ export const liveryInvoices = pgTable(
     index('idx_livery_invoices_provider_payment')
       .on(table.providerPaymentId)
       .where(sql`provider_payment_id IS NOT NULL`),
+    // Audit pass-6 (2026-05-22 LOW-3): mirror of migration 0058's
+    // composite index backing `wasProviderPaymentIssuedRecently` on
+    // livery invoices. Same drizzle-kit-regenerate safety as the
+    // bookings sibling index; the N-Genius freshness gate relies on
+    // this for cron-time index-only scans.
+    index('idx_livery_invoices_provider_payment_issued_at').on(
+      table.clubId,
+      table.paymentProvider,
+      table.providerPaymentId,
+      table.providerPaymentIssuedAt,
+    ),
     // Audit F-14 (2026-05-07 r5): unique on `(club_id, invoice_number)`
     // declared by migration 0022. The runtime depends on this — the 23505
     // retry loop in `createLiveryInvoiceWithGeneratedNumber` catches this
@@ -100,5 +118,15 @@ export const liveryInvoices = pgTable(
     // Audit F-11 (2026-05-07 r4): SQL CHECK from migration 0025 —
     // schema drift fix.
     check('livery_invoices_period_range_check', sql`${table.periodStart} <= ${table.periodEnd}`),
+    // Audit pass-7 (2026-05-25 MED-2): see migration 0060. `payment_provider`
+    // is `varchar(50)` rather than the `payment_provider` enum because
+    // `platform_subscription_invoices.payment_provider` stores
+    // `'ziina_platform'` (not an enum member) and we keep both invoice
+    // tables on the same column type. The CHECK constraint gives us the
+    // typo-protection of the enum without forcing the type change.
+    check(
+      'livery_invoices_payment_provider_check',
+      sql`${table.paymentProvider} IS NULL OR ${table.paymentProvider} IN ('stripe', 'n_genius', 'ziina')`,
+    ),
   ],
 );

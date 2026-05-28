@@ -188,10 +188,13 @@ export async function createHealthRecord(
   data: HealthRecordCreate,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit I8 (2026-05-18): `encryptFields` now returns ONLY the
+  // encrypted keys, so callers must spread `...data` first to keep the
+  // non-encrypted columns (title, date, etc.) in the insert payload.
   const encrypted = encryptFields(data, HEALTH_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseHealthRecords)
-    .values({ ...encrypted, clubId, horseId })
+    .values({ ...data, ...encrypted, clubId, horseId })
     .returning();
   const row = result[0];
   return row ? decryptFields(row, HEALTH_ENCRYPTED_FIELDS) : row;
@@ -291,10 +294,12 @@ export type MedicationListItem = Awaited<ReturnType<typeof getMedications>>['ite
 
 export async function createMedication(clubId: string, horseId: string, data: MedicationCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit I8 (2026-05-18): see createHealthRecord — encryptFields now
+  // returns only the encrypted keys, so spread `...data` first.
   const encrypted = encryptFields(data, MEDICATION_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseMedications)
-    .values({ ...encrypted, clubId, horseId })
+    .values({ ...data, ...encrypted, clubId, horseId })
     .returning();
   const row = result[0];
   return row ? decryptFields(row, MEDICATION_ENCRYPTED_FIELDS) : row;
@@ -307,10 +312,11 @@ export async function updateMedication(
   data: Partial<MedicationCreate>,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit I8 (2026-05-18): see createHealthRecord.
   const encrypted = encryptFields(data, MEDICATION_ENCRYPTED_FIELDS);
   const result = await db
     .update(horseMedications)
-    .set({ ...encrypted, updatedAt: new Date() })
+    .set({ ...data, ...encrypted, updatedAt: new Date() })
     .where(
       and(
         eq(horseMedications.id, medicationId),
@@ -405,10 +411,11 @@ export async function createMedicationLog(
   data: MedicationLogCreate,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit I8 (2026-05-18): see createHealthRecord.
   const encrypted = encryptFields(data, MEDICATION_LOG_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseMedicationLogs)
-    .values({ ...encrypted, clubId, horseId })
+    .values({ ...data, ...encrypted, clubId, horseId })
     .returning();
   const row = result[0];
   return row ? decryptFields(row, MEDICATION_LOG_ENCRYPTED_FIELDS) : row;
@@ -466,17 +473,19 @@ export type FeedingPlanListItem = Awaited<ReturnType<typeof getFeedingPlans>>['i
 export async function createFeedingPlan(clubId: string, horseId: string, data: FeedingPlanCreate) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
   // Audit F-3 (2026-05-08 r6 PR Psi): encrypt vet/groom-prescribed
-  // notes before insert. The double `unknown` cast threads through
-  // `encryptFields<T extends Record<string, unknown>>` — interface
-  // types like `FeedingPlanCreate` don't carry an index signature,
-  // but the helper only touches the named string fields.
-  const encrypted = encryptFields(
-    data as unknown as Record<string, unknown>,
-    FEEDING_PLAN_ENCRYPTED_FIELDS as readonly string[],
-  ) as unknown as FeedingPlanCreate;
+  // notes before insert.
+  //
+  // Audit I8 (2026-05-18): drop the `as unknown as Record<string,
+  // unknown>` cast — encryptFields now accepts plain T. Spread
+  // `...data` first so non-encrypted columns survive (encryptFields
+  // returns only the encrypted keys); the explicit numeric→string
+  // conversion for `quantityKg` reads from `data` (not `encrypted`,
+  // which no longer carries it).
+  const encrypted = encryptFields(data, FEEDING_PLAN_ENCRYPTED_FIELDS);
   const values = {
+    ...data,
     ...encrypted,
-    quantityKg: encrypted.quantityKg != null ? String(encrypted.quantityKg) : null,
+    quantityKg: data.quantityKg != null ? String(data.quantityKg) : null,
     clubId,
     horseId,
   } as NewFeedingPlan;
@@ -496,13 +505,16 @@ export async function updateFeedingPlan(
   // `encryptFields` skips `undefined` so untouched fields are not
   // overwritten. An explicit `null` clears the column (handled by the
   // helper as null pass-through).
-  const encrypted = encryptFields(
-    data as unknown as Record<string, unknown>,
-    FEEDING_PLAN_ENCRYPTED_FIELDS as readonly string[],
-  ) as unknown as Partial<FeedingPlanCreate>;
+  //
+  // Audit I8 (2026-05-18): drop the casts; encryptFields now returns
+  // only the encrypted keys. Spread `...data` first so non-encrypted
+  // columns survive; numeric coercion reads from `data` (not the
+  // narrower `encrypted`).
+  const encrypted = encryptFields(data, FEEDING_PLAN_ENCRYPTED_FIELDS);
   const values = {
+    ...data,
     ...encrypted,
-    ...(encrypted.quantityKg != null ? { quantityKg: String(encrypted.quantityKg) } : {}),
+    ...(data.quantityKg != null ? { quantityKg: String(data.quantityKg) } : {}),
     updatedAt: new Date(),
   } as Partial<NewFeedingPlan>;
   const result = await db
@@ -591,10 +603,11 @@ export async function createExerciseSchedule(
   data: ExerciseCreate,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit I8 (2026-05-18): see createHealthRecord.
   const encrypted = encryptFields(data, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS);
   const result = await db
     .insert(horseExerciseSchedules)
-    .values({ ...encrypted, clubId, horseId })
+    .values({ ...data, ...encrypted, clubId, horseId })
     .returning();
   const row = result[0];
   return row ? decryptFields(row, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS) : row;
@@ -607,10 +620,11 @@ export async function updateExerciseSchedule(
   data: Partial<ExerciseCreate>,
 ) {
   if (!(await isHorseActiveInClub(clubId, horseId))) return null;
+  // Audit I8 (2026-05-18): see createHealthRecord.
   const encrypted = encryptFields(data, EXERCISE_SCHEDULE_ENCRYPTED_FIELDS);
   const result = await db
     .update(horseExerciseSchedules)
-    .set({ ...encrypted, updatedAt: new Date() })
+    .set({ ...data, ...encrypted, updatedAt: new Date() })
     .where(
       and(
         eq(horseExerciseSchedules.id, scheduleId),
