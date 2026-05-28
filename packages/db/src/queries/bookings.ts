@@ -408,6 +408,11 @@ export async function getBookingsByClub(clubId: string, filters: BookingFilters)
         horseId: bookings.horseId,
         status: bookings.status,
         paymentStatus: bookings.paymentStatus,
+        // Codex #18 iter-3 P3 (2026-05-28): list rows need
+        // paymentMethod so the admin UI can hide the provider-refund
+        // action on offline-settled bookings (refund route requires
+        // provider refs which markBookingPaidOffline clears).
+        paymentMethod: bookings.paymentMethod,
         amount: bookings.amount,
         // Audit P1 (2026-05-26): include the running refund total so
         // consumers (rider invoices page, admin lists) can render the
@@ -1263,6 +1268,18 @@ export async function setBookingPaymentRef(
       if (current.status === 'cancelled' || current.status === 'no_show') {
         return null;
       }
+      // Codex #18 iter-4 P2 (2026-05-28): route-driven attaches (no
+      // `paymentStatus` arg — the route is recording the provider
+      // intent, not the outcome) MUST require the locked row to still
+      // be `paymentStatus='pending'`. Otherwise a concurrent
+      // `markBookingPaidOffline` between the route's intent-mint and
+      // its DB attach would let us reattach a fresh provider ref to
+      // an already-paid booking — opening duplicate collection. The
+      // route logs and surfaces an error so ops can void the orphaned
+      // intent.
+      if (!data.paymentStatus && current.paymentStatus !== 'pending') {
+        return null;
+      }
     }
 
     if (data.paymentStatus) {
@@ -1661,6 +1678,77 @@ export async function reconcileBookingMarkPaid(clubId: string, bookingId: string
         eq(bookings.id, bookingId),
         eq(bookings.clubId, clubId),
         eq(bookings.paymentStatus, 'pending'),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
+// `package_credit` intentionally OMITTED — settlement against rider
+// packages requires atomic credit consumption (decrement
+// rider_packages.remaining_credits) and the booking-create path blocks
+// it for the same reason. Until that flow ships, the offline
+// settle-now button can't represent it (codex #18 P2 2026-05-28).
+type OfflinePaymentMethod = 'cash' | 'card_in_person' | 'bank_transfer';
+
+/**
+ * Task #18 (2026-05-28): admin-initiated "mark paid offline" path for the
+ * inline booking row action. Sets `payment_status='paid'` and pins the
+ * `payment_method` to the offline option the operator picked. CAS on
+ * NOT-paid statuses so an already-paid / refunded booking can't be
+ * silently overwritten — a concurrent webhook landing 'paid' wins and we
+ * return null. A 'failed' booking can be salvaged this way; a 'refunded'
+ * one cannot (a manual refund recapture would need its own flow).
+ *
+ * Lifecycle CAS (codex #18 P2 2026-05-28): also block cancelled /
+ * no_show / completed bookings. A 'no_show' or 'cancelled' booking
+ * shouldn't be retroactively marked paid — that produces phantom paid
+ * revenue against a released slot. Only `confirmed` and `pending`
+ * lifecycle states are eligible.
+ *
+ * Provider-ref clear (codex #18 P2 2026-05-28): when flipping a
+ * `failed` booking, also clear `paymentProvider` / `providerPaymentId`
+ * / `providerPaymentIssuedAt`. Without this the refund path would try
+ * to call the provider with a stale (failed/abandoned) reference.
+ *
+ * Returns the updated row when the CAS won; null otherwise.
+ */
+export async function markBookingPaidOffline(
+  clubId: string,
+  bookingId: string,
+  paymentMethod: OfflinePaymentMethod,
+) {
+  const result = await db
+    .update(bookings)
+    .set({
+      paymentStatus: 'paid',
+      paymentMethod,
+      paymentProvider: null,
+      providerPaymentId: null,
+      providerPaymentIssuedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.clubId, clubId),
+        // Payment CAS — only flip when not already settled.
+        inArray(bookings.paymentStatus, ['pending', 'failed']),
+        // Lifecycle CAS — only when the booking is still live.
+        inArray(bookings.status, ['confirmed', 'pending']),
+        // Provider-intent guard (codex #18 iter-3 P2 2026-05-28).
+        // A `pending` booking with an active provider intent is mid-
+        // online-payment; flipping it offline while the rider's
+        // checkout still resolves causes either duplicate collection
+        // or stale provider refs reattached after the clear. Refuse
+        // and let staff cancel the provider intent first. `failed`
+        // bookings already exhausted their provider flow, so we
+        // permit them through this gate even with non-null refs (the
+        // clear above is then load-bearing).
+        sql`(
+          ${bookings.paymentStatus} = 'failed'
+          OR ${bookings.providerPaymentId} IS NULL
+        )`,
       ),
     )
     .returning();

@@ -17,13 +17,24 @@ function StatCard({
   subtitle,
   icon: Icon,
   href,
+  emptyCta,
 }: {
   title: string;
   value: string | number;
   subtitle?: string;
   icon: typeof PawPrint;
   href: string;
+  /**
+   * Audit P2 (2026-05-28): when value is 0/'0', show this CTA instead
+   * of the numeric value so a brand-new club sees an actionable
+   * prompt rather than four blank "0" cards on first load. Keeps the
+   * card clickable to the same href.
+   */
+  emptyCta?: string;
 }) {
+  const isEmpty =
+    emptyCta !== undefined &&
+    (value === 0 || value === '0');
   return (
     <Link href={href}>
       <Card className="transition-shadow hover:shadow-md">
@@ -33,8 +44,16 @@ function StatCard({
           </div>
           <div>
             <p className="text-muted-foreground text-sm">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
-            {subtitle && <p className="text-muted-foreground text-xs">{subtitle}</p>}
+            {isEmpty ? (
+              <p className="text-primary text-sm font-medium underline-offset-2 group-hover:underline">
+                {emptyCta} →
+              </p>
+            ) : (
+              <p className="text-2xl font-bold">{value}</p>
+            )}
+            {subtitle && !isEmpty && (
+              <p className="text-muted-foreground text-xs">{subtitle}</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -108,13 +127,15 @@ export function DashboardOverview() {
           subtitle={`${stats.todayBookings.confirmed} confirmed, ${stats.todayBookings.pending} pending`}
           icon={BookOpen}
           href="/bookings"
+          emptyCta="Add a booking"
         />
         <StatCard
           title="Today's Slots"
           value={stats.todaySlots}
           subtitle="Scheduled lessons"
           icon={Calendar}
-          href="/bookings"
+          href="/calendar"
+          emptyCta="Open the calendar"
         />
         <StatCard
           title="Horses"
@@ -122,6 +143,7 @@ export function DashboardOverview() {
           subtitle={`${stats.horses.available} available`}
           icon={PawPrint}
           href="/horses"
+          emptyCta="Add your first horse"
         />
         <StatCard
           title="Riders"
@@ -129,6 +151,7 @@ export function DashboardOverview() {
           subtitle="Active riders"
           icon={Users}
           href="/riders"
+          emptyCta="Add your first rider"
         />
       </div>
 
