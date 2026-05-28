@@ -11,6 +11,7 @@ export * from './competitions';
 export * from './finances';
 export * from './operations';
 export * from './audiences';
+export * from './email-send-log';
 export * from './club-join-requests';
 export * from './livery-invoices';
 export * from './platform-subscription-invoices';

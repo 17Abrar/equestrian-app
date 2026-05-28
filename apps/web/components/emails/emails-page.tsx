@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { AudiencesTab } from '@/components/emails/audiences-tab';
 import { SuppressionsTab } from '@/components/emails/suppressions-tab';
+import { SendsTab } from '@/components/emails/sends-tab';
+import { TemplateGalleryDialog } from '@/components/emails/template-gallery-dialog';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
 import { type ApiSuccessResponse, type PaginatedApiResponse } from '@equestrian/shared/types';
@@ -88,6 +90,7 @@ export function EmailsPage() {
         <TabsList>
           <TabsTrigger value="compose">Compose</TabsTrigger>
           <TabsTrigger value="audiences">Audiences</TabsTrigger>
+          <TabsTrigger value="sends">Recently sent</TabsTrigger>
           <TabsTrigger value="suppressions">Suppressions</TabsTrigger>
         </TabsList>
 
@@ -97,6 +100,10 @@ export function EmailsPage() {
 
         <TabsContent value="audiences" className="mt-6">
           <AudiencesTab />
+        </TabsContent>
+
+        <TabsContent value="sends" className="mt-6">
+          <SendsTab />
         </TabsContent>
 
         <TabsContent value="suppressions" className="mt-6">
@@ -206,8 +213,23 @@ function SingleRecipientForm({ prefillTo }: { prefillTo?: string }) {
 
   const isSubmitting = form.formState.isSubmitting;
 
+  // Codex #22 P3 (2026-05-28): the gallery confirms before overwriting
+  // when either subject or body has content.
+  const subjectField = form.watch('subject');
+  const bodyField = form.watch('body');
+  const hasDraftContent = Boolean(subjectField?.trim() || bodyField?.trim());
+
   return (
     <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+      <div className="flex justify-end">
+        <TemplateGalleryDialog
+          hasUnsavedContent={hasDraftContent}
+          onPick={(template) => {
+            form.setValue('subject', template.subject, { shouldDirty: true });
+            form.setValue('body', template.body, { shouldDirty: true });
+          }}
+        />
+      </div>
       <div>
         <label className="text-sm font-medium">To *</label>
         <Input
@@ -397,6 +419,18 @@ function BroadcastForm() {
                     : `Will send to up to ${selectedAudience.memberCount} rider${selectedAudience.memberCount === 1 ? '' : 's'} (riders without an email or sharing an address are excluded).`}
             </p>
           )}
+        </div>
+
+        <div className="flex justify-end">
+          <TemplateGalleryDialog
+            hasUnsavedContent={Boolean(
+              form.watch('subject')?.trim() || form.watch('body')?.trim(),
+            )}
+            onPick={(template) => {
+              form.setValue('subject', template.subject, { shouldDirty: true });
+              form.setValue('body', template.body, { shouldDirty: true });
+            }}
+          />
         </div>
 
         <div>

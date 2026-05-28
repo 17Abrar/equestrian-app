@@ -20,3 +20,4 @@ export * from './platform-billing';
 export * from './webhook-events';
 export * from './notifications';
 export * from './email-suppressions';
+export * from './email-send-log';
