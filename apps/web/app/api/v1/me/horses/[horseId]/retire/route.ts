@@ -15,7 +15,9 @@ import {
   parseOptionalBody,
   validateUuidParam,
 } from '@/lib/api-utils';
+import { hasPermission } from '@/lib/permissions-shared';
 import { logger } from '@/lib/logger';
+import { type UserRole } from '@equestrian/shared/types';
 
 interface RouteParams {
   params: Promise<{ horseId: string }>;
@@ -40,6 +42,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse('FORBIDDEN', 'You are not the owner of this horse', 403);
       }
 
+      // Permission check against the TARGET club (the horse's club),
+      // not the active tenant. A multi-club owner whose active club
+      // role lacks `horses:update_own` (e.g., active as `parent` at
+      // club A, `rider` at club B) was previously 403'd by the
+      // active-tenant `requiredPermission` gate. Aligns with the
+      // reactivate endpoint, which already runs this check. Task #23
+      // (2026-05-28) — target-club permission sweep.
+      const targetMembership =
+        ctx.clubId === ownership.clubId
+          ? { role: ctx.orgRole, isActive: true }
+          : await getMemberByClerkUserAndClub(ctx.userId, ownership.clubId);
+      if (!targetMembership || !targetMembership.isActive) {
+        return errorResponse('FORBIDDEN', 'You are not an active member of this horse’s club', 403);
+      }
+      if (!hasPermission(targetMembership.role as UserRole, 'horses:update_own')) {
+        return errorResponse(
+          'FORBIDDEN',
+          'Your role at this club cannot retire horse ownership.',
+          403,
+        );
+      }
+
       if (ownership.ownershipStatus !== 'active') {
         return errorResponse('NOT_ACTIVE', 'Only active ownerships can be retired', 409);
       }
@@ -48,8 +72,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // transaction, a DB blip between the two writes left the horse
       // retired but the cron still firing reminders for invoices the
       // owner cannot settle.
+      //
+      // Owner pin (task #23 codex P2 2026-05-28): pass the
+      // expected ownerMemberId so the update no-ops if an admin
+      // transferred or cleared ownership in the gap between
+      // `getHorseOwnershipByUser` and this transaction. Otherwise
+      // a stale former owner could cancel the new owner's pending
+      // invoices.
       const result = await writeTransaction(async () => {
-        const retired = await retireHorseOwnership(ownership.clubId, horseId, data.liveryEndDate);
+        const retired = await retireHorseOwnership(
+          ownership.clubId,
+          horseId,
+          data.liveryEndDate,
+          ownership.ownerMemberId,
+        );
         if (!retired) return null;
         const cancelled = await cancelPendingInvoicesForHorse(ownership.clubId, horseId);
         return { horse: retired, cancelled };
@@ -94,12 +130,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       return successResponse(result.horse);
     },
-    // Layered defence: the in-handler ownership check (`getHorseOwnershipByUser`)
-    // is still the authoritative gate, but adding a permission requirement
-    // matches the convention used by every other route in the codebase and
-    // catches the case where a future change to the ownership resolver
-    // accidentally relaxes the gate. Both `horse_owner` and `rider` carry
-    // `horses:update_own`, which covers everyone who can own a horse.
-    { requiredPermission: 'horses:update_own' },
+    // No active-tenant `requiredPermission` — the target-club check
+    // above is the authoritative gate. Aligns with the reactivate
+    // endpoint, which adopted the same pattern after codex P2
+    // (2026-05-26) flagged that active-tenant gating creates false
+    // 403s for multi-club owners.
   );
 }

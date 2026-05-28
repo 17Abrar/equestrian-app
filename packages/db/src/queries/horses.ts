@@ -659,7 +659,20 @@ export async function declineHorseOwnership(clubId: string, horseId: string, rea
 export async function reactivateRetiredOwnership(
   clubId: string,
   horseId: string,
+  expectedOwnerMemberId?: string | null,
 ): Promise<{ id: string; clubId: string; ownershipStatus: string } | null> {
+  // Owner pin mirrors `retireHorseOwnership` (task #23 codex P2
+  // 2026-05-28). If an admin transferred ownership while the former
+  // owner's reactivate request was in flight, the WHERE refuses to
+  // fire — the new owner's retired horse isn't quietly flipped to
+  // pending by someone who no longer owns it.
+  const ownerPredicate =
+    expectedOwnerMemberId === undefined
+      ? undefined
+      : expectedOwnerMemberId === null
+        ? isNull(horses.ownerMemberId)
+        : eq(horses.ownerMemberId, expectedOwnerMemberId);
+
   const result = await db
     .update(horses)
     .set({
@@ -674,6 +687,7 @@ export async function reactivateRetiredOwnership(
         eq(horses.clubId, clubId),
         eq(horses.ownershipStatus, 'retired'),
         isNull(horses.deletedAt),
+        ...(ownerPredicate ? [ownerPredicate] : []),
       ),
     )
     .returning({
@@ -688,7 +702,22 @@ export async function retireHorseOwnership(
   clubId: string,
   horseId: string,
   liveryEndDate?: string,
+  expectedOwnerMemberId?: string | null,
 ) {
+  // Task #23 codex P2 (2026-05-28): when called via the owner-initiated
+  // endpoint, the caller passes `expectedOwnerMemberId` resolved from the
+  // ownership read. The WHERE predicate then refuses to fire if an admin
+  // transferred or cleared ownership in the gap between the read and the
+  // write — closes the TOCTOU where a former owner could retire (and
+  // cascade-cancel pending invoices for) a horse that no longer belongs to
+  // them. The admin endpoint omits the arg and retains the prior contract.
+  const ownerPredicate =
+    expectedOwnerMemberId === undefined
+      ? undefined
+      : expectedOwnerMemberId === null
+        ? isNull(horses.ownerMemberId)
+        : eq(horses.ownerMemberId, expectedOwnerMemberId);
+
   const result = await db
     .update(horses)
     .set({
@@ -704,6 +733,7 @@ export async function retireHorseOwnership(
         eq(horses.clubId, clubId),
         eq(horses.ownershipStatus, 'active'),
         isNull(horses.deletedAt),
+        ...(ownerPredicate ? [ownerPredicate] : []),
       ),
     )
     .returning();
@@ -809,6 +839,9 @@ export async function getHorseOwnershipByUser(clerkUserId: string, horseId: stri
       horseId: horses.id,
       clubId: horses.clubId,
       ownershipStatus: horses.ownershipStatus,
+      // Surface the member id the join resolved against so callers can pin
+      // their write to that exact owner (task #23 codex P2 2026-05-28).
+      ownerMemberId: clubMembers.id,
     })
     .from(horses)
     .innerJoin(
