@@ -53,12 +53,22 @@ interface SendEmailParams {
   to: string;
   subject: string;
   template: ReactElement;
+  /**
+   * Task #21 (2026-05-28): the sender's club. Passed to
+   * `isEmailSuppressed` so manual suppressions are scoped — Club A's
+   * manual entry blocks Club A's sends but not Club B's. Webhook
+   * (bounce/complaint) rows are global and always honored. Operational
+   * mail with no tenant context (system warnings, signups) leaves this
+   * undefined and runs the webhook-only check.
+   */
+  clubId?: string;
 }
 
 interface SendPlainTextEmailParams {
   to: string;
   subject: string;
   text: string;
+  clubId?: string;
 }
 
 export interface EmailSendResult {
@@ -165,7 +175,7 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailSendResul
   // multi-tenant SaaS where one club's bad list would burn deliverability
   // for every other club. Operator can retire a suppression via
   // `retireEmailSuppression` when the recipient asks to be re-added.
-  if (await isEmailSuppressed(params.to)) {
+  if (await isEmailSuppressed(params.to, params.clubId)) {
     logger.warn('email_skipped_by_suppression', {
       to: params.to,
       subject: params.subject,
@@ -220,7 +230,7 @@ export async function sendPlainTextEmail(
   // Audit pass-7 followup ⑤ (2026-05-25): suppression-list check —
   // mirrors `sendEmail`. Plain-text path is used for system notices,
   // same suppression contract applies.
-  if (await isEmailSuppressed(params.to)) {
+  if (await isEmailSuppressed(params.to, params.clubId)) {
     logger.warn('email_skipped_by_suppression', {
       to: params.to,
       subject: params.subject,
@@ -439,7 +449,11 @@ export async function sendTriggeredEmail(params: TriggeredEmailParams): Promise<
       error: 'Email disabled by notification preference',
     };
   }
-  return sendWithRetry(() => sendEmail(emailParams), {
+  // Task #21 (2026-05-28): forward clubId to the send so
+  // `isEmailSuppressed` honours this club's manual suppressions.
+  // Triggered emails always know their club; passing it makes per-club
+  // manual suppressions effective for every transactional path.
+  return sendWithRetry(() => sendEmail({ ...emailParams, clubId }), {
     to: emailParams.to,
     subject: emailParams.subject,
     clubId,

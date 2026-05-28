@@ -93,6 +93,10 @@ export async function POST(request: NextRequest) {
           to: data.to,
           subject: data.subject,
           text: data.body,
+          // Task #21 (2026-05-28): club-scope the suppression check so
+          // this club's manual entries fire without affecting other
+          // tenants' sends.
+          clubId: ctx.clubId,
         });
 
         if (!result.sent) {

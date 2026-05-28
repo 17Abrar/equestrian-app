@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { AudiencesTab } from '@/components/emails/audiences-tab';
+import { SuppressionsTab } from '@/components/emails/suppressions-tab';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
 import { type ApiSuccessResponse, type PaginatedApiResponse } from '@equestrian/shared/types';
@@ -87,6 +88,7 @@ export function EmailsPage() {
         <TabsList>
           <TabsTrigger value="compose">Compose</TabsTrigger>
           <TabsTrigger value="audiences">Audiences</TabsTrigger>
+          <TabsTrigger value="suppressions">Suppressions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="compose" className="mt-6">
@@ -95,6 +97,10 @@ export function EmailsPage() {
 
         <TabsContent value="audiences" className="mt-6">
           <AudiencesTab />
+        </TabsContent>
+
+        <TabsContent value="suppressions" className="mt-6">
+          <SuppressionsTab />
         </TabsContent>
       </Tabs>
     </div>
