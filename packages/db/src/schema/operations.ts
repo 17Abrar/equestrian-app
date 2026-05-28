@@ -11,6 +11,7 @@ import {
   jsonb,
   inet,
   unique,
+  uniqueIndex,
   check,
   index,
   foreignKey,
@@ -504,16 +505,40 @@ export const emailSuppressions = pgTable(
     bounceSubtype: varchar('bounce_subtype', { length: 20 }),
     source: varchar('source', { length: 20 }).notNull(),
     notes: text('notes'),
+    // Migration 0065 (task #21, 2026-05-28): nullable club_id.
+    // Resend-webhook rows leave it NULL (global protection); manual
+    // rows MUST carry a club so the listing UI doesn't leak across
+    // tenants. Partial CHECK in 0065 enforces the pairing. CASCADE
+    // because SET NULL would violate the manual CHECK when a club is
+    // hard-deleted.
+    clubId: uuid('club_id').references(() => clubs.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     // Non-null retires the suppression so a future re-bounce / re-complaint
     // can re-insert without violating UNIQUE(email). Preserves history.
     retiredAt: timestamp('retired_at', { withTimezone: true }),
   },
   (table) => [
-    unique('email_suppressions_email_unique').on(table.email),
+    // Migration 0065 (task #21, 2026-05-28): two partial unique indexes
+    // replace the original `UNIQUE(email)`. Webhook rows are globally
+    // unique by email (deliverability invariant); manual rows are
+    // unique per `(email, club_id)` so each club can independently
+    // suppress the same address. `isEmailSuppressed(email)` matches
+    // ANY active row, so global webhook suppression still applies
+    // across all tenants.
+    uniqueIndex('email_suppressions_webhook_unique')
+      .on(table.email)
+      .where(sql`source = 'resend_webhook'`),
+    uniqueIndex('email_suppressions_manual_unique')
+      .on(table.email, table.clubId)
+      .where(sql`source = 'manual'`),
     // The hot path is `isSuppressed(email)`. Partial index on the
     // non-retired rows keeps it index-only. Mirrored from migration 0063.
     index('idx_email_suppressions_active').on(table.email).where(sql`retired_at IS NULL`),
+    // Listing UI hot path: per-club, newest-first, active only. Partial
+    // index from migration 0065 keeps it tight (webhook rows excluded).
+    index('idx_email_suppressions_club')
+      .on(table.clubId, table.createdAt)
+      .where(sql`club_id IS NOT NULL AND retired_at IS NULL`),
     // CHECK constraints from migration 0063 — mirrored so a future
     // drizzle-kit regenerate doesn't strip them. Same shape as
     // `livery_invoices_payment_provider_check` pattern.
@@ -524,6 +549,11 @@ export const emailSuppressions = pgTable(
     check(
       'email_suppressions_source_check',
       sql`${table.source} IN ('resend_webhook', 'manual')`,
+    ),
+    // Migration 0065: manual ↔ club_id pairing.
+    check(
+      'email_suppressions_manual_requires_club',
+      sql`(${table.source} = 'manual' AND ${table.clubId} IS NOT NULL) OR (${table.source} = 'resend_webhook' AND ${table.clubId} IS NULL)`,
     ),
   ],
 );

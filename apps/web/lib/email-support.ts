@@ -50,6 +50,14 @@ async function postOperationalEmail(args: SendArgs): Promise<void> {
   // account-deletion notices, support replies) still hits Resend's
   // sender-reputation pool, so a bounced operational address is just
   // as harmful as a bounced rider address.
+  //
+  // Task #21 (2026-05-28): no `clubId` — operational mail has no
+  // tenant context. `isEmailSuppressed` runs in webhook-only mode,
+  // honoring global Resend bounce/complaint rows but ignoring any
+  // club's manual entries. Honoring an arbitrary club's manual list
+  // here would either suppress legitimate operational mail (Club A
+  // suppressed support@cavaliq.com? we still need to reply) or leak
+  // signal across tenants.
   if (await isEmailSuppressed(args.to)) {
     logger.warn('operational_email_skipped_by_suppression', {
       to: args.to,

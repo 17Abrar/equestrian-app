@@ -262,7 +262,13 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < allowedRecipients.length; i += CONCURRENCY) {
           const chunk = allowedRecipients.slice(i, i + CONCURRENCY);
           const results = await Promise.allSettled(
-            chunk.map((r) => sendPlainTextEmailWithRetry({ to: r.email, subject, text })),
+            // Task #21 (2026-05-28): pass clubId so the per-recipient
+            // suppression check honours this club's manual list (without
+            // letting other clubs' lists block our sends). Global Resend
+            // bounce/complaint rows still apply across all callers.
+            chunk.map((r) =>
+              sendPlainTextEmailWithRetry({ to: r.email, subject, text, clubId }),
+            ),
           );
 
           for (let j = 0; j < results.length; j += 1) {
