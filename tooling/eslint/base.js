@@ -43,6 +43,24 @@ module.exports = [
       'no-console': 'warn',
       'no-var': 'error',
       'prefer-const': 'error',
+      // ESLint v10 promoted `no-useless-assignment` to recommended-as-error
+      // (2026-05-25). It flags the legitimate "hoist with safe default"
+      // pattern we use to scope a let across an await boundary so the
+      // value survives a transaction:
+      //
+      //   let providerRefundId: string | null = null;
+      //   const result = await writeTransaction(async (tx) => {
+      //     providerRefundId = …;  // reassigned inside the tx
+      //   });
+      //   if (providerRefundId) …; // read outside the tx
+      //
+      // The rule's CFG analysis treats the initial null as dead because the
+      // reassignment is unconditional within the tx callback, but the
+      // initial value is what we want if the tx skips that branch. Keep
+      // the rule off until/unless we get a smarter narrowing — the manual
+      // alternative (`let X: T;` without init) regresses to "used before
+      // assigned" TS errors in plenty of these spots.
+      'no-useless-assignment': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': [
         'error',
