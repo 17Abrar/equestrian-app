@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # gitleaks needs full history to scan the diff against base.
           # Audit F-62 (2026-05-07 r4): pre-commit hook (scripts/git-hooks/
@@ -60,7 +60,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           # Match `packageManager` field in root package.json so the lockfile
           # version matches what we install with locally.
@@ -174,10 +174,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.20.0
 
@@ -192,7 +192,7 @@ jobs:
 
       - name: Create Neon test branch
         id: create-branch
-        uses: neondatabase/create-branch-action@v5
+        uses: neondatabase/create-branch-action@v6
         with:
           # Both NEON_PROJECT_ID and NEON_API_KEY are repo secrets — see
           # Settings → Secrets and variables → Actions → Secrets. The
