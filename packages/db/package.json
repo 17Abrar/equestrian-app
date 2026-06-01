@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@equestrian/shared": "workspace:*",
-    "@neondatabase/serverless": "0.10.4",
+    "@neondatabase/serverless": "1.1.0",
     "drizzle-orm": "0.45.2",
     "ws": "^8.21.0"
   },
