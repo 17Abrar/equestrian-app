@@ -33,7 +33,7 @@
     "@equestrian/eslint-config": "workspace:*",
     "@equestrian/typescript-config": "workspace:*",
     "@types/react": "^19.2.15",
-    "eslint": "^10.4.0",
+    "eslint": "^10.4.1",
     "typescript": "^5.8.2"
   }
 }
