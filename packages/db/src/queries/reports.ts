@@ -75,6 +75,10 @@ export async function getLessonPopularityReport(clubId: string, range: DateRange
     .where(
       and(
         eq(bookings.clubId, clubId),
+        // Exclude cancelled bookings so a frequently-cancelled lesson type
+        // doesn't rank as popular — consistent with the revenue and
+        // horse-utilization reports, which also drop cancelled bookings.
+        sql`${bookings.status} != 'cancelled'`,
         sql`${bookingSlots.date} >= ${range.dateFrom}`,
         sql`${bookingSlots.date} <= ${range.dateTo}`,
       ),

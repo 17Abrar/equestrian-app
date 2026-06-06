@@ -426,6 +426,42 @@ export async function markInvoiceOverdueAndLogReminder(
 }
 
 /**
+ * Roll back a reminder claim made by `markInvoiceOverdueAndLogReminder` when
+ * the email send fails (transient Resend error). Decrements `reminder_count`
+ * back to its pre-claim value so the next cron pass re-claims and retries,
+ * instead of permanently burning the 7/14/30-day threshold on a transient
+ * outage. Mirrors `unmarkBookingReminderSent` / `unrecordHorseCareReminderSend`.
+ *
+ * CAS-guarded on the post-claim count (`expectedReminderCount + 1`) and an
+ * `overdue` status so a concurrent payment or re-claim isn't stomped. The
+ * `overdue` status is intentionally left as-is: the invoice is genuinely past
+ * due regardless of the failed email. Returns the row on success, null if a
+ * concurrent writer already moved it.
+ */
+export async function unmarkInvoiceReminder(
+  clubId: string,
+  invoiceId: string,
+  expectedReminderCount: number,
+) {
+  const result = await rawDb
+    .update(liveryInvoices)
+    .set({
+      reminderCount: sql`${liveryInvoices.reminderCount} - 1`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(liveryInvoices.id, invoiceId),
+        eq(liveryInvoices.clubId, clubId),
+        eq(liveryInvoices.status, 'overdue'),
+        eq(liveryInvoices.reminderCount, expectedReminderCount + 1),
+      ),
+    )
+    .returning();
+  return result[0] ?? null;
+}
+
+/**
  * One-shot `pending → overdue` transition that leaves `reminder_count`
  * untouched. Used by the cron when an invoice is past due but the owner
  * has no email on file (audit G-2): bumping the counter would burn through

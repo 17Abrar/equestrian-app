@@ -59,7 +59,7 @@ const ITEMS: FaqItem[] = [
   {
     question: 'Where is data hosted?',
     answer:
-      'On Cloudflare’s global edge network with the database in the EU. Cloudflare is SOC 2 Type II certified. We don’t store payment card data ourselves — that goes directly to your payment processor.',
+      'On Cloudflare’s global edge network, with the database hosted on Neon (AWS, Singapore region). Cloudflare is SOC 2 Type II certified. We don’t store payment card data ourselves. That goes directly to your payment processor.',
   },
 ];
 

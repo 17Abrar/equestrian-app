@@ -89,10 +89,49 @@ guard (was `NaN`) · `emails-4` zero-padded minutes in email template ·
 
 ---
 
-## Deferred for sign-off (not auto-applied)
+## Deferred items — resolved after sign-off (Pass 11b, 2026-06-06)
 
-These are real findings, but each is a judgment call, a migration-history edit
-with checksum risk, or out-of-scope for a safe automated fix.
+After operator clarification on each, all seven deferrals were actioned:
+
+- **D-1 (resolved):** new idempotent forward migration
+  `0067_audit_pass_11_horse_leases_idempotent.sql` — guards `CREATE TYPE` in
+  `DO/EXCEPTION`, `CREATE TABLE/INDEX IF NOT EXISTS`, breakpoint-delimited.
+  No-op where 0064 applied correctly; self-heals the fork scenario. 0064 left
+  untouched (no journal-hash break). Validated: applies cleanly on PGlite via
+  the db test harness.
+- **D-2 (resolved):** added `unmarkInvoiceReminder` (CAS-guarded reminder-count
+  rollback) and call it on both livery-billing send-failure paths, so a
+  transient Resend outage retries next pass instead of burning the threshold.
+- **D-3 (resolved, FK only):** migration
+  `0068_audit_pass_11_email_send_log_audience_fk.sql` adds `audiences (id,
+  club_id)` UNIQUE and promotes `email_send_log.audience_id` to a composite
+  `(audience_id, club_id)` FK. `ON DELETE NO ACTION` (club_id is NOT NULL);
+  `deleteAudience` now nulls the log reference in the same transaction first,
+  preserving prior behavior. Drizzle schema TS updated to match. The
+  `updated_at` backfill no-ops were intentionally NOT changed (cosmetic, no data
+  loss, re-run wouldn't help).
+- **D-4 (resolved):** Lesson Popularity now excludes cancelled bookings,
+  consistent with the other reports.
+- **D-5 (resolved):** the DB is in **AWS `ap-southeast-1` (Singapore), not the
+  EU** — the FAQ's "database in the EU" claim was false. Corrected to the actual
+  region. (Operator may revisit positioning / a regional Neon move separately.)
+- **D-6 (resolved):** not a package/library problem — the local pnpm store copy
+  of `react-native-toast-message` was corrupted (missing `lib/index.*`). A clean
+  reinstall restored it; no code/dependency change. See the mobile note below.
+- **D-7 (resolved):** deleted the orphaned `apps/web/components/marketing/`.
+
+**New finding surfaced (mobile, pre-existing, separate task):** a faithful
+lockfile install reveals `apps/mobile` has a dependency-alignment problem —
+`package.json` declares `react-native ~0.85.3` alongside `expo ~53` (whose RN is
+0.79.x, which the lockfile actually pins), and with `@types/react` 19.2 this
+produces React-19 JSX-type errors (`'Image' cannot be used as a JSX component`).
+The previously-drifted local `node_modules` masked it. This is an Expo-SDK
+alignment task (align RN + @types/react to the chosen Expo SDK, with a device
+build test), not a code-audit fix — recommended as a focused follow-up.
+
+## Original deferred list (for reference)
+
+These were the findings flagged before sign-off; see the resolutions above.
 
 - **D-1 (high) — `migrations/0064_horse_leases.sql`:** bare `CREATE TYPE` with no
   guard. On a Neon test-branch fork the swallowed `duplicate_object` aborts the

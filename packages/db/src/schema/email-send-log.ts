@@ -38,7 +38,7 @@ export const emailSendLog = pgTable(
     senderMemberId: uuid('sender_member_id'),
     toEmail: varchar('to_email', { length: 320 }).notNull(),
     subject: varchar('subject', { length: 255 }).notNull(),
-    audienceId: uuid('audience_id').references(() => audiences.id, { onDelete: 'set null' }),
+    audienceId: uuid('audience_id'),
     trigger: varchar('trigger', { length: 64 }),
     /**
      * Coarse bucket — UI filter only. Distinct from `trigger` which is
@@ -67,6 +67,19 @@ export const emailSendLog = pgTable(
       name: 'email_send_log_sender_member_club_fk',
       columns: [table.senderMemberId, table.clubId],
       foreignColumns: [clubMembers.id, clubMembers.clubId],
+    }).onDelete('no action'),
+    // Audit pass-11 (2026-06-06): composite (audience_id, club_id) FK so a
+    // broadcast log row can't reference another club's audience (matches the
+    // tenant-FK convention used for sender_member_id). Migration 0068 replaces
+    // the prior single-column audience_id FK with this. ON DELETE NO ACTION
+    // (not SET NULL): club_id is NOT NULL, so a composite SET NULL would try to
+    // null club_id and abort. `deleteAudience` clears email_send_log.audience_id
+    // in the same transaction before deleting, preserving the prior
+    // "log kept, audience ref cleared" behavior.
+    foreignKey({
+      name: 'email_send_log_audience_club_fk',
+      columns: [table.audienceId, table.clubId],
+      foreignColumns: [audiences.id, audiences.clubId],
     }).onDelete('no action'),
     check(
       'email_send_log_source_check',

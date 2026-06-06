@@ -5,6 +5,7 @@ import {
   findOverdueInvoicesForReminders,
   markInvoiceOverdueAndLogReminder,
   markInvoiceOverdueOnly,
+  unmarkInvoiceReminder,
   setInvoiceProviderRef,
   adminGetActivePaymentAccount,
   type BillableHorse,
@@ -569,6 +570,10 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
           return { sent: 0, skipped: 1 };
         }
 
+        // Roll back the claim so the next pass retries instead of permanently
+        // burning this threshold on a transient send failure (matches
+        // booking-reminders / horse-care / trial-nudges).
+        await unmarkInvoiceReminder(inv.clubId, inv.invoiceId, inv.reminderCount);
         logger.error('livery_reminder_email_rejected', {
           invoiceId: inv.invoiceId,
           clubId: inv.clubId,
@@ -576,6 +581,13 @@ async function sendReminders(utcToday: string): Promise<{ sent: number; skipped:
         });
         return { sent: 0, skipped: 1 };
       } catch (err) {
+        // Same rollback on a thrown send error. Best-effort: if the rollback
+        // itself fails we still surface the original send error below.
+        try {
+          await unmarkInvoiceReminder(inv.clubId, inv.invoiceId, inv.reminderCount);
+        } catch {
+          // swallow — the send error is the actionable one
+        }
         logger.error('livery_reminder_send_failed', {
           invoiceId: inv.invoiceId,
           clubId: inv.clubId,
