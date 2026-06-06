@@ -16,6 +16,7 @@ import {
   useDeleteLessonType,
   type LessonType,
 } from '@/hooks/use-bookings';
+import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -102,6 +103,7 @@ interface LessonTypeFormDialogProps {
 export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
   const [open, setOpen] = useState(false);
   const createLessonType = useCreateLessonType();
+  const settingsQuery = useClubSettings();
 
   const form = useForm<CreateLessonTypeFormFields>({
     resolver: zodResolver(createLessonTypeFormSchema),
@@ -124,12 +126,17 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
 
   async function onSubmit(data: CreateLessonTypeFormFields) {
     try {
-      // Create form has no currency selector; lesson types are priced in the
-      // club's default (AED). Convert major->minor with that currency.
+      // Create form has no currency selector; lesson types inherit the club's
+      // currency. Convert major->minor with that currency so non-AED clubs
+      // (incl. 3-decimal KWD/BHD/OMR) are priced correctly. The settings API
+      // types currency as a plain string, but it is always a SUPPORTED_CURRENCIES
+      // value (validated at the settings layer), so the narrow is safe.
+      const clubCurrency = (settingsQuery.data?.data.currency ??
+        'AED') as CreateLessonTypeInput['currency'];
       await createLessonType.mutateAsync({
         ...data,
-        currency: 'AED',
-        price: toMinorUnits(data.price, 'AED'),
+        currency: clubCurrency,
+        price: toMinorUnits(data.price, clubCurrency),
       });
       toast.success('Lesson type created');
       form.reset();

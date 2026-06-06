@@ -120,14 +120,38 @@ After operator clarification on each, all seven deferrals were actioned:
   reinstall restored it; no code/dependency change. See the mobile note below.
 - **D-7 (resolved):** deleted the orphaned `apps/web/components/marketing/`.
 
-**New finding surfaced (mobile, pre-existing, separate task):** a faithful
-lockfile install reveals `apps/mobile` has a dependency-alignment problem —
-`package.json` declares `react-native ~0.85.3` alongside `expo ~53` (whose RN is
-0.79.x, which the lockfile actually pins), and with `@types/react` 19.2 this
-produces React-19 JSX-type errors (`'Image' cannot be used as a JSX component`).
-The previously-drifted local `node_modules` masked it. This is an Expo-SDK
-alignment task (align RN + @types/react to the chosen Expo SDK, with a device
-build test), not a code-audit fix — recommended as a focused follow-up.
+### Pass 11c — Codex cross-check refinements (2026-06-07)
+
+An independent Codex review of the full branch surfaced two items, both actioned:
+
+- **Lesson-type create form hardcoded `AED`** (pre-existing): a non-AED club's
+  lesson types were created with the wrong currency. The create dialog now reads
+  the club currency from settings (like the ownership-approval fix) and converts
+  with `toMinorUnits` keyed off it.
+- **Migration `0068` idempotency:** its `ALTER TABLE ... ADD CONSTRAINT`
+  statements relied on the migrate-neon runner swallowing duplicate-constraint
+  errors rather than guarding them in SQL, so it wasn't truly idempotent across
+  runners despite advertising itself as such. Each ADD is now wrapped in the
+  `DO/EXCEPTION duplicate_object` guard (matching `0067`); re-validated on PGlite.
+
+### Mobile — Expo SDK 53 alignment (2026-06-07)
+
+The mobile dependency manifest had drifted incoherent (`expo@53` core with
+`expo-*` modules at 55.x, `react-native@0.85.3`, `@types/react@19.2`), which
+produced React-19 JSX-type errors on a clean lockfile install. Ran
+`expo install --fix` to realign every dependency to SDK 53 (`react-native@0.79.6`,
+SDK-53 `expo-*` modules, sentry/vector-icons), and deliberately kept
+react/react-dom/@types/react at 19.2.x (pinned via `expo.install.exclude`)
+because `@clerk/clerk-expo` requires React 19.2.3+ and the whole workspace shares
+one `@types/react` version (mixing 19.0/19.2 broke web's JSX types via hoisting).
+Mobile now typechecks green; `expo install --check` reports dependencies up to
+date.
+
+The one remaining recommendation is a device/simulator build smoke test of the
+mobile app: the dependency realignment is type-clean and Expo-validated, but a
+runtime build (`expo start` / EAS) on a device is the final confirmation that the
+SDK-53 module versions behave at runtime. That requires a device and is outside
+this environment.
 
 ## Original deferred list (for reference)
 

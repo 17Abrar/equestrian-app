@@ -21,16 +21,24 @@
 -- clears email_send_log.audience_id in the same transaction before deleting the
 -- audience, preserving the prior "log kept, audience ref cleared" behavior.
 --
--- Idempotent: ADD CONSTRAINT throws 42710 if it already exists (swallowed by
--- the migrate-neon runner); DROP ... IF EXISTS is a no-op when already dropped.
+-- Idempotent across runners: `ALTER TABLE ... ADD CONSTRAINT` has no
+-- `IF NOT EXISTS` form, so each ADD is wrapped in the established
+-- `DO/EXCEPTION duplicate_object` guard (rather than relying on the
+-- migrate-neon runner swallowing 42710). `DROP ... IF EXISTS` is a no-op when
+-- already dropped. A re-applied Neon fork and the PGlite test harness both
+-- re-run cleanly.
 
-ALTER TABLE "audiences"
-  ADD CONSTRAINT "audiences_id_club_unique" UNIQUE ("id", "club_id");
+DO $$ BEGIN
+  ALTER TABLE "audiences"
+    ADD CONSTRAINT "audiences_id_club_unique" UNIQUE ("id", "club_id");
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 ALTER TABLE "email_send_log"
   DROP CONSTRAINT IF EXISTS "email_send_log_audience_id_fkey";
 --> statement-breakpoint
-ALTER TABLE "email_send_log"
-  ADD CONSTRAINT "email_send_log_audience_club_fk"
-  FOREIGN KEY ("audience_id", "club_id")
-  REFERENCES "audiences"("id", "club_id") ON DELETE NO ACTION;
+DO $$ BEGIN
+  ALTER TABLE "email_send_log"
+    ADD CONSTRAINT "email_send_log_audience_club_fk"
+    FOREIGN KEY ("audience_id", "club_id")
+    REFERENCES "audiences"("id", "club_id") ON DELETE NO ACTION;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
