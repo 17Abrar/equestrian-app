@@ -169,8 +169,8 @@ export const createHorseSchema = z
     insuranceCoverage: z.string().max(500).optional(),
     insuranceExpiry: z.string().max(50).optional(),
 
-    primaryPhotoUrl: z.string().url().max(2000).optional(),
-    photoUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+    primaryPhotoUrl: httpsUrl.optional(),
+    photoUrls: z.array(httpsUrl).max(20).optional(),
     notes: z.string().max(2000).optional(),
     ownerMemberId: z.string().uuid().optional(),
   })
@@ -333,7 +333,7 @@ export const registerHorseOwnershipSchema = z
     heightHands: optionalNumeric(z.number().positive()),
     weightKg: optionalNumeric(z.number().positive()),
     skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-    primaryPhotoUrl: z.string().url().max(2000).optional(),
+    primaryPhotoUrl: httpsUrl.optional(),
     notes: z.string().max(2000).optional(),
   })
   .strict();
@@ -999,7 +999,7 @@ export const createHealthRecordSchema = z
     followUpDate: z.string().max(50).optional(),
     batchNumber: z.string().max(100).optional(),
     productUsed: z.string().max(255).optional(),
-    documentUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+    documentUrls: z.array(httpsUrl).max(20).optional(),
   })
   .strict();
 

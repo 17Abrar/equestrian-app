@@ -160,6 +160,9 @@ export function decryptFields<T, K extends keyof T>(
   row: T,
   fields: readonly K[],
 ): T {
+  // A null/undefined row (e.g. a left-joined absent relation) would throw on
+  // `row[field]` below; pass it through untouched.
+  if (row == null) return row;
   const result: T = { ...row };
   for (const field of fields) {
     const value = row[field];

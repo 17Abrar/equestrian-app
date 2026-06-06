@@ -183,8 +183,8 @@ const MAGIC_SIGNATURES: MagicSignature[] = [
     // "RIFF" then 4 size bytes (wildcard) then "WEBP"
     bytes: [0x52, 0x49, 0x46, 0x46, null, null, null, null, 0x57, 0x45, 0x42, 0x50],
   },
-  // GIF87a / GIF89a share the first 6 bytes only on positions 0-3; the
-  // version byte differs. Use the shared prefix "GIF8".
+  // GIF87a / GIF89a share the prefix "GIF8" (bytes 0-3); they differ at the
+  // version digit (byte 4: '7' vs '9'). Match only the shared prefix.
   { contentType: 'image/gif', bytes: [0x47, 0x49, 0x46, 0x38] },
   { contentType: 'application/pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
   // Legacy .doc (OLE compound document).

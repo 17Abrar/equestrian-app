@@ -124,7 +124,7 @@ export function ReportsPage() {
           fallbackCurrency={currency}
         />
         <SummaryCard
-          title="Bookings"
+          title="Paid Bookings"
           value={String(totalBookings)}
           icon={BarChart3}
           loading={revenue.isLoading}

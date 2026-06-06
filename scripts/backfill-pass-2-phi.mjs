@@ -131,13 +131,18 @@ function encryptField(plaintext, key) {
 const dryRun = process.argv.includes('--dry-run');
 const key = loadKey();
 
+// `bumpUpdatedAt: false` for write-once tables that have no `updated_at`
+// column. horse_documents is created with `created_at` only (see
+// schema/horse-health.ts), so an unconditional `SET updated_at = now()` throws
+// Postgres 42703 (undefined_column) and aborts the whole backfill, leaving any
+// plaintext PHI in that column unencrypted. Mirrors backfill-horse-care-phi.mjs.
 const TARGETS = [
   { table: 'rider_profiles',   pk: 'id', column: 'emergency_contact_name' },
   { table: 'rider_profiles',   pk: 'id', column: 'emergency_contact_phone' },
   { table: 'rider_profiles',   pk: 'id', column: 'emergency_contact_relation' },
   { table: 'horse_medications', pk: 'id', column: 'prescribed_by' },
   { table: 'bookings',         pk: 'id', column: 'coach_notes' },
-  { table: 'horse_documents',  pk: 'id', column: 'description' },
+  { table: 'horse_documents',  pk: 'id', column: 'description', bumpUpdatedAt: false },
   { table: 'horses',           pk: 'id', column: 'markings' },
   { table: 'horses',           pk: 'id', column: 'notes' },
 ];
@@ -175,11 +180,15 @@ try {
       if (!ciphertext) continue;
 
       // Conditional update: don't overwrite a row another run / writer
-      // already migrated.
+      // already migrated. Skip the updated_at bump for write-once tables that
+      // have no such column.
+      const setClause =
+        t.bumpUpdatedAt === false
+          ? `SET ${t.column} = $1`
+          : `SET ${t.column} = $1, updated_at = now()`;
       const result = await client.query(
         `UPDATE ${t.table}
-            SET ${t.column} = $1,
-                updated_at = now()
+            ${setClause}
           WHERE ${t.pk} = $2
             AND ${t.column} IS NOT NULL
             AND ${t.column} <> ''

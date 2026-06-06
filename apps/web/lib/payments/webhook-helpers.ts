@@ -396,8 +396,8 @@ export async function applyPaymentWebhook({
   }
 
   // (Removed a duplicate findBookingByProviderPaymentId call here that
-  // re-ran the same query with the same args — the lookup at line 70
-  // already covers it. Audit E-14.)
+  // re-ran the same query with the same args — the earlier lookup in this
+  // function already covers it. Audit E-14.)
 
   // TOCTOU fallback. The route stores `providerPaymentId` on the booking
   // AFTER calling the adapter; a fast-succeed webhook (Apple Pay, 3DS

@@ -89,7 +89,12 @@ export async function getHorseUtilizationReport(clubId: string, range: DateRange
   const result = await db
     .select({
       horseName: horses.name,
-      bookingCount: sql<number>`count(${bookings.id})::int`,
+      // Count the date-filtered (slot) side: the date range lives on the
+      // bookingSlots join, so out-of-range bookings null out there. Counting
+      // bookings.id instead would tally every lifetime non-cancelled booking
+      // and ignore the selected range. slotId is NOT NULL on bookings, so
+      // every in-range booking has exactly one matching slot row.
+      bookingCount: sql<number>`count(${bookingSlots.id})::int`,
       maxLessonsPerDay: horses.maxLessonsPerDay,
     })
     .from(horses)
@@ -112,7 +117,7 @@ export async function getHorseUtilizationReport(clubId: string, range: DateRange
     )
     .where(and(eq(horses.clubId, clubId), sql`${horses.deletedAt} IS NULL`))
     .groupBy(horses.id, horses.name, horses.maxLessonsPerDay)
-    .orderBy(sql`count(${bookings.id}) desc`);
+    .orderBy(sql`count(${bookingSlots.id}) desc`);
 
   return result;
 }

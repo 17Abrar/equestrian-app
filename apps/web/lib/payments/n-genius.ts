@@ -764,10 +764,9 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     const explicitMatch = input.amountMinorUnits
       ? eligiblePayments.find((p) => p.amount?.value === input.amountMinorUnits)
       : undefined;
-    // Fall back to the LAST eligible entry — newest-first per N-Genius
-    // documented retry-after-decline behavior, where the array grows
-    // over time. Belt-and-braces: if the array is mid-mutation server-
-    // side, the last entry is the most-recently committed one.
+    // Fall back to the LAST eligible entry. N-Genius appends payment legs
+    // chronologically (oldest-first) as retries-after-decline accrue, so the
+    // last entry is the newest / most-recently committed one.
     const payment = explicitMatch ?? eligiblePayments[eligiblePayments.length - 1];
     if (!payment || !payment._id || !payment.amount) {
       throw new PaymentProviderError('NO_PAYMENT_LEG', 'N-Genius order has no capturable payment');
@@ -1040,8 +1039,9 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // ~90 seconds — N-Genius retries on bounded backoff so a legitimate
     // event won't take that long to land, and Stripe's documented signed-
     // webhook tolerance is 5 min (we go tighter because the
-    // payload-controlled `eventTime` field below is the attacker's own
-    // surface, not a server-stamped timestamp). The constant-time
+    // payload-controlled timestamp below — `paymentDate ?? createdDateTime`,
+    // read into the local `eventTime` — is the attacker's own surface, not a
+    // server-stamped timestamp). The constant-time
     // secret compare is the primary defence; this is belt-and-braces
     // against a leaked secret + captured-body replay.
     //
@@ -1051,8 +1051,8 @@ export const nGeniusAdapter: PaymentProviderAdapter = {
     // legitimate delivery can be replayed to forge events for arbitrary
     // references. The 10-min window was generous enough to cover
     // realistic attack scenarios. 90 s tracks Stripe parity; the
-    // payload-controlled `eventTime` means this is defense-in-depth,
-    // not a hard auth boundary.
+    // payload-controlled timestamp (paymentDate/createdDateTime) means this is
+    // defense-in-depth, not a hard auth boundary.
     const FRESHNESS_WINDOW_MS = 90 * 1_000;
     // The negative-side window (clock skew) stays at 5 min — N-Genius
     // can stamp eventTime up to a few seconds in the future and a

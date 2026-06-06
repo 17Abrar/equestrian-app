@@ -21,6 +21,11 @@ export function safeHref(raw: string | null | undefined): string {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return '#';
 
+  // Protocol-relative (`//evil.com`) and backslash variants resolve to a
+  // cross-origin navigation in the browser, so they must not slip through the
+  // path-passthrough below. Mirror safe-redirect.ts which rejects the same.
+  if (trimmed.startsWith('//') || trimmed.startsWith('\\')) return '#';
+
   // Path-only or hash-only links are safe — no protocol to worry about.
   if (trimmed.startsWith('/') || trimmed.startsWith('#') || trimmed.startsWith('?')) {
     return trimmed;

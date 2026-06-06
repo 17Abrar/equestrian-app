@@ -45,13 +45,10 @@ import { MAX_PAGE_SIZE } from '@equestrian/shared/constants';
 // the slot-list query but never get submitted — they're part of the
 // schema so RHF can watch them and reset the slot+coupon state when
 // they change, without falling back to ad-hoc useState/setValue calls.
-const PAYMENT_METHODS = [
-  'cash',
-  'card',
-  'card_in_person',
-  'bank_transfer',
-  'package_credit',
-] as const;
+// `package_credit` is intentionally omitted: the bookings API hard-rejects it
+// with 422 (NOT_IMPLEMENTED) until atomic credit consumption ships, matching
+// the exclusion in bookings-list.tsx OFFLINE_PAYMENT_METHODS.
+const PAYMENT_METHODS = ['cash', 'card', 'card_in_person', 'bank_transfer'] as const;
 
 const formSchema = z
   .object({
@@ -416,7 +413,6 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                           <SelectItem value="card">Card</SelectItem>
                           <SelectItem value="card_in_person">Card (in person)</SelectItem>
                           <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                          <SelectItem value="package_credit">Package Credit</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

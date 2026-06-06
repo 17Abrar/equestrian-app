@@ -2,8 +2,6 @@ import { Image, type ImageStyle } from 'expo-image';
 import type { StyleProp } from 'react-native';
 import lightLogo from '../assets/brand/cavaliq-logo.png';
 import darkLogo from '../assets/brand/cavaliq-logo-dark.png';
-import lightMark from '../assets/brand/cavaliq-mark.png';
-import darkMark from '../assets/brand/cavaliq-mark-dark.png';
 
 type Variant = 'light' | 'dark';
 
@@ -27,20 +25,3 @@ export function CavaliqLogo({ variant = 'light', height = 32, style }: CavaliqLo
   );
 }
 
-interface CavaliqMarkProps {
-  variant?: Variant;
-  size?: number;
-  style?: StyleProp<ImageStyle>;
-}
-
-export function CavaliqMark({ variant = 'light', size = 32, style }: CavaliqMarkProps) {
-  const source = variant === 'dark' ? darkMark : lightMark;
-  return (
-    <Image
-      source={source}
-      style={[{ height: size, width: size }, style]}
-      contentFit="contain"
-      accessibilityLabel="Cavaliq"
-    />
-  );
-}

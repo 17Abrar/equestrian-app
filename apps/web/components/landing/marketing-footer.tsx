@@ -23,7 +23,7 @@ const LEGAL_LINKS: FooterLink[] = [
   { label: 'Terms (stables)', href: '/legal/terms' },
   { label: 'Terms (riders)', href: '/legal/terms/end-user' },
   { label: 'Privacy', href: '/legal/privacy' },
-  { label: 'Acceptable use', href: '/legal' },
+  { label: 'Acceptable use', href: '/legal/acceptable-use' },
 ];
 
 export function MarketingFooter() {
