@@ -12,12 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/clerk-expo": "^2.19.37",
+    "@clerk/clerk-expo": "^2.19.39",
     "@equestrian/api-client": "workspace:*",
     "@equestrian/shared": "workspace:*",
     "@expo/vector-icons": "^15.1.1",
     "@sentry/react-native": "^7.13.0",
-    "@tanstack/react-query": "^5.100.14",
+    "@tanstack/react-query": "^5.101.0",
     "expo": "~53.0.27",
     "expo-constants": "~55.0.9",
     "expo-image": "~55.0.6",
@@ -26,9 +26,9 @@
     "expo-secure-store": "~55.0.9",
     "expo-status-bar": "~55.0.4",
     "expo-web-browser": "^55.0.14",
-    "nativewind": "^4.2.4",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "nativewind": "^4.2.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-native": "~0.85.3",
     "react-native-gesture-handler": "~2.31.2",
     "react-native-reanimated": "~3.17.4",
@@ -44,8 +44,8 @@
     "@equestrian/eslint-config": "workspace:*",
     "@equestrian/prettier-config": "workspace:*",
     "@equestrian/typescript-config": "workspace:*",
-    "@types/react": "^19.2.15",
-    "eslint": "^10.4.0",
+    "@types/react": "^19.2.17",
+    "eslint": "^10.4.1",
     "typescript": "^5.8.2"
   }
 }
