@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { z } from 'zod';
-import { errorResponse, successResponse } from '@/lib/api-utils';
+import {
+  bodyErrorResponse,
+  errorResponse,
+  parseRequiredBody,
+  rateLimitedResponse,
+  successResponse,
+} from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/request-ip';
 import { sendOperationalEmailAsync } from '@/lib/email-support';
@@ -58,29 +64,29 @@ export async function POST(request: NextRequest) {
       failClosed: true,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-      return errorResponse(
-        'RATE_LIMITED',
-        'You have already submitted a deletion request recently. Check your email.',
-        429,
-        { retryAfter },
-      );
+      // Audit sweep (2026-06-10): previously went through `errorResponse`
+      // and dropped the Retry-After header (the other drifted copy beside
+      // privacy/request). The shared helper restores the header;
+      // `retryAfterInDetails` keeps the body field existing clients may
+      // already read.
+      return rateLimitedResponse(rl, {
+        message: 'You have already submitted a deletion request recently. Check your email.',
+        retryAfterInDetails: true,
+      });
     }
 
-    let body: unknown;
+    // The errors parseRequiredBody throws must be mapped HERE: the outer
+    // catch below would otherwise swallow them into a generic 500.
+    let data: z.infer<typeof deleteSchema>;
     try {
-      body = await request.json();
-    } catch {
-      return errorResponse('INVALID_JSON', 'Body must be valid JSON', 400);
-    }
-    const parsed = deleteSchema.safeParse(body);
-    if (!parsed.success) {
-      return errorResponse(
-        'VALIDATION_ERROR',
+      data = await parseRequiredBody(request, deleteSchema);
+    } catch (error) {
+      const response = bodyErrorResponse(
+        error,
         "Type DELETE to confirm. Field 'confirm' must equal 'DELETE'.",
-        400,
-        parsed.error.flatten(),
       );
+      if (response) return response;
+      throw error;
     }
 
     const user = await currentUser();
@@ -93,7 +99,7 @@ export async function POST(request: NextRequest) {
       userId,
       email,
       ip,
-      hasReason: Boolean(parsed.data.reason),
+      hasReason: Boolean(data.reason),
     });
 
     const opsBody = [
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
       `IP: ${ip}`,
       `Submitted at: ${new Date().toISOString()}`,
       '',
-      parsed.data.reason ? `User reason:\n${parsed.data.reason}` : 'No reason provided.',
+      data.reason ? `User reason:\n${data.reason}` : 'No reason provided.',
       '',
       'Action required:',
       '  1. Identify all club_members rows for this Clerk ID.',

@@ -691,10 +691,7 @@ export async function createBooking(clubId: string, data: BookingCreate) {
           .from(bookingSlots)
           .innerJoin(
             lessonTypes,
-            and(
-              eq(bookingSlots.lessonTypeId, lessonTypes.id),
-              eq(lessonTypes.clubId, clubId),
-            ),
+            and(eq(bookingSlots.lessonTypeId, lessonTypes.id), eq(lessonTypes.clubId, clubId)),
           )
           .where(and(eq(bookingSlots.id, data.slotId), eq(bookingSlots.clubId, clubId)))
           .limit(1);
@@ -1327,8 +1324,7 @@ export async function setBookingPaymentRef(
     // to days later; that arrival should not move the issuance
     // timestamp.
     const isProviderPaymentIdChanging =
-      Boolean(data.providerPaymentId) &&
-      data.providerPaymentId !== current.providerPaymentId;
+      Boolean(data.providerPaymentId) && data.providerPaymentId !== current.providerPaymentId;
     const result = await tx
       .update(bookings)
       .set({

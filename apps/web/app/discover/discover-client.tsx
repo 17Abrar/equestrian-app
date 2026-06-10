@@ -99,7 +99,7 @@ export function DiscoverClient() {
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Find a stable.</h1>
           <p className="text-muted-foreground mt-3 max-w-2xl text-lg">
             Browse stables near you, see what they offer, and join the ones that fit. Ride at
-            multiple stables — your progress follows you.
+            multiple stables. Your progress follows you.
           </p>
 
           <div className="mt-6 max-w-xl">
@@ -143,7 +143,7 @@ export function DiscoverClient() {
                     as "check back soon." */}
                 {search
                   ? 'No stables matched your search.'
-                  : 'Check back soon — more stables are joining every week.'}
+                  : 'Check back soon. More stables are joining every week.'}
               </p>
               {search && (
                 <Button variant="outline" className="mt-4" onClick={() => setSearch('')}>

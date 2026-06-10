@@ -160,21 +160,6 @@ export async function getHorsesByClub(clubId: string, filters: HorseFilters) {
 // of redeclaring inline. Starter pattern — wider rollout deferred.
 export type HorseListRow = Awaited<ReturnType<typeof getHorsesByClub>>['data'][number];
 
-/** Cheap count for the admin "Pending approvals" badge. */
-export async function getPendingOwnershipCount(clubId: string) {
-  const result = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(horses)
-    .where(
-      and(
-        eq(horses.clubId, clubId),
-        eq(horses.ownershipStatus, 'pending'),
-        isNull(horses.deletedAt),
-      ),
-    );
-  return result[0]?.count ?? 0;
-}
-
 export async function getHorseById(clubId: string, horseId: string) {
   const result = await db
     .select({

@@ -86,6 +86,25 @@ vi.mock('@/lib/api-utils', () => ({
       status,
       headers: { 'content-type': 'application/json' },
     }),
+  // Mirrors the real helper closely enough for the 429 test below to
+  // assert the Retry-After contract (seconds, rounded up).
+  rateLimitedResponse: (result: { retryAfterMs: number | null }, options?: { message?: string }) =>
+    new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: options?.message ?? 'Too many requests. Please try again later.',
+        },
+      }),
+      {
+        status: 429,
+        headers: {
+          'content-type': 'application/json',
+          'Retry-After': String(Math.ceil((result.retryAfterMs ?? 1000) / 1000)),
+        },
+      },
+    ),
 }));
 
 import { NextRequest } from 'next/server';
@@ -156,10 +175,7 @@ describe('CSRF guard — same-origin / x-cavaliq-csrf required', () => {
     expect(body.error.code).toBe('FORBIDDEN');
     expect(authMock).not.toHaveBeenCalled();
     expect(bootstrapMock).not.toHaveBeenCalled();
-    expect(warnMock).toHaveBeenCalledWith(
-      'bootstrap_cross_origin_blocked',
-      expect.any(Object),
-    );
+    expect(warnMock).toHaveBeenCalledWith('bootstrap_cross_origin_blocked', expect.any(Object));
   });
 
   it('returns 403 FORBIDDEN when Origin is set but not the request URL origin (cross-site)', async () => {

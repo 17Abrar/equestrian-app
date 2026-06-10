@@ -24,7 +24,7 @@ export default function StatusPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
       <header className="border-b pb-8">
-        <p className="text-muted-foreground text-sm font-medium uppercase tracking-wide">Status</p>
+        <p className="text-muted-foreground text-sm font-medium tracking-wide uppercase">Status</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
           Cavaliq platform status
         </h1>
@@ -41,7 +41,8 @@ export default function StatusPage() {
           <div>
             <p className="text-foreground text-base font-semibold">All systems operational</p>
             <p className="text-muted-foreground text-xs">
-              Last checked: {new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}
+              Last checked:{' '}
+              {new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}
             </p>
           </div>
         </div>

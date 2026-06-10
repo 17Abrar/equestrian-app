@@ -94,9 +94,7 @@ export async function GET(_request: NextRequest) {
       // skips it as a comment line. Without this, admins who forget
       // to delete "Bella" from the template would import the sample
       // as a real horse. Codex P2 (2026-05-28).
-      const sampleRow =
-        '# ' +
-        COLUMNS.map((c) => csvEscape(SAMPLE_ROW[c] ?? '')).join(',');
+      const sampleRow = '# ' + COLUMNS.map((c) => csvEscape(SAMPLE_ROW[c] ?? '')).join(',');
       // Escaped UTF-8 BOM (U+FEFF) prefix \u2014 Excel/Numbers display
       // BOM-prefixed UTF-8 cleanly; without it, Excel on Windows
       // defaults to Latin-1 and mangles non-ASCII horse names. Use

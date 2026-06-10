@@ -238,6 +238,8 @@ function SlotActions({ slot }: { slot: BookingSlot }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Input
+            aria-label="Reason for cancellation"
+            aria-required="true"
             placeholder="Reason for cancellation (required)"
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}

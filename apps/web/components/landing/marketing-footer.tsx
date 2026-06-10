@@ -23,7 +23,7 @@ const LEGAL_LINKS: FooterLink[] = [
   { label: 'Terms (stables)', href: '/legal/terms' },
   { label: 'Terms (riders)', href: '/legal/terms/end-user' },
   { label: 'Privacy', href: '/legal/privacy' },
-  { label: 'Acceptable use', href: '/legal' },
+  { label: 'Acceptable use', href: '/legal/acceptable-use' },
 ];
 
 export function MarketingFooter() {
@@ -50,9 +50,20 @@ export function MarketingFooter() {
         <div className="text-muted-foreground mt-12 flex flex-col items-start justify-between gap-3 border-t pt-6 text-xs sm:flex-row sm:items-center">
           <p>© {year} Cavaliq. All rights reserved.</p>
           <p>
-            Need to sign in? <Link href="/sign-in" className="hover:text-foreground underline-offset-4 hover:underline">Riders</Link>
+            Need to sign in?{' '}
+            <Link
+              href="/sign-in"
+              className="hover:text-foreground underline-offset-4 hover:underline"
+            >
+              Riders
+            </Link>
             {' · '}
-            <Link href="/sign-in?as=stable" className="hover:text-foreground underline-offset-4 hover:underline">Stables</Link>
+            <Link
+              href="/sign-in?as=stable"
+              className="hover:text-foreground underline-offset-4 hover:underline"
+            >
+              Stables
+            </Link>
           </p>
         </div>
       </div>
@@ -67,10 +78,7 @@ function FooterColumn({ title, links }: { title: string; links: FooterLink[] }) 
       <ul className="mt-4 space-y-2">
         {links.map((link) => (
           <li key={link.href}>
-            <Link
-              href={link.href}
-              className="text-muted-foreground hover:text-foreground text-sm"
-            >
+            <Link href={link.href} className="text-muted-foreground hover:text-foreground text-sm">
               {link.label}
             </Link>
           </li>

@@ -83,7 +83,7 @@ export default function StartClubPage() {
 
   async function onSubmit(data: CreateClubOutput) {
     if (!createOrganization || !setActive) {
-      toast.error('Sign-in is still loading — please try again in a moment.');
+      toast.error('Sign-in is still loading. Please try again in a moment.');
       return;
     }
 
@@ -118,7 +118,7 @@ export default function StartClubPage() {
     } catch (err) {
       reportMutationError('start_club.create', err, { name: data.name });
       toast.error(
-        err instanceof Error ? err.message : 'Could not create your club — please try again.',
+        err instanceof Error ? err.message : 'Could not create your club. Please try again.',
       );
       setStage('idle');
     }
@@ -197,7 +197,7 @@ export default function StartClubPage() {
                 </Button>
 
                 <p className="text-muted-foreground text-center text-xs">
-                  By creating a club you become its admin. You&apos;ll be billed on a 14-day trial —
+                  By creating a club you become its admin. You&apos;ll be billed on a 14-day trial,
                   no card required up front.
                 </p>
               </form>
@@ -208,4 +208,3 @@ export default function StartClubPage() {
     </div>
   );
 }
-

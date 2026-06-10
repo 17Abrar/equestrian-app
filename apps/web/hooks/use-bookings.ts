@@ -182,7 +182,10 @@ export function useDeleteLessonType() {
 // Audit F-54 (2026-05-07 r4): the route schema accepts `coachMemberId`
 // but the hook's filter type omitted it, so the per-coach calendar view
 // can't filter slots. Expose it through.
-export function useBookingSlots(filters: NormalizedBookingSlotFilters = {}) {
+export function useBookingSlots(
+  filters: NormalizedBookingSlotFilters = {},
+  options: { enabled?: boolean } = {},
+) {
   const params = new URLSearchParams();
   if (filters.date) params.set('date', filters.date);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
@@ -205,6 +208,9 @@ export function useBookingSlots(filters: NormalizedBookingSlotFilters = {}) {
     queryKey: bookingSlotsListKey(normalized),
     queryFn: () =>
       fetchJson<ApiSuccessResponse<BookingSlot[]>>(`/api/v1/booking-slots?${params.toString()}`),
+    // Audit FE (2026-06-07): callers can disable the fetch so roles without
+    // booking-create capability (e.g. horse_owner) don't pull the slot catalog.
+    enabled: options.enabled ?? true,
   });
 }
 

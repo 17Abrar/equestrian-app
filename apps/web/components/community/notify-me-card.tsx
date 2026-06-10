@@ -78,7 +78,9 @@ export function NotifyMeCard({ source, variant }: NotifyMeCardProps) {
             {submitted ? (
               <div className="bg-muted/50 mt-6 flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm">
                 <Check className="h-4 w-4 text-green-600" aria-hidden />
-                <span>You’re on the list at <strong>{email}</strong></span>
+                <span>
+                  You’re on the list at <strong>{email}</strong>
+                </span>
               </div>
             ) : (
               <form

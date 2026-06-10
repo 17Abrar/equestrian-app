@@ -4,15 +4,15 @@ import { Button } from '@/components/ui/button';
 
 export function CtaBand() {
   return (
-    <section className="border-b" style={{ backgroundColor: '#0d1f34' }}>
+    <section className="bg-brand border-b">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight text-balance text-white sm:text-4xl">
             Your stable is doing the work. Cavaliq does the paperwork.
           </h2>
           <p className="mt-4 text-lg text-balance text-white/70">
-            Start a free trial today — no credit card, no salesperson, no
-            commitments. If it doesn’t fit, you walk away.
+            Start a free trial today. No credit card, no salesperson, no commitments. If it does not
+            fit, you walk away.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">

@@ -128,10 +128,7 @@ async function runSweep(now: Date): Promise<CronResult> {
             if (status.status === 'succeeded') {
               // Webhook genuinely never landed but the money DID arrive.
               // Reconcile to paid; do NOT cancel.
-              const reconciled = await reconcileBookingMarkPaid(
-                booking.clubId,
-                booking.bookingId,
-              );
+              const reconciled = await reconcileBookingMarkPaid(booking.clubId, booking.bookingId);
               if (reconciled) {
                 reconciledPaid += 1;
                 logger.warn('booking_payment_reconciled_from_provider', {

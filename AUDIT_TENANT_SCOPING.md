@@ -12,7 +12,7 @@ For each route I:
    ownership-aware endpoints, scopes by `clerkUserId` instead.
 3. For routes that delegate to `packages/db/src/queries/*`, I opened the
    underlying query file and grepped/read every relevant `export async
-   function` to confirm the helper itself enforces `clubId` (defence-in-
+function` to confirm the helper itself enforces `clubId` (defence-in-
    depth) — not just the call site. Files actually opened or grepped:
    `arenas.ts`, `bookings.ts`, `horses.ts`, `horse-health.ts`,
    `club-members.ts`, `riders.ts`, `dashboard.ts`, `reports.ts`,
@@ -75,14 +75,14 @@ or signature-verified pre-membership flow):
   verifying `(clubId, clerkUserId)` is an active member. CSRF-guarded
   via `isSameOriginRequest`. DELETE mirrors the guard.
 - `app/api/v1/me/horses/route.ts` — `getHorsesOwnedByUser(ctx.userId,
-  ...)` scopes strictly by Clerk userId across all clubs the user owns
+...)` scopes strictly by Clerk userId across all clubs the user owns
   a horse at.
 - `app/api/v1/me/horses/[horseId]/retire/route.ts` — `getHorseOwner-
-  shipByUser(ctx.userId, horseId)` is the gate; retires using the
+shipByUser(ctx.userId, horseId)` is the gate; retires using the
   horse's OWN `clubId`, not `ctx.clubId` (audit F-57 carve-out for
   multi-club owners).
 - `app/api/v1/me/livery-invoices/route.ts` — `getLiveryInvoicesOwnedBy-
-  User(ctx.userId, ...)` scoped by Clerk userId.
+User(ctx.userId, ...)` scoped by Clerk userId.
 - `app/api/v1/me/profile/route.ts` — read/update against the rider
   profile keyed by `(ctx.clubId, ctx.memberId)`. ctx.clubId IS the
   active tenant.
@@ -103,7 +103,7 @@ or signature-verified pre-membership flow):
 ### Pre-membership / unauthenticated intake
 
 - `app/api/v1/clubs/bootstrap/route.ts` — provisions a NEW `(club,
-  club_members)` pair for the caller's currently-active Clerk org.
+club_members)` pair for the caller's currently-active Clerk org.
   Pre-membership by definition; cannot use `ctx.clubId`. CSRF-guarded.
   Resolves authoritative org metadata from Clerk's Backend API (not
   request body) to prevent rename via session-replay.
@@ -169,8 +169,8 @@ These are the patterns that have driven the audit pass to clean:
 4. **Body-supplied FKs verified inside the route** — `lessonTypeId`,
    `arenaId`, `coachMemberId`, `horseId`, `riderMemberId`, etc. are all
    bound to ctx.clubId before insert. See `booking-slots/route.ts:96-
-   117`, `bookings/route.ts:258-263`, `finances/expenses/route.ts:36-
-   41`, etc.
+117`, `bookings/route.ts:258-263`, `finances/expenses/route.ts:36-
+41`, etc.
 5. **`/me/*` endpoints scope by `ctx.userId` (Clerk id)** in helpers
    like `getHorsesOwnedByUser`, `getLiveryInvoicesOwnedByUser`,
    `getActiveMembershipsForUser`. These return rows across MANY clubs
@@ -181,11 +181,11 @@ These are the patterns that have driven the audit pass to clean:
    and `competitions/.../entries/route.ts` accept three permission
    grants (staff / self / parent) and narrow each role to the set of
    `riderMemberId`s it's allowed to act on, with `isParentOf(ctx.clubId,
-   ctx.memberId, target)` verifying the guardian relationship for the
+ctx.memberId, target)` verifying the guardian relationship for the
    parent path.
 7. **Idempotent provider-money paths** — `bookings/[id]/refund/route.ts`
    uses `applyProviderRefund` (dedups by `(booking_id,
-   provider_refund_id)`) so concurrent admin refunds + webhook replays
+provider_refund_id)`) so concurrent admin refunds + webhook replays
    cannot double-count.
 
 ## Conclusion
@@ -197,3 +197,25 @@ pass-3, pass-4, pass-5, pass-6, pass-7) targeted at exactly this
 class of bug, and the defence-in-depth posture documented in
 CLAUDE.md is in place at the helper layer too. No remediation work
 is required from this audit.
+
+## Automated backstop (2026-06-09)
+
+The audit above is a point-in-time read; the real residual risk (raised
+by external review #1) is a FUTURE helper that silently omits the
+`club_id` filter, since RLS was deliberately dropped (migration 0011:
+the Neon HTTP driver cannot set `app.current_club_id`, and the WS+tx
+path RLS needs costs ~150ms/request) and the manual
+`tenant-isolation.test.ts` only covers hand-picked helpers.
+
+`packages/db/src/test/tenant-scope-guard.test.ts` closes that gap with
+pure static analysis (no runtime cost, runs in the existing CI). It
+derives the tenant-table set from the schema itself (every Drizzle table
+with a `clubId` column, so new tenant tables are covered automatically)
+and fails the build if any function in `packages/db/src/queries/*` runs
+a primary op (`.from` / `.update` / `.delete` / `.insert`) against a
+tenant table without referencing `clubId`. Genuinely cross-tenant-by-
+design paths (webhook resolution by the provider's globally-unique
+external id, the `(provider, eventId)` idempotency ledger, and the
+date-keyed retention sweep) are listed in `BY_DESIGN_EXEMPTIONS` with a
+one-line justification each. To add a new such helper, add it there with
+a reason; otherwise the guard requires the `clubId` predicate.

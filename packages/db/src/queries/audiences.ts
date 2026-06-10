@@ -4,6 +4,7 @@ import { audiences, type AudienceFilters } from '../schema/audiences';
 import { clubMembers } from '../schema/club-members';
 import { riderProfiles } from '../schema/rider-profiles';
 import { bookings } from '../schema/bookings';
+import { emailSendLog } from '../schema/email-send-log';
 
 type NewAudience = typeof audiences.$inferInsert;
 type AudienceCreate = Pick<NewAudience, 'name' | 'description' | 'filters'>;
@@ -82,11 +83,22 @@ export async function updateAudience(clubId: string, audienceId: string, data: A
 }
 
 export async function deleteAudience(clubId: string, audienceId: string) {
-  const rows = await db
-    .delete(audiences)
-    .where(and(eq(audiences.id, audienceId), eq(audiences.clubId, clubId)))
-    .returning({ id: audiences.id });
-  return rows[0] ?? null;
+  // The composite (audience_id, club_id) FK on email_send_log is ON DELETE
+  // NO ACTION (a SET NULL would try to null the NOT NULL club_id), so clear any
+  // log references in the same transaction before deleting the audience. This
+  // preserves the prior single-column ON DELETE SET NULL behavior: send-log
+  // rows are kept with their audience_id nulled.
+  return db.transaction(async (tx) => {
+    await tx
+      .update(emailSendLog)
+      .set({ audienceId: null, updatedAt: new Date() })
+      .where(and(eq(emailSendLog.audienceId, audienceId), eq(emailSendLog.clubId, clubId)));
+    const rows = await tx
+      .delete(audiences)
+      .where(and(eq(audiences.id, audienceId), eq(audiences.clubId, clubId)))
+      .returning({ id: audiences.id });
+    return rows[0] ?? null;
+  });
 }
 
 /**

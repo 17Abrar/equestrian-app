@@ -10,7 +10,7 @@ export function PublicHeader() {
   const { isSignedIn, isLoaded } = useUser();
 
   return (
-    <header className="border-b bg-background">
+    <header className="bg-background border-b">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <Link href={isSignedIn ? '/rider' : '/'} aria-label="Cavaliq home">
           <CavaliqLogo height={32} priority />

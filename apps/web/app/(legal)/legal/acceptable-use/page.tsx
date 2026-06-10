@@ -22,9 +22,7 @@ export default function AcceptableUsePage() {
       </p>
 
       <h2 id="prohibited-content">1. Prohibited content</h2>
-      <p>
-        Don&rsquo;t use Cavaliq to host, send, or display content that:
-      </p>
+      <p>Don&rsquo;t use Cavaliq to host, send, or display content that:</p>
       <ul>
         <li>
           Is unlawful, defamatory, obscene, sexually explicit, hateful, harassing, or threatens
@@ -34,19 +32,15 @@ export default function AcceptableUsePage() {
           Infringes someone else&rsquo;s intellectual-property or privacy rights (including
           uploading photos of someone without their consent);
         </li>
+        <li>Promotes self-harm, animal cruelty, or unsafe handling of horses;</li>
         <li>
-          Promotes self-harm, animal cruelty, or unsafe handling of horses;
-        </li>
-        <li>
-          Contains malware, viruses, trackers, or any other code designed to disrupt the platform
-          or harm a user&rsquo;s device.
+          Contains malware, viruses, trackers, or any other code designed to disrupt the platform or
+          harm a user&rsquo;s device.
         </li>
       </ul>
 
       <h2 id="prohibited-conduct">2. Prohibited conduct</h2>
-      <p>
-        Don&rsquo;t:
-      </p>
+      <p>Don&rsquo;t:</p>
       <ul>
         <li>
           Try to access an account, club, or piece of data that you are not authorised to access.
@@ -56,24 +50,20 @@ export default function AcceptableUsePage() {
           using your own credentials.
         </li>
         <li>
-          Reverse-engineer, decompile, or attempt to derive the source code of the platform,
-          except to the extent permitted by applicable law.
+          Reverse-engineer, decompile, or attempt to derive the source code of the platform, except
+          to the extent permitted by applicable law.
         </li>
         <li>
           Probe, scan, or test the vulnerability of the platform without our written permission.
           (Responsible disclosure is welcome — see our{' '}
           <a href="/.well-known/security.txt">security.txt</a> file.)
         </li>
-        <li>
-          Use the platform to send spam or unsolicited marketing.
-        </li>
+        <li>Use the platform to send spam or unsolicited marketing.</li>
         <li>
           Interfere with another user&rsquo;s use of the platform — for example, by overloading the
           API, holding open many sessions, or sending malformed requests.
         </li>
-        <li>
-          Resell or rebrand Cavaliq as your own product without a written reseller agreement.
-        </li>
+        <li>Resell or rebrand Cavaliq as your own product without a written reseller agreement.</li>
         <li>
           Use the platform in any way that would violate applicable law in your country or the
           United Arab Emirates.
@@ -81,9 +71,7 @@ export default function AcceptableUsePage() {
       </ul>
 
       <h2 id="club-staff">3. Additional rules for Club staff</h2>
-      <p>
-        If you have admin or manager access to a Club&rsquo;s Cavaliq account, you must:
-      </p>
+      <p>If you have admin or manager access to a Club&rsquo;s Cavaliq account, you must:</p>
       <ul>
         <li>Only access rider data you need to do your job.</li>
         <li>
@@ -107,16 +95,13 @@ export default function AcceptableUsePage() {
       <h2 id="reporting">4. Reporting abuse</h2>
       <p>
         If you see content or conduct on Cavaliq that breaches this AUP, please report it. Email{' '}
-        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> with the details (URLs,
-        screenshots, account names where relevant). For security vulnerabilities specifically,
-        please follow the disclosure process at{' '}
-        <a href="/.well-known/security.txt">/.well-known/security.txt</a>.
+        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> with the details (URLs, screenshots,
+        account names where relevant). For security vulnerabilities specifically, please follow the
+        disclosure process at <a href="/.well-known/security.txt">/.well-known/security.txt</a>.
       </p>
 
       <h2 id="enforcement">5. Enforcement</h2>
-      <p>
-        Depending on the seriousness of the breach, we may:
-      </p>
+      <p>Depending on the seriousness of the breach, we may:</p>
       <ul>
         <li>Warn the user or Club;</li>
         <li>Remove offending content;</li>

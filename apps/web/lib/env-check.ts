@@ -73,6 +73,11 @@ const PRODUCTION_REQUIRED_ENV_VARS: ReadonlyArray<{
     name: 'R2_BUCKET_NAME',
     effect: 'R2 client has no target bucket; upload presign 503',
   },
+  {
+    name: 'R2_PUBLIC_URL',
+    effect:
+      'signed-upload origin-pin disabled; getUploadUrl 503s and findNonR2OriginUrl / extractR2KeyFromUrl cannot validate asset origins (security boundary downgrades silently)',
+  },
   // Audit F-17 (2026-05-08 r6): Clerk binding required for auth.
   // Without these, every authenticated route 500s and Clerk webhooks
   // fail open (signature can't be verified).

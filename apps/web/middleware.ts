@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const CLERK_SCRIPT =
   'https://clerk.cavaliq.com https://*.clerk.services https://*.clerk.accounts.dev https://challenges.cloudflare.com';
 const CLERK_CONNECT =
-  'https://clerk.cavaliq.com https://*.clerk.services https://*.clerk.accounts.dev https://*.clerk.com https://clerk-telemetry.com';
+  'https://clerk.cavaliq.com https://*.clerk.services https://*.clerk.accounts.dev https://*.clerk.com https://clerk-telemetry.com https://images.clerk.dev';
 const CLERK_FRAME =
   'https://clerk.cavaliq.com https://*.clerk.accounts.dev https://challenges.cloudflare.com';
 
@@ -61,7 +61,11 @@ function buildCsp(nonce: string): string {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' ${CLERK_SCRIPT} ${STRIPE_SCRIPT}${isDev ? " 'unsafe-eval'" : ''}`,
     `style-src 'self' 'unsafe-inline' ${CLERK_SCRIPT}`,
-    "img-src 'self' data: blob: https://*.r2.dev https://img.clerk.com",
+    // Audit FE (2026-06-07): Clerk serves org/user logos from BOTH
+    // img.clerk.com (prod CDN) and images.clerk.dev (the dev-instance CDN
+    // this app supports booting against). Without images.clerk.dev the
+    // OrganizationSwitcher/UserButton logo is CSP-blocked on dev instances.
+    "img-src 'self' data: blob: https://*.r2.dev https://img.clerk.com https://images.clerk.dev",
     "font-src 'self' data:",
     // R2 hosts: `*.r2.cloudflarestorage.com` is the S3-compatible
     // endpoint where the browser PUTs presigned uploads (both path-

@@ -4,10 +4,10 @@ import { z, ZodError, type ZodTypeAny } from 'zod';
 import { type UserRole } from '@equestrian/shared/types';
 import { paginationSchema } from '@equestrian/shared/schemas';
 import { getTenantContext, TenantError, type ActiveMembership } from './tenant';
-import { hasPermission, PermissionError } from './permissions';
+import { hasPermission } from './permissions';
 import { logger } from './logger';
-import { checkRateLimit, type RateLimitConfig } from './rate-limit';
-import { getClientIp } from './request-ip';
+import { checkRateLimit, type RateLimitConfig, type RateLimitResult } from './rate-limit';
+import { getClientIp, getClientIpFromHeaders } from './request-ip';
 import { createAuditEntry } from '@equestrian/db/queries';
 
 interface AuditParams {
@@ -55,6 +55,51 @@ export function successResponse<T>(data: T, status = 200) {
 
 export function errorResponse(code: string, message: string, status: number, details?: unknown) {
   return NextResponse.json({ success: false, error: { code, message, details } }, { status });
+}
+
+/**
+ * Audit sweep (2026-06-10): the same ~8-line 429 block (compute
+ * Retry-After seconds, hand-build the RATE_LIMITED envelope, attach the
+ * header) was copy-pasted across 7 public routes plus `withAuth`, and
+ * had ALREADY drifted — privacy/request and account/delete went through
+ * `errorResponse` (which can't set headers) and silently dropped the
+ * Retry-After header that the join route's own comment calls "part of
+ * the rate-limit contract". Same extraction rationale as
+ * `parsePagination` (Audit r5 F-60): a future contract tweak (e.g.
+ * adopting the draft `RateLimit-*` headers) lands once.
+ *
+ * Retry-After is whole seconds, rounded UP — a 1500ms wait must not
+ * advertise `1` and invite a guaranteed-429 retry. The 1000ms fallback
+ * covers limiters that report a null `retryAfterMs`.
+ */
+export function rateLimitedResponse(
+  result: RateLimitResult,
+  options?: {
+    /** User-facing copy. Call sites keep their route-specific phrasing. */
+    message?: string;
+    /** Extra response headers (`withAuth` threads `x-request-id` through). */
+    headers?: Record<string, string>;
+    /**
+     * Mirror retryAfter (seconds) into `error.details`. privacy/request
+     * and account/delete exposed it in the body back when they lacked
+     * the Retry-After header; removing a body field clients may already
+     * read is a breaking change, so it stays available opt-in.
+     */
+    retryAfterInDetails?: boolean;
+  },
+) {
+  const retryAfter = Math.ceil((result.retryAfterMs ?? 1000) / 1000);
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: 'RATE_LIMITED',
+        message: options?.message ?? 'Too many requests. Please try again later.',
+        ...(options?.retryAfterInDetails ? { details: { retryAfter } } : {}),
+      },
+    },
+    { status: 429, headers: { 'Retry-After': String(retryAfter), ...options?.headers } },
+  );
 }
 
 export function paginatedResponse<T>(
@@ -335,12 +380,10 @@ export async function parseOptionalBody<S extends ZodTypeAny>(
  *
  * Audit F-63 (2026-05-07 r5): a `no-restricted-syntax` ESLint rule in
  * `tooling/eslint/nextjs.js` blocks new `request.json()` calls inside
- * `apps/web/app/api/v1/**` so future routes land in this helper. ~50
- * legacy routes still call `request.json()` directly; the migration
- * is mechanical (replace `const body = await request.json(); const
- * data = validateInput(schema, body);` with `const data = await
- * parseRequiredBody(request, schema);`) but high-blast-radius for one
- * PR. Migrate as you touch each route.
+ * `apps/web/app/api/v1/**` so future routes land in this helper.
+ * Migration completed 2026-06-09 — zero raw `request.json()` calls
+ * remain under `apps/web/app/api`. Routes outside withAuth pair this
+ * with `bodyErrorResponse` to map the thrown errors themselves.
  */
 export async function parseRequiredBody<S extends ZodTypeAny>(
   request: Request,
@@ -367,6 +410,35 @@ export class ValidationError extends Error {
   }
 }
 
+/**
+ * Maps parseRequiredBody / parseOptionalBody failures onto the standard
+ * error envelope. withAuth calls this from its catch; routes that run
+ * OUTSIDE withAuth (the public intake endpoints) call it from their own
+ * try/catch so a malformed body still yields a 400/413 instead of
+ * falling through to a generic 500. Returns null for errors it doesn't
+ * recognise so the caller can rethrow.
+ *
+ * `validationMessage` lets a route keep its user-facing copy (e.g.
+ * "Type DELETE to confirm") instead of the generic "Invalid input".
+ */
+export function bodyErrorResponse(error: unknown, validationMessage?: string) {
+  if (error instanceof ValidationError) {
+    return errorResponse(
+      'VALIDATION_ERROR',
+      validationMessage ?? error.message,
+      400,
+      error.details,
+    );
+  }
+  if (error instanceof SyntaxError) {
+    return errorResponse('INVALID_JSON', 'Request body contains invalid JSON', 400);
+  }
+  if (error instanceof PayloadTooLargeError) {
+    return errorResponse('PAYLOAD_TOO_LARGE', error.message, 413);
+  }
+  return null;
+}
+
 export async function withAuth(
   handler: (ctx: AuthenticatedContext) => Promise<NextResponse>,
   options?: ApiHandlerOptions,
@@ -388,10 +460,14 @@ export async function withAuth(
   try {
     const headerStore = await headers();
     requestId = headerStore.get('x-request-id') ?? crypto.randomUUID();
-    const ip =
-      headerStore.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      headerStore.get('x-real-ip') ??
-      'unknown';
+    // Audit sweep (2026-06-10): this was a hand-rolled x-forwarded-for /
+    // x-real-ip chain that predated the F-46 helper extraction and missed
+    // the authoritative `cf-connecting-ip` first hop. withAuth holds a
+    // next/headers ReadonlyHeaders store rather than a Request — hence
+    // the headers-based sibling. Audit-log entries and the
+    // rate_limit_exceeded log below now record the CF-authoritative IP
+    // instead of a client-spoofable XFF first hop.
+    const ip = getClientIpFromHeaders(headerStore);
     const userAgent = headerStore.get('user-agent') ?? 'unknown';
 
     const tenantCtx = await getTenantContext();
@@ -422,7 +498,6 @@ export async function withAuth(
       : fallbackKey;
     const rateLimitResult = await checkRateLimit(rateLimitKey, rateLimitConfig);
     if (!rateLimitResult.allowed) {
-      const retryAfter = Math.ceil((rateLimitResult.retryAfterMs ?? 1000) / 1000);
       logger.warn('rate_limit_exceeded', {
         requestId,
         userId: tenantCtx.userId,
@@ -432,13 +507,10 @@ export async function withAuth(
         limit: rateLimitConfig.maxRequests,
         windowMs: rateLimitConfig.windowMs,
       });
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
-        },
-        { status: 429, headers: { 'Retry-After': String(retryAfter), 'x-request-id': requestId } },
-      );
+      return rateLimitedResponse(rateLimitResult, {
+        message: 'Too many requests. Please try again later.',
+        headers: { 'x-request-id': requestId },
+      });
     }
 
     if (options?.requiredPermission) {
@@ -499,20 +571,16 @@ export async function withAuth(
       return errorResponse(error.code, error.message, status);
     }
 
-    if (error instanceof PermissionError) {
-      return errorResponse('FORBIDDEN', error.message, 403);
-    }
+    // Audit sweep (2026-06-10): a `PermissionError` catch arm lived here
+    // since the P-1 split, but `assertPermission` (the only thrower) had
+    // zero callers repo-wide — routes gate via `hasPermission` + explicit
+    // errorResponse, and withAuth's own `requiredPermission` check above
+    // returns a 403 directly. The dead helper, class, and this arm were
+    // removed together; see lib/permissions.ts.
 
-    if (error instanceof ValidationError) {
-      return errorResponse('VALIDATION_ERROR', error.message, 400, error.details);
-    }
-
-    if (error instanceof SyntaxError) {
-      return errorResponse('INVALID_JSON', 'Request body contains invalid JSON', 400);
-    }
-
-    if (error instanceof PayloadTooLargeError) {
-      return errorResponse('PAYLOAD_TOO_LARGE', error.message, 413);
+    const bodyError = bodyErrorResponse(error);
+    if (bodyError) {
+      return bodyError;
     }
 
     // Reuse the requestId captured at the top of withAuth (audit QA-27).

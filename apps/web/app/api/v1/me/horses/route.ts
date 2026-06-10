@@ -1,7 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { paginationSchema } from '@equestrian/shared/schemas';
 import { getHorsesOwnedByUser, getActiveMembershipsForUser } from '@equestrian/db/queries';
-import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, successResponse, parsePagination } from '@/lib/api-utils';
 
 /**
  * Rider-scoped endpoint — returns every horse the authenticated user owns,
@@ -18,11 +17,7 @@ import { withAuth, successResponse, validateInput } from '@/lib/api-utils';
  */
 export async function GET(request: NextRequest) {
   return withAuth(async (ctx) => {
-    const url = new URL(request.url);
-    const { page, pageSize } = validateInput(paginationSchema, {
-      page: url.searchParams.get('page') ?? undefined,
-      pageSize: url.searchParams.get('pageSize') ?? undefined,
-    });
+    const { page, pageSize } = parsePagination(request);
 
     const [horsesResult, memberships] = await Promise.all([
       getHorsesOwnedByUser(ctx.userId, { page, pageSize }),

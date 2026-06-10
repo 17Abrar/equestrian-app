@@ -27,7 +27,7 @@ export default function SelectOrgPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Welcome to Cavaliq</h1>
           <p className="text-muted-foreground mt-2">
-            You&apos;re signed in — pick how you want to use the platform.
+            You&apos;re signed in. Pick how you want to use the platform.
           </p>
         </div>
 

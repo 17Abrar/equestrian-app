@@ -16,8 +16,7 @@ import { CavaliqLogo } from '../../components/cavaliq-logo';
 
 const LEGAL_BASE_URL =
   process.env.EXPO_PUBLIC_LEGAL_BASE_URL?.replace(/\/$/, '') ?? 'https://cavaliq.com';
-const openLegal = (path: string) =>
-  void WebBrowser.openBrowserAsync(`${LEGAL_BASE_URL}${path}`);
+const openLegal = (path: string) => void WebBrowser.openBrowserAsync(`${LEGAL_BASE_URL}${path}`);
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();

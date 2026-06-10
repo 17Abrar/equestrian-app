@@ -43,7 +43,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
       <h1 className="mb-1 text-2xl font-bold">{isStable ? 'Stable sign in' : 'Rider sign in'}</h1>
       <p className="text-muted-foreground mb-6 max-w-sm text-center text-sm">
         {isStable
-          ? 'Sign in to manage your stable — horses, staff, bookings, and payments.'
+          ? 'Sign in to manage your stable: horses, staff, bookings, and payments.'
           : 'Sign in to book lessons, track progress, and join stables.'}
       </p>
 

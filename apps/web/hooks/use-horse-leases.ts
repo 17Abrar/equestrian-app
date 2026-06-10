@@ -2,14 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchJson } from '@/lib/fetch-json';
-import {
-  type ApiSuccessResponse,
-  type ApiResponse,
-} from '@equestrian/shared/types';
-import {
-  type CreateHorseLeaseInput,
-  type SetLeaseStatusInput,
-} from '@equestrian/shared/schemas';
+import { type ApiSuccessResponse, type ApiResponse } from '@equestrian/shared/types';
+import { type CreateHorseLeaseInput, type SetLeaseStatusInput } from '@equestrian/shared/schemas';
 
 export type LeaseType = 'half' | 'full';
 export type LeaseStatus = 'pending' | 'active' | 'ended' | 'cancelled';

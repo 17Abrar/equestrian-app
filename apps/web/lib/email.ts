@@ -4,11 +4,7 @@ import { render } from '@react-email/components';
 import { after } from 'next/server';
 import { rawDb } from '@equestrian/db';
 import { clubs, type NotificationPreferences } from '@equestrian/db/schema';
-import {
-  isEmailSuppressed,
-  recordEmailSend,
-  updateEmailSendStatus,
-} from '@equestrian/db/queries';
+import { isEmailSuppressed, recordEmailSend, updateEmailSendStatus } from '@equestrian/db/queries';
 import type { EmailSendSource } from '@equestrian/db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from './logger';
@@ -501,9 +497,12 @@ async function sendWithRetry(
  * 'queued'; every subsequent attempt sees `existingLogId` and only
  * updates the existing row's status.
  */
-async function hoistSendLog(
-  params: { clubId?: string; to: string; subject: string; sendLog?: SendLogContext },
-): Promise<string | null> {
+async function hoistSendLog(params: {
+  clubId?: string;
+  to: string;
+  subject: string;
+  sendLog?: SendLogContext;
+}): Promise<string | null> {
   if (!params.sendLog || !params.clubId) return null;
   return recordEmailSend({
     clubId: params.clubId,

@@ -7,6 +7,7 @@ import {
   timestamp,
   index,
   foreignKey,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { clubs } from './clubs';
 import { clubMembers } from './club-members';
@@ -56,5 +57,9 @@ export const audiences = pgTable(
       columns: [table.createdByMemberId, table.clubId],
       foreignColumns: [clubMembers.id, clubMembers.clubId],
     }).onDelete('set null'),
+    // Audit pass-11 (2026-06-06): target for the composite
+    // (audience_id, club_id) FK on email_send_log so a row can't reference
+    // another club's audience. Migration 0068 adds the matching constraint.
+    unique('audiences_id_club_unique').on(table.id, table.clubId),
   ],
 );

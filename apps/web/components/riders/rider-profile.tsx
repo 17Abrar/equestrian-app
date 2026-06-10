@@ -15,11 +15,7 @@ import { useRider, useUpdateRider } from '@/hooks/use-riders';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { hasPermission } from '@/lib/permissions-shared';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
-import {
-  formatMoney,
-  getTodayDateString,
-  getTodayLocalDateString,
-} from '@equestrian/shared/utils';
+import { formatMoney, getTodayDateString, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -442,12 +438,12 @@ export function RiderProfile({ riderId }: RiderProfileProps) {
             </TabsContent>
 
             <TabsContent value="bookings" className="mt-4">
-              <RiderBookings riderMemberId={rider.id} />
+              <RiderBookings riderMemberId={rider.memberId} />
             </TabsContent>
 
             <TabsContent value="progress" className="mt-4">
               <RiderProgress
-                riderMemberId={rider.id}
+                riderMemberId={rider.memberId}
                 totalLessonsCompleted={rider.totalLessonsCompleted ?? 0}
                 skillLevel={rider.skillLevel}
               />

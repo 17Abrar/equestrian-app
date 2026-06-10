@@ -16,6 +16,12 @@ import { NextRequest } from 'next/server';
 //   - F-12 (2026-05-08 r6) IP-keyed rate limit guards the body-cap →
 //     DB-lookup → AES-GCM-decrypt → HMAC pipeline from clubId floods.
 //   - F-38 account-id mismatch defense (Connect path defense-in-depth).
+//   - Replay masking (Codex security review, 2026-06): the lastError
+//     auto-clear fires only AFTER claimWebhookEvent confirms a fresh
+//     event — a replayed old delivery, signed with a stale secret the
+//     app still holds, verifies but must NOT clear a red badge while
+//     real deliveries keep failing. CAS token (`account.updatedAt`)
+//     threaded so a stale clear can't erase a newer recorded error.
 //
 // Pattern is the same shape as lib/tenant.test.ts and is intentionally
 // reusable for the other 4 webhook receivers (ziina/[clubId],
@@ -29,6 +35,8 @@ const {
   verifyWebhookMock,
   applyPaymentWebhookMock,
   applyLiveryInvoiceWebhookMock,
+  safeRecordAccountErrorMock,
+  safeClearAccountErrorMock,
   claimWebhookEventMock,
   markProcessedMock,
   markFailedMock,
@@ -44,6 +52,8 @@ const {
   verifyWebhookMock: vi.fn(),
   applyPaymentWebhookMock: vi.fn(),
   applyLiveryInvoiceWebhookMock: vi.fn(),
+  safeRecordAccountErrorMock: vi.fn(),
+  safeClearAccountErrorMock: vi.fn(),
   claimWebhookEventMock: vi.fn(),
   markProcessedMock: vi.fn(),
   markFailedMock: vi.fn(),
@@ -81,6 +91,17 @@ vi.mock('@/lib/payments/stripe', () => ({
 vi.mock('@/lib/payments/webhook-helpers', () => ({
   applyPaymentWebhook: applyPaymentWebhookMock,
   applyLiveryInvoiceWebhook: applyLiveryInvoiceWebhookMock,
+  // The route awaits this on the no-secret / invalid-signature paths to
+  // surface `lastError` in settings. It must exist in the mock (the route
+  // would otherwise TypeError into the F-15 wrapper and the QA-15 tests
+  // would see 500 instead of 401); vi.fn() resolves undefined, which
+  // matches the real helper's fire-and-record void contract.
+  safeRecordAccountError: safeRecordAccountErrorMock,
+  // The inverse: awaited AFTER claimWebhookEvent confirms a fresh event,
+  // when the loaded account row carries a lastError / 'error' status, so
+  // a fixed webhook secret self-heals the settings badge. Same void
+  // fire-and-clear contract.
+  safeClearAccountError: safeClearAccountErrorMock,
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -101,22 +122,29 @@ const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const EVENT_ID = 'evt_test_123';
 const PROVIDER_PAYMENT_ID = 'pi_test_abc';
 const WEBHOOK_SECRET = 'whsec_test_secret';
+// Fixed `updated_at` snapshot on the loaded account row — the route must
+// thread this exact value into safeClearAccountError as the CAS token so
+// a clear computed against a stale row read can't erase a newer error.
+const ACCOUNT_UPDATED_AT = new Date('2026-06-01T12:00:00.000Z');
 
-function makeRequest(opts: {
-  body?: string;
-  signature?: string | null;
-  clubId?: string;
-} = {}): NextRequest {
+function makeRequest(
+  opts: {
+    body?: string;
+    signature?: string | null;
+    clubId?: string;
+  } = {},
+): NextRequest {
   const headers = new Headers();
   if (opts.signature !== null && opts.signature !== undefined) {
     headers.set('stripe-signature', opts.signature);
   }
   const body = opts.body ?? '{}';
   headers.set('content-length', String(body.length));
-  return new NextRequest(
-    `https://example.com/api/webhooks/stripe/${opts.clubId ?? CLUB_ID}`,
-    { method: 'POST', headers, body },
-  );
+  return new NextRequest(`https://example.com/api/webhooks/stripe/${opts.clubId ?? CLUB_ID}`, {
+    method: 'POST',
+    headers,
+    body,
+  });
 }
 
 function call(req: NextRequest, clubId: string = CLUB_ID) {
@@ -146,9 +174,16 @@ beforeEach(() => {
   rateLimitMock.mockResolvedValue({ allowed: true, remaining: 59, resetAt: 0 });
   getClientIpMock.mockReturnValue('192.0.2.1');
   readWebhookBodyMock.mockResolvedValue('{"raw":"body"}');
+  // Faithful to the real `WebhookSecretConfig` shape — `status` and
+  // `lastError` are load-bearing for the clear-on-verified gate: the
+  // healthy defaults here double as the "does NOT clear on a healthy
+  // account" baseline for every other test in this file.
   getWebhookConfigMock.mockResolvedValue({
     webhookSigningSecret: WEBHOOK_SECRET,
     externalAccountId: null,
+    status: 'connected',
+    lastError: null,
+    updatedAt: ACCOUNT_UPDATED_AT,
   });
   verifyWebhookMock.mockResolvedValue(makeEvent());
   claimWebhookEventMock.mockResolvedValue({ status: 'claimed', attempt: 1 });
@@ -227,9 +262,7 @@ describe('signature verification — all rejection paths return the QA-15 unifor
       webhookSigningSecret: WEBHOOK_SECRET,
       externalAccountId: 'acct_legitimate',
     });
-    verifyWebhookMock.mockResolvedValueOnce(
-      makeEvent({ providerAccountId: 'acct_attacker' }),
-    );
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ providerAccountId: 'acct_attacker' }));
 
     const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
 
@@ -238,11 +271,166 @@ describe('signature verification — all rejection paths return the QA-15 unifor
   });
 });
 
+describe('error clear on first verified webhook', () => {
+  // Lifecycle under test: `safeRecordAccountError` stamps lastError +
+  // status 'error' on misconfig; the ONLY other clear path is a full
+  // reconnect. A verified signature on a FRESH event proves the stored
+  // secret is correct again, so the route must clear the stale error —
+  // but ONLY when the already-loaded account row shows one (hot-path
+  // discipline: no DB write on the healthy steady state), and ONLY after
+  // claimWebhookEvent confirms the event is fresh (replay masking — see
+  // the placement-lock tests below).
+
+  it('clears when the loaded account row carries a lastError — and only AFTER the dedup claim (placement lock)', async () => {
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: null,
+      status: 'error',
+      lastError: 'Stripe webhook signature verification failed.',
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+
+    const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(res.status).toBe(200);
+    // The third argument is the CAS token: the exact `updated_at` the
+    // route loaded for signature verification, so a stale-row clear
+    // can't erase an error recorded after that read.
+    expect(safeClearAccountErrorMock).toHaveBeenCalledWith(CLUB_ID, 'stripe', ACCOUNT_UPDATED_AT);
+    // Placement lock (Codex security review, 2026-06): the clear must
+    // fire AFTER claimWebhookEvent proved freshness — a clear placed
+    // before the claim would also fire on replayed duplicates, which a
+    // stale-secret app still verifies. Invocation order is the
+    // observable contract for that placement.
+    expect(claimWebhookEventMock.mock.invocationCallOrder[0]).toBeLessThan(
+      safeClearAccountErrorMock.mock.invocationCallOrder[0]!,
+    );
+    // The verified event must still be processed normally — the clear is
+    // a side effect, never a substitute for the booking flow.
+    expect(markProcessedMock).toHaveBeenCalledWith('stripe', EVENT_ID);
+  });
+
+  it('clears when status is error even if lastError is already null (OR gate)', async () => {
+    // Half-cleared row (e.g. a partial manual fix) — the status badge is
+    // still stuck on 'error', so the clear must fire on either signal.
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: null,
+      status: 'error',
+      lastError: null,
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+
+    await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(safeClearAccountErrorMock).toHaveBeenCalledWith(CLUB_ID, 'stripe', ACCOUNT_UPDATED_AT);
+  });
+
+  it('does NOT clear on an already_processed duplicate — a signed replay must not green-light the badge', async () => {
+    // Replay-masking scenario (Codex security review, 2026-06): the app
+    // holds a stale `whsec_…` after the operator rotated the endpoint
+    // secret in Stripe. Real deliveries (signed with the NEW secret)
+    // fail verification and keep the badge red; a replayed OLD delivery
+    // — signed with the stale secret the app still holds — verifies
+    // fine. The dedup row remembers it was already processed, and that
+    // branch must NOT clear: verification of a replay proves nothing
+    // about current config health.
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: null,
+      status: 'error',
+      lastError: 'Stripe webhook signature verification failed.',
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+    claimWebhookEventMock.mockResolvedValueOnce({ status: 'already_processed' });
+
+    const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(res.status).toBe(200);
+    expect(safeClearAccountErrorMock).not.toHaveBeenCalled();
+    expect(applyPaymentWebhookMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT clear on an in_flight claim — only the worker that actually processes may clear', async () => {
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: null,
+      status: 'error',
+      lastError: 'Stripe webhook signature verification failed.',
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+    claimWebhookEventMock.mockResolvedValueOnce({ status: 'in_flight' });
+
+    const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(res.status).toBe(503);
+    expect(safeClearAccountErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT clear on a permanently_failed event — a redelivery of a dead event is a replay, not fresh proof', async () => {
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: null,
+      status: 'error',
+      lastError: 'Stripe webhook signature verification failed.',
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+    claimWebhookEventMock.mockResolvedValueOnce({ status: 'permanently_failed' });
+
+    const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(res.status).toBe(200);
+    expect(safeClearAccountErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT clear on a healthy account — no extra write on the hot path', async () => {
+    // Defaults from beforeEach: status 'connected', lastError null.
+    const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(res.status).toBe(200);
+    expect(safeClearAccountErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT clear when signature verification fails — only proof of a working secret clears', async () => {
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: null,
+      status: 'error',
+      lastError: 'Stripe webhook signature verification failed.',
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+    verifyWebhookMock.mockRejectedValueOnce(
+      new PaymentProviderError('INVALID_SIGNATURE', 'bad sig'),
+    );
+
+    const res = await call(makeRequest({ signature: 'sig_v1=bad' }));
+
+    expect(res.status).toBe(401);
+    expect(safeClearAccountErrorMock).not.toHaveBeenCalled();
+    // The still-broken secret re-records instead.
+    expect(safeRecordAccountErrorMock).toHaveBeenCalled();
+  });
+
+  it('does NOT clear on an F-38 account-id mismatch — correctly signed but misrouted is still a config problem', async () => {
+    getWebhookConfigMock.mockResolvedValueOnce({
+      webhookSigningSecret: WEBHOOK_SECRET,
+      externalAccountId: 'acct_legitimate',
+      status: 'error',
+      lastError: 'Stripe webhook signature verification failed.',
+      updatedAt: ACCOUNT_UPDATED_AT,
+    });
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ providerAccountId: 'acct_attacker' }));
+
+    const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
+
+    expect(res.status).toBe(401);
+    expect(safeClearAccountErrorMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('event-type filter', () => {
   it('200s without claiming the event when the type is not in HANDLED_EVENTS', async () => {
-    verifyWebhookMock.mockResolvedValueOnce(
-      makeEvent({ eventType: 'invoice.created' }),
-    );
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ eventType: 'invoice.created' }));
 
     const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
 
@@ -303,9 +491,7 @@ describe('happy paths', () => {
   });
 
   it('charge.refunded is forwarded as isRefundEvent=true', async () => {
-    verifyWebhookMock.mockResolvedValueOnce(
-      makeEvent({ eventType: 'charge.refunded' }),
-    );
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ eventType: 'charge.refunded' }));
 
     await call(makeRequest({ signature: 'sig_v1=abc' }));
 
@@ -369,11 +555,7 @@ describe('failure paths', () => {
 
     expect(res.status).toBe(500);
     await expect(res.text()).resolves.toBe('Processing failed');
-    expect(markFailedMock).toHaveBeenCalledWith(
-      'stripe',
-      EVENT_ID,
-      'DB went sideways',
-    );
+    expect(markFailedMock).toHaveBeenCalledWith('stripe', EVENT_ID, 'DB went sideways');
     expect(markProcessedMock).not.toHaveBeenCalled();
   });
 

@@ -11,6 +11,7 @@ import {
   formatDate,
   getTodayDateString,
   getTodayLocalDateString,
+  toMinorUnits,
 } from '@equestrian/shared/utils';
 import { useClubSettings } from '@/hooks/use-settings';
 import { Card, CardContent } from '@/components/ui/card';
@@ -179,9 +180,7 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
   // browser-local (wrong when admin tz ≠ club tz). Fall back to
   // browser-local while settings load — same as MED-3 v1 in that window.
   const clubTimezone = settingsQuery.data?.data.timezone;
-  const todayInClub = clubTimezone
-    ? getTodayDateString(clubTimezone)
-    : getTodayLocalDateString();
+  const todayInClub = clubTimezone ? getTodayDateString(clubTimezone) : getTodayLocalDateString();
 
   const form = useForm<ApproveFormValues, unknown, ApproveFormOutput>({
     resolver: zodResolver(approveFormSchema),
@@ -214,9 +213,13 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
         ? values.feeMajorUnits
         : Number(values.feeMajorUnits);
     try {
+      // User enters major units; DB stores minor units. The scale is
+      // currency-dependent (KWD/BHD/OMR are 3-decimal, JPY 0-decimal), so use
+      // the currency-aware helper keyed off the club currency rather than a
+      // hardcoded *100 — matching health-tab / leases-tab.
+      const clubCurrency = settingsQuery.data?.data.currency ?? 'AED';
       await approve.mutateAsync({
-        // User enters AED major units; DB stores minor units (fils).
-        monthlyLiveryFeeMinor: Math.round(feeNumber * 100),
+        monthlyLiveryFeeMinor: toMinorUnits(feeNumber, clubCurrency),
         liveryStartDate: values.liveryStartDate,
       });
       toast.success(`${horse.name} approved`);

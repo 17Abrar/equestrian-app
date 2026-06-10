@@ -31,8 +31,6 @@ export function CavaliqMark({
 
 const LOCKUP_NATURAL_WIDTH = 704;
 const LOCKUP_NATURAL_HEIGHT = 256;
-const WORDMARK_NATURAL_WIDTH = 866;
-const WORDMARK_NATURAL_HEIGHT = 256;
 
 interface CavaliqLogoProps {
   variant?: Variant;
@@ -59,34 +57,6 @@ export function CavaliqLogo({
       className={cn('shrink-0', className)}
       style={{ height, width }}
       priority={priority}
-    />
-  );
-}
-
-interface CavaliqWordmarkProps {
-  variant?: Variant;
-  height?: number;
-  className?: string;
-}
-
-export function CavaliqWordmark({
-  variant = 'light',
-  height = 24,
-  className,
-}: CavaliqWordmarkProps) {
-  const src =
-    variant === 'dark'
-      ? '/brand/cavaliq-wordmark-dark-trimmed.png'
-      : '/brand/cavaliq-wordmark-trimmed.png';
-  const width = Math.round((WORDMARK_NATURAL_WIDTH / WORDMARK_NATURAL_HEIGHT) * height);
-  return (
-    <Image
-      src={src}
-      alt="Cavaliq"
-      width={WORDMARK_NATURAL_WIDTH}
-      height={WORDMARK_NATURAL_HEIGHT}
-      className={cn('shrink-0', className)}
-      style={{ height, width }}
     />
   );
 }

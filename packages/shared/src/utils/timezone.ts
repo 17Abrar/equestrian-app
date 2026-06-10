@@ -52,8 +52,9 @@ export function isDateInPast(dateStr: string, timezone: string): boolean {
  * specified timezone and returns the correct UTC Date.
  *
  * HTML `<input type="datetime-local">` emits strings without timezone info.
- * `new Date('2026-04-01T10:00')` parses as server-local time (UTC on Vercel),
- * which is wrong if the admin is in Asia/Dubai. This function fixes that.
+ * `new Date('2026-04-01T10:00')` parses as server-local time (UTC on the
+ * server runtime, e.g. Cloudflare Workers), which is wrong if the admin is
+ * in Asia/Dubai. This function fixes that.
  *
  * Example: parseDateTimeLocal("2026-04-01T10:00", "Asia/Dubai")
  *   → Date representing 2026-04-01T06:00:00Z (10:00 Dubai = 06:00 UTC)

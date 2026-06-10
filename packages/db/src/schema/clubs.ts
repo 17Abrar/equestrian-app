@@ -92,9 +92,7 @@ export const clubs = pgTable(
     // PayPage 3DS flows comfortably fit). Clubs with high-friction card
     // flows (slow OTP, etc.) can raise it; clubs with high double-booking
     // pressure can lower it.
-    bookingPaymentTimeoutMinutes: integer('booking_payment_timeout_minutes')
-      .notNull()
-      .default(15),
+    bookingPaymentTimeoutMinutes: integer('booking_payment_timeout_minutes').notNull().default(15),
     defaultLessonDurationMinutes: integer('default_lesson_duration_minutes').notNull().default(60),
     allowOverbooking: boolean('allow_overbooking').notNull().default(false),
     overbookingLimit: integer('overbooking_limit').notNull().default(0),

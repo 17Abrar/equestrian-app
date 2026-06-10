@@ -13,12 +13,28 @@
  * `x-real-ip` for unknown reverse proxies. The literal `'unknown'`
  * is the agreed-upon sentinel — `lib/queries/audit-log.ts:sanitizeIp`
  * specifically tests for it before logging an IP.
+ *
+ * Audit sweep (2026-06-10): `withAuth` resolves its headers via
+ * next/headers (a ReadonlyHeaders store — no Request object exists in
+ * that scope), so it had hand-rolled the chain and drifted, dropping
+ * the `cf-connecting-ip` first hop from audit-log entries. The
+ * structural `{ get() }` parameter accepts both `Request['headers']`
+ * and ReadonlyHeaders, so the chain now lives exactly once.
  */
-export function getClientIp(request: Request): string {
+export function getClientIpFromHeaders(h: { get(name: string): string | null }): string {
   return (
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
+    h.get('cf-connecting-ip') ??
+    h.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    h.get('x-real-ip') ??
     'unknown'
   );
+}
+
+/**
+ * Request-flavoured wrapper for call sites that hold a full Request
+ * (webhooks, public routes). Delegates so the header order above is the
+ * single source of truth.
+ */
+export function getClientIp(request: Request): string {
+  return getClientIpFromHeaders(request.headers);
 }

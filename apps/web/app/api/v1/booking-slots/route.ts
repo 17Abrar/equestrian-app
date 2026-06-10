@@ -55,11 +55,17 @@ export async function GET(request: NextRequest) {
     const searchParams = Object.fromEntries(request.nextUrl.searchParams);
     const filters = validateInput(bookingSlotFiltersSchema, searchParams);
 
-    // Riders can view available slots (needed to book), staff can view all
+    // Riders can view available slots (needed to book), staff can view all.
+    // Audit FE (2026-06-07): parents were excluded — they hold create_child /
+    // read_child rather than the self-scoped grants, so they 403'd on the slot
+    // list and could never book a lesson for their child. Include the child
+    // grants so the parent booking flow works end to end.
     const canViewSlots =
       hasPermission(ctx.orgRole, 'bookings:read') ||
       hasPermission(ctx.orgRole, 'bookings:create') ||
-      hasPermission(ctx.orgRole, 'bookings:read_own');
+      hasPermission(ctx.orgRole, 'bookings:read_own') ||
+      hasPermission(ctx.orgRole, 'bookings:create_child') ||
+      hasPermission(ctx.orgRole, 'bookings:read_child');
 
     if (!canViewSlots) {
       return errorResponse('FORBIDDEN', 'You do not have permission to view booking slots', 403);

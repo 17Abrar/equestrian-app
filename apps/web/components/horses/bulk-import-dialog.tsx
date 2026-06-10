@@ -95,7 +95,9 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
       setSubmitResult(res.data);
       void qc.invalidateQueries({ queryKey: ['horses'] });
       if (res.data.failureCount === 0) {
-        toast.success(`Imported ${res.data.successCount} horse${res.data.successCount === 1 ? '' : 's'}`);
+        toast.success(
+          `Imported ${res.data.successCount} horse${res.data.successCount === 1 ? '' : 's'}`,
+        );
       } else {
         toast.warning(
           `Imported ${res.data.successCount} of ${res.data.total} · ${res.data.failureCount} failed — see details below`,
@@ -146,9 +148,7 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
 
   async function onSubmit() {
     if (validRows.length === 0) return;
-    const horses = validRows
-      .map((r) => r.parsed)
-      .filter((h): h is CreateHorseInput => h !== null);
+    const horses = validRows.map((r) => r.parsed).filter((h): h is CreateHorseInput => h !== null);
     // Send the parallel CSV-row-number array so the post-import view
     // can point at the right line in the spreadsheet even after we
     // filtered invalid rows out. Codex P3 (2026-05-27).
@@ -224,8 +224,8 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
       <DialogHeader>
         <DialogTitle>Bulk import horses</DialogTitle>
         <DialogDescription>
-          Download the template, fill it in your spreadsheet tool, then upload the CSV. We
-          validate each row before any horse is created. Max {BULK_HORSES_MAX} horses per upload.
+          Download the template, fill it in your spreadsheet tool, then upload the CSV. We validate
+          each row before any horse is created. Max {BULK_HORSES_MAX} horses per upload.
         </DialogDescription>
       </DialogHeader>
 
@@ -234,8 +234,8 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
         <div className="rounded-md border p-3">
           <p className="text-sm font-medium">Step 1 — Get the template</p>
           <p className="text-muted-foreground mt-1 text-xs">
-            A CSV with the columns Cavaliq accepts. Open it in Excel / Numbers / Google Sheets,
-            fill it in, then save as CSV.
+            A CSV with the columns Cavaliq accepts. Open it in Excel / Numbers / Google Sheets, fill
+            it in, then save as CSV.
           </p>
           <Button asChild variant="outline" size="sm" className="mt-2">
             <a href="/api/v1/horses/bulk/template" download="cavaliq-horses-template.csv">
@@ -249,8 +249,7 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
         <div className="rounded-md border p-3">
           <p className="text-sm font-medium">Step 2 — Upload your filled CSV</p>
           <p className="text-muted-foreground mt-1 text-xs">
-            We&apos;ll preview every row and call out validation errors before anything is
-            saved.
+            We&apos;ll preview every row and call out validation errors before anything is saved.
           </p>
           <input
             ref={fileRef}
@@ -262,9 +261,7 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
               if (file) void onFile(file);
             }}
           />
-          {parseError && (
-            <p className="text-destructive mt-2 text-xs">{parseError}</p>
-          )}
+          {parseError && <p className="text-destructive mt-2 text-xs">{parseError}</p>}
         </div>
 
         {/* Step 3 — Preview */}
@@ -320,10 +317,7 @@ function BulkImportBody({ onDone }: { onDone: () => void }) {
             Start over
           </Button>
         )}
-        <Button
-          onClick={onSubmit}
-          disabled={validRows.length === 0 || bulkMutation.isPending}
-        >
+        <Button onClick={onSubmit} disabled={validRows.length === 0 || bulkMutation.isPending}>
           <Upload className="mr-2 h-4 w-4" />
           {bulkMutation.isPending
             ? 'Importing…'

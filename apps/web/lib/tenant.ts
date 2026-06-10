@@ -102,9 +102,7 @@ export async function getTenantContext(): Promise<TenantContext> {
           isActive: clubMembers.isActive,
         })
         .from(clubMembers)
-        .where(
-          and(eq(clubMembers.clubId, foundClub.id), eq(clubMembers.clerkUserId, userId)),
-        )
+        .where(and(eq(clubMembers.clubId, foundClub.id), eq(clubMembers.clerkUserId, userId)))
         .limit(1);
 
       const foundMember = member[0];
@@ -120,7 +118,7 @@ export async function getTenantContext(): Promise<TenantContext> {
       //      layout renders an auto-refreshing setup placeholder.
       //   2. Deactivated user whose Clerk session is still live —
       //      `deactivateMember` flips `is_active=false` in our DB.
-      //      `removeOrganizationMembership` is fail-open by design (see
+      //      `removeClerkOrgMembership` is fail-open by design (see
       //      `lib/clerk-org-membership.ts`), so a Clerk 5xx leaves the
       //      JWT carrying the stale `org:admin` role until TTL. Refusing
       //      here closes that authorization-bypass window unconditionally;

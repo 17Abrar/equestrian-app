@@ -6,13 +6,9 @@ import { toast } from 'sonner';
 import { useState } from 'react';
 import { z } from 'zod';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import {
-  createLessonTypeSchema,
-  type CreateLessonTypeFormValues,
-  type CreateLessonTypeInput,
-} from '@equestrian/shared/schemas';
+import { type CreateLessonTypeInput } from '@equestrian/shared/schemas';
 import { DEFAULT_LESSON_TYPES } from '@equestrian/shared/types';
-import { formatMoney } from '@equestrian/shared/utils';
+import { formatMoney, toMinorUnits, toMajorUnits } from '@equestrian/shared/utils';
 import {
   useLessonTypes,
   useCreateLessonType,
@@ -20,6 +16,7 @@ import {
   useDeleteLessonType,
   type LessonType,
 } from '@/hooks/use-bookings';
+import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -74,6 +71,29 @@ const editLessonTypeFormSchema = z
   });
 type EditLessonTypeFormValues = z.infer<typeof editLessonTypeFormSchema>;
 
+// Create form takes price in MAJOR units (decimal, e.g. 150.50) for the
+// human-readable input; onSubmit converts to minor units via the
+// currency-aware helper. We deliberately do NOT reuse the API
+// `createLessonTypeSchema` as the resolver here: its `price` is
+// `z.number().int()` (minor units), which rejects any fractional major-unit
+// value the user types and silently blocks submit. The API schema still
+// validates the converted payload server-side.
+const createLessonTypeFormSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    type: z.string().min(1, 'Type is required').max(100),
+    durationMinutes: z.number().int().min(15, 'Min 15 minutes'),
+    price: z.number().min(0, 'Price cannot be negative'),
+    maxRiders: z.number().int().min(1, 'At least 1 rider'),
+    minRiders: z.number().int().min(1, 'At least 1 rider'),
+    color: z.string().min(4).max(7),
+  })
+  .refine((d) => d.minRiders <= d.maxRiders, {
+    message: 'minRiders cannot exceed maxRiders',
+    path: ['minRiders'],
+  });
+type CreateLessonTypeFormFields = z.infer<typeof createLessonTypeFormSchema>;
+
 // ─── Lesson Type Form Dialog (Create) ─────────────────────────────────
 
 interface LessonTypeFormDialogProps {
@@ -83,15 +103,15 @@ interface LessonTypeFormDialogProps {
 export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
   const [open, setOpen] = useState(false);
   const createLessonType = useCreateLessonType();
+  const settingsQuery = useClubSettings();
 
-  const form = useForm<CreateLessonTypeFormValues, unknown, CreateLessonTypeInput>({
-    resolver: zodResolver(createLessonTypeSchema),
+  const form = useForm<CreateLessonTypeFormFields>({
+    resolver: zodResolver(createLessonTypeFormSchema),
     defaultValues: {
       name: '',
       type: '',
       durationMinutes: 60,
       price: 0,
-      currency: 'AED',
       maxRiders: 6,
       minRiders: 1,
       color: '#3b82f6',
@@ -104,9 +124,20 @@ export function LessonTypeFormDialog({ onSuccess }: LessonTypeFormDialogProps) {
     form.setValue('name', suggestion);
   }
 
-  async function onSubmit(data: CreateLessonTypeInput) {
+  async function onSubmit(data: CreateLessonTypeFormFields) {
     try {
-      await createLessonType.mutateAsync({ ...data, price: Math.round(data.price * 100) });
+      // Create form has no currency selector; lesson types inherit the club's
+      // currency. Convert major->minor with that currency so non-AED clubs
+      // (incl. 3-decimal KWD/BHD/OMR) are priced correctly. The settings API
+      // types currency as a plain string, but it is always a SUPPORTED_CURRENCIES
+      // value (validated at the settings layer), so the narrow is safe.
+      const clubCurrency = (settingsQuery.data?.data.currency ??
+        'AED') as CreateLessonTypeInput['currency'];
+      await createLessonType.mutateAsync({
+        ...data,
+        currency: clubCurrency,
+        price: toMinorUnits(data.price, clubCurrency),
+      });
       toast.success('Lesson type created');
       form.reset();
       setOpen(false);
@@ -393,7 +424,10 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
     defaultValues: {
       name: lessonType.name,
       durationMinutes: lessonType.durationMinutes,
-      price: lessonType.price / 100, // Convert from fils to AED for display
+      // Convert minor->major for display using the lesson type's own currency
+      // (KWD/BHD/OMR are 3-decimal, JPY 0-decimal); a hardcoded /100 mis-scales
+      // any non-2-decimal currency.
+      price: toMajorUnits(lessonType.price, lessonType.currency),
       maxRiders: lessonType.maxRiders,
       minRiders: lessonType.minRiders,
       color: lessonType.color ?? '#3b82f6',
@@ -404,7 +438,7 @@ function EditLessonTypeDialog({ lessonType }: { lessonType: LessonType }) {
     try {
       const payload: Partial<CreateLessonTypeInput> = {
         ...data,
-        price: Math.round(data.price * 100),
+        price: toMinorUnits(data.price, lessonType.currency),
       };
       await updateLessonType.mutateAsync(payload);
       toast.success('Lesson type updated');

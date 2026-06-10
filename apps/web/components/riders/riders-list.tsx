@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/form';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { PaginationControls } from '@/components/shared/pagination-controls';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 
 import { SKILL_LEVEL_COLORS } from '@/lib/ui-constants';
@@ -206,30 +207,12 @@ export function RidersList({ canCreate = true }: RidersListProps = {}) {
             ))}
           </div>
 
-          {/* Pagination */}
-          {data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-muted-foreground text-sm">
-                Page {page} of {data.pagination.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= data.pagination.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+          {/* Pagination: renders nothing on a single page */}
+          <PaginationControls
+            page={page}
+            totalPages={data.pagination.totalPages}
+            onChange={setPage}
+          />
         </>
       )}
     </div>

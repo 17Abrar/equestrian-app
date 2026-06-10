@@ -19,7 +19,7 @@ const ITEMS: FaqItem[] = [
   {
     question: 'Do you charge per-booking fees?',
     answer:
-      'No. Cavaliq charges a flat monthly subscription per stable. Your payment processor (Stripe, Ziina, or N-Genius) takes its standard fee on each transaction — that money goes straight from rider to you, not through us.',
+      'No. Cavaliq charges a flat monthly subscription per stable. Your payment processor (Stripe, Ziina, or N-Genius) takes its standard fee on each transaction. That money goes straight from rider to you, not through us.',
   },
   {
     question: 'Which payment processors are supported?',
@@ -29,12 +29,12 @@ const ITEMS: FaqItem[] = [
   {
     question: 'Can riders book without signing up first?',
     answer:
-      'Riders need a Cavaliq account to book — it’s how their progress, horse history, and invoices follow them. Sign-up is free and takes 30 seconds. They can browse your stable on Discover without an account.',
+      'Riders need a Cavaliq account to book. It is how their progress, horse history, and invoices follow them. Sign-up is free and takes 30 seconds. They can browse your stable on Discover without an account.',
   },
   {
     question: 'Is there a free trial?',
     answer:
-      'Yes — 14 days, no credit card required. You can use every feature during the trial. We only ask for payment if you decide to keep going.',
+      'Yes. 14 days, no credit card required. You can use every feature during the trial. We only ask for payment if you decide to keep going.',
   },
   {
     question: 'Can I cancel any time?',
@@ -44,7 +44,7 @@ const ITEMS: FaqItem[] = [
   {
     question: 'Is rider and horse data secure?',
     answer:
-      'Medical fields (vet diagnoses, medications, rider medical notes) are encrypted at the application layer before storage. Every database query is scoped to your club — no other stable can see your data, full stop.',
+      'Medical fields (vet diagnoses, medications, rider medical notes) are encrypted at the application layer before storage. Every database query is scoped to your club. No other stable can see your data, full stop.',
   },
   {
     question: 'Do you support multiple currencies?',
@@ -54,12 +54,12 @@ const ITEMS: FaqItem[] = [
   {
     question: 'Can coaches, grooms, and owners use Cavaliq?',
     answer:
-      'Yes. We support seven distinct roles — club admin, manager, coach, horse owner, rider, parent, and groom — each with a tailored view and permission scope. Add as many team members as you need.',
+      'Yes. We support seven distinct roles: club admin, manager, coach, horse owner, rider, parent, and groom, each with a tailored view and permission scope. Add as many team members as you need.',
   },
   {
     question: 'Where is data hosted?',
     answer:
-      'On Cloudflare’s global edge network with the database in the EU. Cloudflare is SOC 2 Type II certified. We don’t store payment card data ourselves — that goes directly to your payment processor.',
+      'On Cloudflare’s global edge network, with the database hosted on Neon (AWS, Singapore region). Cloudflare is SOC 2 Type II certified. We don’t store payment card data ourselves. That goes directly to your payment processor.',
   },
 ];
 
@@ -68,9 +68,7 @@ export function Faq() {
     <section id="faq" className="border-b py-20 sm:py-28">
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <div className="text-center">
-          <p className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
-            FAQ
-          </p>
+          <p className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">FAQ</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-balance sm:text-4xl">
             Questions stables ask before signing up.
           </h2>

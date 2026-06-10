@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -151,6 +151,21 @@ export default function BookScreen() {
   const slotsForDate = slots.filter((s) => s.date === selectedDate);
 
   const weekDateStrings = useMemo(() => week.dates.map(toDateString), [week.dates]);
+
+  // When the visible week changes (week-forward/back chevrons), selectedDate
+  // can point outside the new week, so `slots.filter(s => s.date === selectedDate)`
+  // returns [] and the rider sees a spurious "No slots available" until they
+  // manually tap a day. Snap to the first day of the visible week that is today
+  // or later (else the first day) whenever the week shifts.
+  useEffect(() => {
+    if (weekDateStrings.includes(selectedDate)) return;
+    const today = toDateString(new Date());
+    const next = weekDateStrings.find((d) => d >= today) ?? weekDateStrings[0]!;
+    setSelectedDate(next);
+    setSelectedSlot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekDateStrings]);
+
   const slotCountsByDate = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const s of slots) counts[s.date] = (counts[s.date] ?? 0) + 1;
@@ -160,11 +175,24 @@ export default function BookScreen() {
   const handleConfirmBooking = useCallback(async () => {
     if (!selectedSlot || !memberId) return;
 
-    const result = await createBooking.mutateAsync({
-      slotId: selectedSlot.id,
-      riderMemberId: memberId,
-      autoMatchHorse: true,
-    });
+    // The api-client awaits getToken() BEFORE its own try/catch, so a Clerk
+    // token-refresh blip makes mutateAsync REJECT rather than resolve to an
+    // {success:false} envelope. Without this guard the rejection skips all
+    // feedback and the button just snaps back. Mirrors community.tsx.
+    let result;
+    try {
+      result = await createBooking.mutateAsync({
+        slotId: selectedSlot.id,
+        riderMemberId: memberId,
+        autoMatchHorse: true,
+      });
+    } catch (err) {
+      Alert.alert(
+        'Booking Failed',
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
+      );
+      return;
+    }
 
     if (!result.success) {
       // Audit F-7 (2026-05-07 r5 PR Sigma): `result` is the discriminated

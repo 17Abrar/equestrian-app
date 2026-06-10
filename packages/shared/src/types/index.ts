@@ -230,6 +230,22 @@ export const HORSE_SALE_STATUS = {
 
 export type HorseSaleStatus = (typeof HORSE_SALE_STATUS)[keyof typeof HORSE_SALE_STATUS];
 
+// Canonical tuple (same single-source-of-truth rule as the 2026-05-13 P1
+// audit comment above) — `createDocumentSchema`'s `z.enum` derives from
+// this, so the const-map, the TypeScript type, and the runtime validator
+// can't drift apart.
+export const FILE_CATEGORY_VALUES = [
+  'medical_report',
+  'blood_test',
+  'xray',
+  'competition_result',
+  'registration',
+  'insurance',
+  'purchase_agreement',
+  'vaccination_certificate',
+  'other',
+] as const satisfies readonly string[];
+
 export const FILE_CATEGORY = {
   MedicalReport: 'medical_report',
   BloodTest: 'blood_test',
@@ -242,7 +258,7 @@ export const FILE_CATEGORY = {
   Other: 'other',
 } as const;
 
-export type FileCategory = (typeof FILE_CATEGORY)[keyof typeof FILE_CATEGORY];
+export type FileCategory = (typeof FILE_CATEGORY_VALUES)[number];
 
 export const COMPETITION_STATUS = {
   Draft: 'draft',

@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { UserButton } from '@clerk/nextjs';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { canCreateBookings } from '@/lib/permissions-shared';
 import {
   Home,
   CalendarPlus,
@@ -75,6 +76,14 @@ export function RiderNav() {
     return pathname.startsWith(href);
   }
 
+  // Audit FE (2026-06-07): horse owners (and any role without bookings:create)
+  // don't see the "Book" tab. They can read their own bookings/horses but can't
+  // create a booking, so the tab would dead-end on a 403 at confirm.
+  const { data: me } = useCurrentUser();
+  const role = me?.data?.role ?? null;
+  const canBook = !role || canCreateBookings(role);
+  const navItems = canBook ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.href !== '/rider/book');
+
   return (
     <header className="bg-card sticky top-0 z-50 border-b">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -88,7 +97,7 @@ export function RiderNav() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 sm:flex" aria-label="Rider navigation">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -124,7 +133,7 @@ export function RiderNav() {
         aria-label="Mobile navigation"
       >
         <div className="flex items-center justify-around py-2">
-          {NAV_ITEMS.slice(0, MOBILE_PRIMARY_COUNT).map((item) => (
+          {navItems.slice(0, MOBILE_PRIMARY_COUNT).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -138,7 +147,7 @@ export function RiderNav() {
               {item.label}
             </Link>
           ))}
-          <MobileMoreMenu activeOverflow={NAV_ITEMS.slice(MOBILE_PRIMARY_COUNT).some((i) => isActive(i.href))} />
+          <MobileMoreMenu items={navItems.slice(MOBILE_PRIMARY_COUNT)} />
         </div>
       </nav>
     </header>
@@ -152,9 +161,12 @@ export function RiderNav() {
  * the current page, mirroring the single-link active treatment of the
  * primary items.
  */
-function MobileMoreMenu({ activeOverflow }: { activeOverflow: boolean }) {
+function MobileMoreMenu({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
-  const overflowItems = NAV_ITEMS.slice(MOBILE_PRIMARY_COUNT);
+  const overflowItems = items;
+  const activeOverflow = overflowItems.some((i) =>
+    i.href === '/rider' ? pathname === '/rider' : pathname.startsWith(i.href),
+  );
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

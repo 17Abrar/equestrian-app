@@ -1,4 +1,4 @@
-import { eq, and, asc, gte, ne, sql } from 'drizzle-orm';
+import { eq, and, asc, gte, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 import { db, rawDb, writeTransaction } from '../index';
 import { clubPaymentAccounts, burnedWebhookSecretHashes } from '../schema/finances';
 import { bookings } from '../schema/bookings';
@@ -173,20 +173,6 @@ export async function getActivePaymentAccount(
     .select()
     .from(clubPaymentAccounts)
     .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.isActive, true)))
-    .limit(1);
-
-  const row = rows[0];
-  return row ? toWithCredentials(row) : null;
-}
-
-export async function getPaymentAccountByProvider(
-  clubId: string,
-  provider: PaymentProvider,
-): Promise<PaymentAccountWithCredentials | null> {
-  const rows = await db
-    .select()
-    .from(clubPaymentAccounts)
-    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)))
     .limit(1);
 
   const row = rows[0];
@@ -495,12 +481,103 @@ export async function recordPaymentAccountError(
 }
 
 /**
+ * Inverse of `recordPaymentAccountError`: clears `lastError` and restores
+ * a healthy status, called by webhook routes when signature verification
+ * SUCCEEDS on an account that previously recorded a misconfiguration.
+ *
+ * Why this exists: before it, the ONLY thing that cleared `lastError` was
+ * the reconnect flow (`upsertPaymentAccount`'s onConflict sets
+ * `lastError: null`). An operator who fixed a wrong/rotated webhook
+ * signing secret in their provider dashboard — without re-saving the
+ * connection in Settings — was stuck with the settings-panel error badge
+ * forever, even though every webhook was now verifying fine. A verified
+ * signature is cryptographic proof the stored secret matches the
+ * provider's, which is exactly the condition the recorded error claimed
+ * was broken.
+ *
+ * Status semantics — the enum is pending | connected | disabled | error:
+ *   - 'error'    → 'connected'. `recordPaymentAccountError` stamps 'error'
+ *                  unconditionally, destroying the prior value, so we can't
+ *                  literally restore "whatever it was". 'connected' is the
+ *                  honest reconstruction: a passing signature check proves
+ *                  the account is live and correctly configured, and the
+ *                  connect routes themselves stamp 'connected' on success.
+ *   - 'disabled' → untouched entirely (excluded in the WHERE, not just the
+ *                  CASE). Disconnect is a deliberate operator action; a
+ *                  late in-flight webhook that still verifies must never
+ *                  resurrect it. Note the webhook config lookups already
+ *                  filter `status != 'disabled'`, so this is belt-and-
+ *                  braces against future callers, not a live code path.
+ *   - 'pending'  → stays 'pending', only `lastError` is cleared. Promotion
+ *                  to 'connected' belongs to the connect flow.
+ *
+ * The WHERE also requires `lastError IS NOT NULL OR status = 'error'` so a
+ * call against an already-healthy row is a DB-level no-op (no row matched,
+ * no `updated_at` churn) — webhook routes additionally gate on the row
+ * they already loaded, but the guard makes a redundant call harmless even
+ * if a future caller skips that check.
+ *
+ * Compare-and-set via `seenUpdatedAt` (Codex security review, 2026-06):
+ * the caller passes the `updated_at` it observed on the row it loaded for
+ * signature verification, and the WHERE adds `updated_at <= seenUpdatedAt`.
+ * Without it, this UPDATE could erase an error recorded AFTER the route
+ * loaded its row — webhook routes load the account, verify, then clear,
+ * and a concurrent `recordPaymentAccountError` (a failing delivery racing
+ * this one) landing in that gap would be wiped by a clear that never saw
+ * it. The CAS compares two values of the SAME column on the SAME row in
+ * the same database (the snapshot the caller read vs. the live value), so
+ * there is no cross-host clock-skew axis: `recordPaymentAccountError`
+ * bumps `updated_at`, the live value becomes strictly newer than the
+ * snapshot, and the stale clear matches zero rows.
+ *
+ * Convergence argument: a clear blocked by the CAS is not lost — the row
+ * still shows `lastError`/'error', so the NEXT verified fresh webhook
+ * reloads the row (observing the newer `updated_at`, i.e. a snapshot that
+ * postdates the recorded error) and its clear succeeds. The badge can
+ * therefore only be cleared by a verification that happened against the
+ * row state which includes the most recent error, and it always
+ * eventually clears while verified deliveries keep arriving.
+ */
+export async function clearPaymentAccountError(
+  clubId: string,
+  provider: PaymentProvider,
+  seenUpdatedAt: Date,
+): Promise<void> {
+  await db
+    .update(clubPaymentAccounts)
+    .set({
+      lastError: null,
+      // Conditional in SQL (not read-then-write) so concurrent webhook
+      // deliveries racing this UPDATE can't interleave a stale status —
+      // each statement evaluates the CASE against the row's current value.
+      status: sql`CASE WHEN ${clubPaymentAccounts.status} = 'error' THEN 'connected'::payment_account_status ELSE ${clubPaymentAccounts.status} END`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(clubPaymentAccounts.clubId, clubId),
+        eq(clubPaymentAccounts.provider, provider),
+        // Deliberate states stay deliberate — see doc comment above.
+        ne(clubPaymentAccounts.status, 'disabled'),
+        // No-op write guard: only touch rows that actually have something
+        // to clear.
+        or(isNotNull(clubPaymentAccounts.lastError), eq(clubPaymentAccounts.status, 'error')),
+        // CAS guard — see doc comment above. `<=` (not `<`): equality is
+        // the normal success path (nothing touched the row since the
+        // caller's read); strictly-newer means a fresher write (e.g. a
+        // just-recorded error) must win over this stale clear.
+        lte(clubPaymentAccounts.updatedAt, seenUpdatedAt),
+      ),
+    );
+}
+
+/**
  * Webhook-time lookup: resolve a payment account (and its club) from the
  * provider's external id. Uses `rawDb` intentionally — webhook handlers have
  * no tenant context yet, so RLS would otherwise block the read.
  *
  * Only call this from webhook routes; in-app code should use the tenant-scoped
- * `getPaymentAccountByProvider`.
+ * `getActivePaymentAccount`.
  *
  * Filters out `disabled` accounts (audit B-25): a club that disconnected
  * but whose row remained will keep receiving Stripe webhooks for in-flight
@@ -856,6 +933,24 @@ export interface WebhookSecretConfig {
   clubId: string;
   externalAccountId: string | null;
   status: PaymentAccountStatus;
+  /**
+   * Most recent recorded misconfig (see `recordPaymentAccountError`).
+   * Surfaced here so webhook routes can gate the clear-on-verified-webhook
+   * write (`clearPaymentAccountError`) on the row they ALREADY loaded for
+   * signature verification — hot-path discipline: no second read and no
+   * unconditional UPDATE on every healthy delivery.
+   */
+  lastError: string | null;
+  /**
+   * Row snapshot timestamp for the clear-on-verified-webhook compare-and-
+   * set: routes thread this through `safeClearAccountError` →
+   * `clearPaymentAccountError`, whose `updated_at <= seenUpdatedAt` guard
+   * rejects a clear when anything (most importantly a concurrent
+   * `recordPaymentAccountError`) touched the row after this snapshot was
+   * read. Not a secret, not surfaced to UI — purely an optimistic-
+   * concurrency token.
+   */
+  updatedAt: Date;
   /** Stored under credentials.webhookSigningSecret today (Ziina). */
   webhookSigningSecret: string | null;
   /** N-Genius pair — stored under credentials.{webhookHeaderName,webhookHeaderValue}. */
@@ -887,6 +982,8 @@ function rowToWebhookSecretConfig(row: PaymentAccountRow): WebhookSecretConfig {
     clubId: row.clubId,
     externalAccountId: row.externalAccountId,
     status: row.status,
+    lastError: row.lastError,
+    updatedAt: row.updatedAt,
     webhookSigningSecret: typeof signingSecret === 'string' ? signingSecret : null,
     webhookHeaderName: typeof headerName === 'string' ? headerName : null,
     webhookHeaderValue: typeof headerValue === 'string' ? headerValue : null,

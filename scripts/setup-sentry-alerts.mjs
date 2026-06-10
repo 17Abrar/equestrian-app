@@ -16,8 +16,9 @@
  *
  *   pnpm sentry:alerts
  *
- * The pnpm script wraps `node --env-file=.env.local`, so it picks up the
- * SENTRY_* values stored there automatically. Required env:
+ * The pnpm script wraps `node --env-file-if-exists=.env.local`, so it picks up
+ * the SENTRY_* values stored there automatically (and is a no-op if the file is
+ * absent, e.g. in CI). Required env:
  *
  *   SENTRY_ALERTS_AUTH_TOKEN  user token with `alerts:write` + `project:read`
  *                              (or fall back to SENTRY_AUTH_TOKEN if that's

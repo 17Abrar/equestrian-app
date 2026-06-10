@@ -8,6 +8,8 @@ import {
 } from '@equestrian/db/queries';
 import { logger } from '@/lib/logger';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/request-ip';
 
 /**
  * Resend webhook receiver. Pass-7 integration audit MED (2026-05-25).
@@ -50,13 +52,6 @@ interface ResendEvent {
   };
 }
 
-const ACTIONABLE_EVENT_TYPES = new Set([
-  'email.bounced',
-  'email.complained',
-  'email.failed',
-  'email.delivery_delayed',
-]);
-
 const NOOP_EVENT_TYPES = new Set([
   'email.sent',
   'email.delivered',
@@ -67,6 +62,20 @@ const NOOP_EVENT_TYPES = new Set([
 
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
+
+  // IP-keyed failClosed rate limit, matching the Stripe / Ziina / N-Genius
+  // webhook receivers. This route is on the public allowlist, so without it
+  // an attacker can drive unbounded svix HMAC + webhook_events load.
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`webhook:resend:${ip}`, {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosed: true,
+  });
+  if (!rl.allowed) {
+    logger.warn('resend_webhook_rate_limited', { ip, requestId });
+    return new Response('Too many requests', { status: 429 });
+  }
 
   const body = await readWebhookBody(request, WEBHOOK_BODY_CAPS.resend, 'resend');
   if (body === null) {
@@ -220,8 +229,3 @@ export async function POST(request: Request) {
     return new Response('Webhook processing failed', { status: 500 });
   }
 }
-
-// `ACTIONABLE_EVENT_TYPES` exported indirectly via TypeScript suppress —
-// referenced here to keep the set live for the next iteration that adds
-// suppression-list logic.
-void ACTIONABLE_EVENT_TYPES;

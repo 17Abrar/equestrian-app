@@ -28,7 +28,8 @@ export function formatBookingDate(date: string): string {
 export function formatBookingTime(time: string): string {
   const parts = time.split(':');
   const hours = parseInt(parts[0] ?? '', 10);
-  const minutes = parts[1] ?? '00';
+  // Zero-pad so "9:5" renders "9:05 AM", not "9:5 AM".
+  const minutes = (parts[1] ?? '00').padStart(2, '0');
   if (isNaN(hours)) return time;
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const displayHour = hours % 12 || 12;

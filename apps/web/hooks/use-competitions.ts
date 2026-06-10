@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   type CreateCompetitionInput,
-  type UpdateCompetitionInput,
   type CreateCompetitionClassInput,
   type CreateCompetitionEntryInput,
   type CreateCompetitionResultInput,
@@ -92,23 +91,6 @@ export function useCreateCompetition() {
   });
 }
 
-export function useUpdateCompetition(competitionId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: UpdateCompetitionInput) =>
-      fetchJson<ApiResponse<Competition>>(`/api/v1/competitions/${competitionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...COMPETITIONS_KEY, 'list'] });
-      void queryClient.invalidateQueries({ queryKey: competitionDetailKey(competitionId) });
-    },
-  });
-}
-
 export function useDeleteCompetition() {
   const queryClient = useQueryClient();
 
@@ -185,27 +167,6 @@ export function useCreateCompetitionEntry(competitionId: string, classId: string
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
-        },
-      ),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: competitionEntriesKey(competitionId, classId),
-      });
-    },
-  });
-}
-
-export function useWithdrawCompetitionEntry(competitionId: string, classId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ entryId, reason }: { entryId: string; reason: string }) =>
-      fetchJson<ApiResponse<CompetitionEntry>>(
-        `/api/v1/competitions/${competitionId}/classes/${classId}/entries/${entryId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason }),
         },
       ),
     onSuccess: () => {

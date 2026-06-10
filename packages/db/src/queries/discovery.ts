@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, sql, ilike, type inArray, type SQL } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql, ilike, type SQL } from 'drizzle-orm';
 import { escapeLikePattern } from '@equestrian/shared/utils';
 import { rawDb } from '../index';
 import { clubs } from '../schema/clubs';
@@ -237,8 +237,6 @@ export async function joinClubInstantly(input: {
 export type PublicClub = Awaited<ReturnType<typeof listPublicClubs>>['data'][number];
 export type PublicClubProfile = NonNullable<Awaited<ReturnType<typeof getPublicClubBySlug>>>;
 
-// Silence unused-import for barrel re-exports that may go unused in Workers bundle.
-export type _DiscoveryInArrayUnused = typeof inArray;
 // `clubJoinRequests` is held by the schema for the dropped approval-queue
 // flow (audit F-13); referencing the symbol here keeps the import live so
 // the schema package's `export *` still emits the table type for any

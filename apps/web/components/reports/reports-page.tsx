@@ -117,14 +117,13 @@ export function ReportsPage() {
           // non-AED club with zero rows in the period sees `AED 0`
           // when their settings query fails. Codex P3 (2026-05-26).
           hasError={
-            revenue.isError ||
-            (sortedRevenueCurrencies.length === 0 && settingsQuery.isError)
+            revenue.isError || (sortedRevenueCurrencies.length === 0 && settingsQuery.isError)
           }
           rollup={sortedRevenueCurrencies}
           fallbackCurrency={currency}
         />
         <SummaryCard
-          title="Bookings"
+          title="Paid Bookings"
           value={String(totalBookings)}
           icon={BarChart3}
           loading={revenue.isLoading}

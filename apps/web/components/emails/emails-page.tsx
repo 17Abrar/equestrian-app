@@ -246,9 +246,7 @@ function SingleRecipientForm({ prefillTo }: { prefillTo?: string }) {
         <label className="text-sm font-medium">Subject *</label>
         <Input placeholder="Email subject..." className="mt-1" {...form.register('subject')} />
         {form.formState.errors.subject && (
-          <p className="text-destructive mt-1 text-xs">
-            {form.formState.errors.subject.message}
-          </p>
+          <p className="text-destructive mt-1 text-xs">{form.formState.errors.subject.message}</p>
         )}
       </div>
       <div>
@@ -300,9 +298,8 @@ function BroadcastForm() {
   // sets `isError`, not a `{success: false}` envelope. Surface that
   // path separately so users see a recovery action instead of the
   // "create an audience first" empty state — caught by codex.
-  const audiences = audiencesQuery.data && audiencesQuery.data.success
-    ? audiencesQuery.data.data
-    : [];
+  const audiences =
+    audiencesQuery.data && audiencesQuery.data.success ? audiencesQuery.data.data : [];
   const audienceFetchError = audiencesQuery.isError
     ? audiencesQuery.error instanceof Error
       ? audiencesQuery.error.message
@@ -423,9 +420,7 @@ function BroadcastForm() {
 
         <div className="flex justify-end">
           <TemplateGalleryDialog
-            hasUnsavedContent={Boolean(
-              form.watch('subject')?.trim() || form.watch('body')?.trim(),
-            )}
+            hasUnsavedContent={Boolean(form.watch('subject')?.trim() || form.watch('body')?.trim())}
             onPick={(template) => {
               form.setValue('subject', template.subject, { shouldDirty: true });
               form.setValue('body', template.body, { shouldDirty: true });
@@ -437,9 +432,7 @@ function BroadcastForm() {
           <label className="text-sm font-medium">Subject *</label>
           <Input placeholder="Email subject..." className="mt-1" {...form.register('subject')} />
           {form.formState.errors.subject && (
-            <p className="text-destructive mt-1 text-xs">
-              {form.formState.errors.subject.message}
-            </p>
+            <p className="text-destructive mt-1 text-xs">{form.formState.errors.subject.message}</p>
           )}
         </div>
 
@@ -452,9 +445,7 @@ function BroadcastForm() {
             {...form.register('body')}
           />
           {form.formState.errors.body && (
-            <p className="text-destructive mt-1 text-xs">
-              {form.formState.errors.body.message}
-            </p>
+            <p className="text-destructive mt-1 text-xs">{form.formState.errors.body.message}</p>
           )}
           <p className="text-muted-foreground mt-1 text-xs">
             Plain text only — formatting and links render as written. Suppressed addresses are
@@ -489,8 +480,8 @@ function BroadcastForm() {
               This will queue an email to {selectedAudience?.memberCount ?? 0} rider
               {selectedAudience?.memberCount === 1 ? '' : 's'} in
               <strong> {selectedAudience?.name}</strong> with subject{' '}
-              <strong>“{confirming?.subject}”</strong>. Sends run in the background;
-              delivery results land in the worker logs. There’s no undo.
+              <strong>“{confirming?.subject}”</strong>. Sends run in the background; delivery
+              results land in the worker logs. There’s no undo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

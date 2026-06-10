@@ -2,7 +2,7 @@ import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { db } from '@equestrian/db';
 import { clubs, clubMembers } from '@equestrian/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import {
   claimWebhookEvent,
   markWebhookEventFailed,
@@ -385,7 +385,11 @@ async function handlePost(request: Request) {
               role: mapClerkRoleToAppRole(memberData.role),
               displayName,
               email: userData.identifier,
-              isActive: true,
+              // Never let a webhook (or a Svix redelivery) resurrect a member
+              // an admin has kicked. Mirrors the CASE guard in
+              // bootstrapClubAndMembership / joinClubInstantly so the
+              // deactivated_by_admin_at stamp is the single source of truth.
+              isActive: sql`CASE WHEN ${clubMembers.deactivatedByAdminAt} IS NULL THEN true ELSE ${clubMembers.isActive} END`,
               updatedAt: new Date(),
             },
           });

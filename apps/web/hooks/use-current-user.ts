@@ -23,8 +23,11 @@ interface Membership {
 interface CurrentUser {
   userId: string;
   memberId: string | null;
-  orgId: string;
-  role: UserRole;
+  // Audit FE (2026-06-07): null for an authenticated user who has not joined
+  // any club yet. /api/v1/me returns a clubless payload (200) for that state
+  // instead of a 400, so the "find a stable" UI renders without a console error.
+  orgId: string | null;
+  role: UserRole | null;
   activeClub: ActiveClub | null;
   memberships: Membership[];
 }

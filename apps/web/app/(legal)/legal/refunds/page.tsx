@@ -17,12 +17,12 @@ export default function RefundsPage() {
       summary="Bookings are between you and the Club. Each Club sets its own cancellation rules within the framework on this page, and the Club's own policy is shown to you before you pay. Refunds are typically returned within 5–10 business days to the original payment method."
     >
       <p>
-        This page describes the default cancellation framework that applies to bookings made
-        through Cavaliq. Each Club can configure its own cancellation rules within this framework;
-        when the rules differ, the Club&rsquo;s own policy &mdash; <strong>which is shown to you on
-        the booking page before you pay</strong> &mdash; is what governs your booking. If anything
-        in this page conflicts with the policy you accepted at checkout, the policy you accepted
-        controls.
+        This page describes the default cancellation framework that applies to bookings made through
+        Cavaliq. Each Club can configure its own cancellation rules within this framework; when the
+        rules differ, the Club&rsquo;s own policy &mdash;{' '}
+        <strong>which is shown to you on the booking page before you pay</strong> &mdash; is what
+        governs your booking. If anything in this page conflicts with the policy you accepted at
+        checkout, the policy you accepted controls.
       </p>
 
       <h2 id="cancelling">1. Cancelling a lesson you booked</h2>
@@ -46,14 +46,14 @@ export default function RefundsPage() {
         </li>
       </ul>
       <p>
-        Clubs can be stricter or more generous than this default. The exact windows for your
-        booking are always shown on the booking confirmation.
+        Clubs can be stricter or more generous than this default. The exact windows for your booking
+        are always shown on the booking confirmation.
       </p>
 
       <h2 id="club-cancels">2. When the Club cancels</h2>
       <p>
-        Sometimes the Club has to cancel a lesson at short notice — bad weather, an injured horse,
-        a coach off sick, or a safety issue with an arena. When the Club cancels:
+        Sometimes the Club has to cancel a lesson at short notice — bad weather, an injured horse, a
+        coach off sick, or a safety issue with an arena. When the Club cancels:
       </p>
       <ul>
         <li>You always get a full refund or a free reschedule, your choice.</li>
@@ -104,22 +104,20 @@ export default function RefundsPage() {
       <h2 id="disputes">6. Chargebacks and disputes</h2>
       <p>
         If you have a problem with a booking, please contact the Club first; most issues can be
-        resolved directly. Filing a chargeback with your card issuer for a charge you authorised
-        and received the service for may result in the Club suspending your account and recovering
-        the disputed amount and any fees through other means.
+        resolved directly. Filing a chargeback with your card issuer for a charge you authorised and
+        received the service for may result in the Club suspending your account and recovering the
+        disputed amount and any fees through other means.
       </p>
 
       <h2 id="prices-vat">7. Prices and VAT</h2>
       <p>
         Prices shown to riders include VAT where the Club is VAT-registered, in line with UAE
-        Federal Tax Authority rules. Prices for Cavaliq&rsquo;s own subscriptions to Clubs are
-        shown both excluding and including VAT on the billing page.
+        Federal Tax Authority rules. Prices for Cavaliq&rsquo;s own subscriptions to Clubs are shown
+        both excluding and including VAT on the billing page.
       </p>
 
       <h2 id="contact">8. Contact</h2>
-      <p>
-        Refund questions about a specific lesson: contact the Club.
-      </p>
+      <p>Refund questions about a specific lesson: contact the Club.</p>
       <p>
         Questions about this policy or a problem with the platform itself: write to{' '}
         <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>.

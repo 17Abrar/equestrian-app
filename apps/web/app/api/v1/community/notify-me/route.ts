@@ -1,6 +1,12 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { errorResponse, successResponse } from '@/lib/api-utils';
+import {
+  bodyErrorResponse,
+  errorResponse,
+  parseRequiredBody,
+  rateLimitedResponse,
+  successResponse,
+} from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/request-ip';
 import { sendOperationalEmailAsync } from '@/lib/email-support';
@@ -34,22 +40,15 @@ export async function POST(request: NextRequest) {
   // a cross-origin `fetch` from a hostile site with `Content-Type:
   // text/plain` (or `text/plain; note=application/json` to bypass a
   // substring check) is a CORS-safelisted "simple request" — no
-  // preflight fires and `request.json()` would still parse the body.
+  // preflight fires and the JSON body parse would still succeed.
   // Requiring exact `application/json` forces the browser to preflight,
   // which the CORS allowlist in middleware.ts blocks for non-approved
   // origins. Parse the media type out of the full header so legitimate
   // `application/json; charset=utf-8` still passes. Caught by codex
   // review on this PR's first and second passes.
-  const mediaType = (request.headers.get('content-type') ?? '')
-    .split(';')[0]
-    ?.trim()
-    .toLowerCase();
+  const mediaType = (request.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase();
   if (mediaType !== 'application/json') {
-    return errorResponse(
-      'UNSUPPORTED_MEDIA_TYPE',
-      'Content-Type must be application/json',
-      415,
-    );
+    return errorResponse('UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json', 415);
   }
 
   const ip = getClientIp(request);
@@ -64,34 +63,19 @@ export async function POST(request: NextRequest) {
     failClosed: true,
   });
   if (!rl.allowed) {
-    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
-      },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-    );
+    return rateLimitedResponse(rl, { message: 'Too many requests. Please try again later.' });
   }
 
-  let body: unknown;
+  let data: z.infer<typeof notifyMeSchema>;
   try {
-    body = await request.json();
-  } catch {
-    return errorResponse('INVALID_JSON', 'Body must be valid JSON', 400);
+    data = await parseRequiredBody(request, notifyMeSchema);
+  } catch (error) {
+    const response = bodyErrorResponse(error, 'Please check your email and try again');
+    if (response) return response;
+    throw error;
   }
 
-  const parsed = notifyMeSchema.safeParse(body);
-  if (!parsed.success) {
-    return errorResponse(
-      'VALIDATION_ERROR',
-      'Please check your email and try again',
-      400,
-      parsed.error.flatten(),
-    );
-  }
-
-  const { email, source } = parsed.data;
+  const { email, source } = data;
 
   const text = [
     `New community waitlist signup`,

@@ -122,7 +122,7 @@ async function verifyCronSecretBinding(env, ctx) {
       Sentry.captureMessage('cron_secret_binding_mismatch', {
         level: 'error',
         tags: { component: 'worker-entry', signal: 'cron_secret_binding_mismatch' },
-        extra: { routeErrorCode, routeErrorMessage, status: res.status },
+        extra: { routeErrorCode: errorCode, routeErrorMessage: errorMessage, status: res.status },
       });
     } else if (res.status === 401) {
       console.error('cron_secret_binding_drift', {
@@ -135,7 +135,7 @@ async function verifyCronSecretBinding(env, ctx) {
       Sentry.captureMessage('cron_secret_binding_drift', {
         level: 'error',
         tags: { component: 'worker-entry', signal: 'cron_secret_binding_drift' },
-        extra: { routeErrorCode, routeErrorMessage, status: res.status },
+        extra: { routeErrorCode: errorCode, routeErrorMessage: errorMessage, status: res.status },
       });
     } else if (res.status !== 200) {
       console.error('cron_secret_binding_unexpected', {
@@ -146,7 +146,7 @@ async function verifyCronSecretBinding(env, ctx) {
       Sentry.captureMessage('cron_secret_binding_unexpected', {
         level: 'warning',
         tags: { component: 'worker-entry', signal: 'cron_secret_binding_unexpected' },
-        extra: { routeErrorCode, routeErrorMessage, status: res.status },
+        extra: { routeErrorCode: errorCode, routeErrorMessage: errorMessage, status: res.status },
       });
     }
   } catch (err) {

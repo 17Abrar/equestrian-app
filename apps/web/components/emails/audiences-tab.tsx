@@ -80,7 +80,12 @@ export function AudiencesTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['audiences'],
-    queryFn: () => fetchJson<ApiEnvelope<Audience[]>>('/api/v1/emails/audiences'),
+    // Request the API's max page size (50). Without an explicit pageSize the
+    // route defaults to 25, silently hiding audiences past the first page in
+    // this management surface (no pagination UI exists here). Matches the
+    // broadcast picker's ?pageSize=50. Clubs exceeding 50 audiences still
+    // need real Prev/Next controls — tracked as a follow-up.
+    queryFn: () => fetchJson<ApiEnvelope<Audience[]>>('/api/v1/emails/audiences?pageSize=50'),
   });
 
   // Audit F-28 (2026-05-06): content-shape skeleton — audiences

@@ -5,22 +5,21 @@ import { SupportForm } from './support-form';
 
 export const metadata: Metadata = {
   title: 'Support',
-  description: "Get help from the Cavaliq team. Email us or send a message through the form below.",
+  description: 'Get help from the Cavaliq team. Email us or send a message through the form below.',
 };
 
 export default function SupportPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
       <header className="border-b pb-8">
-        <p className="text-muted-foreground text-sm font-medium uppercase tracking-wide">Support</p>
+        <p className="text-muted-foreground text-sm font-medium tracking-wide uppercase">Support</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">How can we help?</h1>
         <p className="text-muted-foreground mt-4 max-w-2xl text-base leading-relaxed">
           Send us a message below, or email{' '}
           <a href="mailto:info@cavaliq.com" className="text-foreground underline">
             info@cavaliq.com
           </a>{' '}
-          directly. Typical first response within one business day; security disclosures within
-          two.
+          directly. Typical first response within one business day; security disclosures within two.
         </p>
       </header>
 
@@ -55,7 +54,7 @@ export default function SupportPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border bg-muted/30 p-4">
+          <section className="bg-muted/30 rounded-lg border p-4">
             <h3 className="text-sm font-semibold">Response times</h3>
             <ul className="text-muted-foreground mt-3 space-y-2 text-xs">
               <li className="flex gap-2">
@@ -72,7 +71,11 @@ export default function SupportPage() {
               </li>
             </ul>
             <p className="text-muted-foreground mt-3 text-xs">
-              See the <Link href="/legal/sla" className="underline">SLA</Link> for full details.
+              See the{' '}
+              <Link href="/legal/sla" className="underline">
+                SLA
+              </Link>{' '}
+              for full details.
             </p>
           </section>
         </aside>

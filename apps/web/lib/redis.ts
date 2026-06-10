@@ -29,12 +29,6 @@ export function getRedis(): Redis | null {
   return redisClient;
 }
 
-/** Reset the memoised client. Intended for tests. */
-export function __resetRedisForTest(): void {
-  redisClient = null;
-  resolvedClient = false;
-}
-
 export function logRedisUnavailable(context: string, err: unknown): void {
   logger.warn('redis_unavailable', {
     context,

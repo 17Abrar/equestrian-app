@@ -87,8 +87,8 @@ export default function CommunityScreen() {
               Community is on the way
             </Text>
             <Text className="mt-2 text-center text-sm text-gray-500">
-              Photos, progress, and announcements from your stable, right here. Drop your
-              email and we’ll let you know the moment it’s ready.
+              Photos, progress, and announcements from your stable, right here. Drop your email and
+              we’ll let you know the moment it’s ready.
             </Text>
           </View>
 

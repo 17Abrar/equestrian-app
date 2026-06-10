@@ -6,7 +6,17 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
-import { Plus, Clock, CheckCircle2, XCircle, Archive, RotateCcw, Rabbit, Receipt, Handshake } from 'lucide-react';
+import {
+  Plus,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Archive,
+  RotateCcw,
+  Rabbit,
+  Receipt,
+  Handshake,
+} from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -254,8 +264,8 @@ export default function RiderHorsesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Retire {retiring?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This stops livery billing going forward. You can reactivate from the Retired
-              section later — the stable will re-approve with a fresh livery fee.
+              This stops livery billing going forward. You can reactivate from the Retired section
+              later — the stable will re-approve with a fresh livery fee.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -267,10 +277,7 @@ export default function RiderHorsesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={!!reactivating}
-        onOpenChange={(open) => !open && setReactivating(null)}
-      >
+      <AlertDialog open={!!reactivating} onOpenChange={(open) => !open && setReactivating(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reactivate {reactivating?.name}?</AlertDialogTitle>

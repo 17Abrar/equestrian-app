@@ -1,7 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { paginationSchema } from '@equestrian/shared/schemas';
 import { getLiveryInvoicesOwnedByUser } from '@equestrian/db/queries';
-import { withAuth, paginatedResponse, validateInput } from '@/lib/api-utils';
+import { withAuth, paginatedResponse, parsePagination } from '@/lib/api-utils';
 
 /**
  * Owner's own livery invoices, across every stable they own a horse at.
@@ -9,11 +8,7 @@ import { withAuth, paginatedResponse, validateInput } from '@/lib/api-utils';
  */
 export async function GET(request: NextRequest) {
   return withAuth(async (ctx) => {
-    const url = new URL(request.url);
-    const { page, pageSize } = validateInput(paginationSchema, {
-      page: url.searchParams.get('page') ?? undefined,
-      pageSize: url.searchParams.get('pageSize') ?? undefined,
-    });
+    const { page, pageSize } = parsePagination(request);
     const { items, total } = await getLiveryInvoicesOwnedByUser(ctx.userId, { page, pageSize });
     return paginatedResponse(items, { page, pageSize, total });
   });

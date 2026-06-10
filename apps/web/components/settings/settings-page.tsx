@@ -10,6 +10,7 @@ import {
   type UpdateClubProfileInput,
   type UpdateBookingRulesInput,
 } from '@equestrian/shared/schemas';
+import { type SupportedCurrency } from '@equestrian/shared/constants';
 import { useClubSettings, useUpdateSettings, type ClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -187,18 +188,7 @@ function ClubProfileForm({ settings }: { settings: ClubSettings }) {
       // Audit 2026-05-13: API response types currency as `string`; cast to
       // the narrowed SupportedCurrency union the form expects. The server
       // already enforced the enum at write time.
-      currency: (settings.currency ?? 'AED') as
-        | 'AED'
-        | 'SAR'
-        | 'KWD'
-        | 'BHD'
-        | 'QAR'
-        | 'OMR'
-        | 'USD'
-        | 'EUR'
-        | 'GBP'
-        | 'CAD'
-        | 'AUD',
+      currency: (settings.currency ?? 'AED') as SupportedCurrency,
       logoUrl: settings.logoUrl ?? '',
       websiteUrl: settings.websiteUrl ?? '',
       socialInstagram: settings.socialInstagram ?? '',
@@ -561,9 +551,8 @@ function BookingRulesForm({ settings }: { settings: ClubSettings }) {
                       <NumberInput min="1" max="60" {...field} />
                     </FormControl>
                     <FormDescription>
-                      Minutes to wait before auto-cancelling a confirmed booking whose payment
-                      never completed. Slot is released and rider is emailed. Range 1–60;
-                      default 15.
+                      Minutes to wait before auto-cancelling a confirmed booking whose payment never
+                      completed. Slot is released and rider is emailed. Range 1–60; default 15.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

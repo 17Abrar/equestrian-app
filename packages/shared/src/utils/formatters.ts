@@ -11,8 +11,11 @@ import { formatMoney } from './money';
  */
 export function formatTime(timeStr: string): string {
   const parts = timeStr.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
+  // `?? 0` only catches missing parts, not `Number('ab') === NaN`, which would
+  // render "NaN:NaN" despite the docstring's 0-fallback promise. Guard on
+  // finiteness so non-numeric input collapses to 0.
+  const hours = Number.isFinite(parts[0]) ? (parts[0] as number) : 0;
+  const minutes = Number.isFinite(parts[1]) ? (parts[1] as number) : 0;
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHour = hours % 12 || 12;
   return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;

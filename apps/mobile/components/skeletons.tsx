@@ -45,36 +45,6 @@ export function ShimmerBox({ className, style }: ShimmerBoxProps) {
 }
 
 /**
- * Skeleton matching the `BookingCard` shape in `apps/mobile/app/(tabs)/index.tsx`:
- * a rounded card with a title line, subtitle line, secondary line, and a
- * status pill on the right.
- */
-export function BookingCardSkeleton() {
-  return (
-    <View className="rounded-2xl border border-gray-200 bg-white p-4">
-      <View className="flex-row items-start justify-between">
-        <View className="flex-1 gap-2">
-          <ShimmerBox className="h-4 w-3/4 rounded bg-gray-200" />
-          <ShimmerBox className="h-3 w-1/2 rounded bg-gray-200" />
-          <ShimmerBox className="h-3 w-2/5 rounded bg-gray-200" />
-        </View>
-        <ShimmerBox className="h-6 w-20 rounded-full bg-gray-200" />
-      </View>
-    </View>
-  );
-}
-
-export function BookingListSkeleton({ count = 3 }: { count?: number }) {
-  return (
-    <View className="gap-3 px-6">
-      {Array.from({ length: count }).map((_, i) => (
-        <BookingCardSkeleton key={i} />
-      ))}
-    </View>
-  );
-}
-
-/**
  * Skeleton matching the `HorseCard` shape in `apps/mobile/app/(tabs)/horses.tsx`:
  * a rounded card with a 64x64 photo placeholder, two text lines, and two
  * status pills.

@@ -5,7 +5,7 @@ import {
   MAX_PAGE_SIZE,
   SUPPORTED_CURRENCIES,
 } from '../constants';
-import { PAYMENT_METHOD_VALUES } from '../types';
+import { FILE_CATEGORY_VALUES, PAYMENT_METHOD_VALUES } from '../types';
 
 // Audit 2026-05-13 (P1): canonical currency field used by every inbound
 // schema. Validating against SUPPORTED_CURRENCIES (vs raw `length(3)`)
@@ -54,7 +54,10 @@ const httpsUrl = z
   .max(2000)
   .refine((v) => HTTPS_URL_RE.test(v), { message: 'URL must start with http:// or https://' });
 const optionalUrl = z.union([httpsUrl, z.literal('')]).optional();
-const nullableOptionalUrl = z.union([httpsUrl, z.literal('')]).nullable().optional();
+const nullableOptionalUrl = z
+  .union([httpsUrl, z.literal('')])
+  .nullable()
+  .optional();
 
 // Audit pass-7 (2026-05-24 MED-1): social-profile fields previously accepted
 // any string up to 255 chars, so a club admin could persist
@@ -169,8 +172,8 @@ export const createHorseSchema = z
     insuranceCoverage: z.string().max(500).optional(),
     insuranceExpiry: z.string().max(50).optional(),
 
-    primaryPhotoUrl: z.string().url().max(2000).optional(),
-    photoUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+    primaryPhotoUrl: httpsUrl.optional(),
+    photoUrls: z.array(httpsUrl).max(20).optional(),
     notes: z.string().max(2000).optional(),
     ownerMemberId: z.string().uuid().optional(),
   })
@@ -252,12 +255,10 @@ const strictIsoDateOptional = z
 // as the server's bulk endpoint. Codex P2 (2026-05-28): a separate
 // preview schema let invalid dates slip through preview only to bomb
 // the final submit, leaving the operator with no per-row feedback.
-export const bulkCreateHorseRowSchema = createHorseSchema
-  .omit({ ownerMemberId: true })
-  .extend({
-    dateOfBirth: strictIsoDateOptional,
-    insuranceExpiry: strictIsoDateOptional,
-  });
+export const bulkCreateHorseRowSchema = createHorseSchema.omit({ ownerMemberId: true }).extend({
+  dateOfBirth: strictIsoDateOptional,
+  insuranceExpiry: strictIsoDateOptional,
+});
 export type BulkCreateHorseRowInput = z.output<typeof bulkCreateHorseRowSchema>;
 
 export const bulkCreateHorsesSchema = z
@@ -277,10 +278,9 @@ export const bulkCreateHorsesSchema = z
     csvRowNumbers: z.array(z.number().int().positive()).optional(),
   })
   .strict()
-  .refine(
-    (d) => !d.csvRowNumbers || d.csvRowNumbers.length === d.horses.length,
-    { message: 'csvRowNumbers length must match horses length' },
-  );
+  .refine((d) => !d.csvRowNumbers || d.csvRowNumbers.length === d.horses.length, {
+    message: 'csvRowNumbers length must match horses length',
+  });
 
 export type BulkCreateHorsesInput = z.output<typeof bulkCreateHorsesSchema>;
 
@@ -333,7 +333,7 @@ export const registerHorseOwnershipSchema = z
     heightHands: optionalNumeric(z.number().positive()),
     weightKg: optionalNumeric(z.number().positive()),
     skillLevel: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-    primaryPhotoUrl: z.string().url().max(2000).optional(),
+    primaryPhotoUrl: httpsUrl.optional(),
     notes: z.string().max(2000).optional(),
   })
   .strict();
@@ -999,7 +999,7 @@ export const createHealthRecordSchema = z
     followUpDate: z.string().max(50).optional(),
     batchNumber: z.string().max(100).optional(),
     productUsed: z.string().max(255).optional(),
-    documentUrls: z.array(z.string().url().max(2000)).max(20).optional(),
+    documentUrls: z.array(httpsUrl).max(20).optional(),
   })
   .strict();
 
@@ -1072,18 +1072,6 @@ export type CreateExerciseScheduleFormValues = z.input<typeof createExerciseSche
 export type CreateExerciseScheduleInput = z.output<typeof createExerciseScheduleSchema>;
 export const updateExerciseScheduleSchema = createExerciseScheduleSchema.partial().strict();
 
-const FILE_CATEGORIES = [
-  'medical_report',
-  'blood_test',
-  'xray',
-  'competition_result',
-  'registration',
-  'insurance',
-  'purchase_agreement',
-  'vaccination_certificate',
-  'other',
-] as const;
-
 export const createDocumentSchema = z
   .object({
     fileName: z.string().min(1, 'File name is required').max(255),
@@ -1104,7 +1092,7 @@ export const createDocumentSchema = z
     // MIMEs (presentationml = 73, spreadsheetml = 79) without going
     // unbounded; migration 0059 widens the DB column to match.
     fileType: z.string().min(1).max(127),
-    category: z.enum(FILE_CATEGORIES).default('other'),
+    category: z.enum(FILE_CATEGORY_VALUES).default('other'),
     description: z.string().max(2000).optional(),
   })
   .strict();

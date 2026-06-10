@@ -4,7 +4,8 @@ import { LegalPage } from '@/components/shared/legal-page';
 
 export const metadata: Metadata = {
   title: 'Service level agreement',
-  description: 'Uptime commitment, exclusions, support response targets, and service credits for Cavaliq.',
+  description:
+    'Uptime commitment, exclusions, support response targets, and service credits for Cavaliq.',
 };
 
 export default function SlaPage() {
@@ -32,9 +33,7 @@ export default function SlaPage() {
           (defined below).
         </li>
       </ul>
-      <p>
-        Monthly uptime percentage is calculated as:
-      </p>
+      <p>Monthly uptime percentage is calculated as:</p>
       <p>
         <code>
           (Total Minutes In Month − Excluded Minutes − Downtime) ÷ (Total Minutes In Month −
@@ -60,14 +59,16 @@ export default function SlaPage() {
         <li>Emergency maintenance to respond to a security threat;</li>
         <li>
           Issues caused by something outside Cavaliq&rsquo;s reasonable control: a third-party
-          internet outage, an action by a regulator, an act of war or natural disaster, or a
-          general internet attack;
+          internet outage, an action by a regulator, an act of war or natural disaster, or a general
+          internet attack;
         </li>
         <li>
           Issues caused by a third-party service the Club has chosen to connect — for example, an
           outage at the Club&rsquo;s payment processor or the Club&rsquo;s own email server;
         </li>
-        <li>Issues caused by the Club or its users (e.g. misconfigured permissions, deleted data);</li>
+        <li>
+          Issues caused by the Club or its users (e.g. misconfigured permissions, deleted data);
+        </li>
         <li>
           Issues affecting only a feature in beta or labelled as &ldquo;preview&rdquo; or
           &ldquo;experimental.&rdquo;
@@ -95,17 +96,17 @@ export default function SlaPage() {
       </ul>
       <p>
         Service credits are the Club&rsquo;s sole and exclusive remedy for failure to meet the
-        uptime commitment. To claim, email{' '}
-        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> within 30 days of the end of
-        the affected month with the impacted dates and times. Credits are not paid out in cash, are
-        not transferable, and cannot exceed 100% of the affected month&rsquo;s fee.
+        uptime commitment. To claim, email <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>{' '}
+        within 30 days of the end of the affected month with the impacted dates and times. Credits
+        are not paid out in cash, are not transferable, and cannot exceed 100% of the affected
+        month&rsquo;s fee.
       </p>
 
       <h2 id="support">4. Support response targets</h2>
       <p>
-        Support is available via email at{' '}
-        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> and via the in-product help
-        link. Response targets are best-effort and do not give rise to service credits.
+        Support is available via email at <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> and
+        via the in-product help link. Response targets are best-effort and do not give rise to
+        service credits.
       </p>
       <table className="my-6 w-full border-collapse text-sm">
         <thead>
@@ -144,9 +145,7 @@ export default function SlaPage() {
           </tr>
         </tbody>
       </table>
-      <p>
-        Business hours are 9am–6pm GST, Sunday–Thursday, excluding UAE public holidays.
-      </p>
+      <p>Business hours are 9am–6pm GST, Sunday–Thursday, excluding UAE public holidays.</p>
 
       <h2 id="changes">5. Changes</h2>
       <p>

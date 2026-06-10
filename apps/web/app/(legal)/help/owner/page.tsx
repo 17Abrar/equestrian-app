@@ -23,19 +23,31 @@ export default function OwnerHelpPage() {
         Once signed in, open <strong>Horses → My horses</strong>. Each horse profile has:
       </p>
       <ul>
-        <li><strong>Basics:</strong> name, breed, age, markings, weight, height.</li>
-        <li><strong>Health:</strong> vet visits, diagnoses, treatments.</li>
-        <li><strong>Vaccinations:</strong> dates done and next due dates.</li>
-        <li><strong>Farrier:</strong> shoeing history.</li>
-        <li><strong>Feeding:</strong> the current plan.</li>
-        <li><strong>Exercise:</strong> who&rsquo;s ridden the horse and when.</li>
-        <li><strong>Documents:</strong> passport, registration, insurance.</li>
+        <li>
+          <strong>Basics:</strong> name, breed, age, markings, weight, height.
+        </li>
+        <li>
+          <strong>Health:</strong> vet visits, diagnoses, treatments.
+        </li>
+        <li>
+          <strong>Vaccinations:</strong> dates done and next due dates.
+        </li>
+        <li>
+          <strong>Farrier:</strong> shoeing history.
+        </li>
+        <li>
+          <strong>Feeding:</strong> the current plan.
+        </li>
+        <li>
+          <strong>Exercise:</strong> who&rsquo;s ridden the horse and when.
+        </li>
+        <li>
+          <strong>Documents:</strong> passport, registration, insurance.
+        </li>
       </ul>
 
       <h2>3. Reminders</h2>
-      <p>
-        Cavaliq sends reminders ahead of:
-      </p>
+      <p>Cavaliq sends reminders ahead of:</p>
       <ul>
         <li>Vaccination due dates.</li>
         <li>Farrier and dental check-ups.</li>
@@ -43,8 +55,8 @@ export default function OwnerHelpPage() {
         <li>Medication end dates.</li>
       </ul>
       <p>
-        Reminders go to the stable&rsquo;s staff first; you also receive an email summary so you
-        can plan around your horse&rsquo;s schedule.
+        Reminders go to the stable&rsquo;s staff first; you also receive an email summary so you can
+        plan around your horse&rsquo;s schedule.
       </p>
 
       <h2>4. Read-only by default</h2>

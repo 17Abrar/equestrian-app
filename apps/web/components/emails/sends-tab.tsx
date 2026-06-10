@@ -6,7 +6,6 @@ import { CheckCircle2, XCircle, Clock, ShieldOff } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -16,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PaginationControls } from '@/components/shared/pagination-controls';
 import { fetchJson } from '@/lib/fetch-json';
 
 interface SendRow {
@@ -226,29 +226,13 @@ export function SendsTab() {
               </ul>
             </CardContent>
           </Card>
-          {pagination && pagination.totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-muted-foreground text-sm">
-                Page {page} of {pagination.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= pagination.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          ) : null}
+          {/* Pagination: renders nothing on a single page; `?? 1` keeps the
+              undefined-envelope case (no pagination yet) on that same path. */}
+          <PaginationControls
+            page={page}
+            totalPages={pagination?.totalPages ?? 1}
+            onChange={setPage}
+          />
         </>
       )}
     </div>

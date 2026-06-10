@@ -52,16 +52,15 @@ export function CookieBanner() {
       <div
         role="region"
         aria-label="Cookie notice"
-        className="pointer-events-auto bg-background ring-border/80 max-w-2xl rounded-xl border p-4 shadow-lg ring-1 sm:p-5"
+        className="bg-background ring-border/80 pointer-events-auto max-w-2xl rounded-xl border p-4 shadow-lg ring-1 sm:p-5"
       >
         <div className="flex items-start gap-3">
           <Cookie className="text-muted-foreground mt-0.5 h-5 w-5 shrink-0" aria-hidden />
           <div className="flex-1 text-sm">
             <p className="text-foreground font-medium">We use a small set of essential cookies</p>
             <p className="text-muted-foreground mt-1 leading-relaxed">
-              Cavaliq sets cookies needed for authentication and security — for example, to keep
-              you signed in. We don&rsquo;t use advertising or cross-site tracking cookies. Read
-              the{' '}
+              Cavaliq sets cookies needed for authentication and security, for example to keep you
+              signed in. We don&rsquo;t use advertising or cross-site tracking cookies. Read the{' '}
               <Link href="/legal/cookies" className="text-foreground underline">
                 cookie policy
               </Link>{' '}

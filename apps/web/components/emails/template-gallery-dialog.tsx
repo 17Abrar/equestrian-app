@@ -99,8 +99,8 @@ export function TemplateGalleryDialog({ onPick, hasUnsavedContent = false }: Pro
           <AlertDialogHeader>
             <AlertDialogTitle>Replace your draft?</AlertDialogTitle>
             <AlertDialogDescription>
-              Loading &ldquo;{pendingTemplate?.label}&rdquo; will overwrite what you&apos;ve
-              already written in the subject and body.
+              Loading &ldquo;{pendingTemplate?.label}&rdquo; will overwrite what you&apos;ve already
+              written in the subject and body.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

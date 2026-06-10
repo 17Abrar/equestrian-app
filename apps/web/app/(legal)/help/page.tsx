@@ -86,12 +86,10 @@ export default function HelpIndexPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
       <header className="border-b pb-8">
-        <p className="text-muted-foreground text-sm font-medium uppercase tracking-wide">
+        <p className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
           Help centre
         </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-          How can we help?
-        </h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">How can we help?</h1>
         <p className="text-muted-foreground mt-4 max-w-2xl text-base leading-relaxed">
           Guides and answers, organised by role. Can&rsquo;t find what you&rsquo;re looking for?{' '}
           <Link href="/support" className="underline">

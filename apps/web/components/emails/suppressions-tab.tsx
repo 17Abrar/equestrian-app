@@ -52,12 +52,7 @@ interface PaginatedEnvelope<T> {
 }
 
 const addSuppressionSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email('Enter a valid email address')
-    .max(320),
+  email: z.string().trim().toLowerCase().email('Enter a valid email address').max(320),
   notes: z.string().trim().max(500).optional(),
 });
 

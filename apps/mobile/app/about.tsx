@@ -31,9 +31,7 @@ function LinkRow({ label, description, icon, onPress, isLast }: LinkRowProps) {
             <Text className="text-sm font-medium text-gray-900">{label}</Text>
             <Ionicons name="open-outline" size={14} color="#9ca3af" />
           </View>
-          {description ? (
-            <Text className="mt-0.5 text-xs text-gray-500">{description}</Text>
-          ) : null}
+          {description ? <Text className="mt-0.5 text-xs text-gray-500">{description}</Text> : null}
         </View>
       </View>
     </TouchableOpacity>
@@ -143,16 +141,8 @@ export default function AboutScreen() {
           Help & contact
         </Text>
         <View className="rounded-2xl border border-gray-200 bg-white">
-          <LinkRow
-            label="Help centre"
-            icon="help-circle-outline"
-            onPress={() => open('/help')}
-          />
-          <LinkRow
-            label="Contact support"
-            icon="mail-outline"
-            onPress={() => open('/support')}
-          />
+          <LinkRow label="Help centre" icon="help-circle-outline" onPress={() => open('/help')} />
+          <LinkRow label="Contact support" icon="mail-outline" onPress={() => open('/support')} />
           <LinkRow
             label="Service status"
             icon="pulse-outline"

@@ -104,17 +104,19 @@ function request(): NextRequest {
   });
 }
 
-function staleBooking(overrides: Partial<{
-  bookingId: string;
-  clubId: string;
-  paymentProvider: string | null;
-  providerPaymentId: string | null;
-  isGuestBooking: boolean;
-  guestEmail: string | null;
-  guestName: string | null;
-  riderEmail: string | null;
-  riderName: string | null;
-}> = {}) {
+function staleBooking(
+  overrides: Partial<{
+    bookingId: string;
+    clubId: string;
+    paymentProvider: string | null;
+    providerPaymentId: string | null;
+    isGuestBooking: boolean;
+    guestEmail: string | null;
+    guestName: string | null;
+    riderEmail: string | null;
+    riderName: string | null;
+  }> = {},
+) {
   // Spread the overrides last so callers can explicitly set fields to
   // `null` (e.g. `riderEmail: null` to exercise the "no recipient" path).
   // `??` would coerce `null` back to the default.
@@ -159,7 +161,13 @@ beforeEach(() => {
 
 async function readJson(res: Response): Promise<{
   success: boolean;
-  data?: { considered: number; reconciledPaid: number; autoCancelled: number; skipped: number; errors: number };
+  data?: {
+    considered: number;
+    reconciledPaid: number;
+    autoCancelled: number;
+    skipped: number;
+    errors: number;
+  };
   error?: { code: string; message: string };
 }> {
   return res.json();
@@ -167,9 +175,7 @@ async function readJson(res: Response): Promise<{
 
 describe('authorization', () => {
   it('short-circuits to whatever requireCronSecret returns when unauthorized', async () => {
-    requireCronSecretMock.mockResolvedValueOnce(
-      new Response('Unauthorized', { status: 401 }),
-    );
+    requireCronSecretMock.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
 
     const res = await POST(request());
 
@@ -357,9 +363,7 @@ describe('cancellation email', () => {
   });
 
   it('cancel proceeds even when there is no recipient email — just skips the send', async () => {
-    findStaleMock.mockResolvedValueOnce([
-      staleBooking({ riderEmail: null }),
-    ]);
+    findStaleMock.mockResolvedValueOnce([staleBooking({ riderEmail: null })]);
     getPaymentStatusMock.mockResolvedValueOnce({ status: 'pending' });
 
     const body = await readJson(await POST(request()));

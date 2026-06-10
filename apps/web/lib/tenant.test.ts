@@ -68,12 +68,7 @@ vi.mock('@sentry/nextjs', () => ({
   withScope: (fn: (scope: { setTag: () => void }) => void) => fn({ setTag: vi.fn() }),
 }));
 
-import {
-  getTenantContext,
-  withTenantContext,
-  TenantError,
-  ACTIVE_CLUB_COOKIE,
-} from './tenant';
+import { getTenantContext, withTenantContext, TenantError, ACTIVE_CLUB_COOKIE } from './tenant';
 
 const CLUB_A = 'club-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CLUB_B = 'club-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';

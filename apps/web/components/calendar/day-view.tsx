@@ -6,7 +6,10 @@ import { type BookingSlot } from '@/hooks/use-bookings';
 import { type CalendarCompetition } from '@/hooks/use-competitions';
 import { Card, CardContent } from '@/components/ui/card';
 
-const HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 6am to 10pm
+// Full 24-hour grid. Booking-slot creation has no 06:00-22:00 constraint, so a
+// fixed 6am-10pm band silently dropped legitimate early-morning / late-evening
+// slots from Day view (they still rendered in Week/Month/Agenda).
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 interface DayViewProps {
   date: Date;

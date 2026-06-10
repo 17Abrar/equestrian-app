@@ -18,7 +18,7 @@ export function HelpArticle({ title, description, children }: HelpArticleProps) 
         Back to help centre
       </Link>
       <header className="mt-6 border-b pb-8">
-        <p className="text-muted-foreground text-sm font-medium uppercase tracking-wide">
+        <p className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
           Help centre
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>

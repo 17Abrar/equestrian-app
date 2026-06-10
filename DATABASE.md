@@ -126,8 +126,8 @@ CREATE TABLE clubs (
   -- New code reads per-club provider credentials from `club_payment_accounts.encrypted_credentials`.
   -- These three columns are retained for backwards compatibility; do not write to them in new flows.
   stripe_account_id VARCHAR(255),             -- LEGACY: Stripe Connect account ID (no longer used)
-  stripe_customer_id VARCHAR(255),            -- For paying the Cavaliq SaaS subscription (still used for platform billing)
-  stripe_subscription_id VARCHAR(255),        -- For paying the Cavaliq SaaS subscription (still used for platform billing)
+  stripe_customer_id VARCHAR(255),            -- LEGACY: Connect-era SaaS billing customer (unused; platform billing runs on Ziina)
+  stripe_subscription_id VARCHAR(255),        -- LEGACY: Connect-era SaaS billing subscription (unused; platform billing runs on Ziina)
 
   -- Subscription
   subscription_tier VARCHAR(20) NOT NULL DEFAULT 'trial',  -- trial, starter, growing, professional

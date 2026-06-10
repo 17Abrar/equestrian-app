@@ -52,10 +52,7 @@ interface AddSuppressionArgs {
  *     do NOT consult manual rows here: there's no club to scope against,
  *     so honoring any club's manual row would re-introduce the leak.
  */
-export async function isEmailSuppressed(
-  email: string,
-  clubId?: string,
-): Promise<boolean> {
+export async function isEmailSuppressed(email: string, clubId?: string): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return false;
   const scopeClause = clubId

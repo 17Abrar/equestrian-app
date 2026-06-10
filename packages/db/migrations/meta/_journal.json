@@ -470,6 +470,20 @@
       "when": 1779840600000,
       "tag": "0066_email_send_log",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1779840700000,
+      "tag": "0067_audit_pass_11_horse_leases_idempotent",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1779840800000,
+      "tag": "0068_audit_pass_11_email_send_log_audience_fk",
+      "breakpoints": true
     }
   ]
 }

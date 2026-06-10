@@ -10,6 +10,8 @@ import {
   useCancelPreview,
   type Booking,
 } from '@/hooks/use-bookings';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { canCreateBookings } from '@/lib/permissions-shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -102,7 +104,7 @@ function BookingCard({ booking, onCancel }: BookingCardProps) {
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {formatTime(booking.slotStartTime)} – {formatTime(booking.slotEndTime)}
+              {formatTime(booking.slotStartTime)} to {formatTime(booking.slotEndTime)}
             </span>
             {booking.arenaName && (
               <span className="flex items-center gap-1">
@@ -308,6 +310,13 @@ export function RiderHome() {
   );
   const pastBookings = past?.data ?? [];
 
+  // Audit FE (2026-06-07): horse owners can view their bookings but can't
+  // create one (no bookings:create), so hide the "Book a lesson" affordances
+  // for any role that lacks the permission.
+  const { data: me } = useCurrentUser();
+  const role = me?.data?.role ?? null;
+  const canBook = !role || canCreateBookings(role);
+
   return (
     <div className="space-y-8 pb-20 sm:pb-0">
       {/* Header */}
@@ -316,12 +325,14 @@ export function RiderHome() {
           <h1 className="text-2xl font-bold">Home</h1>
           <p className="text-muted-foreground">Your upcoming lessons and activity</p>
         </div>
-        <Button asChild>
-          <Link href="/rider/book">
-            Book a Lesson
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+        {canBook && (
+          <Button asChild>
+            <Link href="/rider/book">
+              Book a Lesson
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Upcoming bookings */}
@@ -334,8 +345,12 @@ export function RiderHome() {
         ) : upcomingBookings.length === 0 ? (
           <EmptyState
             title="No upcoming bookings"
-            description="Book your first lesson to get started."
-            action={{ label: 'Book a Lesson', href: '/rider/book' }}
+            description={
+              canBook
+                ? 'Book your first lesson to get started.'
+                : 'Your booked lessons will appear here.'
+            }
+            action={canBook ? { label: 'Book a Lesson', href: '/rider/book' } : undefined}
           />
         ) : (
           <div className="space-y-3">

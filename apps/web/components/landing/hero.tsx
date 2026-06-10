@@ -11,7 +11,7 @@ export function Hero() {
         className="absolute inset-0 opacity-[0.04]"
         style={{
           backgroundImage:
-            'radial-gradient(circle at 1px 1px, #0d1f34 1px, transparent 0)',
+            'radial-gradient(circle at 1px 1px, var(--color-brand) 1px, transparent 0)',
           backgroundSize: '24px 24px',
         }}
       />
@@ -27,9 +27,9 @@ export function Hero() {
             Run your stable from one place.
           </h1>
           <p className="text-muted-foreground mx-auto mt-5 max-w-2xl text-lg text-balance sm:text-xl">
-            Bookings, horses, riders, staff, and payments — Cavaliq replaces the
-            spreadsheets, the WhatsApp groups, and the paper diary. Built for
-            equestrian clubs that take their riders, horses, and books seriously.
+            Bookings, horses, riders, staff, and payments. Cavaliq replaces the spreadsheets, the
+            WhatsApp groups, and the paper diary. Built for equestrian clubs that take their riders,
+            horses, and books seriously.
           </p>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

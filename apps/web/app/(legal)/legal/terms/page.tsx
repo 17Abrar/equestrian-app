@@ -24,10 +24,10 @@ export default function TermsPage() {
         <strong>Club</strong>&rdquo;, &ldquo;<strong>you</strong>&rdquo;).
       </p>
       <p>
-        These Terms apply to all subscriptions to Cavaliq and to all use of the platform by the
-        Club and the Club&rsquo;s authorised users. If you are using Cavaliq as a rider, parent, or
-        horse owner who books through a Club, the{' '}
-        <Link href="/legal/terms/end-user">end-user terms</Link> apply to you instead.
+        These Terms apply to all subscriptions to Cavaliq and to all use of the platform by the Club
+        and the Club&rsquo;s authorised users. If you are using Cavaliq as a rider, parent, or horse
+        owner who books through a Club, the <Link href="/legal/terms/end-user">end-user terms</Link>{' '}
+        apply to you instead.
       </p>
 
       <h2 id="acceptance">1. Acceptance and authority</h2>
@@ -45,15 +45,13 @@ export default function TermsPage() {
         communications. The exact features available depend on the Club&rsquo;s subscription tier.
       </p>
       <p>
-        We will use commercially reasonable efforts to keep the platform available and to improve
-        it over time. Specific uptime commitments and support response targets are in our{' '}
+        We will use commercially reasonable efforts to keep the platform available and to improve it
+        over time. Specific uptime commitments and support response targets are in our{' '}
         <Link href="/legal/sla">service level agreement</Link>.
       </p>
 
       <h2 id="subscription">3. Subscriptions, trial, and renewal</h2>
-      <p>
-        Cavaliq is sold on a subscription basis. The plans currently offered are:
-      </p>
+      <p>Cavaliq is sold on a subscription basis. The plans currently offered are:</p>
       <ul>
         <li>
           <strong>Starter</strong> — AED 300 per month.
@@ -99,26 +97,22 @@ export default function TermsPage() {
         balance is settled.
       </p>
       <p>
-        Cavaliq is not the merchant of record for any payment the Club takes from its riders.
-        Riders pay the Club through the payment processor the Club has connected (Stripe, Ziina, or
-        Network International). Cavaliq earns no transaction-based fee on those rider payments
-        beyond the subscription fee.
+        Cavaliq is not the merchant of record for any payment the Club takes from its riders. Riders
+        pay the Club through the payment processor the Club has connected (Stripe, Ziina, or Network
+        International). Cavaliq earns no transaction-based fee on those rider payments beyond the
+        subscription fee.
       </p>
 
       <h2 id="account">5. Account, users, and security</h2>
-      <p>
-        The Club is responsible for the activity of all users it adds to the platform. It must:
-      </p>
+      <p>The Club is responsible for the activity of all users it adds to the platform. It must:</p>
       <ul>
         <li>Keep credentials confidential and require strong, unique passwords.</li>
         <li>Enable multi-factor authentication where available.</li>
-        <li>
-          Remove user access promptly when a staff member leaves or no longer needs access.
-        </li>
+        <li>Remove user access promptly when a staff member leaves or no longer needs access.</li>
         <li>Use Cavaliq&rsquo;s role system to give each user only the permissions they need.</li>
         <li>
-          Notify us promptly at <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> on
-          learning of any unauthorised use of the account.
+          Notify us promptly at <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> on learning
+          of any unauthorised use of the account.
         </li>
       </ul>
 
@@ -163,17 +157,17 @@ export default function TermsPage() {
       <h2 id="acceptable-use">8. Acceptable use</h2>
       <p>
         The Club, its users, and anyone acting on its behalf must comply with the{' '}
-        <Link href="/legal/acceptable-use">Acceptable Use Policy</Link>. We may suspend or
-        terminate access for material or repeated breaches.
+        <Link href="/legal/acceptable-use">Acceptable Use Policy</Link>. We may suspend or terminate
+        access for material or repeated breaches.
       </p>
 
       <h2 id="confidentiality">9. Confidentiality</h2>
       <p>
-        Each party may receive information from the other that is marked or reasonably understood
-        to be confidential. Each party will protect the other&rsquo;s confidential information with
-        the same standard of care it uses for its own (at least a reasonable standard), use it only
-        for the purposes of these Terms, and not disclose it except to its employees and advisers
-        on a need-to-know basis under confidentiality obligations.
+        Each party may receive information from the other that is marked or reasonably understood to
+        be confidential. Each party will protect the other&rsquo;s confidential information with the
+        same standard of care it uses for its own (at least a reasonable standard), use it only for
+        the purposes of these Terms, and not disclose it except to its employees and advisers on a
+        need-to-know basis under confidentiality obligations.
       </p>
       <p>
         Confidentiality does not apply to information that is public, that the receiving party
@@ -213,13 +207,13 @@ export default function TermsPage() {
       </p>
 
       <h2 id="liability">12. Liability</h2>
-      <p>
-        To the maximum extent permitted by law, neither party will be liable to the other for:
-      </p>
+      <p>To the maximum extent permitted by law, neither party will be liable to the other for:</p>
       <ul>
         <li>indirect, incidental, consequential, special, or punitive damages;</li>
         <li>loss of profits, revenue, business, goodwill, or anticipated savings;</li>
-        <li>loss or corruption of data (other than to the extent caused by our breach of the DPA).</li>
+        <li>
+          loss or corruption of data (other than to the extent caused by our breach of the DPA).
+        </li>
       </ul>
       <p>
         Each party&rsquo;s total aggregate liability arising out of or in connection with these
@@ -260,9 +254,9 @@ export default function TermsPage() {
 
       <h2 id="changes">14. Changes to these Terms</h2>
       <p>
-        We may update these Terms from time to time. We will post the updated Terms here and, if
-        the change is material, notify the Club at least 30 days before it takes effect. Continued
-        use of the platform after the effective date constitutes acceptance.
+        We may update these Terms from time to time. We will post the updated Terms here and, if the
+        change is material, notify the Club at least 30 days before it takes effect. Continued use
+        of the platform after the effective date constitutes acceptance.
       </p>
 
       <h2 id="general">15. General</h2>

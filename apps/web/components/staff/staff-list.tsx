@@ -49,6 +49,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PaginationControls } from '@/components/shared/pagination-controls';
+import { PersonContactFields } from '@/components/shared/person-contact-fields';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { DEFAULT_PAGE_SIZE } from '@equestrian/shared/constants';
 
@@ -237,29 +239,9 @@ export function StaffList({ canCreate = true }: StaffListProps = {}) {
         </div>
       )}
 
-      {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-          >
-            Previous
-          </Button>
-          <span className="text-muted-foreground text-sm">
-            Page {page} of {pagination.totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page >= pagination.totalPages}
-          >
-            Next
-          </Button>
-        </div>
-      )}
+      {/* Pagination: renders nothing on a single page; `?? 1` keeps the
+          undefined-envelope case (no pagination yet) on that same path. */}
+      <PaginationControls page={page} totalPages={pagination?.totalPages ?? 1} onChange={setPage} />
     </div>
   );
 }
@@ -304,45 +286,7 @@ function AddStaffDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="displayName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Full name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email *</FormLabel>
-                  <FormControl>
-                    <Input type="email" placeholder="staff@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="+971..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <PersonContactFields control={form.control} emailPlaceholder="staff@example.com" />
             <FormField
               control={form.control}
               name="role"

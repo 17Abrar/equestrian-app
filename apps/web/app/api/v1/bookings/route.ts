@@ -406,11 +406,7 @@ export async function POST(request: NextRequest) {
             return errorResponse('INVALID_COUPON', 'Promo code is no longer valid', 422);
           }
           if (err.message === 'COUPON_INACTIVE') {
-            return errorResponse(
-              'INVALID_COUPON',
-              'This promo code is no longer active',
-              422,
-            );
+            return errorResponse('INVALID_COUPON', 'This promo code is no longer active', 422);
           }
           if (err.message === 'COUPON_EXPIRED') {
             return errorResponse('INVALID_COUPON', 'This promo code has expired', 422);
@@ -443,11 +439,7 @@ export async function POST(request: NextRequest) {
             return errorResponse('INVALID_COUPON', 'You have already used this promo code', 422);
           }
           if (err.message === 'COUPON_FIRST_TIME_ONLY') {
-            return errorResponse(
-              'INVALID_COUPON',
-              'This promo is for first-time riders only',
-              422,
-            );
+            return errorResponse('INVALID_COUPON', 'This promo is for first-time riders only', 422);
           }
           if (err.message === 'COUPON_LESSON_TYPE_NOT_ALLOWED') {
             return errorResponse(

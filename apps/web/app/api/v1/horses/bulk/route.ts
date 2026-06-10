@@ -1,12 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { bulkCreateHorsesSchema } from '@equestrian/shared/schemas';
 import { createHorse } from '@equestrian/db/queries';
-import {
-  withAuth,
-  successResponse,
-  errorResponse,
-  parseRequiredBody,
-} from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, parseRequiredBody } from '@/lib/api-utils';
 import { findNonR2OriginUrl } from '@/lib/upload-verify-cache';
 import { logger } from '@/lib/logger';
 
@@ -124,14 +119,18 @@ export async function POST(request: NextRequest) {
             // and range (`2026-13-01` → "date/time field value out
             // of range"). Codex P2 (2026-05-28): the range variant
             // wasn't matched, so a bogus date 500'd the whole import.
-            /invalid input syntax for type date|date\/time field value out of range/i.test(message) ||
+            /invalid input syntax for type date|date\/time field value out of range/i.test(
+              message,
+            ) ||
             // Numeric overflow on `numeric(4,1)` (heightHands) or
             // `integer` columns. Codex P2 (2026-05-28 iter 2): if a
             // row has `heightHands=99.9` Zod accepts it but Postgres
             // raises "numeric field overflow"; without this
             // classification the whole import 500'd after partial
             // success.
-            /numeric field overflow|value out of range for type|integer out of range/i.test(message);
+            /numeric field overflow|value out of range for type|integer out of range/i.test(
+              message,
+            );
           if (!isRowLevel) {
             logger.error('horse_bulk_import_infra_error', {
               clubId: ctx.clubId,
@@ -148,8 +147,7 @@ export async function POST(request: NextRequest) {
             friendly =
               'Duplicate value — check the microchip / passport / registration number columns.';
           } else if (/violates foreign key/i.test(message)) {
-            friendly =
-              'Referenced record (club / owner) is missing or inactive. Contact support.';
+            friendly = 'Referenced record (club / owner) is missing or inactive. Contact support.';
           } else if (
             /invalid input syntax for type date|date\/time field value out of range/i.test(message)
           ) {
@@ -204,4 +202,3 @@ export async function POST(request: NextRequest) {
     },
   );
 }
-

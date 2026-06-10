@@ -214,7 +214,10 @@ describe('setBookingPaymentRef — lifecycle CAS', () => {
     expect(result).toBeNull();
 
     const row = await testDb.db
-      .select({ providerPaymentId: bookings.providerPaymentId, paymentStatus: bookings.paymentStatus })
+      .select({
+        providerPaymentId: bookings.providerPaymentId,
+        paymentStatus: bookings.paymentStatus,
+      })
       .from(bookings)
       .where(eq(bookings.id, bookingId))
       .limit(1);

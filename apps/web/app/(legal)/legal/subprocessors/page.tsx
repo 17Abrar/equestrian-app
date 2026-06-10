@@ -46,7 +46,8 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
   {
     name: 'Resend',
     service: 'Transactional email delivery',
-    dataCategories: 'Recipient email, name, email content (booking confirmations, receipts, alerts)',
+    dataCategories:
+      'Recipient email, name, email content (booking confirmations, receipts, alerts)',
     location: 'United States and EU',
     transferMechanism: 'Contractual safeguards equivalent to EU SCCs',
     url: 'https://resend.com',
@@ -160,11 +161,11 @@ export default function SubprocessorsPage() {
       <h2 id="dual-role">A note on payment processors</h2>
       <p>
         Stripe, Ziina, and Network International are listed here for transparency, but their role
-        differs from a typical subprocessor. When a rider pays for a lesson, the card or wallet
-        data flows directly from the rider&rsquo;s browser to the processor — Cavaliq never sees
-        the card details. The processor acts as a separate, independent controller of the
-        cardholder&rsquo;s payment data under its own terms. Cavaliq only receives the tokens and
-        references needed to record the transaction.
+        differs from a typical subprocessor. When a rider pays for a lesson, the card or wallet data
+        flows directly from the rider&rsquo;s browser to the processor — Cavaliq never sees the card
+        details. The processor acts as a separate, independent controller of the cardholder&rsquo;s
+        payment data under its own terms. Cavaliq only receives the tokens and references needed to
+        record the transaction.
       </p>
 
       <h2 id="subscribe">Subscribe to changes</h2>

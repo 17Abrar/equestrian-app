@@ -428,11 +428,26 @@ export async function createCompetitionEntry(clubId: string, data: EntryCreate) 
         status: competitions.status,
       })
       .from(competitions)
-      .where(and(eq(competitions.id, cls.competitionId), eq(competitions.clubId, clubId)))
+      .where(
+        and(
+          eq(competitions.id, cls.competitionId),
+          eq(competitions.clubId, clubId),
+          // Soft-deleted competitions must not accept entries. Every read path
+          // (getCompetitionById / list) already gates on isActive; the
+          // entry-creation path was the lone exception.
+          eq(competitions.isActive, true),
+        ),
+      )
       .limit(1);
 
     const competition = comp[0];
-    if (!competition || competition.status === 'cancelled') {
+    // Only an open competition accepts entries. Previously any status other
+    // than 'cancelled' was allowed, which let paid, capacity-consuming entries
+    // be created against draft (never opened) and completed (results finalised)
+    // competitions.
+    const registerable =
+      competition?.status === 'published' || competition?.status === 'in_progress';
+    if (!competition || !registerable) {
       throw new Error('COMPETITION_NOT_AVAILABLE');
     }
 

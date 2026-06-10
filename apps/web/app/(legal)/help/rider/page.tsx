@@ -31,14 +31,24 @@ export default function RiderHelpPage() {
 
       <h2>2. Complete your rider profile</h2>
       <p>
-        Once you&rsquo;ve joined a stable, fill in your rider profile. The stable&rsquo;s coaches use
-        this information to match you to the right horse and lesson:
+        Once you&rsquo;ve joined a stable, fill in your rider profile. The stable&rsquo;s coaches
+        use this information to match you to the right horse and lesson:
       </p>
       <ul>
-        <li><strong>Skill level:</strong> beginner, novice, intermediate, advanced, competition.</li>
-        <li><strong>Height and weight:</strong> used to match a horse that&rsquo;s a safe fit.</li>
-        <li><strong>Allergies and medical notes:</strong> only visible to authorised staff. Encrypted at rest.</li>
-        <li><strong>Emergency contact:</strong> a person we can reach if something goes wrong at the yard.</li>
+        <li>
+          <strong>Skill level:</strong> beginner, novice, intermediate, advanced, competition.
+        </li>
+        <li>
+          <strong>Height and weight:</strong> used to match a horse that&rsquo;s a safe fit.
+        </li>
+        <li>
+          <strong>Allergies and medical notes:</strong> only visible to authorised staff. Encrypted
+          at rest.
+        </li>
+        <li>
+          <strong>Emergency contact:</strong> a person we can reach if something goes wrong at the
+          yard.
+        </li>
       </ul>
 
       <h2>3. Book a lesson</h2>
@@ -79,8 +89,8 @@ export default function RiderHelpPage() {
       </ul>
       <p>
         If the stable cancels (bad weather, coach off sick, horse welfare), you always get a full
-        refund or a free reschedule. See the{' '}
-        <Link href="/legal/refunds">refund policy</Link> for the full picture.
+        refund or a free reschedule. See the <Link href="/legal/refunds">refund policy</Link> for
+        the full picture.
       </p>
 
       <h2>6. Your profile and progress</h2>
@@ -91,9 +101,9 @@ export default function RiderHelpPage() {
 
       <h2>7. Delete your account</h2>
       <p>
-        From the mobile app, go to <strong>Profile → About → Delete account</strong>. We delete
-        your account data within 30 days, except for records we&rsquo;re legally required to keep.
-        See the <Link href="/legal/privacy">privacy policy</Link>.
+        From the mobile app, go to <strong>Profile → About → Delete account</strong>. We delete your
+        account data within 30 days, except for records we&rsquo;re legally required to keep. See
+        the <Link href="/legal/privacy">privacy policy</Link>.
       </p>
     </HelpArticle>
   );

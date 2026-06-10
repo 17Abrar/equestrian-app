@@ -8,7 +8,17 @@ import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import { fetchJson } from '@/lib/fetch-json';
-import { ArrowLeft, MapPin, Globe, Instagram, Facebook, Music2, Users, LogIn, Loader2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  MapPin,
+  Globe,
+  Instagram,
+  Facebook,
+  Music2,
+  Users,
+  LogIn,
+  Loader2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -229,7 +239,7 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
                 <div>
                   <p className="text-muted-foreground text-xs tracking-wide uppercase">Joining</p>
                   <p className="mt-1 font-medium">
-                    {club.joinPolicy === 'open' ? 'Open — anyone can join' : 'Invitation only'}
+                    {club.joinPolicy === 'open' ? 'Open: anyone can join' : 'Invitation only'}
                   </p>
                 </div>
                 <div>
@@ -238,12 +248,12 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
                 </div>
 
                 {/* Audit pass-7 (2026-05-24): `websiteUrl` is routed through
-                  * `safeHref()` (defence-in-depth — input is already constrained
-                  * to http(s) by the schema); social handles are normalized into
-                  * canonical platform URLs by `social-link.ts` so legacy rows
-                  * that contain `https://evil.com/phish` collapse to `null`
-                  * instead of escaping under an "Instagram" badge.
-                  */}
+                 * `safeHref()` (defence-in-depth — input is already constrained
+                 * to http(s) by the schema); social handles are normalized into
+                 * canonical platform URLs by `social-link.ts` so legacy rows
+                 * that contain `https://evil.com/phish` collapse to `null`
+                 * instead of escaping under an "Instagram" badge.
+                 */}
                 {(() => {
                   const instagram = instagramUrl(club.socialInstagram);
                   const facebook = facebookUrl(club.socialFacebook);
@@ -264,21 +274,36 @@ export function ClubProfileClient({ club }: { club: PublicClub }) {
                         </a>
                       )}
                       {instagram && (
-                        <a href={instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+                        <a
+                          href={instagram}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Instagram"
+                        >
                           <Badge variant="outline" className="gap-1">
                             <Instagram className="h-3 w-3" /> Instagram
                           </Badge>
                         </a>
                       )}
                       {facebook && (
-                        <a href={facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook">
+                        <a
+                          href={facebook}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Facebook"
+                        >
                           <Badge variant="outline" className="gap-1">
                             <Facebook className="h-3 w-3" /> Facebook
                           </Badge>
                         </a>
                       )}
                       {tiktok && (
-                        <a href={tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok">
+                        <a
+                          href={tiktok}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="TikTok"
+                        >
                           <Badge variant="outline" className="gap-1">
                             <Music2 className="h-3 w-3" /> TikTok
                           </Badge>

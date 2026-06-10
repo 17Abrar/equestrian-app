@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useClerk } from '@clerk/nextjs';
+import { useAuth, useClerk } from '@clerk/nextjs';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -54,6 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { InfoHint } from '@/components/shared/info-hint';
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -106,6 +107,48 @@ const LESSON_TYPE_COLORS: Record<string, string> = {
   Clinic: '#ec4899',
 };
 
+// Audit SMART-1 (2026-06-07): sensible starter defaults per lesson type so a
+// suggestion click fills duration, capacity, and a non-zero placeholder price
+// (prices are AED major units, editable; they prevent accidentally shipping a
+// free lesson). Admins tune these afterwards in Settings.
+interface LessonTemplate {
+  durationMinutes: number;
+  price: number;
+  minRiders: number;
+  maxRiders: number;
+}
+const LESSON_TYPE_TEMPLATES: Record<string, LessonTemplate> = {
+  Group: { durationMinutes: 60, price: 150, minRiders: 2, maxRiders: 6 },
+  'Semi-Private': { durationMinutes: 45, price: 250, minRiders: 1, maxRiders: 2 },
+  Private: { durationMinutes: 45, price: 350, minRiders: 1, maxRiders: 1 },
+  'Desert Ride': { durationMinutes: 90, price: 300, minRiders: 1, maxRiders: 8 },
+  'Beach Ride': { durationMinutes: 90, price: 350, minRiders: 1, maxRiders: 6 },
+  Endurance: { durationMinutes: 120, price: 400, minRiders: 1, maxRiders: 10 },
+  Camp: { durationMinutes: 180, price: 500, minRiders: 1, maxRiders: 12 },
+  Clinic: { durationMinutes: 120, price: 450, minRiders: 1, maxRiders: 10 },
+};
+
+// Audit WIZ-3: the standard set offered as a one-click starter, in order.
+const STANDARD_LESSON_SET = ['Group', 'Semi-Private', 'Private'] as const;
+
+// Audit WIZ-1: derive the internal lesson-type id from the human name so the
+// admin never has to think about a slug. `type` has no uniqueness constraint
+// and is never branched on in app logic, so deriving it is behaviour-preserving.
+function slugifyLessonType(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'lesson'
+  );
+}
+
+// Audit WIZ-2: persist the wizard step so a refresh, or the Stripe OAuth
+// round-trip out of the Payments step, returns the admin to where they were
+// instead of dropping them back to step 1.
+const ONBOARDING_STEP_KEY = 'cavaliq:onboarding:step';
+
 // ─── Step Indicator ──────────────────────────────────────────────────
 
 interface StepIndicatorProps {
@@ -123,6 +166,7 @@ function StepIndicator({ currentStep }: StepIndicatorProps) {
         return (
           <div key={step.id} className="flex items-center">
             <div
+              aria-current={isActive ? 'step' : undefined}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-primary text-primary-foreground'
@@ -133,6 +177,11 @@ function StepIndicator({ currentStep }: StepIndicatorProps) {
             >
               {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
               <span className="hidden sm:inline">{step.label}</span>
+              {/* Audit A11Y-9 (2026-06-07): expose state to screen readers; the
+                  steps were distinguished by color alone. */}
+              <span className="sr-only">
+                {isCompleted ? '(completed)' : isActive ? '(current step)' : ''}
+              </span>
             </div>
             {index < STEPS.length - 1 && (
               <ChevronRight className="text-muted-foreground mx-1 h-4 w-4" />
@@ -295,6 +344,23 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
     }
   }
 
+  // Audit WIZ-3: one-click starter so a new club can clear the arena gate
+  // without thinking. Editable later in Settings.
+  async function addStarterArena() {
+    try {
+      await createArena.mutateAsync({
+        name: 'Main Arena',
+        isIndoor: false,
+        hasLighting: true,
+      } as CreateArenaInput);
+      toast.success('Starter arena added');
+      void refetch();
+    } catch (err) {
+      reportMutationError('onboarding.arena.starter', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to add arena');
+    }
+  }
+
   return (
     <Card className="mx-auto max-w-lg">
       <CardHeader className="text-center">
@@ -377,6 +443,19 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
           </form>
         </Form>
 
+        {arenas.length === 0 && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={addStarterArena}
+            disabled={createArena.isPending}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Use a starter arena (Main Arena)
+          </Button>
+        )}
+
         {/* Navigation */}
         <div className="flex gap-3">
           <Button variant="outline" onClick={onBack} className="flex-1">
@@ -406,7 +485,6 @@ function ArenasStep({ onNext, onBack }: ArenasStepProps) {
 const quickLessonSchema = z
   .object({
     name: z.string().min(1, 'Name is required').max(255),
-    type: z.string().min(1, 'Type is required').max(100),
     durationMinutes: z.coerce.number().int().min(15, 'Min 15 minutes'),
     price: z.coerce.number().min(0, 'Price cannot be negative'),
     currency: z.string().length(3),
@@ -435,7 +513,6 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
     resolver: zodResolver(quickLessonSchema),
     defaultValues: {
       name: '',
-      type: '',
       durationMinutes: 60,
       price: 0,
       currency: 'AED',
@@ -445,17 +522,27 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
     },
   });
 
+  const [addingSet, setAddingSet] = useState(false);
+
   function selectSuggestion(suggestion: string) {
-    const slug = suggestion.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-    form.setValue('type', slug);
     form.setValue('name', suggestion);
     form.setValue('color', LESSON_TYPE_COLORS[suggestion] ?? '#6366f1');
+    // Audit SMART-1: a suggestion also fills sensible duration / capacity / price.
+    const template = LESSON_TYPE_TEMPLATES[suggestion];
+    if (template) {
+      form.setValue('durationMinutes', template.durationMinutes);
+      form.setValue('price', template.price);
+      form.setValue('minRiders', template.minRiders);
+      form.setValue('maxRiders', template.maxRiders);
+    }
   }
 
   async function onSubmit(data: QuickLessonOutput) {
     try {
       await createLessonType.mutateAsync({
         ...data,
+        // Audit WIZ-1: internal id derived from the name, never asked for.
+        type: slugifyLessonType(data.name),
         // User enters AED (major units); DB stores fils (minor units).
         price: Math.round(data.price * 100),
       } as CreateLessonTypeInput);
@@ -465,6 +552,38 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
     } catch (err) {
       reportMutationError('onboarding.lesson_type.create', err, { name: data.name });
       toast.error(err instanceof Error ? err.message : 'Failed to add lesson type');
+    }
+  }
+
+  // Audit WIZ-3: one click adds the standard Group / Semi-Private / Private set
+  // (skipping any already present) so the hardest step can clear instantly.
+  async function addStandardSet() {
+    setAddingSet(true);
+    try {
+      const existing = new Set(lessonTypes.map((lt) => lt.name));
+      let added = 0;
+      for (const name of STANDARD_LESSON_SET) {
+        if (existing.has(name)) continue;
+        const template = LESSON_TYPE_TEMPLATES[name]!;
+        await createLessonType.mutateAsync({
+          name,
+          type: slugifyLessonType(name),
+          durationMinutes: template.durationMinutes,
+          price: Math.round(template.price * 100),
+          currency: 'AED',
+          minRiders: template.minRiders,
+          maxRiders: template.maxRiders,
+          color: LESSON_TYPE_COLORS[name] ?? '#6366f1',
+        } as CreateLessonTypeInput);
+        added += 1;
+      }
+      toast.success(added > 0 ? 'Standard lesson set added' : 'Those lesson types already exist');
+      void refetch();
+    } catch (err) {
+      reportMutationError('onboarding.lesson_type.starter_set', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to add lesson set');
+    } finally {
+      setAddingSet(false);
     }
   }
 
@@ -526,44 +645,47 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
           </div>
         )}
 
+        {/* Audit WIZ-3: one-click standard set so the gate clears instantly. */}
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={addStandardSet}
+          disabled={addingSet}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          {addingSet ? 'Adding...' : 'Add the standard set (Group, Semi-Private, Private)'}
+        </Button>
+
         {/* Quick add form */}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Private Lesson" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Type ID</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. private" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Private Lesson" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid gap-4 sm:grid-cols-3">
               <FormField
                 control={form.control}
                 name="durationMinutes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Duration (min)</FormLabel>
+                    <div className="flex items-center gap-1">
+                      <FormLabel>Duration (min)</FormLabel>
+                      <InfoHint
+                        label="About lesson duration"
+                        text="How long the lesson runs, in minutes. Minimum 15."
+                      />
+                    </div>
                     <FormControl>
                       <Input type="number" min={15} step={15} {...field} />
                     </FormControl>
@@ -595,7 +717,13 @@ function LessonsStep({ onNext, onBack }: LessonsStepProps) {
                 name="maxRiders"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Max Riders</FormLabel>
+                    <div className="flex items-center gap-1">
+                      <FormLabel>Max Riders</FormLabel>
+                      <InfoHint
+                        label="About max riders"
+                        text="The most riders allowed in this lesson at once. Group lessons hold more; private lessons are 1."
+                      />
+                    </div>
                     <FormControl>
                       <Input type="number" min={1} {...field} />
                     </FormControl>
@@ -660,7 +788,7 @@ function PaymentsStep({ onNext, onBack }: PaymentsStepProps) {
         <div className="flex gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <p>
-            Stripe uses an OAuth redirect — clicking &ldquo;Connect Stripe&rdquo; will leave the
+            Stripe uses an OAuth redirect, so clicking &ldquo;Connect Stripe&rdquo; will leave the
             wizard. If you&apos;d rather finish onboarding first, pick Stripe from{' '}
             <span className="font-medium">Settings &rarr; Payments</span> after setup. N-Genius and
             Ziina connect inline here without leaving.
@@ -680,7 +808,7 @@ function PaymentsStep({ onNext, onBack }: PaymentsStepProps) {
           </Button>
         </div>
         <p className="text-muted-foreground text-center text-xs">
-          Payments are optional at setup — you can connect a processor any time.
+          Payments are optional at setup. You can connect a processor any time.
         </p>
       </CardContent>
     </Card>
@@ -846,13 +974,51 @@ function StaffStep({ onComplete, onBack }: StaffStepProps) {
 export default function OnboardingPage() {
   const router = useRouter();
   const { signOut } = useClerk();
+  const { orgId, isLoaded: authLoaded } = useAuth();
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Codex review (2026-06-07): scope the saved step by active club so a step
+  // saved while onboarding club A in this browser cannot restore club B past
+  // its arena/lesson gates. Falls back to a shared key only when no org is set.
+  const stepKey = `${ONBOARDING_STEP_KEY}:${orgId ?? 'anon'}`;
+
+  // Audit WIZ-2: restore the saved step once auth has resolved (so the key is
+  // correctly scoped). Covers a refresh or the Stripe OAuth round-trip out of
+  // the Payments step, then persists on change.
+  useEffect(() => {
+    if (!authLoaded) return;
+    try {
+      const saved = window.localStorage.getItem(stepKey);
+      if (saved !== null) {
+        const n = Number(saved);
+        if (Number.isInteger(n) && n >= 0 && n <= STEPS.length - 1) setStep(n);
+      }
+    } catch {
+      // storage unavailable: fall back to step 0
+    }
+    setHydrated(true);
+  }, [authLoaded, stepKey]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(stepKey, String(step));
+    } catch {
+      // best-effort
+    }
+  }, [step, hydrated, stepKey]);
 
   const handleComplete = useCallback(async () => {
     setCompleting(true);
     try {
       await fetchJson('/api/v1/onboarding', { method: 'POST' });
+      try {
+        window.localStorage.removeItem(stepKey);
+      } catch {
+        // best-effort
+      }
       toast.success('Setup complete! Welcome to your dashboard.');
       router.push('/dashboard');
     } catch (err) {
@@ -896,7 +1062,7 @@ export default function OnboardingPage() {
     } finally {
       setCompleting(false);
     }
-  }, [router, signOut]);
+  }, [router, signOut, stepKey]);
 
   return (
     <div className="from-background to-muted/30 min-h-screen bg-gradient-to-b">
