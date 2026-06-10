@@ -62,15 +62,15 @@ export default function ParentHelpPage() {
       </p>
 
       <h2>6. Managing your child&rsquo;s data</h2>
-      <p>
-        You can edit, export, or delete your child&rsquo;s data at any time:
-      </p>
+      <p>You can edit, export, or delete your child&rsquo;s data at any time:</p>
       <ul>
-        <li>From the app: <strong>Profile → Riders → [child] → Edit / Delete</strong>.</li>
+        <li>
+          From the app: <strong>Profile → Riders → [child] → Edit / Delete</strong>.
+        </li>
         <li>
           For a full export or a deletion request, write to{' '}
-          <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>. We&rsquo;ll verify you are
-          the parent or guardian before fulfilling the request.
+          <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>. We&rsquo;ll verify you are the
+          parent or guardian before fulfilling the request.
         </li>
       </ul>
 

@@ -415,8 +415,7 @@ function nextBillingPeriod(
   // billing run. The cleaner fix is a per-contract anchor (column or
   // archive-on-reactivate flow); queued as task #23 follow-up. The
   // continuously-billed path is unaffected by the current floor.
-  const effectiveAnchor =
-    anchor && anchor.periodStart >= horse.liveryStartDate ? anchor : null;
+  const effectiveAnchor = anchor && anchor.periodStart >= horse.liveryStartDate ? anchor : null;
 
   const startBase = effectiveAnchor
     ? addMonths(effectiveAnchor.periodStart, 1)

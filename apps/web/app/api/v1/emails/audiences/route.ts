@@ -1,14 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { paginationSchema } from '@equestrian/shared/schemas';
 import { createAudience, listAudiences, countAudienceMembersBatch } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
   errorResponse,
-  validateInput,
   parseRequiredBody,
   paginatedResponse,
+  parsePagination,
 } from '@/lib/api-utils';
 
 // audit M-1 (2026-05-05) — schema kept narrow: only the three filters the
@@ -35,11 +34,7 @@ const createAudienceSchema = z
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const url = new URL(request.url);
-      const { page, pageSize } = validateInput(paginationSchema, {
-        page: url.searchParams.get('page') ?? undefined,
-        pageSize: url.searchParams.get('pageSize') ?? undefined,
-      });
+      const { page, pageSize } = parsePagination(request);
       const { items, total } = await listAudiences(ctx.clubId, { page, pageSize });
       // One round-trip to compute every audience's member count for the
       // current page only — replaces the previous all-rows enrichment.

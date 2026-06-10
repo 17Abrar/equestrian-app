@@ -1,23 +1,19 @@
 import { type NextRequest } from 'next/server';
-import { createArenaSchema, paginationSchema } from '@equestrian/shared/schemas';
+import { createArenaSchema } from '@equestrian/shared/schemas';
 import { getArenasByClub, createArena } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
   errorResponse,
-  validateInput,
   parseRequiredBody,
   paginatedResponse,
+  parsePagination,
 } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   return withAuth(
     async (ctx) => {
-      const url = new URL(request.url);
-      const { page, pageSize } = validateInput(paginationSchema, {
-        page: url.searchParams.get('page') ?? undefined,
-        pageSize: url.searchParams.get('pageSize') ?? undefined,
-      });
+      const { page, pageSize } = parsePagination(request);
       const { items, total } = await getArenasByClub(ctx.clubId, { page, pageSize });
       return paginatedResponse(items, { page, pageSize, total });
     },

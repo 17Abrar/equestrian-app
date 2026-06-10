@@ -23,10 +23,11 @@ export default function EndUserTermsPage() {
       </p>
       <p>
         If you book lessons or other services through a riding club, stable, or yard (the &ldquo;
-        <strong>Club</strong>&rdquo;), <strong>your contract for those services is with the
-        Club</strong>, not with Cavaliq. Cavaliq provides the software that the Club uses to manage
-        bookings, payments, and rider information; Cavaliq is not your riding instructor and does
-        not own or operate any horses, arenas, or facilities.
+        <strong>Club</strong>&rdquo;),{' '}
+        <strong>your contract for those services is with the Club</strong>, not with Cavaliq.
+        Cavaliq provides the software that the Club uses to manage bookings, payments, and rider
+        information; Cavaliq is not your riding instructor and does not own or operate any horses,
+        arenas, or facilities.
       </p>
 
       <h2 id="eligibility">1. Who can use Cavaliq</h2>
@@ -34,9 +35,8 @@ export default function EndUserTermsPage() {
         You can create your own Cavaliq account if you are <strong>16 or older</strong>. If you are
         under 16, a parent or guardian must create the account and manage your profile. We do not
         knowingly accept direct sign-ups from children under 13. If you become aware that a child
-        has signed up directly, email{' '}
-        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> and we will remove the
-        account.
+        has signed up directly, email <a href="mailto:info@cavaliq.com">info@cavaliq.com</a> and we
+        will remove the account.
       </p>
       <p>
         See the <Link href="/legal/children">children&rsquo;s data statement</Link> for the full
@@ -55,11 +55,11 @@ export default function EndUserTermsPage() {
       </p>
 
       <h2 id="booking">3. Booking lessons</h2>
-      <p>
-        When you book a lesson:
-      </p>
+      <p>When you book a lesson:</p>
       <ul>
-        <li>The booking creates a contract <strong>between you and the Club</strong>.</li>
+        <li>
+          The booking creates a contract <strong>between you and the Club</strong>.
+        </li>
         <li>
           The Club&rsquo;s own pricing, cancellation, no-show, and refund rules apply. The Club is
           required to display them before you confirm a booking.
@@ -82,10 +82,10 @@ export default function EndUserTermsPage() {
       <h2 id="payments">4. Payments</h2>
       <p>
         Cavaliq is <strong>not a payment processor</strong>. When you pay for a lesson, the payment
-        flows through the processor the Club has connected — Stripe, Ziina, or Network
-        International (N-Genius). The processor receives your card or wallet details directly from
-        your browser. Cavaliq receives only the tokens and references needed to record that the
-        payment was successful.
+        flows through the processor the Club has connected — Stripe, Ziina, or Network International
+        (N-Genius). The processor receives your card or wallet details directly from your browser.
+        Cavaliq receives only the tokens and references needed to record that the payment was
+        successful.
       </p>
       <p>
         The Club is the merchant of record for the lesson. If you need an invoice, a receipt, or a
@@ -147,8 +147,8 @@ export default function EndUserTermsPage() {
 
       <h2 id="content">7. Content you provide</h2>
       <p>
-        You may upload photos, notes, or other content into your profile. You keep ownership of
-        what you upload. You grant Cavaliq a worldwide, royalty-free, non-exclusive licence to host,
+        You may upload photos, notes, or other content into your profile. You keep ownership of what
+        you upload. You grant Cavaliq a worldwide, royalty-free, non-exclusive licence to host,
         store, and display that content as necessary to provide the service to you and to the Club.
       </p>
       <p>
@@ -161,8 +161,8 @@ export default function EndUserTermsPage() {
       <p>
         We may suspend or terminate your account if you breach these Terms, the{' '}
         <Link href="/legal/acceptable-use">acceptable use policy</Link>, or any reasonable
-        instruction we give you for safety, legal, or security reasons. The Club may also suspend
-        or remove your access to its booking system for the same reasons or for unpaid balances.
+        instruction we give you for safety, legal, or security reasons. The Club may also suspend or
+        remove your access to its booking system for the same reasons or for unpaid balances.
       </p>
       <p>
         You can stop using Cavaliq at any time by closing your account. Closing your account does
@@ -180,21 +180,25 @@ export default function EndUserTermsPage() {
 
       <h2 id="liability">10. Our responsibility to you</h2>
       <p>
-        Cavaliq is provided to you free of charge as the end-user; the Club pays for our service.
-        We aim to provide a reliable platform but we cannot guarantee the platform will be
+        Cavaliq is provided to you free of charge as the end-user; the Club pays for our service. We
+        aim to provide a reliable platform but we cannot guarantee the platform will be
         uninterrupted or error-free.
       </p>
-      <p>
-        To the maximum extent permitted by law, Cavaliq is not liable to you for:
-      </p>
+      <p>To the maximum extent permitted by law, Cavaliq is not liable to you for:</p>
       <ul>
-        <li>Anything that goes wrong in your relationship with the Club (refunds, conduct of staff, condition of horses or facilities, quality of teaching).</li>
+        <li>
+          Anything that goes wrong in your relationship with the Club (refunds, conduct of staff,
+          condition of horses or facilities, quality of teaching).
+        </li>
         <li>Indirect or consequential loss.</li>
-        <li>Loss or damage that could not reasonably have been expected at the time you accepted these Terms.</li>
+        <li>
+          Loss or damage that could not reasonably have been expected at the time you accepted these
+          Terms.
+        </li>
       </ul>
       <p>
-        Nothing in these Terms excludes or limits liability for death, personal injury caused by
-        our negligence, fraud, or any other liability that cannot lawfully be limited.
+        Nothing in these Terms excludes or limits liability for death, personal injury caused by our
+        negligence, fraud, or any other liability that cannot lawfully be limited.
       </p>
 
       <h2 id="changes">11. Changes</h2>
@@ -207,13 +211,13 @@ export default function EndUserTermsPage() {
       <h2 id="contact">12. Contact and disputes</h2>
       <p>
         For account, technical, or privacy questions, contact us at{' '}
-        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>. For issues about a lesson,
-        refund, or conduct of staff or horses, contact your Club directly first; we will help if
-        you cannot reach a resolution.
+        <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>. For issues about a lesson, refund,
+        or conduct of staff or horses, contact your Club directly first; we will help if you cannot
+        reach a resolution.
       </p>
       <p>
-        These Terms are governed by the laws of the United Arab Emirates. Any dispute is subject
-        to the exclusive jurisdiction of the courts of Dubai, except where you have a non-waivable
+        These Terms are governed by the laws of the United Arab Emirates. Any dispute is subject to
+        the exclusive jurisdiction of the courts of Dubai, except where you have a non-waivable
         right to bring proceedings in the courts of the country where you live.
       </p>
     </LegalPage>

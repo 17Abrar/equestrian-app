@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { rawDb } from '@equestrian/db';
+import { rateLimitedResponse } from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getRedis } from '@/lib/redis';
 import { getClientIp } from '@/lib/request-ip';
@@ -98,11 +99,7 @@ export async function GET(request: NextRequest) {
         windowMs: 60_000,
       });
   if (!rl.allowed) {
-    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-    return NextResponse.json(
-      { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-    );
+    return rateLimitedResponse(rl, { message: 'Too many requests' });
   }
 
   if (!deep) {

@@ -105,11 +105,3 @@ export interface CancelPreview {
   cancellationNoticeHours: number;
   lessonPrice: number;
 }
-
-/**
- * Mobile previously declared trimmed `Booking` and `BookingSlot` shapes with
- * `status: string` etc. Kept as aliases so mobile narrows against the same
- * fully-typed shape without a breaking import path.
- */
-export type BookingMobile = Booking;
-export type BookingSlotMobile = BookingSlot;

@@ -102,9 +102,7 @@ export async function getTenantContext(): Promise<TenantContext> {
           isActive: clubMembers.isActive,
         })
         .from(clubMembers)
-        .where(
-          and(eq(clubMembers.clubId, foundClub.id), eq(clubMembers.clerkUserId, userId)),
-        )
+        .where(and(eq(clubMembers.clubId, foundClub.id), eq(clubMembers.clerkUserId, userId)))
         .limit(1);
 
       const foundMember = member[0];

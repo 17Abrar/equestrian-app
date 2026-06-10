@@ -24,12 +24,7 @@
       },
       "package": "com.equestrian.app"
     },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "@sentry/react-native",
-      "expo-web-browser"
-    ],
+    "plugins": ["expo-router", "expo-secure-store", "@sentry/react-native", "expo-web-browser"],
     "experiments": {
       "typedRoutes": true
     }

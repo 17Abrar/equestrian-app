@@ -1,11 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { retireManualSuppressionForClub } from '@equestrian/db/queries';
-import {
-  withAuth,
-  successResponse,
-  errorResponse,
-  validateUuidParam,
-} from '@/lib/api-utils';
+import { withAuth, successResponse, errorResponse, validateUuidParam } from '@/lib/api-utils';
 
 interface RouteParams {
   params: Promise<{ suppressionId: string }>;

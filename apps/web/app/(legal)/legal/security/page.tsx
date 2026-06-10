@@ -4,7 +4,8 @@ import { LegalPage } from '@/components/shared/legal-page';
 
 export const metadata: Metadata = {
   title: 'Security overview',
-  description: 'How Cavaliq protects your data: encryption, access control, tenant isolation, and incident response.',
+  description:
+    'How Cavaliq protects your data: encryption, access control, tenant isolation, and incident response.',
 };
 
 export default function SecurityPage() {
@@ -75,9 +76,8 @@ export default function SecurityPage() {
       <p>
         Every request that mutates Club Data — and most read operations on sensitive data — is
         recorded in an audit log with the actor, action, resource, time, and request ID. Logs are
-        retained for at least 12 months and longer for incidents under investigation. They are
-        also the &ldquo;audit trail of last resort&rdquo; in the event of a dispute or
-        investigation.
+        retained for at least 12 months and longer for incidents under investigation. They are also
+        the &ldquo;audit trail of last resort&rdquo; in the event of a dispute or investigation.
       </p>
 
       <h2 id="payments">6. Payments and PCI scope</h2>
@@ -91,11 +91,14 @@ export default function SecurityPage() {
       <ul>
         <li>The application runs on Cloudflare Workers, with strict outbound allow-listing.</li>
         <li>
-          Rate limiting and bot protection are applied at the edge. Rules are tuned to absorb
-          common abuse patterns without affecting legitimate traffic.
+          Rate limiting and bot protection are applied at the edge. Rules are tuned to absorb common
+          abuse patterns without affecting legitimate traffic.
         </li>
         <li>The database is on Neon, with point-in-time recovery and routine restore drills.</li>
-        <li>Object storage uses Cloudflare R2 with private-by-default buckets and signed URLs for upload and download.</li>
+        <li>
+          Object storage uses Cloudflare R2 with private-by-default buckets and signed URLs for
+          upload and download.
+        </li>
       </ul>
 
       <h2 id="people">8. People and process</h2>
@@ -103,18 +106,21 @@ export default function SecurityPage() {
         <li>All staff and contractors are bound by written confidentiality obligations.</li>
         <li>We use the principle of least privilege when granting access to production systems.</li>
         <li>Access is reviewed periodically and revoked when no longer needed.</li>
-        <li>Dependency vulnerabilities are scanned automatically and triaged on a documented cadence.</li>
+        <li>
+          Dependency vulnerabilities are scanned automatically and triaged on a documented cadence.
+        </li>
       </ul>
 
       <h2 id="incident-response">9. Incident response</h2>
-      <p>
-        Cavaliq has a documented incident response process. On detecting an incident we:
-      </p>
+      <p>Cavaliq has a documented incident response process. On detecting an incident we:</p>
       <ol>
         <li>Triage and contain the issue;</li>
         <li>Investigate the root cause and the scope of any data affected;</li>
         <li>Remediate;</li>
-        <li>Notify affected Clubs without undue delay, and within 72 hours when applicable law requires;</li>
+        <li>
+          Notify affected Clubs without undue delay, and within 72 hours when applicable law
+          requires;
+        </li>
         <li>Run a post-incident review and publish a written summary to affected Clubs.</li>
       </ol>
       <p>

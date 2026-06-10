@@ -61,11 +61,7 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
       }
 
       if (ownership.ownershipStatus !== 'retired') {
-        return errorResponse(
-          'NOT_RETIRED',
-          'Only retired horses can be reactivated.',
-          409,
-        );
+        return errorResponse('NOT_RETIRED', 'Only retired horses can be reactivated.', 409);
       }
 
       const updated = await reactivateRetiredOwnership(

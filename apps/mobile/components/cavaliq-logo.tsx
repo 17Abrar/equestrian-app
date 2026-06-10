@@ -24,4 +24,3 @@ export function CavaliqLogo({ variant = 'light', height = 32, style }: CavaliqLo
     />
   );
 }
-

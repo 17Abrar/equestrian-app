@@ -1,9 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  addEmailSuppression,
-  listManualSuppressionsForClub,
-} from '@equestrian/db/queries';
+import { addEmailSuppression, listManualSuppressionsForClub } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
@@ -80,11 +77,7 @@ export async function POST(request: NextRequest) {
         // ctx.clubId) but treat the violation as a 500 with structured
         // logging rather than leaking the Postgres error.
         if (/email_suppressions_manual_requires_club/i.test(message)) {
-          return errorResponse(
-            'INTERNAL_ERROR',
-            'Could not save suppression. Please retry.',
-            500,
-          );
+          return errorResponse('INTERNAL_ERROR', 'Could not save suppression. Please retry.', 500);
         }
         throw err;
       }

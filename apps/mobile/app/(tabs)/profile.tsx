@@ -34,14 +34,8 @@ function Row({ label, icon, onPress, trailing, destructive, isLast }: RowProps) 
       }`}
     >
       <View className="flex-row items-center gap-3">
-        <Ionicons
-          name={icon}
-          size={18}
-          color={destructive ? '#dc2626' : '#6b7280'}
-        />
-        <Text
-          className={`text-sm font-medium ${destructive ? 'text-red-600' : 'text-gray-900'}`}
-        >
+        <Ionicons name={icon} size={18} color={destructive ? '#dc2626' : '#6b7280'} />
+        <Text className={`text-sm font-medium ${destructive ? 'text-red-600' : 'text-gray-900'}`}>
           {label}
         </Text>
       </View>
@@ -103,7 +97,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Info rows */}
-        <Text className="mt-8 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <Text className="mb-2 mt-8 text-xs font-semibold uppercase tracking-wide text-gray-500">
           Account
         </Text>
         <View className="rounded-2xl border border-gray-200 bg-white">
@@ -126,30 +120,17 @@ export default function ProfileScreen() {
         </View>
 
         {/* Help & Support */}
-        <Text className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <Text className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">
           Help & support
         </Text>
         <View className="rounded-2xl border border-gray-200 bg-white">
-          <Row
-            label="Help centre"
-            icon="help-circle-outline"
-            onPress={() => openLegal('/help')}
-          />
-          <Row
-            label="Contact support"
-            icon="mail-outline"
-            onPress={() => openLegal('/support')}
-          />
-          <Row
-            label="Status"
-            icon="pulse-outline"
-            onPress={() => openLegal('/status')}
-            isLast
-          />
+          <Row label="Help centre" icon="help-circle-outline" onPress={() => openLegal('/help')} />
+          <Row label="Contact support" icon="mail-outline" onPress={() => openLegal('/support')} />
+          <Row label="Status" icon="pulse-outline" onPress={() => openLegal('/status')} isLast />
         </View>
 
         {/* Legal & About */}
-        <Text className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <Text className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">
           About
         </Text>
         <View className="rounded-2xl border border-gray-200 bg-white">
@@ -168,11 +149,7 @@ export default function ProfileScreen() {
             icon="document-text-outline"
             onPress={() => openLegal('/legal/terms/end-user')}
           />
-          <Row
-            label="Cookies"
-            icon="ellipse-outline"
-            onPress={() => openLegal('/legal/cookies')}
-          />
+          <Row label="Cookies" icon="ellipse-outline" onPress={() => openLegal('/legal/cookies')} />
           <Row
             label="Refund policy"
             icon="receipt-outline"
@@ -182,7 +159,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Account actions */}
-        <Text className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <Text className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">
           Account actions
         </Text>
         <View className="rounded-2xl border border-gray-200 bg-white">
@@ -204,9 +181,7 @@ export default function ProfileScreen() {
           <Text className="text-center text-base font-semibold text-red-600">Sign Out</Text>
         </TouchableOpacity>
 
-        <Text className="mt-6 text-center text-xs text-gray-400">
-          Cavaliq · v1.0
-        </Text>
+        <Text className="mt-6 text-center text-xs text-gray-400">Cavaliq · v1.0</Text>
       </ScrollView>
     </SafeAreaView>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { type NextRequest, NextResponse, after } from 'next/server';
+import { type NextRequest, after } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import {
   getPublicClubBySlug,
@@ -7,7 +7,7 @@ import {
   joinClubInstantly,
   createAuditEntry,
 } from '@equestrian/db/queries';
-import { successResponse, errorResponse } from '@/lib/api-utils';
+import { successResponse, errorResponse, rateLimitedResponse } from '@/lib/api-utils';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { sendTriggeredEmail } from '@/lib/email';
@@ -48,16 +48,11 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       failClosed: true,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-      // `errorResponse` doesn't take custom headers, so build this one
-      // by hand — Retry-After is part of the rate-limit contract.
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'RATE_LIMITED', message: 'Too many join attempts. Try again shortly.' },
-        },
-        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-      );
+      // Retry-After is part of the rate-limit contract — the shared
+      // helper owns the header now (audit sweep 2026-06-10; this site
+      // used to hand-build the response because errorResponse can't
+      // set headers).
+      return rateLimitedResponse(rl, { message: 'Too many join attempts. Try again shortly.' });
     }
 
     const { slug } = await params;

@@ -12,13 +12,17 @@ filter on that tag** — never on message text. Tag-based matching
 survives log-message wording changes; message-text matching breaks
 silently when a copy edit lands.
 
-`scripts/setup-sentry-alerts.ts` creates every rule in the tables below
+`scripts/setup-sentry-alerts.mjs` creates every rule in the tables below
 via Sentry's REST API. Run it once after editing this file:
 
 ```sh
-SENTRY_AUTH_TOKEN=... SENTRY_ORG_SLUG=... SENTRY_PROJECT_SLUG=cavaliq-web \
-  pnpm tsx scripts/setup-sentry-alerts.ts
+pnpm sentry:alerts
 ```
+
+The pnpm script wraps `node --env-file-if-exists=.env.local`, so it
+picks up `SENTRY_ALERTS_AUTH_TOKEN` (falls back to `SENTRY_AUTH_TOKEN`),
+`SENTRY_ORG_SLUG`, and `SENTRY_PROJECT_SLUG` from `.env.local`
+automatically; export them inline if the file is absent.
 
 The script is idempotent — it lists existing rules and only creates
 missing ones (matched by name). The integrations (PagerDuty, Slack)

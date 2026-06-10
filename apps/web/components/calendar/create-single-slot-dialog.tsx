@@ -82,9 +82,7 @@ export function CreateSingleSlotDialog({
   // window, but settings is cached after the first dashboard navigation
   // so the fallback is effectively unreachable in practice).
   const clubTimezone = settingsQuery.data?.data.timezone;
-  const todayInClub = clubTimezone
-    ? getTodayDateString(clubTimezone)
-    : getTodayLocalDateString();
+  const todayInClub = clubTimezone ? getTodayDateString(clubTimezone) : getTodayLocalDateString();
 
   const form = useForm<SlotFormValues, unknown, CreateBookingSlotInput>({
     resolver: zodResolver(createBookingSlotSchema),

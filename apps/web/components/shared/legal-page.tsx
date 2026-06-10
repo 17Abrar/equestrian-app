@@ -18,7 +18,7 @@ export function LegalPage({
   return (
     <article className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
       <header className="mb-10 border-b pb-8">
-        <p className="text-muted-foreground text-sm font-medium uppercase tracking-wide">Legal</p>
+        <p className="text-muted-foreground text-sm font-medium tracking-wide uppercase">Legal</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
         <dl className="text-muted-foreground mt-4 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
           <div>
@@ -31,7 +31,7 @@ export function LegalPage({
           </div>
         </dl>
         {summary ? (
-          <p className="text-muted-foreground mt-6 max-w-prose rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed">
+          <p className="text-muted-foreground bg-muted/30 mt-6 max-w-prose rounded-lg border p-4 text-sm leading-relaxed">
             <strong className="text-foreground">In short: </strong>
             {summary}
           </p>

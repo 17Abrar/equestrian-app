@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
 import { getPublicClubBySlug } from '@equestrian/db/queries';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { successResponse, errorResponse } from '@/lib/api-utils';
+import { successResponse, errorResponse, rateLimitedResponse } from '@/lib/api-utils';
 import { getClientIp } from '@/lib/request-ip';
 
 interface RouteParams {
@@ -26,11 +26,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     failClosed: true,
   });
   if (!rl.allowed) {
-    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-    return NextResponse.json(
-      { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-    );
+    return rateLimitedResponse(rl, { message: 'Too many requests' });
   }
 
   // Audit L-2-frontend / F-37: defensive bounds on the slug path segment.

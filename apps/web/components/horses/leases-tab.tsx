@@ -6,10 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Plus, Handshake, Clock, CheckCircle2, Ban, Calendar } from 'lucide-react';
 import { z } from 'zod';
-import {
-  type CreateHorseLeaseInput,
-  type SetLeaseStatusInput,
-} from '@equestrian/shared/schemas';
+import { type CreateHorseLeaseInput, type SetLeaseStatusInput } from '@equestrian/shared/schemas';
 import { formatMoney, toMinorUnits, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { SUPPORTED_CURRENCIES, type SupportedCurrency } from '@equestrian/shared/constants';
 import {
@@ -77,28 +74,29 @@ import { reportMutationError } from '@/components/shared/report-mutation-error';
  * rather than a partial list.
  */
 
-const STATUS_BADGE: Record<LeaseStatus, { label: string; className: string; Icon: typeof Clock }> = {
-  pending: {
-    label: 'Pending',
-    className: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
-    Icon: Clock,
-  },
-  active: {
-    label: 'Active',
-    className: 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100',
-    Icon: CheckCircle2,
-  },
-  ended: {
-    label: 'Ended',
-    className: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
-    Icon: Calendar,
-  },
-  cancelled: {
-    label: 'Cancelled',
-    className: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
-    Icon: Ban,
-  },
-};
+const STATUS_BADGE: Record<LeaseStatus, { label: string; className: string; Icon: typeof Clock }> =
+  {
+    pending: {
+      label: 'Pending',
+      className: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
+      Icon: Clock,
+    },
+    active: {
+      label: 'Active',
+      className: 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100',
+      Icon: CheckCircle2,
+    },
+    ended: {
+      label: 'Ended',
+      className: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
+      Icon: Calendar,
+    },
+    cancelled: {
+      label: 'Cancelled',
+      className: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
+      Icon: Ban,
+    },
+  };
 
 export function LeasesTab({ horseId }: { horseId: string }) {
   const { data, isLoading, isError, error, refetch } = useHorseLeases(horseId);
@@ -116,10 +114,7 @@ export function LeasesTab({ horseId }: { horseId: string }) {
 
   if (isError) {
     return (
-      <ErrorState
-        message={error instanceof Error ? error.message : undefined}
-        onRetry={refetch}
-      />
+      <ErrorState message={error instanceof Error ? error.message : undefined} onRetry={refetch} />
     );
   }
 
@@ -222,7 +217,7 @@ function LeaseRow({ lease, horseId }: { lease: HorseLeaseRow; horseId: string })
               {formatMoney(lease.monthlyFeeMinor, lease.currency)}/month
             </p>
             {lease.notes && (
-              <p className="text-muted-foreground mt-2 whitespace-pre-wrap text-xs">
+              <p className="text-muted-foreground mt-2 text-xs whitespace-pre-wrap">
                 {lease.notes}
               </p>
             )}
@@ -332,9 +327,9 @@ function AddLeaseDialog({
   const lesseesQuery = useQuery({
     queryKey: ['members-for-lease-picker', { role: 'rider' }],
     queryFn: () =>
-      fetchJson<PaginatedApiResponse<{ id: string; displayName: string | null; email: string | null }>>(
-        '/api/v1/members?role=rider&pageSize=50',
-      ),
+      fetchJson<
+        PaginatedApiResponse<{ id: string; displayName: string | null; email: string | null }>
+      >('/api/v1/members?role=rider&pageSize=50'),
   });
 
   // FORM SHAPE: monthly fee is held in MAJOR units inside the form
@@ -409,10 +404,9 @@ function AddLeaseDialog({
         lesseeMemberId: '',
         leaseType: 'half',
         monthlyFeeMajor: undefined as unknown as number,
-        currency:
-          (settingsQuery.data?.success
-            ? (settingsQuery.data.data.currency as SupportedCurrency)
-            : clubCurrency),
+        currency: settingsQuery.data?.success
+          ? (settingsQuery.data.data.currency as SupportedCurrency)
+          : clubCurrency,
         startDate: getTodayLocalDateString(),
         endDate: '',
         notes: '',
@@ -424,8 +418,7 @@ function AddLeaseDialog({
     }
   }
 
-  const lesseeList =
-    lesseesQuery.data && lesseesQuery.data.success ? lesseesQuery.data.data : [];
+  const lesseeList = lesseesQuery.data && lesseesQuery.data.success ? lesseesQuery.data.data : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -507,10 +500,7 @@ function AddLeaseDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Currency *</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value ?? clubCurrency}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value ?? clubCurrency}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -548,8 +538,8 @@ function AddLeaseDialog({
                     />
                   </FormControl>
                   <p className="text-muted-foreground text-xs">
-                    Half-lease typically costs half the horse&apos;s monthly upkeep.
-                    Full-lease covers the whole thing.
+                    Half-lease typically costs half the horse&apos;s monthly upkeep. Full-lease
+                    covers the whole thing.
                   </p>
                   <FormMessage />
                 </FormItem>
@@ -592,7 +582,11 @@ function AddLeaseDialog({
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
                   <FormControl>
-                    <Textarea rows={2} placeholder="Days of access, riding times, etc." {...field} />
+                    <Textarea
+                      rows={2}
+                      placeholder="Days of access, riding times, etc."
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

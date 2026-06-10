@@ -809,27 +809,11 @@ export async function cancelLiveryInvoice(clubId: string, invoiceId: string) {
 }
 
 /**
- * Simple sequential invoice number per club. Format: `LIV-{clubSlug}-{n}`
- * where n is the current count of livery invoices for that club + 1.
- *
- * Concurrent callers can both compute the same `n`; the
- * `livery_invoices_club_number_unique` index ensures only one wins, and
- * `createLiveryInvoiceWithGeneratedNumber` retries on the resulting
- * 23505 with a fresh number — see audit G-4.
- */
-export async function nextLiveryInvoiceNumber(clubId: string) {
-  const result = await rawDb
-    .select({ count: sql<number>`count(*)::int` })
-    .from(liveryInvoices)
-    .where(eq(liveryInvoices.clubId, clubId));
-  const n = (result[0]?.count ?? 0) + 1;
-  return `LIV-${clubId.slice(0, 6)}-${String(n).padStart(5, '0')}`;
-}
-
-/**
  * Issue a livery invoice with a freshly-generated unique number, retrying
  * on the per-club (club_id, invoice_number) unique-index collision that
- * concurrent cron runs would otherwise produce. The (horse_id,
+ * concurrent cron runs would otherwise produce. Numbers are simple
+ * per-club sequentials: `LIV-{clubId-prefix}-{n}` where n is the current
+ * count of livery invoices for that club + 1. The (horse_id,
  * period_start) idempotency conflict is still handled by createLiveryInvoice's
  * onConflictDoNothing — that path returns null (already issued).
  *

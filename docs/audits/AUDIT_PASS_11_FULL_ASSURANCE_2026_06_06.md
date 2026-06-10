@@ -51,30 +51,30 @@ the unused `apps/mobile/lib/storage.ts` (imported the uninstalled
 
 ### High severity
 
-| ID | File | Fix |
-|----|------|-----|
-| auth-tenant-1 | `app/api/webhooks/clerk/route.ts` | **Security:** `organizationMembership.created` upsert could resurrect an admin-kicked member. Added the `CASE WHEN deactivated_by_admin_at IS NULL` guard used everywhere else so a webhook/Svix redelivery can't reactivate a kicked member. |
-| people-1 | `components/riders/rider-profile.tsx` | Passed `rider.id` (profile UUID) where a `club_members.id` was required, leaving the Bookings/Progress tabs permanently empty. Now passes `rider.memberId`. |
-| horses-1 | `components/horses/pending-approval-card.tsx` | Hardcoded `*100` mis-billed 3-decimal currencies (KWD/BHD/OMR) by 10x on ownership approval. Now uses `toMinorUnits(fee, clubCurrency)`. |
-| competitions-community-1 | `db/src/queries/competitions.ts` | Registration was allowed against draft/completed/soft-deleted competitions (only `cancelled` was rejected). Now requires `isActive` and status in `{published, in_progress}`. |
-| arenas-lessons-dash-1 | `db/src/queries/reports.ts` | Horse-utilization report ignored the date range (counted `bookings.id` off the un-dated join). Now counts the date-filtered `bookingSlots.id`. |
-| arenas-lessons-dash-2 | `components/lesson-types/lesson-type-form.tsx` | Create form rejected fractional prices (resolver used the integer minor-unit API schema). Added a major-unit form schema; converts via `toMinorUnits` on submit. |
-| config-scripts-1 | `scripts/backfill-pass-2-phi.mjs` | PHI backfill unconditionally set `updated_at` on `horse_documents`, which has no such column → 42703 aborts the whole backfill (leaves PHI unencrypted). Added `bumpUpdatedAt: false` for write-once tables. |
-| db-migrations-1 | (deferred — see D-1) | Editing an already-applied migration carries checksum risk; documented for sign-off. |
+| ID                       | File                                           | Fix                                                                                                                                                                                                                                           |
+| ------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| auth-tenant-1            | `app/api/webhooks/clerk/route.ts`              | **Security:** `organizationMembership.created` upsert could resurrect an admin-kicked member. Added the `CASE WHEN deactivated_by_admin_at IS NULL` guard used everywhere else so a webhook/Svix redelivery can't reactivate a kicked member. |
+| people-1                 | `components/riders/rider-profile.tsx`          | Passed `rider.id` (profile UUID) where a `club_members.id` was required, leaving the Bookings/Progress tabs permanently empty. Now passes `rider.memberId`.                                                                                   |
+| horses-1                 | `components/horses/pending-approval-card.tsx`  | Hardcoded `*100` mis-billed 3-decimal currencies (KWD/BHD/OMR) by 10x on ownership approval. Now uses `toMinorUnits(fee, clubCurrency)`.                                                                                                      |
+| competitions-community-1 | `db/src/queries/competitions.ts`               | Registration was allowed against draft/completed/soft-deleted competitions (only `cancelled` was rejected). Now requires `isActive` and status in `{published, in_progress}`.                                                                 |
+| arenas-lessons-dash-1    | `db/src/queries/reports.ts`                    | Horse-utilization report ignored the date range (counted `bookings.id` off the un-dated join). Now counts the date-filtered `bookingSlots.id`.                                                                                                |
+| arenas-lessons-dash-2    | `components/lesson-types/lesson-type-form.tsx` | Create form rejected fractional prices (resolver used the integer minor-unit API schema). Added a major-unit form schema; converts via `toMinorUnits` on submit.                                                                              |
+| config-scripts-1         | `scripts/backfill-pass-2-phi.mjs`              | PHI backfill unconditionally set `updated_at` on `horse_documents`, which has no such column → 42703 aborts the whole backfill (leaves PHI unencrypted). Added `bumpUpdatedAt: false` for write-once tables.                                  |
+| db-migrations-1          | (deferred — see D-1)                           | Editing an already-applied migration carries checksum risk; documented for sign-off.                                                                                                                                                          |
 
 ### Medium severity
 
-| ID | File | Fix |
-|----|------|-----|
-| auth-tenant-2 | `lib/safe-href.ts` | Protocol-relative `//evil.com` slipped through the path-passthrough (open-redirect). Now rejected, matching `safe-redirect.ts`. |
-| payments-1 | `app/api/webhooks/resend/route.ts` | Resend webhook had no rate limit (every sibling webhook fails closed). Added IP-keyed `failClosed` limiter. |
-| shared-1 | `shared/src/schemas/index.ts` | Photo/document URL fields used bare `z.string().url()` (accepts `javascript:`). Switched to the `httpsUrl` scheme guard. |
-| web-infra-1 | `lib/env-check.ts` | `R2_PUBLIC_URL` (an upload origin-pin / security boundary) was missing from the production required-env gate. Added. |
-| arenas-lessons-dash-3 | `components/reports/reports-page.tsx` | "Bookings" card counts only paid/partial; relabelled "Paid Bookings" to match the data. |
+| ID                    | File                                           | Fix                                                                                                                                     |
+| --------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| auth-tenant-2         | `lib/safe-href.ts`                             | Protocol-relative `//evil.com` slipped through the path-passthrough (open-redirect). Now rejected, matching `safe-redirect.ts`.         |
+| payments-1            | `app/api/webhooks/resend/route.ts`             | Resend webhook had no rate limit (every sibling webhook fails closed). Added IP-keyed `failClosed` limiter.                             |
+| shared-1              | `shared/src/schemas/index.ts`                  | Photo/document URL fields used bare `z.string().url()` (accepts `javascript:`). Switched to the `httpsUrl` scheme guard.                |
+| web-infra-1           | `lib/env-check.ts`                             | `R2_PUBLIC_URL` (an upload origin-pin / security boundary) was missing from the production required-env gate. Added.                    |
+| arenas-lessons-dash-3 | `components/reports/reports-page.tsx`          | "Bookings" card counts only paid/partial; relabelled "Paid Bookings" to match the data.                                                 |
 | arenas-lessons-dash-5 | `components/lesson-types/lesson-type-form.tsx` | Edit dialog `*100` / `/100` mis-scaled non-AED currencies. Now uses `toMinorUnits`/`toMajorUnits` keyed off the lesson type's currency. |
-| bookings-1 | `components/calendar/day-view.tsx` | Day view dropped slots outside 06:00–22:00. Widened to a full 24-hour grid. |
-| bookings-2 | `components/bookings/add-booking-dialog.tsx` | Offered "Package Credit", which the API hard-rejects (422). Removed the dead option. |
-| emails-1 | `components/emails/audiences-tab.tsx` | Audiences list silently truncated to the default 25. Now requests `pageSize=50` (full pagination UI tracked as follow-up). |
+| bookings-1            | `components/calendar/day-view.tsx`             | Day view dropped slots outside 06:00–22:00. Widened to a full 24-hour grid.                                                             |
+| bookings-2            | `components/bookings/add-booking-dialog.tsx`   | Offered "Package Credit", which the API hard-rejects (422). Removed the dead option.                                                    |
+| emails-1              | `components/emails/audiences-tab.tsx`          | Audiences list silently truncated to the default 25. Now requests `pageSize=50` (full pagination UI tracked as follow-up).              |
 
 ### Low severity (mechanical / clarity)
 
@@ -104,7 +104,7 @@ After operator clarification on each, all seven deferrals were actioned:
   transient Resend outage retries next pass instead of burning the threshold.
 - **D-3 (resolved, FK only):** migration
   `0068_audit_pass_11_email_send_log_audience_fk.sql` adds `audiences (id,
-  club_id)` UNIQUE and promotes `email_send_log.audience_id` to a composite
+club_id)` UNIQUE and promotes `email_send_log.audience_id` to a composite
   `(audience_id, club_id)` FK. `ON DELETE NO ACTION` (club_id is NOT NULL);
   `deleteAudience` now nulls the log reference in the same transaction first,
   preserving prior behavior. Drizzle schema TS updated to match. The
@@ -160,7 +160,7 @@ These were the findings flagged before sign-off; see the resolutions above.
 - **D-1 (high) — `migrations/0064_horse_leases.sql`:** bare `CREATE TYPE` with no
   guard. On a Neon test-branch fork the swallowed `duplicate_object` aborts the
   single-statement file, so `horse_leases` + indexes are never created yet 0064
-  is recorded as applied. *Recommended:* a new forward migration that
+  is recorded as applied. _Recommended:_ a new forward migration that
   idempotently creates the table/indexes if missing (don't edit applied history).
 - **D-2 (medium) — `cron/livery-billing`:** overdue-reminder burns
   `reminder_count` before send and never rolls back on transient email failure
@@ -178,7 +178,7 @@ These were the findings flagged before sign-off; see the resolutions above.
 - **D-6 (pre-existing, environmental) — mobile typecheck:**
   `react-native-toast-message@2.3.3`'s `package.json` points `main`/`types` at
   `./lib/index.*` but it builds to `./lib/src/*` (no `index.*` exists), so `tsc`
-  can't resolve it. Runtime (Metro) is unaffected. *Recommended:* pin to a
+  can't resolve it. Runtime (Metro) is unaffected. _Recommended:_ pin to a
   version whose package metadata matches its build output, or add a typed module
   shim. Not masked with an `any` shim (that would be its own regression).
 - **D-7 (low) — `components/marketing/`:** orphaned `WaitlistForm` +

@@ -533,7 +533,9 @@ export const emailSuppressions = pgTable(
       .where(sql`source = 'manual'`),
     // The hot path is `isSuppressed(email)`. Partial index on the
     // non-retired rows keeps it index-only. Mirrored from migration 0063.
-    index('idx_email_suppressions_active').on(table.email).where(sql`retired_at IS NULL`),
+    index('idx_email_suppressions_active')
+      .on(table.email)
+      .where(sql`retired_at IS NULL`),
     // Listing UI hot path: per-club, newest-first, active only. Partial
     // index from migration 0065 keeps it tight (webhook rows excluded).
     index('idx_email_suppressions_club')
@@ -546,10 +548,7 @@ export const emailSuppressions = pgTable(
       'email_suppressions_reason_check',
       sql`${table.reason} IN ('bounced', 'complained', 'manual')`,
     ),
-    check(
-      'email_suppressions_source_check',
-      sql`${table.source} IN ('resend_webhook', 'manual')`,
-    ),
+    check('email_suppressions_source_check', sql`${table.source} IN ('resend_webhook', 'manual')`),
     // Migration 0065: manual ↔ club_id pairing.
     check(
       'email_suppressions_manual_requires_club',

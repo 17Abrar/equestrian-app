@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
+import { PaginationControls } from '@/components/shared/pagination-controls';
 import { PendingApprovalCard } from './pending-approval-card';
 import { BulkImportButton } from './bulk-import-dialog';
 import { HORSE_STATUS_COLORS } from '@/lib/ui-constants';
@@ -304,30 +305,12 @@ export function HorsesList({ canCreate = true }: HorsesListProps = {}) {
             ))}
           </div>
 
-          {/* Pagination */}
-          {data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-muted-foreground text-sm">
-                Page {page} of {data.pagination.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= data.pagination.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+          {/* Pagination: renders nothing on a single page */}
+          <PaginationControls
+            page={page}
+            totalPages={data.pagination.totalPages}
+            onChange={setPage}
+          />
         </>
       )}
     </div>

@@ -17,10 +17,10 @@ export async function register() {
   // the deploy gate's startup probe instead of at midnight when an
   // admin first writes a medication record. Sub-millisecond cost.
   //
-  // Only fires in the Node runtime where encryption actually runs.
-  // The build step (`scripts/collect-page-data.mjs`) doesn't pass
-  // through `register()` so a missing key during build doesn't crash
-  // the build.
+  // Only fires in the Node runtime where encryption actually runs:
+  // the check is gated on `NEXT_RUNTIME === 'nodejs'` below, which is
+  // what keeps a missing key during `next build` from failing the
+  // build.
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { assertEncryptionKeyConfigured } = await import('@equestrian/db/crypto');
     assertEncryptionKeyConfigured();

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type CreateStaffInput, type UpdateStaffInput } from '@equestrian/shared/schemas';
+import { type CreateStaffInput } from '@equestrian/shared/schemas';
 import {
   type ApiResponse,
   type PaginatedResponse,
@@ -60,16 +60,6 @@ export function useOwnerMembers() {
   });
 }
 
-export function useRiderMembers() {
-  return useQuery({
-    queryKey: ['members', 'rider'],
-    queryFn: () =>
-      fetchJson<PaginatedResponse<ClubMember>>(
-        `/api/v1/members?role=rider&pageSize=${MAX_PAGE_SIZE}`,
-      ),
-  });
-}
-
 export function useCoachMembers() {
   return useQuery({
     queryKey: ['members', 'coach'],
@@ -109,22 +99,6 @@ export function useCreateStaff() {
     mutationFn: (data: CreateStaffInput) =>
       fetchJson<ApiResponse<ClubMember>>('/api/v1/staff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...STAFF_KEY, 'list'] });
-    },
-  });
-}
-
-export function useUpdateStaff(memberId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: UpdateStaffInput) =>
-      fetchJson<ApiResponse<ClubMember>>(`/api/v1/staff/${memberId}`, {
-        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),

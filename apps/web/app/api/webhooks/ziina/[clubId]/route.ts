@@ -8,7 +8,11 @@ import {
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { ziinaAdapter } from '@/lib/payments/ziina';
-import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
+import {
+  applyPaymentWebhook,
+  applyLiveryInvoiceWebhook,
+  safeRecordAccountError,
+} from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -121,6 +125,17 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
     // than via a distinct response code so attackers and Ziina see the
     // same shape as every other rejection path.
     logger.error('ziina_webhook_secret_not_configured', { clubId });
+    // Also surface it on the settings panel's `lastError` — the account
+    // row provably exists (the config lookup above returned it), and
+    // without it the misconfig is only visible to whoever tails logs.
+    // Server-authored message (never derived from request bytes), and
+    // non-fatal by contract — the helper swallows its own DB failures, so
+    // the QA-15 uniform 401 below is unaffected.
+    await safeRecordAccountError(
+      clubId,
+      'ziina',
+      'Ziina webhook received but no webhook signing secret is configured. Save the signing secret from your Ziina webhook registration into Settings > Payments.',
+    );
     return new Response('Invalid signature', { status: 401 });
   }
 
@@ -134,8 +149,25 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
   } catch (err) {
     if (err instanceof PaymentProviderError && err.code === 'INVALID_SIGNATURE') {
       logger.warn('ziina_webhook_invalid_signature', { clubId });
+      // A signature failure on a configured account is the textbook
+      // operator misconfig (wrong or stale signing secret) and it fails
+      // EVERY Ziina delivery the same way — record it so settings shows
+      // `lastError` instead of bookings silently staying forever-pending.
+      // Static server-authored message: a fuzzer hitting this 401 path
+      // (rate-limited above) can flip the status badge to `error` but
+      // cannot inject text. Non-fatal by contract — the response below
+      // stays QA-15 uniform regardless of the recording outcome.
+      await safeRecordAccountError(
+        clubId,
+        'ziina',
+        'Ziina webhook signature verification failed. The webhook signing secret saved in Settings > Payments may not match the secret registered with Ziina.',
+      );
       return new Response('Invalid signature', { status: 401 });
     }
+    // Generic verify failure: with the HMAC already checked first inside
+    // the adapter, this branch is e.g. a JSON parse throw on a body that
+    // PASSED the signature check — provider-side weirdness, not the
+    // club's account config, so no `lastError` write here.
     logger.error('ziina_webhook_verify_failed', {
       clubId,
       error: err instanceof Error ? err.message : 'unknown',

@@ -1,9 +1,10 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { paginationSchema } from '@equestrian/shared/schemas';
 import { listPublicClubs } from '@equestrian/db/queries';
-import { errorResponse, paginatedResponse } from '@/lib/api-utils';
+import { errorResponse, paginatedResponse, rateLimitedResponse } from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/request-ip';
 
 // Public endpoint — no auth required. Allows sign-out riders to browse clubs
 // before committing to a sign-up. Rate-limited per source IP because there
@@ -28,11 +29,7 @@ const queryShape = z
   .strict();
 
 export async function GET(request: NextRequest) {
-  const ip =
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  const ip = getClientIp(request);
   // Tight per-IP cap because this endpoint is unauthenticated and the obvious
   // scrape target — competitor crawls, phishing-list builders. failClosed so a
   // Redis blip doesn't downgrade us to per-isolate counters (which on Workers
@@ -43,11 +40,7 @@ export async function GET(request: NextRequest) {
     failClosed: true,
   });
   if (!rl.allowed) {
-    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-    return NextResponse.json(
-      { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-    );
+    return rateLimitedResponse(rl, { message: 'Too many requests' });
   }
 
   const sp = Object.fromEntries(request.nextUrl.searchParams);

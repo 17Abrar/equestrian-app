@@ -15,11 +15,7 @@ import { useRider, useUpdateRider } from '@/hooks/use-riders';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { hasPermission } from '@/lib/permissions-shared';
 import { useBookings, type Booking } from '@/hooks/use-bookings';
-import {
-  formatMoney,
-  getTodayDateString,
-  getTodayLocalDateString,
-} from '@equestrian/shared/utils';
+import { formatMoney, getTodayDateString, getTodayLocalDateString } from '@equestrian/shared/utils';
 import { useClubSettings } from '@/hooks/use-settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

@@ -31,14 +31,14 @@ export default function CookiesPage() {
       <h2 id="what-we-use">2. What Cavaliq uses cookies for</h2>
       <p>
         We categorise the cookies we set as <strong>strictly necessary</strong>. That means we
-        cannot deliver the service to you without them. We do not use cookies for advertising or
-        for cross-site tracking, and we do not share cookie data with advertising networks.
+        cannot deliver the service to you without them. We do not use cookies for advertising or for
+        cross-site tracking, and we do not share cookie data with advertising networks.
       </p>
 
       <h3>Authentication and session cookies</h3>
       <p>
-        Set by our identity provider, Clerk, when you sign in. They keep you signed in across
-        pages and protect against session hijacking.
+        Set by our identity provider, Clerk, when you sign in. They keep you signed in across pages
+        and protect against session hijacking.
       </p>
       <ul>
         <li>
@@ -81,14 +81,12 @@ export default function CookiesPage() {
       <h3>Error monitoring</h3>
       <p>
         Sentry collects performance traces and error reports. It does not use cookies but it may
-        attach a randomly generated session ID to a crash report so we can join related events.
-        Form values, passwords, and tokens are stripped before being sent to Sentry.
+        attach a randomly generated session ID to a crash report so we can join related events. Form
+        values, passwords, and tokens are stripped before being sent to Sentry.
       </p>
 
       <h2 id="no-marketing">3. What we don&rsquo;t do</h2>
-      <p>
-        Cavaliq does not currently use:
-      </p>
+      <p>Cavaliq does not currently use:</p>
       <ul>
         <li>Advertising cookies or marketing pixels.</li>
         <li>Cross-site behavioural tracking.</li>
@@ -97,8 +95,8 @@ export default function CookiesPage() {
       </ul>
       <p>
         If we ever introduce optional analytics or marketing technology, we will update this page
-        and ask for your consent before setting any non-essential cookie on devices in regions
-        where consent is required (such as the EU, UK, and other applicable jurisdictions).
+        and ask for your consent before setting any non-essential cookie on devices in regions where
+        consent is required (such as the EU, UK, and other applicable jurisdictions).
       </p>
 
       <h2 id="manage">4. How to manage cookies</h2>
@@ -108,9 +106,7 @@ export default function CookiesPage() {
         to clear the secure-store tokens. Blocking strictly necessary cookies may prevent you from
         signing in or from using the platform at all.
       </p>
-      <p>
-        Helpful links:
-      </p>
+      <p>Helpful links:</p>
       <ul>
         <li>
           <a href="https://support.google.com/chrome/answer/95647" rel="noreferrer">

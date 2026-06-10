@@ -179,20 +179,6 @@ export async function getActivePaymentAccount(
   return row ? toWithCredentials(row) : null;
 }
 
-export async function getPaymentAccountByProvider(
-  clubId: string,
-  provider: PaymentProvider,
-): Promise<PaymentAccountWithCredentials | null> {
-  const rows = await db
-    .select()
-    .from(clubPaymentAccounts)
-    .where(and(eq(clubPaymentAccounts.clubId, clubId), eq(clubPaymentAccounts.provider, provider)))
-    .limit(1);
-
-  const row = rows[0];
-  return row ? toWithCredentials(row) : null;
-}
-
 interface UpsertInput {
   provider: PaymentProvider;
   status: PaymentAccountStatus;
@@ -500,7 +486,7 @@ export async function recordPaymentAccountError(
  * no tenant context yet, so RLS would otherwise block the read.
  *
  * Only call this from webhook routes; in-app code should use the tenant-scoped
- * `getPaymentAccountByProvider`.
+ * `getActivePaymentAccount`.
  *
  * Filters out `disabled` accounts (audit B-25): a club that disconnected
  * but whose row remained will keep receiving Stripe webhooks for in-flight

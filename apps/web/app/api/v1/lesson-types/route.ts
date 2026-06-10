@@ -1,13 +1,13 @@
 import { type NextRequest } from 'next/server';
-import { createLessonTypeSchema, paginationSchema } from '@equestrian/shared/schemas';
+import { createLessonTypeSchema } from '@equestrian/shared/schemas';
 import { getLessonTypesByClub, createLessonType, getArenaById } from '@equestrian/db/queries';
 import {
   withAuth,
   successResponse,
   errorResponse,
-  validateInput,
   parseRequiredBody,
   paginatedResponse,
+  parsePagination,
 } from '@/lib/api-utils';
 import { hasPermission } from '@/lib/permissions';
 
@@ -36,11 +36,7 @@ export async function GET(request: NextRequest) {
       return errorResponse('FORBIDDEN', 'You do not have permission to view lesson types', 403);
     }
 
-    const url = new URL(request.url);
-    const { page, pageSize } = validateInput(paginationSchema, {
-      page: url.searchParams.get('page') ?? undefined,
-      pageSize: url.searchParams.get('pageSize') ?? undefined,
-    });
+    const { page, pageSize } = parsePagination(request);
     const { items, total } = await getLessonTypesByClub(ctx.clubId, { page, pageSize });
     return paginatedResponse(items, { page, pageSize, total });
   });

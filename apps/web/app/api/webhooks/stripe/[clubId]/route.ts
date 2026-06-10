@@ -8,7 +8,11 @@ import {
   markWebhookEventProcessed,
 } from '@equestrian/db/queries';
 import { stripeAdapter } from '@/lib/payments/stripe';
-import { applyPaymentWebhook, applyLiveryInvoiceWebhook } from '@/lib/payments/webhook-helpers';
+import {
+  applyPaymentWebhook,
+  applyLiveryInvoiceWebhook,
+  safeRecordAccountError,
+} from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
 import { readWebhookBody, WEBHOOK_BODY_CAPS } from '@/lib/payments/webhook-body';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -117,6 +121,19 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
     // Operator-actionable: the club connected Stripe but didn't paste the
     // webhook signing secret. Log loud, return identical shape.
     logger.error('stripe_webhook_secret_not_configured', { clubId });
+    // Surface the misconfig on the settings panel's `lastError` too — the
+    // account row provably exists (the config lookup above returned it),
+    // and without a working webhook every dashboard-issued refund silently
+    // never lands in the booking ledger. The message is server-authored
+    // (never derived from request bytes), so this unauthenticated path
+    // can't write attacker-controlled content into the UI. Non-fatal by
+    // contract — the helper swallows its own DB failures, so the QA-15
+    // uniform 401 below is unaffected.
+    await safeRecordAccountError(
+      clubId,
+      'stripe',
+      'Stripe webhook received but no webhook signing secret is configured. Paste the whsec_ secret from your Stripe webhook endpoint into Settings > Payments.',
+    );
     return new Response('Invalid signature', { status: 401 });
   }
 
@@ -130,8 +147,26 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
   } catch (err) {
     if (err instanceof PaymentProviderError && err.code === 'INVALID_SIGNATURE') {
       logger.warn('stripe_webhook_invalid_signature', { clubId });
+      // A signature failure on a configured account is the #1 operator
+      // misconfig (wrong or rotated `whsec_…`) and it fails EVERY Stripe
+      // delivery the same way — record it so settings shows `lastError`
+      // instead of payments silently staying forever-pending. The message
+      // is static and server-authored: a fuzzer hitting this 401 path
+      // (rate-limited above) can flip the status badge to `error` but
+      // cannot inject text into the settings panel. Non-fatal by contract
+      // — the response below stays QA-15 uniform regardless of the
+      // recording outcome.
+      await safeRecordAccountError(
+        clubId,
+        'stripe',
+        'Stripe webhook signature verification failed. The webhook signing secret saved in Settings > Payments may not match the endpoint secret in your Stripe dashboard.',
+      );
       return new Response('Invalid signature', { status: 401 });
     }
+    // Generic verify failure: the Stripe adapter wraps every
+    // `constructEvent` throw into INVALID_SIGNATURE, so this branch only
+    // catches genuinely unexpected internals — not attributable to the
+    // club's account config, so no `lastError` write here.
     logger.error('stripe_webhook_verify_failed', {
       clubId,
       error: err instanceof Error ? err.message : 'unknown',

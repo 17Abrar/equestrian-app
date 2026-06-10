@@ -159,22 +159,14 @@ export async function createPlatformInvoice(input: CreatePlatformInvoiceInput) {
   return result[0] ?? null;
 }
 
-/**
- * Per-club sequential invoice number. Format: `PLAT-{clubId-prefix}-{n}`.
- * Mirrors the livery numbering scheme; the per-club uniqueness index
- * catches concurrent races and the wrapper retries with a fresh count.
- */
-export async function nextPlatformInvoiceNumber(clubId: string) {
-  const rows = await rawDb
-    .select({ count: sql<number>`count(*)::int` })
-    .from(platformSubscriptionInvoices)
-    .where(eq(platformSubscriptionInvoices.clubId, clubId));
-  const n = (rows[0]?.count ?? 0) + 1;
-  return `PLAT-${clubId.slice(0, 6)}-${String(n).padStart(5, '0')}`;
-}
-
 type CreatePlatformInvoiceWithoutNumber = Omit<CreatePlatformInvoiceInput, 'invoiceNumber'>;
 
+/**
+ * Issues a platform invoice with a per-club sequential number. Format:
+ * `PLAT-{clubId-prefix}-{n}`, mirroring the livery numbering scheme. The
+ * per-club uniqueness index catches concurrent races and the 23505 retry
+ * loop below re-derives a fresh count.
+ */
 export async function createPlatformInvoiceWithGeneratedNumber(
   input: CreatePlatformInvoiceWithoutNumber,
 ): Promise<NonNullable<Awaited<ReturnType<typeof createPlatformInvoice>>> | null> {

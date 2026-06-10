@@ -76,11 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // payload.
       const lessee = await getMemberById(ctx.clubId, data.lesseeMemberId);
       if (!lessee) {
-        return errorResponse(
-          'LESSEE_NOT_FOUND',
-          'Lessee is not a member of this club.',
-          422,
-        );
+        return errorResponse('LESSEE_NOT_FOUND', 'Lessee is not a member of this club.', 422);
       }
 
       // Codex P2 (2026-05-27): the lessee must be a rider or horse_owner.

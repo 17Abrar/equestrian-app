@@ -20,11 +20,5 @@ export function getAdapter(provider: ProviderName): PaymentProviderAdapter {
   return adapter;
 }
 
-export function listAdapters(): PaymentProviderAdapter[] {
-  return Object.values(adapters);
-}
-
-export const PROVIDER_NAMES: readonly ProviderName[] = Object.keys(adapters) as ProviderName[];
-
 export { PaymentProviderError } from './types';
 export type { PaymentProviderAdapter, ProviderName } from './types';

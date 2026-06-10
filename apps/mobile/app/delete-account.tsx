@@ -64,8 +64,7 @@ export default function DeleteAccountScreen() {
       setDone(true);
     } catch (err) {
       captureMobileException(err, 'account_delete_request_failed', {});
-      const message =
-        err instanceof Error ? err.message : 'Could not submit the deletion request';
+      const message = err instanceof Error ? err.message : 'Could not submit the deletion request';
       Alert.alert('Something went wrong', message);
     } finally {
       setSubmitting(false);
@@ -149,8 +148,8 @@ export default function DeleteAccountScreen() {
           <View className="flex-row gap-2">
             <Text className="text-gray-400">3.</Text>
             <Text className="flex-1 text-sm leading-relaxed text-gray-700">
-              We complete the deletion within 30 days. Some records (e.g. payment invoices) are
-              kept for the period required by tax law — see the privacy policy.
+              We complete the deletion within 30 days. Some records (e.g. payment invoices) are kept
+              for the period required by tax law — see the privacy policy.
             </Text>
           </View>
           <View className="flex-row gap-2">
@@ -161,9 +160,7 @@ export default function DeleteAccountScreen() {
           </View>
         </View>
 
-        <Text className="mt-6 mb-2 text-sm font-medium text-gray-700">
-          Reason (optional)
-        </Text>
+        <Text className="mb-2 mt-6 text-sm font-medium text-gray-700">Reason (optional)</Text>
         <TextInput
           className="rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-900"
           placeholder="Help us improve — what's prompting you to leave?"
@@ -176,7 +173,7 @@ export default function DeleteAccountScreen() {
           maxLength={2000}
         />
 
-        <Text className="mt-6 mb-2 text-sm font-medium text-gray-700">
+        <Text className="mb-2 mt-6 text-sm font-medium text-gray-700">
           Type <Text className="font-bold text-red-600">DELETE</Text> to confirm
         </Text>
         <TextInput
@@ -193,9 +190,7 @@ export default function DeleteAccountScreen() {
           onPress={submit}
           disabled={!canSubmit}
           activeOpacity={0.8}
-          className={`mt-8 rounded-xl py-4 ${
-            canSubmit ? 'bg-red-600' : 'bg-gray-300'
-          }`}
+          className={`mt-8 rounded-xl py-4 ${canSubmit ? 'bg-red-600' : 'bg-gray-300'}`}
         >
           {submitting ? (
             <ActivityIndicator color="white" />
@@ -206,11 +201,7 @@ export default function DeleteAccountScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-          className="mt-3 py-3"
-        >
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} className="mt-3 py-3">
           <Text className="text-center text-sm font-medium text-gray-600">Cancel</Text>
         </TouchableOpacity>
       </ScrollView>

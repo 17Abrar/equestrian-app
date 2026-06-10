@@ -5,7 +5,7 @@ import { LegalPage } from '@/components/shared/legal-page';
 export const metadata: Metadata = {
   title: "Children's data statement",
   description:
-    "How Cavaliq handles personal data about minors, and the special protections we apply to junior riders.",
+    'How Cavaliq handles personal data about minors, and the special protections we apply to junior riders.',
 };
 
 export default function ChildrenPage() {
@@ -32,8 +32,8 @@ export default function ChildrenPage() {
           account.
         </li>
         <li>
-          <strong>13 to 16:</strong> a parent or guardian creates and manages the account. The
-          child does not have direct sign-in access of their own.
+          <strong>13 to 16:</strong> a parent or guardian creates and manages the account. The child
+          does not have direct sign-in access of their own.
         </li>
         <li>
           <strong>16 and older:</strong> can create and manage their own account, with parental
@@ -42,16 +42,16 @@ export default function ChildrenPage() {
       </ul>
 
       <h2 id="parent-control">2. The parent is in control</h2>
-      <p>
-        When a parent or guardian creates the account:
-      </p>
+      <p>When a parent or guardian creates the account:</p>
       <ul>
         <li>
           They are the contractual end-user under the{' '}
           <Link href="/legal/terms/end-user">end-user terms</Link>.
         </li>
         <li>They book and pay for lessons on the child&rsquo;s behalf.</li>
-        <li>They consent to and manage the child&rsquo;s rider profile, including any medical notes.</li>
+        <li>
+          They consent to and manage the child&rsquo;s rider profile, including any medical notes.
+        </li>
         <li>
           They can update, correct, or delete the child&rsquo;s data at any time from the in-app
           profile or by emailing <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>.
@@ -64,8 +64,8 @@ export default function ChildrenPage() {
         <li>We don&rsquo;t build behavioural profiles of children.</li>
         <li>We don&rsquo;t share children&rsquo;s data with advertising or analytics networks.</li>
         <li>
-          We don&rsquo;t apply automated decision-making to children. Horse-matching suggestions
-          are offered to coaches; the coach makes the final call.
+          We don&rsquo;t apply automated decision-making to children. Horse-matching suggestions are
+          offered to coaches; the coach makes the final call.
         </li>
       </ul>
 
@@ -94,15 +94,15 @@ export default function ChildrenPage() {
         <li>Notifying the parent (and Cavaliq) of any data incident.</li>
       </ul>
       <p>
-        Cavaliq provides the tools (role-based access, audit logging, encryption) and the contract
-        (<Link href="/legal/dpa">DPA</Link>) to support the club in meeting these obligations.
+        Cavaliq provides the tools (role-based access, audit logging, encryption) and the contract (
+        <Link href="/legal/dpa">DPA</Link>) to support the club in meeting these obligations.
       </p>
 
       <h2 id="contact">6. Contact</h2>
       <p>
         If you are a parent or guardian and you want to access, correct, or delete data about your
-        child, write to <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>. We will
-        verify that you are the parent or guardian before fulfilling the request.
+        child, write to <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>. We will verify that
+        you are the parent or guardian before fulfilling the request.
       </p>
     </LegalPage>
   );

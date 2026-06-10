@@ -80,17 +80,6 @@ async function trimmedLockup({ height, useDark = false, outPath }) {
   console.log('  ✓', outPath.replace(repo + '/', ''));
 }
 
-/** Tight-cropped wordmark PNG for inline use. */
-async function trimmedWordmark({ height, useDark = false, outPath }) {
-  const svgPath = join(svgDir, useDark ? 'cavaliq-wordmark-dark.svg' : 'cavaliq-wordmark.svg');
-  const { data } = await rasterizeSvg(svgPath, 300);
-  await sharp(data, { limitInputPixels: false })
-    .resize({ height, withoutEnlargement: false })
-    .png()
-    .toFile(outPath);
-  console.log('  ✓', outPath.replace(repo + '/', ''));
-}
-
 async function main() {
   await ensureDir(webApp);
   await ensureDir(webBrand);
@@ -100,8 +89,6 @@ async function main() {
   // Retina-friendly trimmed lockup PNGs for use in headers/sidebar at ~32-64px display height
   await trimmedLockup({ height: 256, useDark: false, outPath: join(webBrand, 'cavaliq-logo-trimmed.png') });
   await trimmedLockup({ height: 256, useDark: true, outPath: join(webBrand, 'cavaliq-logo-dark-trimmed.png') });
-  await trimmedWordmark({ height: 256, useDark: false, outPath: join(webBrand, 'cavaliq-wordmark-trimmed.png') });
-  await trimmedWordmark({ height: 256, useDark: true, outPath: join(webBrand, 'cavaliq-wordmark-dark-trimmed.png') });
 
   console.log('\nWeb app icons (Next.js conventions):');
   // Favicon: light mark (navy on transparent) — works on light browser chrome

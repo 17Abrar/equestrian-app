@@ -34,12 +34,12 @@ This document defines HOW the system is built. Every architectural decision here
                     │  Business logic        │
                     │  Zod validation        │
                     │  RBAC enforcement      │
-                    └─┬───┬───┬───┬───┬─────┘
-                      │   │   │   │   │
-              ┌───────┘   │   │   │   └───────┐
-              ▼           ▼   │   ▼           ▼
-           [NEON]     [CLERK] │ [R2]       [ABLY]
-          Postgres     Auth   │ Storage   Real-time
+                    └─┬───┬───┬───┬─────────┘
+                      │   │   │   │
+              ┌───────┘   │   │   └───────┐
+              ▼           ▼   │           ▼
+           [NEON]     [CLERK] │          [R2]
+          Postgres     Auth   │         Storage
        (app-layer tenant
          scoping only)        │
                              │
@@ -95,9 +95,7 @@ This document defines HOW the system is built. Every architectural decision here
 
     "stripe": "latest",
     "resend": "latest",
-    "@react-email/components": "latest",
-
-    "ably": "^2"
+    "@react-email/components": "latest"
   }
 }
 ```
@@ -135,8 +133,7 @@ This document defines HOW the system is built. Every architectural decision here
     "expo-calendar": "latest",
     "react-native-mmkv": "^3",
 
-    "date-fns": "^3",
-    "ably": "^2"
+    "date-fns": "^3"
   }
 }
 ```
@@ -375,7 +372,7 @@ Each club opens **Settings → Payments**, pastes their secret key / publishable
 ### Coupon/Promo Code Validation
 
 ```typescript
-// lib/coupons.ts
+// packages/db/src/queries/finances.ts (simplified)
 export async function validateCoupon(params: {
   code: string;
   clubId: string;
@@ -618,6 +615,8 @@ This algorithm MUST have unit tests covering:
 
 ## REAL-TIME INTEGRATION (Ably)
 
+**Status: planned, not yet built.** There is no `ably` dependency in any package.json and none of the files in this section exist yet. This is the design for the Phase 2 (Management Layer) real-time work in product-plan.md; the public legal subprocessors page already lists Ably as deliberate forward-looking copy.
+
 ### Channel Structure
 
 ```
@@ -683,7 +682,7 @@ export function useCalendarUpdates(clubId: string, onUpdate: (data: any) => void
 All email templates are React components using @react-email/components:
 
 ```typescript
-// packages/email-templates/booking-confirmation.tsx
+// packages/email-templates/src/booking-confirmation.tsx
 import { Html, Head, Body, Container, Heading, Text, Button, Hr } from '@react-email/components';
 
 interface BookingConfirmationProps {
@@ -876,10 +875,6 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 
-# Ably (Real-time)
-ABLY_API_KEY=...
-NEXT_PUBLIC_ABLY_KEY=...  # Client-side (subscribe only)
-
 # Resend (Email)
 RESEND_API_KEY=re_...
 
@@ -899,9 +894,10 @@ NEVER put real values in .env.example. NEVER commit .env.local.
 
 ### Web App
 
-- Host on Vercel (connects to GitHub, auto-deploys on push to main)
-- Preview deployments for every PR
-- Environment variables set in Vercel dashboard
+- Hosted on Cloudflare Workers via the OpenNext adapter (`pnpm cf:deploy` from `apps/web`, see DEPLOY.md for the full runbook)
+- Production deploys run in GitHub Actions via `cloudflare/wrangler-action` (SHA-pinned), triggered when CI completes successfully on main; manual dispatch supported for hotfixes
+- Local preview via `pnpm cf:preview` (`opennextjs-cloudflare preview`)
+- Secrets set via `wrangler secret put` from `apps/web` (stored encrypted on Cloudflare's side), never in a dashboard or committed file
 
 ### Mobile App
 
@@ -917,7 +913,7 @@ NEVER put real values in .env.example. NEVER commit .env.local.
 
 ### Domain Setup
 
-- Main domain: TBD
+- Main domain: cavaliq.com (cavaliq.com and www.cavaliq.com bound as custom domains in `apps/web/wrangler.jsonc`)
 - API: api.{domain}.com (or same domain, /api routes)
 - Dashboard: app.{domain}.com
 - Status page: status.{domain}.com

@@ -29,6 +29,7 @@ const {
   verifyWebhookMock,
   applyPaymentWebhookMock,
   applyLiveryInvoiceWebhookMock,
+  safeRecordAccountErrorMock,
   claimWebhookEventMock,
   markProcessedMock,
   markFailedMock,
@@ -44,6 +45,7 @@ const {
   verifyWebhookMock: vi.fn(),
   applyPaymentWebhookMock: vi.fn(),
   applyLiveryInvoiceWebhookMock: vi.fn(),
+  safeRecordAccountErrorMock: vi.fn(),
   claimWebhookEventMock: vi.fn(),
   markProcessedMock: vi.fn(),
   markFailedMock: vi.fn(),
@@ -81,6 +83,12 @@ vi.mock('@/lib/payments/stripe', () => ({
 vi.mock('@/lib/payments/webhook-helpers', () => ({
   applyPaymentWebhook: applyPaymentWebhookMock,
   applyLiveryInvoiceWebhook: applyLiveryInvoiceWebhookMock,
+  // The route awaits this on the no-secret / invalid-signature paths to
+  // surface `lastError` in settings. It must exist in the mock (the route
+  // would otherwise TypeError into the F-15 wrapper and the QA-15 tests
+  // would see 500 instead of 401); vi.fn() resolves undefined, which
+  // matches the real helper's fire-and-record void contract.
+  safeRecordAccountError: safeRecordAccountErrorMock,
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -102,21 +110,24 @@ const EVENT_ID = 'evt_test_123';
 const PROVIDER_PAYMENT_ID = 'pi_test_abc';
 const WEBHOOK_SECRET = 'whsec_test_secret';
 
-function makeRequest(opts: {
-  body?: string;
-  signature?: string | null;
-  clubId?: string;
-} = {}): NextRequest {
+function makeRequest(
+  opts: {
+    body?: string;
+    signature?: string | null;
+    clubId?: string;
+  } = {},
+): NextRequest {
   const headers = new Headers();
   if (opts.signature !== null && opts.signature !== undefined) {
     headers.set('stripe-signature', opts.signature);
   }
   const body = opts.body ?? '{}';
   headers.set('content-length', String(body.length));
-  return new NextRequest(
-    `https://example.com/api/webhooks/stripe/${opts.clubId ?? CLUB_ID}`,
-    { method: 'POST', headers, body },
-  );
+  return new NextRequest(`https://example.com/api/webhooks/stripe/${opts.clubId ?? CLUB_ID}`, {
+    method: 'POST',
+    headers,
+    body,
+  });
 }
 
 function call(req: NextRequest, clubId: string = CLUB_ID) {
@@ -227,9 +238,7 @@ describe('signature verification — all rejection paths return the QA-15 unifor
       webhookSigningSecret: WEBHOOK_SECRET,
       externalAccountId: 'acct_legitimate',
     });
-    verifyWebhookMock.mockResolvedValueOnce(
-      makeEvent({ providerAccountId: 'acct_attacker' }),
-    );
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ providerAccountId: 'acct_attacker' }));
 
     const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
 
@@ -240,9 +249,7 @@ describe('signature verification — all rejection paths return the QA-15 unifor
 
 describe('event-type filter', () => {
   it('200s without claiming the event when the type is not in HANDLED_EVENTS', async () => {
-    verifyWebhookMock.mockResolvedValueOnce(
-      makeEvent({ eventType: 'invoice.created' }),
-    );
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ eventType: 'invoice.created' }));
 
     const res = await call(makeRequest({ signature: 'sig_v1=abc' }));
 
@@ -303,9 +310,7 @@ describe('happy paths', () => {
   });
 
   it('charge.refunded is forwarded as isRefundEvent=true', async () => {
-    verifyWebhookMock.mockResolvedValueOnce(
-      makeEvent({ eventType: 'charge.refunded' }),
-    );
+    verifyWebhookMock.mockResolvedValueOnce(makeEvent({ eventType: 'charge.refunded' }));
 
     await call(makeRequest({ signature: 'sig_v1=abc' }));
 
@@ -369,11 +374,7 @@ describe('failure paths', () => {
 
     expect(res.status).toBe(500);
     await expect(res.text()).resolves.toBe('Processing failed');
-    expect(markFailedMock).toHaveBeenCalledWith(
-      'stripe',
-      EVENT_ID,
-      'DB went sideways',
-    );
+    expect(markFailedMock).toHaveBeenCalledWith('stripe', EVENT_ID, 'DB went sideways');
     expect(markProcessedMock).not.toHaveBeenCalled();
   });
 

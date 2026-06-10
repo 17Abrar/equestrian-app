@@ -2,7 +2,15 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, ExternalLink, CheckCircle2, Clock, AlertCircle, Ban, Sparkles } from 'lucide-react';
+import {
+  Receipt,
+  ExternalLink,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Ban,
+  Sparkles,
+} from 'lucide-react';
 import { fetchJson } from '@/lib/fetch-json';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -319,9 +327,7 @@ function BookingReceiptCard({ booking }: { booking: Booking }) {
         </div>
 
         <div className="flex flex-col items-end gap-1">
-          <p className="text-base font-semibold">
-            {formatCurrency(netAmount, booking.currency)}
-          </p>
+          <p className="text-base font-semibold">{formatCurrency(netAmount, booking.currency)}</p>
           {isPartial && (
             <p className="text-muted-foreground text-xs">
               {formatCurrency(booking.refundedAmountMinor, booking.currency)} refunded

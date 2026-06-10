@@ -31,46 +31,6 @@ export interface CreateLeaseInput {
 }
 
 /**
- * Returns the active lease for a horse (if any) for the
- * "Currently leased to X" surface on the horse profile. A horse can
- * in principle have multiple half-leases; this returns the
- * most-recently created active one. Listing every active lease for
- * the same horse is what `listLeasesForHorse` is for.
- */
-export async function getActiveLeaseForHorse(clubId: string, horseId: string) {
-  const rows = await db
-    .select({
-      id: horseLeases.id,
-      leaseType: horseLeases.leaseType,
-      lesseeMemberId: horseLeases.lesseeMemberId,
-      lesseeName: clubMembers.displayName,
-      lesseeEmail: clubMembers.email,
-      monthlyFeeMinor: horseLeases.monthlyFeeMinor,
-      currency: horseLeases.currency,
-      startDate: horseLeases.startDate,
-      endDate: horseLeases.endDate,
-      status: horseLeases.status,
-      notes: horseLeases.notes,
-      createdAt: horseLeases.createdAt,
-    })
-    .from(horseLeases)
-    .innerJoin(
-      clubMembers,
-      and(eq(horseLeases.lesseeMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
-    )
-    .where(
-      and(
-        eq(horseLeases.clubId, clubId),
-        eq(horseLeases.horseId, horseId),
-        eq(horseLeases.status, 'active'),
-      ),
-    )
-    .orderBy(desc(horseLeases.createdAt))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-/**
  * Full history of leases for a horse — used by the admin horse-
  * profile lease tab. Newest first. Always tenant-scoped via clubId.
  */
@@ -96,23 +56,6 @@ export async function listLeasesForHorse(clubId: string, horseId: string) {
       and(eq(horseLeases.lesseeMemberId, clubMembers.id), eq(clubMembers.clubId, clubId)),
     )
     .where(and(eq(horseLeases.clubId, clubId), eq(horseLeases.horseId, horseId)))
-    .orderBy(desc(horseLeases.createdAt));
-}
-
-/**
- * Lessee-side: list leases where the given member is the lessee.
- * Used by the rider portal "My leases" surface.
- */
-export async function listLeasesForLessee(clubId: string, lesseeMemberId: string) {
-  return db
-    .select()
-    .from(horseLeases)
-    .where(
-      and(
-        eq(horseLeases.clubId, clubId),
-        eq(horseLeases.lesseeMemberId, lesseeMemberId),
-      ),
-    )
     .orderBy(desc(horseLeases.createdAt));
 }
 
@@ -155,7 +98,10 @@ export async function listLeasesForLesseeUser(clerkUserId: string) {
         eq(horseLeases.clubId, clubMembers.clubId),
       ),
     )
-    .innerJoin(horses, and(eq(horseLeases.horseId, horses.id), eq(horseLeases.clubId, horses.clubId)))
+    .innerJoin(
+      horses,
+      and(eq(horseLeases.horseId, horses.id), eq(horseLeases.clubId, horses.clubId)),
+    )
     .innerJoin(clubs, eq(horseLeases.clubId, clubs.id))
     .where(
       and(
@@ -242,53 +188,6 @@ export async function setLeaseStatus(
 }
 
 /**
- * Find overlapping active leases for the given horse + date range,
- * excluding `excludeLeaseId` (the lease being activated). Used by the
- * activation path to refuse:
- *   - a full lease overlapping with ANY other active lease
- *   - a half lease overlapping with an active FULL lease
- *
- * Two half leases CAN coexist (overlap-allowed). Codex P2 (2026-05-27).
- *
- * Overlap rule: ranges overlap iff `a.start <= b.end AND a.end >= b.start`.
- */
-export async function findActiveLeaseConflicts(args: {
-  clubId: string;
-  horseId: string;
-  startDate: string;
-  endDate: string;
-  candidateType: LeaseType;
-  excludeLeaseId: string;
-}): Promise<Array<{ id: string; leaseType: LeaseType; startDate: string; endDate: string }>> {
-  const baseConditions = and(
-    eq(horseLeases.clubId, args.clubId),
-    eq(horseLeases.horseId, args.horseId),
-    eq(horseLeases.status, 'active'),
-    ne(horseLeases.id, args.excludeLeaseId),
-    sql`${horseLeases.startDate} <= ${args.endDate}`,
-    sql`${horseLeases.endDate} >= ${args.startDate}`,
-  );
-
-  // If we're activating a FULL lease, any overlap conflicts.
-  // If we're activating a HALF lease, only an existing FULL lease conflicts.
-  const typeFilter =
-    args.candidateType === 'full'
-      ? or(eq(horseLeases.leaseType, 'full'), eq(horseLeases.leaseType, 'half'))
-      : eq(horseLeases.leaseType, 'full');
-
-  const rows = await db
-    .select({
-      id: horseLeases.id,
-      leaseType: horseLeases.leaseType,
-      startDate: horseLeases.startDate,
-      endDate: horseLeases.endDate,
-    })
-    .from(horseLeases)
-    .where(and(baseConditions, typeFilter));
-  return rows;
-}
-
-/**
  * Atomic activate: codex P2 (2026-05-27) flagged that the
  * find-conflicts-then-update sequence had a race window where two
  * concurrent activations could both pass the conflict query and
@@ -315,7 +214,10 @@ export async function findActiveLeaseConflicts(args: {
  */
 export type ActivateLeaseResult =
   | { result: 'activated'; id: string }
-  | { result: 'conflict'; conflict: { id: string; leaseType: LeaseType; startDate: string; endDate: string } }
+  | {
+      result: 'conflict';
+      conflict: { id: string; leaseType: LeaseType; startDate: string; endDate: string };
+    }
   | { result: 'not-pending'; status: LeaseStatus }
   | { result: 'not-found' };
 
@@ -436,7 +338,16 @@ export async function activateLeaseAtomically(
           AND ${l1.endDate} >= ${lease.startDate}
         LIMIT 1
       `);
-      const row = (pair as unknown as { rows?: Array<{ conflict_id: string; conflict_type: string; overlap_start: string; overlap_end: string }> }).rows?.[0];
+      const row = (
+        pair as unknown as {
+          rows?: Array<{
+            conflict_id: string;
+            conflict_type: string;
+            overlap_start: string;
+            overlap_end: string;
+          }>;
+        }
+      ).rows?.[0];
       if (row) {
         return {
           result: 'conflict',
@@ -469,16 +380,4 @@ export async function activateLeaseAtomically(
     if (!row) return { result: 'not-pending', status: lease.status as LeaseStatus };
     return { result: 'activated', id: row.id };
   });
-}
-
-/**
- * Active-lease count per horse for dashboard rollups. Cheap because
- * `idx_horse_leases_club_status` covers the predicate.
- */
-export async function countActiveLeasesForClub(clubId: string): Promise<number> {
-  const rows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(horseLeases)
-    .where(and(eq(horseLeases.clubId, clubId), eq(horseLeases.status, 'active')));
-  return rows[0]?.count ?? 0;
 }

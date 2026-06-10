@@ -119,9 +119,7 @@ describe('bootstrapClubAndMembership', () => {
       .mockReturnValueOnce(makeInsertChain([]))
       .mockReturnValueOnce(makeInsertChain([{ id: CLUB_ID, slug: 'jsr-equestrian-club-abcd' }]))
       .mockReturnValueOnce(makeInsertChain([{ id: MEMBER_ID, isActive: true }]));
-    dbSelectMock
-      .mockReturnValueOnce(makeSelectChain([]))
-      .mockReturnValueOnce(makeSelectChain([]));
+    dbSelectMock.mockReturnValueOnce(makeSelectChain([])).mockReturnValueOnce(makeSelectChain([]));
 
     const result = await bootstrapClubAndMembership(DEFAULTS);
 
@@ -212,9 +210,7 @@ describe('bootstrapClubAndMembership', () => {
     // flip is_active back to true on the upsert.
     dbInsertMock.mockReturnValueOnce(makeInsertChain([{ id: CLUB_ID, slug: 'jsr' }]));
     dbSelectMock.mockReturnValueOnce(
-      makeSelectChain([
-        { id: MEMBER_ID, deactivatedByAdminAt: new Date('2026-05-01T10:00:00Z') },
-      ]),
+      makeSelectChain([{ id: MEMBER_ID, deactivatedByAdminAt: new Date('2026-05-01T10:00:00Z') }]),
     );
 
     await expect(bootstrapClubAndMembership(DEFAULTS)).rejects.toMatchObject({

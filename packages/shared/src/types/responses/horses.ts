@@ -107,10 +107,3 @@ export interface Horse {
   ownerClerkUserId?: string | null;
   clubCurrency?: string;
 }
-
-/**
- * Mobile list-card shape (`apps/mobile/hooks/use-horses.ts` previously declared
- * a separate, looser version). Same wire row as `HorseListItem`; kept as an
- * alias so mobile can adopt the precise union without a breaking import path.
- */
-export type HorseMobileListItem = HorseListItem;

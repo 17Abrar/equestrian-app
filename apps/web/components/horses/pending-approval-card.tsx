@@ -180,9 +180,7 @@ function ApproveDialog({ horse, open, onOpenChange }: DialogProps) {
   // browser-local (wrong when admin tz ≠ club tz). Fall back to
   // browser-local while settings load — same as MED-3 v1 in that window.
   const clubTimezone = settingsQuery.data?.data.timezone;
-  const todayInClub = clubTimezone
-    ? getTodayDateString(clubTimezone)
-    : getTodayLocalDateString();
+  const todayInClub = clubTimezone ? getTodayDateString(clubTimezone) : getTodayLocalDateString();
 
   const form = useForm<ApproveFormValues, unknown, ApproveFormOutput>({
     resolver: zodResolver(approveFormSchema),

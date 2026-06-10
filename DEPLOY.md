@@ -72,10 +72,18 @@ wrangler secret put NEXT_PUBLIC_SENTRY_DSN
 #   - 03:00 UTC daily: `/api/cron/horse-care-reminders`
 #                       (Round 6.2: vaccination / farrier / dental /
 #                        insurance / medication-end reminders)
+#   - 03:30 UTC daily: `/api/cron/audit-prune`
+#                       (audit pass-2 C-3: audit-log retention pruning,
+#                        split out of livery-billing so retention can't
+#                        silently freeze with it)
 #   - hourly (`0 * * * *`): `/api/cron/booking-reminders`
 #                            (24h-before-lesson reminders — hourly because
 #                             the 24h window must be hit in each club's
 #                             local timezone, not just UTC)
+#   - every 10 min (`*/10 * * * *`): `/api/cron/booking-payment-timeout`
+#                                     (2026-05-16 sweep: auto-release slots
+#                                      held by abandoned PayPage flows after
+#                                      a 15-minute grace window)
 # The split (audit pass-2 PROC-1) prevents one slow cron from starving
 # another inside a single 30s-CPU-budget Worker invocation.
 # Generate with: openssl rand -hex 32.

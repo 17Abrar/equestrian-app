@@ -1,6 +1,11 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { errorResponse, successResponse } from '@/lib/api-utils';
+import {
+  bodyErrorResponse,
+  parseRequiredBody,
+  rateLimitedResponse,
+  successResponse,
+} from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/request-ip';
 import { sendOperationalEmailAsync } from '@/lib/email-support';
@@ -12,7 +17,15 @@ const dsarSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     email: z.string().trim().email().max(254),
-    requestType: z.enum(['access', 'rectification', 'deletion', 'restriction', 'portability', 'objection', 'other']),
+    requestType: z.enum([
+      'access',
+      'rectification',
+      'deletion',
+      'restriction',
+      'portability',
+      'objection',
+      'other',
+    ]),
     details: z.string().trim().min(20).max(4000),
     relationship: z.enum(['self', 'parent', 'authorized', 'other']).default('self'),
     clubName: z.string().trim().max(200).optional(),
@@ -53,31 +66,25 @@ export async function POST(request: NextRequest) {
     failClosed: true,
   });
   if (!rl.allowed) {
-    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-    return errorResponse(
-      'RATE_LIMITED',
-      'Too many requests from this address. Please try again later.',
-      429,
-      { retryAfter },
-    );
+    // Audit sweep (2026-06-10): this route used to go through
+    // `errorResponse`, which can't set headers, so it was the drifted
+    // copy that violated the Retry-After contract every other 429 site
+    // honours. The shared helper adds the header; `retryAfterInDetails`
+    // keeps the body field existing clients may already read.
+    return rateLimitedResponse(rl, {
+      message: 'Too many requests from this address. Please try again later.',
+      retryAfterInDetails: true,
+    });
   }
 
-  let body: unknown;
+  let data: z.infer<typeof dsarSchema>;
   try {
-    body = await request.json();
-  } catch {
-    return errorResponse('INVALID_JSON', 'Body must be valid JSON', 400);
+    data = await parseRequiredBody(request, dsarSchema);
+  } catch (error) {
+    const response = bodyErrorResponse(error, 'Please check the form fields and try again');
+    if (response) return response;
+    throw error;
   }
-  const parsed = dsarSchema.safeParse(body);
-  if (!parsed.success) {
-    return errorResponse(
-      'VALIDATION_ERROR',
-      'Please check the form fields and try again',
-      400,
-      parsed.error.flatten(),
-    );
-  }
-  const data = parsed.data;
 
   const opsBody = [
     'Privacy / DSAR request received via the public form.',

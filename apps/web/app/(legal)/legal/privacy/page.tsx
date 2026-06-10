@@ -18,34 +18,31 @@ export default function PrivacyPolicyPage() {
     >
       <h2 id="who-we-are">1. Who we are</h2>
       <p>
-        Cavaliq is an equestrian club management platform operated under the brand &ldquo;Cavaliq&rdquo;
-        from the United Arab Emirates. The operating legal entity is in the process of being
-        registered; once registration is complete, the entity name, trade licence number, and
-        registered office address will be published in this section. Until then, Cavaliq operates as
-        an unincorporated business and the founder is the data controller of record.
+        Cavaliq is an equestrian club management platform operated under the brand
+        &ldquo;Cavaliq&rdquo; from the United Arab Emirates. The operating legal entity is in the
+        process of being registered; once registration is complete, the entity name, trade licence
+        number, and registered office address will be published in this section. Until then, Cavaliq
+        operates as an unincorporated business and the founder is the data controller of record.
       </p>
-      <p>
-        For the purposes of this policy:
-      </p>
+      <p>For the purposes of this policy:</p>
       <ul>
         <li>
-          <strong>&ldquo;Cavaliq&rdquo;</strong>, <strong>&ldquo;we&rdquo;</strong>, <strong>&ldquo;us&rdquo;</strong>, or{' '}
-          <strong>&ldquo;our&rdquo;</strong> means the entity described above.
+          <strong>&ldquo;Cavaliq&rdquo;</strong>, <strong>&ldquo;we&rdquo;</strong>,{' '}
+          <strong>&ldquo;us&rdquo;</strong>, or <strong>&ldquo;our&rdquo;</strong> means the entity
+          described above.
         </li>
         <li>
-          <strong>&ldquo;You&rdquo;</strong> means any individual whose personal data we process — a club
-          staff member, coach, rider, parent, guardian, horse owner, or visitor to our website.
+          <strong>&ldquo;You&rdquo;</strong> means any individual whose personal data we process — a
+          club staff member, coach, rider, parent, guardian, horse owner, or visitor to our website.
         </li>
         <li>
-          <strong>&ldquo;Club&rdquo;</strong> means a riding stable or equestrian club that subscribes to
-          Cavaliq and uses it to manage bookings, riders, horses, and payments.
+          <strong>&ldquo;Club&rdquo;</strong> means a riding stable or equestrian club that
+          subscribes to Cavaliq and uses it to manage bookings, riders, horses, and payments.
         </li>
       </ul>
 
       <h2 id="controller-processor">2. Who controls your data</h2>
-      <p>
-        Cavaliq plays two different roles depending on the data:
-      </p>
+      <p>Cavaliq plays two different roles depending on the data:</p>
       <ul>
         <li>
           <strong>When you sign up directly on cavaliq.com</strong> (e.g. as a rider browsing
@@ -53,10 +50,12 @@ export default function PrivacyPolicyPage() {
           the <em>data controller</em> for your account, billing, and product-usage data.
         </li>
         <li>
-          <strong>When a club uses Cavaliq to manage its riders, horses, bookings, and
-          finances</strong>, the club is the data controller of that operational data. Cavaliq is
-          the <em>data processor</em>, processing the data on the club&rsquo;s documented
-          instructions. The relationship between Cavaliq and the club is governed by the{' '}
+          <strong>
+            When a club uses Cavaliq to manage its riders, horses, bookings, and finances
+          </strong>
+          , the club is the data controller of that operational data. Cavaliq is the{' '}
+          <em>data processor</em>, processing the data on the club&rsquo;s documented instructions.
+          The relationship between Cavaliq and the club is governed by the{' '}
           <Link href="/legal/dpa">Data Processing Addendum</Link>.
         </li>
       </ul>
@@ -261,16 +260,16 @@ export default function PrivacyPolicyPage() {
           <strong>Transactional email (Resend) — United States and EU.</strong>
         </li>
         <li>
-          <strong>Error monitoring (Sentry) — United States or EU, depending on configuration.</strong>
+          <strong>
+            Error monitoring (Sentry) — United States or EU, depending on configuration.
+          </strong>
         </li>
       </ul>
-      <p>
-        We rely on the following safeguards for these transfers:
-      </p>
+      <p>We rely on the following safeguards for these transfers:</p>
       <ul>
         <li>
-          Contractual commitments equivalent to the EU Standard Contractual Clauses (SCCs) with
-          each subprocessor.
+          Contractual commitments equivalent to the EU Standard Contractual Clauses (SCCs) with each
+          subprocessor.
         </li>
         <li>
           Technical measures: encryption in transit (TLS 1.2+) and at rest, application-level
@@ -294,8 +293,8 @@ export default function PrivacyPolicyPage() {
       </p>
       <ul>
         <li>
-          <strong>Account data</strong> — for the life of your account, plus 30 days after
-          deletion (to allow recovery of accidentally deleted accounts).
+          <strong>Account data</strong> — for the life of your account, plus 30 days after deletion
+          (to allow recovery of accidentally deleted accounts).
         </li>
         <li>
           <strong>Booking history</strong> — 7 years, to support tax records, dispute resolution,
@@ -324,9 +323,7 @@ export default function PrivacyPolicyPage() {
       </p>
 
       <h2 id="your-rights">9. Your rights</h2>
-      <p>
-        Depending on where you live, you may have any of the following rights:
-      </p>
+      <p>Depending on where you live, you may have any of the following rights:</p>
       <ul>
         <li>
           <strong>Access</strong> — get a copy of the personal data we hold about you.
@@ -342,8 +339,7 @@ export default function PrivacyPolicyPage() {
           <strong>Restriction</strong> — ask us to limit processing while a dispute is resolved.
         </li>
         <li>
-          <strong>Portability</strong> — receive your data in a structured, machine-readable
-          format.
+          <strong>Portability</strong> — receive your data in a structured, machine-readable format.
         </li>
         <li>
           <strong>Objection</strong> — object to processing carried out under our legitimate
@@ -353,9 +349,9 @@ export default function PrivacyPolicyPage() {
           <strong>Withdraw consent</strong> — for any processing based on consent, at any time.
         </li>
         <li>
-          <strong>Lodge a complaint</strong> — with the UAE Data Office, the SDAIA in Saudi
-          Arabia, your national supervisory authority in the EU/UK, or another competent regulator
-          for your jurisdiction.
+          <strong>Lodge a complaint</strong> — with the UAE Data Office, the SDAIA in Saudi Arabia,
+          your national supervisory authority in the EU/UK, or another competent regulator for your
+          jurisdiction.
         </li>
       </ul>
       <p>
@@ -367,9 +363,7 @@ export default function PrivacyPolicyPage() {
       </p>
 
       <h2 id="children">10. Children</h2>
-      <p>
-        Many riders are minors. Cavaliq is built to handle this responsibly:
-      </p>
+      <p>Many riders are minors. Cavaliq is built to handle this responsibly:</p>
       <ul>
         <li>
           We do not offer direct accounts to children under 16. A parent or guardian creates the
@@ -396,10 +390,12 @@ export default function PrivacyPolicyPage() {
       </p>
       <ul>
         <li>TLS 1.2+ for all data in transit; HSTS enforced.</li>
-        <li>Encryption at rest at the storage layer and field-level encryption for medical data.</li>
         <li>
-          Role-based access control inside Cavaliq, with multi-factor authentication on Clerk-managed
-          sign-in.
+          Encryption at rest at the storage layer and field-level encryption for medical data.
+        </li>
+        <li>
+          Role-based access control inside Cavaliq, with multi-factor authentication on
+          Clerk-managed sign-in.
         </li>
         <li>
           Tenant isolation enforced in the application layer on every database query, so one
@@ -431,15 +427,13 @@ export default function PrivacyPolicyPage() {
 
       <h2 id="changes">14. Changes to this policy</h2>
       <p>
-        We may update this policy from time to time. When we do, we&rsquo;ll update the
-        &ldquo;Last updated&rdquo; date at the top and, if the changes are significant, notify you
-        by email or an in-product banner before they take effect.
+        We may update this policy from time to time. When we do, we&rsquo;ll update the &ldquo;Last
+        updated&rdquo; date at the top and, if the changes are significant, notify you by email or
+        an in-product banner before they take effect.
       </p>
 
       <h2 id="contact">15. Contact</h2>
-      <p>
-        For any privacy question or to exercise your rights:
-      </p>
+      <p>For any privacy question or to exercise your rights:</p>
       <ul>
         <li>
           Email: <a href="mailto:info@cavaliq.com">info@cavaliq.com</a>
@@ -450,8 +444,8 @@ export default function PrivacyPolicyPage() {
       </ul>
       <p>
         If you live in the UAE, you can complain to the UAE Data Office. If you live in Saudi
-        Arabia, you can complain to the SDAIA. If you live in the EU or UK, you can complain to
-        your national supervisory authority.
+        Arabia, you can complain to the SDAIA. If you live in the EU or UK, you can complain to your
+        national supervisory authority.
       </p>
     </LegalPage>
   );

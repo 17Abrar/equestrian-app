@@ -1,6 +1,11 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { errorResponse, successResponse } from '@/lib/api-utils';
+import {
+  bodyErrorResponse,
+  parseRequiredBody,
+  rateLimitedResponse,
+  successResponse,
+} from '@/lib/api-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/request-ip';
 import { sendOperationalEmailAsync } from '@/lib/email-support';
@@ -16,15 +21,7 @@ const supportSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     email: z.string().trim().email().max(254),
-    category: z.enum([
-      'general',
-      'account',
-      'booking',
-      'privacy',
-      'security',
-      'feedback',
-      'other',
-    ]),
+    category: z.enum(['general', 'account', 'booking', 'privacy', 'security', 'feedback', 'other']),
     message: z.string().trim().min(20).max(4000),
   })
   .strict();
@@ -41,34 +38,19 @@ export async function POST(request: NextRequest) {
     failClosed: true,
   });
   if (!rl.allowed) {
-    const retryAfter = Math.ceil((rl.retryAfterMs ?? 1000) / 1000);
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
-      },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-    );
+    return rateLimitedResponse(rl, { message: 'Too many requests. Please try again later.' });
   }
 
-  let body: unknown;
+  let data: z.infer<typeof supportSchema>;
   try {
-    body = await request.json();
-  } catch {
-    return errorResponse('INVALID_JSON', 'Body must be valid JSON', 400);
+    data = await parseRequiredBody(request, supportSchema);
+  } catch (error) {
+    const response = bodyErrorResponse(error, 'Please check the form fields and try again');
+    if (response) return response;
+    throw error;
   }
 
-  const parsed = supportSchema.safeParse(body);
-  if (!parsed.success) {
-    return errorResponse(
-      'VALIDATION_ERROR',
-      'Please check the form fields and try again',
-      400,
-      parsed.error.flatten(),
-    );
-  }
-
-  const { name, email, category, message } = parsed.data;
+  const { name, email, category, message } = data;
 
   // Plain text is enough — no marketing styling, low risk of being flagged
   // as spam by Resend's reputation system. Reply-To is set so the support

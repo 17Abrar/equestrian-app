@@ -64,8 +64,11 @@ it. Production secrets live in Cloudflare Workers Secrets (set via
 ### `DATABASE_URL`
 
 - **Where:** Worker runtime (every query) + build step
-  (`scripts/collect-page-data.mjs` reads it to build the static-data
-  prerender — see DEPLOY.md for the build-time stub used by `cf:build`)
+  (`next build`'s "Collecting page data" phase imports every route
+  module, which transitively imports `@equestrian/db`; the package
+  throws at module load if this is unset. The build never opens a
+  connection, so CI sets a stub URL: see the "Build OpenNext bundle"
+  step in `.github/workflows/deploy.yml`)
 - **When:** required in dev and prod
 - **Why:** Drizzle's HTTP driver connects via this URL. The pooled
   variant is the default; the unpooled variant powers `writeTransaction`
@@ -274,8 +277,11 @@ OAuth flow. Audit AI-\* (2026-05-04 pivot from Connect).
   the rest of the surface. Generate with `openssl rand -hex 32`.
 - **Why:** AES-256-GCM key for field-level encryption of payment
   credentials, rider medical notes, and other sensitive columns
-  (`v1:` versioned ciphertext). Rotate via the runbook in
-  INCIDENT_RUNBOOK.md.
+  (`v1:` versioned ciphertext). No rotation runbook exists yet
+  (tracked as claim 3 in CODE_REVIEW_RESPONSE_2026-06-09.md):
+  rotating this key without re-encrypting existing `v1:` ciphertext
+  breaks decryption, surfacing downstream as a misleading "secret
+  not configured" error.
 
 ---
 

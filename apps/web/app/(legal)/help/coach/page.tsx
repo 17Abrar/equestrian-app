@@ -20,9 +20,7 @@ export default function CoachHelpPage() {
       </p>
 
       <h2>2. Rider profiles before each lesson</h2>
-      <p>
-        Tap a booking to see the rider&rsquo;s profile. Pay attention to:
-      </p>
+      <p>Tap a booking to see the rider&rsquo;s profile. Pay attention to:</p>
       <ul>
         <li>Skill level and recent progress.</li>
         <li>Allergies and medical notes — these are surfaced at the top of the profile.</li>

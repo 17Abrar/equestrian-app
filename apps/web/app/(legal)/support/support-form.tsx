@@ -31,15 +31,7 @@ const SUPPORT_CATEGORIES = [
 const supportFormSchema = z.object({
   name: z.string().trim().min(1, 'Please tell us your name').max(120),
   email: z.string().trim().email('Please enter a valid email address').max(254),
-  category: z.enum([
-    'general',
-    'account',
-    'booking',
-    'privacy',
-    'security',
-    'feedback',
-    'other',
-  ]),
+  category: z.enum(['general', 'account', 'booking', 'privacy', 'security', 'feedback', 'other']),
   message: z
     .string()
     .trim()
@@ -96,18 +88,13 @@ export function SupportForm() {
 
   if (submitted) {
     return (
-      <div className="rounded-lg border bg-muted/30 p-6 text-center">
+      <div className="bg-muted/30 rounded-lg border p-6 text-center">
         <CheckCircle2 className="text-foreground mx-auto h-10 w-10" />
         <h3 className="mt-3 text-base font-semibold">Message sent</h3>
         <p className="text-muted-foreground mt-2 text-sm">
           Thanks &mdash; we&rsquo;ll reply to the email address you gave us.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          onClick={() => setSubmitted(false)}
-        >
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => setSubmitted(false)}>
           Send another
         </Button>
       </div>
@@ -178,7 +165,11 @@ export function SupportForm() {
 
       <p className="text-muted-foreground text-xs leading-relaxed">
         We&rsquo;ll use the details you provide only to respond to your message and improve the
-        product. See our <a href="/legal/privacy" className="underline">privacy policy</a>.
+        product. See our{' '}
+        <a href="/legal/privacy" className="underline">
+          privacy policy
+        </a>
+        .
       </p>
 
       <Button type="submit" disabled={isSubmitting}>

@@ -102,33 +102,7 @@ export function useCreateMedication(horseId: string) {
   });
 }
 
-export function useUpdateMedication(horseId: string, medicationId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Partial<CreateMedicationInput>) =>
-      fetchJson<ApiResponse<Medication>>(`/api/v1/horses/${horseId}/medications/${medicationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['horses', horseId, 'medications'] });
-    },
-  });
-}
-
 // ─── Medication Logs ──────────────────────────────────────────────────
-
-export function useMedicationLogs(horseId: string, medicationId: string) {
-  return useQuery({
-    queryKey: ['horses', horseId, 'medications', medicationId, 'logs'],
-    queryFn: () =>
-      fetchJson<ApiSuccessResponse<MedicationLog[]>>(
-        `/api/v1/horses/${horseId}/medications/${medicationId}/logs`,
-      ),
-    enabled: !!horseId && !!medicationId,
-  });
-}
 
 export function useCreateMedicationLog(horseId: string, medicationId: string) {
   const queryClient = useQueryClient();

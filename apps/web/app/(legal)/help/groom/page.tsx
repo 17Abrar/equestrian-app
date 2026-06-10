@@ -26,9 +26,7 @@ export default function GroomHelpPage() {
       </p>
 
       <h2>3. Horse care reminders</h2>
-      <p>
-        Cavaliq surfaces reminders for:
-      </p>
+      <p>Cavaliq surfaces reminders for:</p>
       <ul>
         <li>Medication doses (with the exact time window).</li>
         <li>Pre-vaccination notices.</li>

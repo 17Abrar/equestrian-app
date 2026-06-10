@@ -5,8 +5,7 @@ import 'server-only';
 // `permissions-shared.ts` (no `'server-only'` guard) so client
 // components like the dashboard sidebar can read it for nav gating.
 // This module re-exports `hasPermission` so existing server callers
-// (api routes, withAuth) keep their import path; the throw-on-miss
-// helper and the `PermissionError` class stay here, behind the guard.
+// (api routes, withAuth) keep their import path, behind the guard.
 //
 // Why split: `'server-only'` is a build-time signal that throws if a
 // module reaches the client bundle. Adding it to the original file
@@ -15,23 +14,15 @@ import 'server-only';
 // `storage.ts`, `billing/platform-ziina.ts`). Splitting keeps both
 // invariants: client code can read the matrix, server-only helpers
 // stay protected from accidental client import.
+//
+// Audit sweep (2026-06-10): the throw-on-miss `assertPermission`
+// helper and its `PermissionError` class were deleted. Repo-wide, no
+// route ever adopted them — every caller gates via `hasPermission` +
+// an explicit `errorResponse` — which left the `instanceof
+// PermissionError` catch arm in `withAuth` permanently unreachable.
+// The trio (helper, class, catch arm) went together; if a future
+// throw-on-miss pattern is wanted, reintroduce all three at once.
 
-import { type UserRole } from '@equestrian/shared/types';
 import { hasPermission } from './permissions-shared';
 
 export { hasPermission };
-
-export function assertPermission(role: UserRole, requiredPermission: string): void {
-  if (!hasPermission(role, requiredPermission)) {
-    throw new PermissionError(`Role '${role}' does not have permission '${requiredPermission}'`);
-  }
-}
-
-export class PermissionError extends Error {
-  public readonly code = 'FORBIDDEN';
-
-  constructor(message: string) {
-    super(message);
-    this.name = 'PermissionError';
-  }
-}

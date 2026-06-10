@@ -5,7 +5,11 @@
   "main": "expo-router/entry",
   "expo": {
     "install": {
-      "exclude": ["react", "react-dom", "@types/react"]
+      "exclude": [
+        "react",
+        "react-dom",
+        "@types/react"
+      ]
     }
   },
   "scripts": {
@@ -48,7 +52,6 @@
     "@babel/core": "^7.29.7",
     "@equestrian/eslint-config": "workspace:*",
     "@equestrian/prettier-config": "workspace:*",
-    "@equestrian/typescript-config": "workspace:*",
     "@types/react": "^19.2.15",
     "eslint": "^10.4.0",
     "typescript": "^5.8.3"

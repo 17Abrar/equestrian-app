@@ -156,10 +156,7 @@ export function encryptFields<T, K extends keyof T>(
  * Audit I8 (2026-05-18): bound widened to plain `T`. See `encryptFields`
  * for the full rationale.
  */
-export function decryptFields<T, K extends keyof T>(
-  row: T,
-  fields: readonly K[],
-): T {
+export function decryptFields<T, K extends keyof T>(row: T, fields: readonly K[]): T {
   // A null/undefined row (e.g. a left-joined absent relation) would throw on
   // `row[field]` below; pass it through untouched.
   if (row == null) return row;

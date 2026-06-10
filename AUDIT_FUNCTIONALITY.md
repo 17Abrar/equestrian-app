@@ -60,6 +60,7 @@ dashboard already solved.
 ## Findings by feature
 
 ### 1. Auth + onboarding
+
 - **Status:** Works
 - **Files traced:** `app/(auth)/sign-in/[[...sign-in]]/page.tsx`,
   `app/(auth)/sign-up/[[...sign-up]]/page.tsx`,
@@ -95,6 +96,7 @@ dashboard already solved.
     `cloudflare-env.d.ts`), so the production worker returns 404.
 
 ### 2. Dashboard home
+
 - **Status:** Works
 - **Files traced:** `app/(dashboard)/dashboard/page.tsx`,
   `components/dashboard/dashboard-overview.tsx`,
@@ -111,6 +113,7 @@ dashboard already solved.
     correctly handles loading / error / empty.
 
 ### 3. Calendar
+
 - **Status:** Works
 - **Files traced:** `components/calendar/calendar-view.tsx`, four view files
   (day / week / month / agenda), `create-recurring-slots-dialog.tsx`,
@@ -130,6 +133,7 @@ dashboard already solved.
   - No print / iCal export from this view.
 
 ### 4. Bookings
+
 - **Status:** Works
 - **Files traced:** `app/(dashboard)/bookings/page.tsx`,
   `components/bookings/bookings-list.tsx`,
@@ -149,6 +153,7 @@ dashboard already solved.
     flow is via the Add Booking dialog only.
 
 ### 5. Horses
+
 - **Status:** Works
 - **Files traced:** `components/horses/horses-list.tsx`,
   `horse-profile.tsx`, `horse-form.tsx`,
@@ -160,7 +165,7 @@ dashboard already solved.
 - **P0:** None.
 - **P1:**
   - The profile has tabs `Overview / Livery / Health / Feeding / Exercise /
-    Documents / Notes`. **Medications** is not a top-level tab; it lives
+Documents / Notes`. **Medications** is not a top-level tab; it lives
     inside `health-tab.tsx` (verified at line ~483). This is a UX choice but
     breaks discoverability — the product plan and DATABASE.md list
     medications as a top-level feature. Consider promoting it to its own tab.
@@ -172,6 +177,7 @@ dashboard already solved.
   - Archive uses soft delete (`deleted_at`); restore is not in the UI.
 
 ### 6. Riders
+
 - **Status:** Works
 - **Files traced:** `components/riders/riders-list.tsx`,
   `rider-profile.tsx`, `app/api/v1/riders/route.ts` (+ `[riderId]/route.ts`)
@@ -185,6 +191,7 @@ dashboard already solved.
     page composer is decoupled.
 
 ### 7. Staff
+
 - **Status:** Works
 - **Files traced:** `components/staff/staff-list.tsx`,
   `app/api/v1/staff/route.ts` (+ `[memberId]/route.ts`)
@@ -196,6 +203,7 @@ dashboard already solved.
     Acceptable for MVP but expected at scale.
 
 ### 8. Owners
+
 - **Status:** Works
 - **Files traced:** `components/owners/owners-list.tsx`,
   `app/api/v1/owners/route.ts` (+ `[memberId]/route.ts`)
@@ -205,6 +213,7 @@ dashboard already solved.
   - Same "no invite email" gap as Staff.
 
 ### 9. Finances
+
 - **Status:** Works
 - **Files traced:** `components/finances/finances-page.tsx` (1284 lines),
   `app/api/v1/finances/{payments,invoices,expenses,coupons,overview}/route.ts`
@@ -223,6 +232,7 @@ dashboard already solved.
   - Refund flow lives on the booking row, not Finances — fine.
 
 ### 10. Emails
+
 - **Status:** Partially broken
 - **Files traced:** `components/emails/emails-page.tsx` (147 lines),
   `audiences-tab.tsx` (520 lines), `app/api/v1/emails/audiences/route.ts`,
@@ -250,6 +260,7 @@ dashboard already solved.
   - No bcc / cc fields, no scheduled-send, no attachments.
 
 ### 11. Competitions
+
 - **Status:** Works
 - **Files traced:** `components/competitions/competitions-list.tsx`,
   `competition-form.tsx`, `competition-detail.tsx`,
@@ -263,6 +274,7 @@ dashboard already solved.
     see upcoming competitions from the public profile.
 
 ### 12. Arenas
+
 - **Status:** Works
 - **Files traced:** `components/arenas/arenas-list.tsx`,
   `app/api/v1/arenas/route.ts` (+ `[arenaId]/route.ts`)
@@ -270,6 +282,7 @@ dashboard already solved.
   - Bare CRUD list, no media. Functional. Probably the most minimal feature.
 
 ### 13. Reports
+
 - **Status:** Partially broken
 - **Files traced:** `components/reports/reports-page.tsx`,
   `app/api/v1/reports/route.ts`
@@ -288,6 +301,7 @@ dashboard already solved.
   - All four queries handle error / empty.
 
 ### 14. Community
+
 - **Status:** Stub
 - **Files traced:** `app/(dashboard)/community/page.tsx` (34 lines),
   `app/rider/community/page.tsx` (28 lines)
@@ -300,6 +314,7 @@ dashboard already solved.
 - **P2:** None.
 
 ### 15. Settings
+
 - **Status:** Works
 - **Files traced:** `components/settings/settings-page.tsx` (~300 lines+),
   `branding-form.tsx`, `discovery-form.tsx`, `notifications-form.tsx`,
@@ -319,6 +334,7 @@ dashboard already solved.
     LOW-5 fix added; verified.
 
 ### 16. Public pages (`/`, `/discover`, `/c/[slug]`, `/legal`, `/help`, `/support`, `/status`)
+
 - **Status:** Partially broken
 - **Files traced:** `app/discover/{page,discover-client}.tsx`,
   `app/c/[slug]/{page,club-profile-client}.tsx`,
@@ -348,6 +364,7 @@ dashboard already solved.
     all functional and well-built.
 
 ### 17. Rider home (`/rider`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/page.tsx`, `rider-home.tsx`,
   `app/rider/layout.tsx`, `components/rider/rider-nav.tsx`
@@ -365,6 +382,7 @@ dashboard already solved.
     Good detail (2026-05-16).
 
 ### 18. Rider book (`/rider/book`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/book/page.tsx` (~600 lines),
   `components/payments/pay-booking-dialog.tsx`,
@@ -383,6 +401,7 @@ dashboard already solved.
     paying.
 
 ### 19. Rider bookings (`/rider/bookings`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/bookings/page.tsx`,
   `app/rider/bookings/[bookingId]/booking-detail-client.tsx`
@@ -396,6 +415,7 @@ dashboard already solved.
     `paymentStatus==='pending'` — good handling of the webhook race.
 
 ### 20. Rider horses (`/rider/horses`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/horses/page.tsx`, `new/page.tsx`,
   `app/api/v1/me/horses/route.ts`,
@@ -410,6 +430,7 @@ dashboard already solved.
     StatusBadge + per-row CTAs. Cleanly built.
 
 ### 21. Rider progress (`/rider/progress`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/progress/page.tsx`,
   `app/api/v1/me/profile/route.ts`
@@ -424,6 +445,7 @@ dashboard already solved.
     exists in DB but isn't surfaced here.
 
 ### 22. Rider invoices (`/rider/invoices`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/invoices/page.tsx`,
   `app/api/v1/me/livery-invoices/route.ts`
@@ -440,10 +462,12 @@ dashboard already solved.
     {club}"). Good.
 
 ### 23. Rider community (`/rider/community`)
+
 - **Status:** Stub — see #14.
 - Page is a "Coming soon" card. Not linked from RiderNav.
 
 ### 24. Rider profile (`/rider/profile`)
+
 - **Status:** Works
 - **Files traced:** `app/rider/profile/page.tsx`,
   `app/api/v1/me/profile/route.ts`
@@ -458,6 +482,7 @@ dashboard already solved.
     `<UserButton>` modal. Good.
 
 ### 25. Mobile (`apps/mobile/`)
+
 - **Status:** Partially broken
 - **Files traced:** all 7 tabs + auth screens + `(modals)`,
   `delete-account.tsx`, `about.tsx`, `booking/[bookingId]/...`
@@ -465,8 +490,7 @@ dashboard already solved.
   - **Horses tab calls the wrong endpoint.** See top-of-report finding #3:
     `apps/mobile/hooks/use-horses.ts:34` calls
     `GET /api/v1/horses` (gated by `horses:read`). Riders have
-    `horses:read_own` only, so every rider opening the Horses tab gets a
-    403. The fix is one line — call `/api/v1/me/horses` instead, matching
+    `horses:read_own` only, so every rider opening the Horses tab gets a 403. The fix is one line — call `/api/v1/me/horses` instead, matching
     the web `/rider/horses` page.
 - **P1:**
   - Community tab is a "Coming soon" card. (See #14.)
@@ -485,6 +509,7 @@ dashboard already solved.
     a rider-only app.
 
 ### 26. Webhooks
+
 - **Status:** Works
 - **Files traced:** all 7 webhook handlers
   (`stripe/[clubId]`, `ziina/[clubId]`, `ziina-platform`, `n-genius`,
@@ -502,6 +527,7 @@ dashboard already solved.
     and `user.deleted` (pass-7 ⑥, PR #185).
 
 ### 27. Cron jobs
+
 - **Status:** Works
 - **Files traced:** 7 cron routes under `app/api/cron/`,
   `worker-entry.mjs`
@@ -520,6 +546,7 @@ dashboard already solved.
     failures page out (pass-7 ③).
 
 ### 28. Email triggers
+
 - **Status:** Works
 - **Files traced:** `lib/email.ts`, `packages/email-templates/`, multiple
   callsites across booking / livery / platform-billing / horse-care crons
@@ -534,6 +561,7 @@ dashboard already solved.
     per-rider `notification_preferences` rows.
 
 ### 29. Permissions / role-based access
+
 - **Status:** Works
 - **Files traced:** `lib/permissions.ts` (server-only),
   `lib/permissions-shared.ts`, `components/dashboard/sidebar.tsx`,

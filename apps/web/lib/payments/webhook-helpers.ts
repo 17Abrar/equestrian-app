@@ -743,7 +743,8 @@ export async function applyPaymentWebhook({
         eventType: event.eventType,
         provider,
         refundAmountMinor: explicitDelta,
-        reason: 'adapter did not surface providerRefundId — falling back to legacy non-deduped path',
+        reason:
+          'adapter did not surface providerRefundId — falling back to legacy non-deduped path',
       });
       const recorded = await recordBookingRefund(clubId, bookingRef.bookingId, explicitDelta);
       if (recorded) {
