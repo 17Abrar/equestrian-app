@@ -51,7 +51,7 @@ function NoClubEmptyState() {
       <h1 className="mt-6 text-2xl font-bold sm:text-3xl">Find a stable to ride at</h1>
       <p className="text-muted-foreground mt-2 max-w-md">
         You&apos;re signed in but haven&apos;t joined a stable yet. Browse the directory to find one
-        near you — you can join as many as you like.
+        near you. You can join as many as you like.
       </p>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -72,7 +72,7 @@ function NoClubEmptyState() {
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Browse public stables on the directory.</li>
             <li>Tap &ldquo;Join&rdquo; on any open stable to become a member instantly.</li>
-            <li>Your bookings, horses, and progress live here — across every stable you join.</li>
+            <li>Your bookings, horses, and progress live here, across every stable you join.</li>
           </ul>
         </CardContent>
       </Card>

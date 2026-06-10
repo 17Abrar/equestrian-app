@@ -9,15 +9,15 @@ import { CtaBand } from '@/components/landing/cta-band';
 import { MarketingFooter } from '@/components/landing/marketing-footer';
 
 export const metadata: Metadata = {
-  title: 'Cavaliq — Equestrian Club Management Software',
+  title: 'Cavaliq: Equestrian Club Management Software',
   description:
-    'Run your equestrian stable from one place. Bookings, horses, riders, staff, and payments — built for the GCC. 14-day free trial.',
+    'Run your equestrian stable from one place. Bookings, horses, riders, staff, and payments, built for the GCC. 14-day free trial.',
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
-    title: 'Cavaliq — Equestrian Club Management Software',
+    title: 'Cavaliq: Equestrian Club Management Software',
     description:
-      'Run your equestrian stable from one place. Bookings, horses, riders, staff, and payments — built for the GCC.',
+      'Run your equestrian stable from one place. Bookings, horses, riders, staff, and payments, built for the GCC.',
     url: '/',
   },
 };

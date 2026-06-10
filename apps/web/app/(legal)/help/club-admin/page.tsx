@@ -15,15 +15,16 @@ export default function ClubAdminHelpPage() {
       description="Everything you need to set up your stable, manage staff, accept payments, and run reports."
     >
       <h2>1. Run the onboarding wizard</h2>
-      <p>
-        After signing up as a stable, you&rsquo;re taken through a five-step wizard:
-      </p>
+      <p>After signing up as a stable, you&rsquo;re taken through a five-step wizard:</p>
       <ol>
-        <li>Club basics (name, city, branding).</li>
-        <li>Arenas (one or more, with capacity per slot).</li>
-        <li>Lesson types (group, private, hack — with default pricing and duration).</li>
+        <li>Club basics (timezone and currency).</li>
+        <li>Arenas (add one or more; mark indoor and lighting).</li>
+        <li>
+          Lesson types (group, semi-private, private, with duration, capacity, and price). A
+          one-click standard set is offered so you can start fast.
+        </li>
+        <li>Payments (connect Stripe, Ziina, or N-Genius, or skip and add later).</li>
         <li>Staff (invite coaches, grooms, managers; pick a role).</li>
-        <li>Payments (connect Stripe, Ziina, or N-Genius — or skip and add later).</li>
       </ol>
       <p>
         You can come back and edit anything from <strong>Settings</strong>.
@@ -38,9 +39,7 @@ export default function ClubAdminHelpPage() {
       </p>
 
       <h3>Stripe</h3>
-      <p>
-        Available globally. Best card processor for stables that take international cards.
-      </p>
+      <p>Available globally. Best card processor for stables that take international cards.</p>
       <ol>
         <li>
           Sign in at{' '}
@@ -51,11 +50,7 @@ export default function ClubAdminHelpPage() {
         </li>
         <li>
           Go to{' '}
-          <a
-            href="https://dashboard.stripe.com/apikeys"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer">
             Developers → API keys
           </a>
           . Copy the <strong>Publishable key</strong> (<code>pk_live_…</code>) and{' '}
@@ -64,11 +59,7 @@ export default function ClubAdminHelpPage() {
         </li>
         <li>
           Go to{' '}
-          <a
-            href="https://dashboard.stripe.com/webhooks"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer">
             Developers → Webhooks → Add endpoint
           </a>
           . URL is <code>https://cavaliq.com/api/webhooks/stripe/&lt;your-club-id&gt;</code> —
@@ -129,11 +120,7 @@ export default function ClubAdminHelpPage() {
           /refund
         </a>
         . Getting-started guide:{' '}
-        <a
-          href="https://docs.ziina.com/getting-started"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href="https://docs.ziina.com/getting-started" target="_blank" rel="noopener noreferrer">
           docs.ziina.com/getting-started
         </a>
         .
@@ -147,35 +134,30 @@ export default function ClubAdminHelpPage() {
       <ol>
         <li>
           Sign in at{' '}
-          <a
-            href="https://portal.ngenius-payments.com"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://portal.ngenius-payments.com" target="_blank" rel="noopener noreferrer">
             portal.ngenius-payments.com
           </a>
           .
         </li>
         <li>
-          Settings → Integration → <strong>Service Accounts</strong>. Generate a new service
-          account key. Paste it into Cavaliq as <strong>API key</strong> (no transformation — paste
-          as-is).
+          Settings → Integration → <strong>Service Accounts</strong>. Generate a new service account
+          key. Paste it into Cavaliq as <strong>API key</strong> (no transformation — paste as-is).
         </li>
         <li>
           Settings → <strong>Organizational Hierarchy</strong>. Copy your{' '}
           <strong>Outlet reference</strong> (a short alphanumeric like <code>e1c4e7…</code>).
         </li>
         <li>
-          Some merchant configurations also need a <strong>Realm name</strong> for identity
-          exchange — N-Genius support can tell you whether yours does. Leave blank if your setup
-          works without it; you&rsquo;ll get a clear error at connect time if it&rsquo;s required.
+          Some merchant configurations also need a <strong>Realm name</strong> for identity exchange
+          — N-Genius support can tell you whether yours does. Leave blank if your setup works
+          without it; you&rsquo;ll get a clear error at connect time if it&rsquo;s required.
         </li>
         <li>
           Webhooks: in the merchant portal, configure a custom header (e.g.{' '}
           <code>X-Webhook-Token</code>) with a secret value of your choice. Point the webhook at{' '}
           <code>https://cavaliq.com/api/webhooks/n-genius</code> and paste the same header name +
-          secret into Cavaliq. N-Genius doesn&rsquo;t HMAC-sign payloads — the shared header is
-          how we authenticate.
+          secret into Cavaliq. N-Genius doesn&rsquo;t HMAC-sign payloads — the shared header is how
+          we authenticate.
         </li>
       </ol>
       <p>
@@ -207,16 +189,26 @@ export default function ClubAdminHelpPage() {
       </p>
 
       <h2>3. Invite staff with the right role</h2>
-      <p>
-        Cavaliq has the following roles:
-      </p>
+      <p>Cavaliq has the following roles:</p>
       <ul>
-        <li><strong>Club admin:</strong> full access, including billing and settings.</li>
-        <li><strong>Club manager:</strong> day-to-day operations.</li>
-        <li><strong>Coach:</strong> own schedule, rider profiles, lesson notes.</li>
-        <li><strong>Horse owner:</strong> read-only on their own horses.</li>
-        <li><strong>Rider / parent:</strong> book and manage their lessons.</li>
-        <li><strong>Groom:</strong> horse care tasks and reminders.</li>
+        <li>
+          <strong>Club admin:</strong> full access, including billing and settings.
+        </li>
+        <li>
+          <strong>Club manager:</strong> day-to-day operations.
+        </li>
+        <li>
+          <strong>Coach:</strong> own schedule, rider profiles, lesson notes.
+        </li>
+        <li>
+          <strong>Horse owner:</strong> read-only on their own horses.
+        </li>
+        <li>
+          <strong>Rider / parent:</strong> book and manage their lessons.
+        </li>
+        <li>
+          <strong>Groom:</strong> horse care tasks and reminders.
+        </li>
       </ul>
       <p>
         Give each staff member only the access they need. Remove access promptly when someone
@@ -232,8 +224,8 @@ export default function ClubAdminHelpPage() {
 
       <h2>5. Horse profiles and care</h2>
       <p>
-        Add each horse under <strong>Horses → Add horse</strong>. Fill in basics, weight limits,
-        and skill match. Use the health tabs to log vet visits, vaccinations, farrier and dental
+        Add each horse under <strong>Horses → Add horse</strong>. Fill in basics, weight limits, and
+        skill match. Use the health tabs to log vet visits, vaccinations, farrier and dental
         appointments, feeding plans, and exercise sessions. Cavaliq sends reminders before each
         recurring care item is due.
       </p>
@@ -260,7 +252,9 @@ export default function ClubAdminHelpPage() {
         <li>Change plan (Starter / Growing / Professional).</li>
         <li>Switch to annual (two months free).</li>
         <li>Update payment method.</li>
-        <li>Cancel — your access continues to the end of the period and the plan won&rsquo;t renew.</li>
+        <li>
+          Cancel — your access continues to the end of the period and the plan won&rsquo;t renew.
+        </li>
       </ul>
 
       <h2>9. Data protection and compliance</h2>
@@ -273,8 +267,8 @@ export default function ClubAdminHelpPage() {
 
       <h2>10. Reference: the integrations Cavaliq runs on</h2>
       <p>
-        These are the third-party services Cavaliq uses on your behalf — useful context if you
-        ever need to debug a delivery, check a payment status, or rotate a credential.
+        These are the third-party services Cavaliq uses on your behalf — useful context if you ever
+        need to debug a delivery, check a payment status, or rotate a credential.
       </p>
       <ul>
         <li>
@@ -305,11 +299,7 @@ export default function ClubAdminHelpPage() {
             Cloudflare Workers
           </a>{' '}
           (deployed via OpenNext for Next.js). Status:{' '}
-          <a
-            href="https://www.cloudflarestatus.com"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://www.cloudflarestatus.com" target="_blank" rel="noopener noreferrer">
             cloudflarestatus.com
           </a>
           .
@@ -343,11 +333,7 @@ export default function ClubAdminHelpPage() {
         </li>
         <li>
           <strong>File storage:</strong>{' '}
-          <a
-            href="https://developers.cloudflare.com/r2/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://developers.cloudflare.com/r2/" target="_blank" rel="noopener noreferrer">
             Cloudflare R2
           </a>{' '}
           — horse photos, club branding assets, uploaded documents. Files are scoped per-club; one

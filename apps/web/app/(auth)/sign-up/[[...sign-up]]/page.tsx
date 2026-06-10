@@ -42,8 +42,8 @@ export default async function SignUpPage({ searchParams }: PageProps) {
       </h1>
       <p className="text-muted-foreground mb-6 max-w-sm text-center text-sm">
         {isStable
-          ? 'Create your account — the next step is the stable setup wizard (horses, staff, pricing).'
-          : 'Create your account — the next step is browsing stables to join.'}
+          ? 'Create your account. The next step is the stable setup wizard (horses, staff, pricing).'
+          : 'Create your account. The next step is browsing stables to join.'}
       </p>
 
       <SignUp

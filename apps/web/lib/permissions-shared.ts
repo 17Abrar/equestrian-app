@@ -5,9 +5,8 @@ import { type UserRole } from '@equestrian/shared/types';
 // inline action visibility, etc.) can read it safely. The matrix itself
 // isn't a secret — the same data is on the server, and the server is
 // the source of truth for authorisation. This module exists so the
-// stricter `permissions.ts` (server-only, with audit hooks + the
-// PermissionError class) can keep its `import 'server-only'` guard
-// without breaking client callers.
+// stricter `permissions.ts` (server-only) can keep its
+// `import 'server-only'` guard without breaking client callers.
 //
 // If you add a new permission string, add it ONLY here. The server
 // module re-exports `hasPermission` so existing server imports keep
@@ -83,6 +82,17 @@ const PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   groom: ['dashboard:read', 'horses:read', 'tasks:*', 'horses:update_care', 'lesson_types:read'],
   veterinarian: ['horses:read', 'horses:read_medical', 'horses:update_medical'],
 };
+
+/**
+ * Audit FE (2026-06-07): can this role create a booking through the rider
+ * portal? Riders use `bookings:create`; parents book on a child's behalf via
+ * `bookings:create_child`. Used to gate the "Book a lesson" nav item, the
+ * rider-home CTA, and the /rider/book page so roles that can't book (e.g.
+ * horse_owner) don't hit a dead-end or see the slot catalog they can't use.
+ */
+export function canCreateBookings(role: UserRole): boolean {
+  return hasPermission(role, 'bookings:create') || hasPermission(role, 'bookings:create_child');
+}
 
 export function hasPermission(role: UserRole, requiredPermission: Permission): boolean {
   const rolePermissions = PERMISSIONS[role];

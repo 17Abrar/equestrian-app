@@ -11,18 +11,15 @@ export function SocialProof() {
     <section className="border-b py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <p className="text-muted-foreground text-center text-sm font-medium">
-          Built with working stables across the region. Designed for the way you
-          already run your club — just faster, with fewer mistakes.
+          Built with working stables across the region. Designed for the way you already run your
+          club, just faster, with fewer mistakes.
         </p>
 
         <div className="mt-10 grid gap-6 sm:grid-cols-3">
           {STATS.map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-card flex items-center gap-4 rounded-lg border p-5"
-            >
+            <div key={stat.label} className="bg-card flex items-center gap-4 rounded-lg border p-5">
               <div className="bg-muted inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-                <stat.icon className="h-5 w-5" style={{ color: '#0d1f34' }} aria-hidden />
+                <stat.icon className="text-brand h-5 w-5" aria-hidden />
               </div>
               <div>
                 <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">

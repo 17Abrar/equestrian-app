@@ -47,11 +47,7 @@ function parseR2PublicUrl(raw: string | undefined): Array<{
 // widened — keeps the narrower types available for any downstream tooling
 // that introspects this object.
 const nextConfig = {
-  transpilePackages: [
-    '@equestrian/shared',
-    '@equestrian/db',
-    '@equestrian/email-templates',
-  ],
+  transpilePackages: ['@equestrian/shared', '@equestrian/db', '@equestrian/email-templates'],
   images: {
     remotePatterns: [
       {
@@ -77,6 +73,16 @@ const nextConfig = {
       // operator notice the warning.
       ...parseR2PublicUrl(process.env.R2_PUBLIC_URL),
     ],
+  },
+  // Audit FE-7 (2026-06-07): tree-shake the `radix-ui` barrel. Next 15
+  // already ships lucide-react in its default optimizePackageImports
+  // list, and @equestrian/shared has no root barrel (all imports are
+  // subpaths), so `radix-ui` is the only entry worth adding: it is a
+  // single barrel re-exporting every primitive, imported in 13 files,
+  // and is absent from Next's default list. Config-only, behaviour-
+  // preserving (radix-ui already sets sideEffects:false).
+  experimental: {
+    optimizePackageImports: ['radix-ui'],
   },
   async headers() {
     return [

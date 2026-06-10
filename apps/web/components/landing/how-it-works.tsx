@@ -37,19 +37,15 @@ export function HowItWorks() {
             Up and running in an afternoon.
           </h2>
           <p className="text-muted-foreground mt-4 text-lg text-balance">
-            Most stables finish setup the same day they sign up. We don’t make
-            you talk to a salesperson to try us.
+            Most stables finish setup the same day they sign up. We don’t make you talk to a
+            salesperson to try us.
           </p>
         </div>
 
         <ol className="mt-14 grid gap-8 sm:grid-cols-3">
           {STEPS.map((step) => (
             <li key={step.number} className="relative">
-              <div
-                className="text-4xl font-bold tracking-tight"
-                style={{ color: '#0d1f34' }}
-                aria-hidden
-              >
+              <div className="text-brand text-4xl font-bold tracking-tight" aria-hidden>
                 {step.number}
               </div>
               <h3 className="mt-3 text-lg font-semibold">{step.title}</h3>

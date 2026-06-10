@@ -453,7 +453,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                   </div>
                   {couponError && <p className="text-destructive mt-1 text-sm">{couponError}</p>}
                   {couponDiscount > 0 && (
-                    <p className="mt-1 text-sm text-green-600">
+                    <p className="mt-1 text-sm text-green-700">
                       Discount: −{formatMoney(couponDiscount, selectedSlot.lessonTypeCurrency)}
                     </p>
                   )}
@@ -471,7 +471,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                   <div className="text-muted-foreground mt-2 space-y-1 text-sm">
                     <p>{selectedSlot.lessonTypeName}</p>
                     <p>
-                      {selectedSlot.date} at {selectedSlot.startTime.slice(0, 5)} –{' '}
+                      {selectedSlot.date} at {selectedSlot.startTime.slice(0, 5)} to{' '}
                       {selectedSlot.endTime.slice(0, 5)}
                     </p>
                     <div className="flex items-center gap-2">
@@ -479,7 +479,7 @@ export function AddBookingDialog(props: AddBookingDialogProps = {}) {
                         {formatMoney(selectedSlot.lessonTypePrice, selectedSlot.lessonTypeCurrency)}
                       </p>
                       {couponDiscount > 0 && (
-                        <p className="font-semibold text-green-600">
+                        <p className="font-semibold text-green-700">
                           {formatMoney(
                             selectedSlot.lessonTypePrice - couponDiscount,
                             selectedSlot.lessonTypeCurrency,

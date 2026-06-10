@@ -276,6 +276,7 @@ export function FileUpload({
           uploading && 'pointer-events-none opacity-60',
         )}
         aria-label={label ?? 'Drop file here or click to browse'}
+        aria-busy={uploading}
       >
         {uploading ? (
           <>
@@ -294,7 +295,7 @@ export function FileUpload({
       </div>
 
       {error && (
-        <div className="text-destructive mt-2 flex items-center gap-1.5 text-sm">
+        <div role="alert" className="text-destructive mt-2 flex items-center gap-1.5 text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <p>{error}</p>
         </div>

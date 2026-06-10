@@ -1,10 +1,20 @@
 @import 'tailwindcss';
+/* Audit FE-4 (2026-06-07): the ui kit ships Radix overlay animation
+   classes (animate-in / fade-in-0 / zoom-in-95 / slide-in-from-*) across
+   dialog, popover, dropdown, sheet, alert-dialog, but no keyframes ever
+   backed them, so every overlay popped open with zero transition. This
+   import supplies those keyframes and utilities. Accordion keyframes are
+   Radix-specific and defined explicitly below. */
+@import 'tw-animate-css';
 
 @theme {
   --color-background: #ffffff;
   --color-foreground: #0a0a0a;
   --color-muted: #f5f5f5;
-  --color-muted-foreground: #737373;
+  /* Audit A11Y-2 (2026-06-07): darkened from #737373 (4.35:1 on muted,
+     fails WCAG AA) to #666666 (5.28:1 on muted, 5.74:1 on white). Lifts
+     every secondary-text usage with no layout impact. */
+  --color-muted-foreground: #666666;
   --color-popover: #ffffff;
   --color-popover-foreground: #0a0a0a;
   --color-card: #ffffff;
@@ -17,11 +27,45 @@
   --color-secondary-foreground: #171717;
   --color-accent: #f5f5f5;
   --color-accent-foreground: #171717;
-  --color-destructive: #ef4444;
+  /* Audit A11Y-1 (2026-06-07): darkened from #ef4444 (3.76:1 on white,
+     fails WCAG AA for text) to #dc2626 (4.83:1, passes). Used as both
+     text-destructive and bg-destructive; white foreground stays legible. */
+  --color-destructive: #dc2626;
   --color-destructive-foreground: #fafafa;
+  /* Audit DS-1 (2026-06-07): the brand navy was hardcoded as the literal
+     #0d1f34 in six landing/layout spots with no token. Tailwind v4
+     auto-generates bg-brand / text-brand / border-brand from these. The
+     Clerk appearance object (a JS value, not a className) references the
+     shared BRAND_NAVY constant in lib/brand.ts which mirrors this. */
+  --color-brand: #0d1f34;
+  --color-brand-foreground: #ffffff;
   --color-ring: #0a0a0a;
   --radius: 0.625rem;
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Audit FE-4 (2026-06-07): Radix accordion animations. tw-animate-css
+     does not ship these (they depend on the Radix content-height var), so
+     they are defined here to back the animate-accordion-* classes in
+     components/ui/accordion.tsx. */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }
 
 @layer base {
@@ -35,5 +79,20 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+  }
+}
+
+/* Audit A11Y-6 (2026-06-07): honour the OS "reduce motion" preference.
+   Now that overlay animations are actually wired (tw-animate-css above),
+   users who opt out must not be subjected to zoom/slide/spin motion.
+   WCAG 2.3.3. Behaviour-identical for everyone who has not opted out. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

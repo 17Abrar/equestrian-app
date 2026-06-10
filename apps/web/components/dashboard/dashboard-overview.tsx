@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { GettingStartedChecklist } from '@/components/dashboard/getting-started-checklist';
 
 import { BOOKING_STATUS_COLORS } from '@/lib/ui-constants';
 
@@ -32,11 +33,9 @@ function StatCard({
    */
   emptyCta?: string;
 }) {
-  const isEmpty =
-    emptyCta !== undefined &&
-    (value === 0 || value === '0');
+  const isEmpty = emptyCta !== undefined && (value === 0 || value === '0');
   return (
-    <Link href={href}>
+    <Link href={href} className="group">
       <Card className="transition-shadow hover:shadow-md">
         <CardContent className="flex items-center gap-4 p-6">
           <div className="bg-primary/10 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg">
@@ -51,9 +50,7 @@ function StatCard({
             ) : (
               <p className="text-2xl font-bold">{value}</p>
             )}
-            {subtitle && !isEmpty && (
-              <p className="text-muted-foreground text-xs">{subtitle}</p>
-            )}
+            {subtitle && !isEmpty && <p className="text-muted-foreground text-xs">{subtitle}</p>}
           </div>
         </CardContent>
       </Card>
@@ -118,6 +115,15 @@ export function DashboardOverview() {
           Welcome to your equestrian club management dashboard.
         </p>
       </div>
+
+      {/* Audit TOUR-1: activation checklist for new clubs. todaySlots>0 or any
+          recent booking implies slots exist; both come from data already
+          fetched here, so no extra request. Self-hides when complete. */}
+      <GettingStartedChecklist
+        hasSlots={stats.todaySlots > 0 || stats.recentBookings.length > 0}
+        horseCount={stats.horses.total}
+        riderCount={stats.riders.total}
+      />
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

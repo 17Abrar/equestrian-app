@@ -91,6 +91,7 @@ import {
 import { PAYMENT_STATUS_COLORS } from '@/lib/ui-constants';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PaginationControls } from '@/components/shared/pagination-controls';
 import { reportMutationError } from '@/components/shared/report-mutation-error';
 import {
   DEFAULT_PAGE_SIZE,
@@ -282,36 +283,6 @@ function OverviewTab() {
   );
 }
 
-function PaginationControls({
-  page,
-  totalPages,
-  onChange,
-}: {
-  page: number;
-  totalPages: number;
-  onChange: (next: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-center gap-2 pt-4">
-      <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-        Previous
-      </Button>
-      <span className="text-muted-foreground text-sm">
-        Page {page} of {totalPages}
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={page >= totalPages}
-        onClick={() => onChange(page + 1)}
-      >
-        Next
-      </Button>
-    </div>
-  );
-}
-
 // Audit F-28 (2026-05-06): content-shape skeletons that match the
 // row-card layout (avatar slot + two text lines + amount on right).
 // Replaces the previous bare `<Skeleton className="h-64" />` so the
@@ -392,10 +363,14 @@ function InvoicesTab() {
           ))}
         </TableBody>
       </Table>
+      {/* `pt-4` because these tab panels do not space their children: the
+          hoisted shared component dropped the hardcoded padding so the list
+          pages (which sit inside `space-y-6` parents) render unchanged. */}
       <PaginationControls
         page={page}
         totalPages={data?.pagination.totalPages ?? 1}
         onChange={setPage}
+        className="pt-4"
       />
     </div>
   );
@@ -459,10 +434,12 @@ function PaymentsTab() {
           ))}
         </TableBody>
       </Table>
+      {/* `pt-4`: see the InvoicesTab note above. */}
       <PaginationControls
         page={page}
         totalPages={data?.pagination.totalPages ?? 1}
         onChange={setPage}
+        className="pt-4"
       />
     </div>
   );
@@ -535,10 +512,12 @@ function ExpensesTab() {
               ))}
             </TableBody>
           </Table>
+          {/* `pt-4`: see the InvoicesTab note above. */}
           <PaginationControls
             page={page}
             totalPages={data?.pagination.totalPages ?? 1}
             onChange={setPage}
+            className="pt-4"
           />
         </>
       )}
@@ -558,18 +537,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
       amount: toMajorUnits(expense.amount, expense.currency),
       // Server enforces SupportedCurrency at write time; the API response
       // types as `string` so we cast to the form's enum-narrowed shape.
-      currency: expense.currency as
-        | 'AED'
-        | 'SAR'
-        | 'KWD'
-        | 'BHD'
-        | 'QAR'
-        | 'OMR'
-        | 'USD'
-        | 'EUR'
-        | 'GBP'
-        | 'CAD'
-        | 'AUD',
+      currency: expense.currency as SupportedCurrency,
       date: expense.date,
       vendorName: expense.vendorName ?? undefined,
     },
@@ -583,18 +551,7 @@ function EditExpenseDialog({ expense }: { expense: Expense }) {
         amount: toMajorUnits(expense.amount, expense.currency),
         // Server enforces SupportedCurrency at write time; the API response
         // types as `string` so we cast to the form's enum-narrowed shape.
-        currency: expense.currency as
-          | 'AED'
-          | 'SAR'
-          | 'KWD'
-          | 'BHD'
-          | 'QAR'
-          | 'OMR'
-          | 'USD'
-          | 'EUR'
-          | 'GBP'
-          | 'CAD'
-          | 'AUD',
+        currency: expense.currency as SupportedCurrency,
         date: expense.date,
         vendorName: expense.vendorName ?? undefined,
       });
@@ -774,9 +731,7 @@ function AddExpenseDialog({
   // in that narrow window, and settings is cached for stable data so the
   // fallback is effectively unreachable in normal navigation.
   const clubTimezone = settingsQuery.data?.data.timezone;
-  const todayInClub = clubTimezone
-    ? getTodayDateString(clubTimezone)
-    : getTodayLocalDateString();
+  const todayInClub = clubTimezone ? getTodayDateString(clubTimezone) : getTodayLocalDateString();
 
   const form = useForm<CreateExpenseFormValues, unknown, CreateExpenseInput>({
     resolver: zodResolver(createExpenseSchema),
@@ -1017,10 +972,12 @@ function CouponsTab() {
               ))}
             </TableBody>
           </Table>
+          {/* `pt-4`: see the InvoicesTab note above. */}
           <PaginationControls
             page={page}
             totalPages={data?.pagination.totalPages ?? 1}
             onChange={setPage}
+            className="pt-4"
           />
         </>
       )}
@@ -1222,10 +1179,7 @@ function AddCouponDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Currency *</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value ?? clubCurrency}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value ?? clubCurrency}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />

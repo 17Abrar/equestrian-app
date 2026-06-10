@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { Toaster } from 'sonner';
 import { Providers } from '@/components/providers';
 import { CookieBanner } from '@/components/shared/cookie-banner';
+import { BRAND_NAVY } from '@/lib/brand';
 import './globals.css';
 
 const inter = Inter({
@@ -15,24 +16,24 @@ const inter = Inter({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://cavaliq.com'),
   title: {
-    default: 'Cavaliq — Equestrian Club Management',
+    default: 'Cavaliq: Equestrian Club Management',
     template: '%s · Cavaliq',
   },
   description:
-    'Run your equestrian club from one place — bookings, horses, riders, staff, and payments. Built for the GCC.',
+    'Run your equestrian club from one place: bookings, horses, riders, staff, and payments. Built for the GCC.',
   applicationName: 'Cavaliq',
   openGraph: {
     type: 'website',
     siteName: 'Cavaliq',
-    title: 'Cavaliq — Equestrian Club Management',
+    title: 'Cavaliq: Equestrian Club Management',
     description:
-      'Run your equestrian club from one place — bookings, horses, riders, staff, and payments.',
+      'Run your equestrian club from one place: bookings, horses, riders, staff, and payments.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Cavaliq — Equestrian Club Management',
+    title: 'Cavaliq: Equestrian Club Management',
     description:
-      'Run your equestrian club from one place — bookings, horses, riders, staff, and payments.',
+      'Run your equestrian club from one place: bookings, horses, riders, staff, and payments.',
   },
 };
 
@@ -67,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               logoLinkUrl: '/',
             },
             variables: {
-              colorPrimary: '#0d1f34',
+              colorPrimary: BRAND_NAVY,
             },
           }}
         >

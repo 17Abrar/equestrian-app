@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -18,10 +19,16 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/shared/error-state';
 import { useBooking, type Booking } from '@/hooks/use-bookings';
-import { PayBookingDialog } from '@/components/payments/pay-booking-dialog';
 import { formatTime, formatDate, formatPrice } from '@equestrian/shared/utils';
 
-// Payment methods that settle at the stable — no online flow expected.
+// Audit FE-15 (2026-06-07): code-split the Stripe-bearing payment dialog so its
+// bindings stay out of the booking-detail bundle until a payment is initiated.
+const PayBookingDialog = dynamic(
+  () => import('@/components/payments/pay-booking-dialog').then((m) => m.PayBookingDialog),
+  { ssr: false },
+);
+
+// Payment methods that settle at the stable. No online flow expected.
 const OFFLINE_METHODS = new Set(['cash', 'card_in_person', 'bank_transfer', 'package_credit']);
 
 interface RiderBookingDetailClientProps {
@@ -155,7 +162,7 @@ export function RiderBookingDetailClient({ bookingId }: RiderBookingDetailClient
           </div>
           <div className="flex items-center gap-2">
             <Clock className="text-muted-foreground h-4 w-4" />
-            {formatTime(booking.slotStartTime)} – {formatTime(booking.slotEndTime)}
+            {formatTime(booking.slotStartTime)} to {formatTime(booking.slotEndTime)}
           </div>
           {booking.arenaName && (
             <div className="flex items-center gap-2">
@@ -281,7 +288,7 @@ function PaymentBanner({
   if (paymentCancelled && booking.paymentStatus === 'pending') {
     return (
       <Banner tone="warn" icon={<AlertCircle className="h-5 w-5" />} title="Payment cancelled">
-        You cancelled the payment. Your slot is still reserved — try again to confirm it.
+        You cancelled the payment. Your slot is still reserved. Try again to confirm it.
         <div className="mt-3">
           <Button size="sm" onClick={onPayClick}>
             Try again
@@ -300,7 +307,7 @@ function PaymentBanner({
         icon={<Loader2 className="h-5 w-5 animate-spin" />}
         title="Confirming your payment…"
       >
-        We&apos;re waiting for the payment processor to confirm. This usually takes a few seconds —
+        We&apos;re waiting for the payment processor to confirm. This usually takes a few seconds,
         this page will update automatically.
         <Badge variant="secondary" className="ml-2 text-xs">
           {statusLabel}
