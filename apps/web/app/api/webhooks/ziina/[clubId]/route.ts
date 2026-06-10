@@ -11,6 +11,7 @@ import { ziinaAdapter } from '@/lib/payments/ziina';
 import {
   applyPaymentWebhook,
   applyLiveryInvoiceWebhook,
+  safeClearAccountError,
   safeRecordAccountError,
 } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -254,6 +255,34 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
       clubId,
     });
     return new Response('OK', { status: 200 });
+  }
+
+  // First FRESH verified delivery after a recorded misconfig: the HMAC
+  // above verifying against the stored signing secret is proof the secret
+  // matches the one registered with Ziina again — exactly the condition
+  // the recorded `lastError` claimed was broken — so clear it (and the
+  // 'error' status badge) instead of leaving the operator stuck until a
+  // full re-save of the connection. Gated on the account row ALREADY
+  // loaded above (B-9 config includes `lastError` for this) so healthy
+  // deliveries never pay an extra DB write.
+  //
+  // Placed AFTER `claimWebhookEvent` deliberately (Codex security review,
+  // 2026-06 — replay masking): the HMAC alone cannot distinguish a fresh
+  // delivery from a REPLAYED old one. If the merchant re-registered the
+  // webhook with a new secret but the app still holds the stale one,
+  // every real delivery fails (recording the error badge) while a replay
+  // of an old delivery — signed with that same stale secret — still
+  // verifies. Clearing on the replay would green-light a badge whose
+  // underlying misconfig is very much live. The dedup claim is what
+  // proves freshness: only the 'claimed' fall-through (processing
+  // genuinely proceeds) reaches this point; the already_processed /
+  // in_flight / permanently_failed branches all returned above without
+  // clearing. `account.updatedAt` is the CAS token — a concurrent error
+  // recorded after our config read blocks this clear (see
+  // clearPaymentAccountError). Non-fatal by contract — a clear failure
+  // never changes the webhook response.
+  if (account.lastError != null || account.status === 'error') {
+    await safeClearAccountError(clubId, 'ziina', account.updatedAt);
   }
 
   try {

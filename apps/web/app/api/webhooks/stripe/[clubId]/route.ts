@@ -11,6 +11,7 @@ import { stripeAdapter } from '@/lib/payments/stripe';
 import {
   applyPaymentWebhook,
   applyLiveryInvoiceWebhook,
+  safeClearAccountError,
   safeRecordAccountError,
 } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -233,6 +234,37 @@ async function handlePost(request: NextRequest, { params }: RouteParams) {
       eventType: event.eventType,
     });
     return new Response('OK', { status: 200 });
+  }
+
+  // First FRESH verified delivery after a recorded misconfig: a passing
+  // signature check is cryptographic proof the stored `whsec_…` matches
+  // the endpoint secret in the club's Stripe dashboard, which is exactly
+  // what the recorded `lastError` claimed was broken — so clear it (and
+  // restore the 'error' status badge) instead of leaving the operator
+  // stuck until a full re-save of the connection. Gated on the account
+  // row ALREADY loaded above (B-9 config includes `lastError` for this)
+  // so healthy deliveries — the steady state — never pay an extra DB
+  // write.
+  //
+  // Placed AFTER `claimWebhookEvent` deliberately (Codex security review,
+  // 2026-06 — replay masking): a signature check alone cannot distinguish
+  // a fresh delivery from a REPLAYED old one. If the operator rotated the
+  // endpoint secret in Stripe but the app still holds the stale `whsec_…`,
+  // every real delivery fails (recording the error badge) while a replay
+  // of an old delivery — signed with that same stale secret — still
+  // verifies. Clearing on the replay would green-light a badge whose
+  // underlying misconfig is very much live. The dedup claim is what
+  // proves freshness: only the 'claimed' fall-through (processing
+  // genuinely proceeds) reaches this point; the already_processed /
+  // in_flight / permanently_failed branches all returned above without
+  // clearing. Also after the F-38 mismatch guard: a correctly-signed but
+  // account-mismatched delivery still signals a config problem and must
+  // not green-light the badge. `account.updatedAt` is the CAS token — a
+  // concurrent error recorded after our config read blocks this clear
+  // (see clearPaymentAccountError). Non-fatal by contract — a clear
+  // failure never changes the webhook response.
+  if (account.lastError != null || account.status === 'error') {
+    await safeClearAccountError(clubId, 'stripe', account.updatedAt);
   }
 
   try {

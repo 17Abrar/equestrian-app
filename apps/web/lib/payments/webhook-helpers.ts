@@ -2,6 +2,7 @@ import { after } from 'next/server';
 import {
   applyProviderRefund,
   attachWebhookEventClub,
+  clearPaymentAccountError,
   findBookingByIdForWebhook,
   findBookingByIdInDescription,
   findBookingByProviderPaymentId,
@@ -1333,6 +1334,59 @@ export async function safeRecordAccountError(
     await recordPaymentAccountError(clubId, provider, message);
   } catch (err) {
     logger.error('record_payment_account_error_failed', {
+      clubId,
+      provider,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+  }
+}
+
+/**
+ * Clears a previously-recorded account error once a webhook VERIFIES.
+ * Same non-fatal contract as `safeRecordAccountError` — a DB failure here
+ * must never change the webhook response (the event itself verified fine
+ * and must still be processed/acked normally).
+ *
+ * `lastError` lifecycle on `club_payment_accounts`:
+ *   - RECORDED by `safeRecordAccountError` when webhook routes hit an
+ *     operator misconfig (missing signing secret, or a signature/header
+ *     mismatch on a configured account — the rotated/wrong-secret case).
+ *     Status flips to 'error'.
+ *   - CLEARED here on the FIRST webhook whose signature verification
+ *     passes AND which survives the `claimWebhookEvent` dedup as a FRESH
+ *     event: a valid signature on a fresh delivery is proof the stored
+ *     secret matches the provider's again, so the recorded misconfig is
+ *     definitionally resolved. Routes gate the call on the account row
+ *     they already loaded (`lastError != null || status === 'error'`) so
+ *     healthy deliveries — the overwhelming majority — never pay this
+ *     extra write. Verification alone is NOT sufficient (Codex security
+ *     review, 2026-06): a replayed old delivery signed with a stale
+ *     secret the app still holds also verifies, and must not clear —
+ *     see the placement comments in the webhook routes.
+ *   - The reconnect flow (`upsertPaymentAccount` onConflict) also clears
+ *     it; that was the ONLY clear path before this helper existed, which
+ *     left the settings error badge stuck after an operator fixed their
+ *     webhook secret provider-side without re-saving the connection.
+ *
+ * `seenUpdatedAt` is the `updated_at` from the account row the route
+ * loaded for signature verification (`WebhookSecretConfig.updatedAt`).
+ * It feeds the compare-and-set in `clearPaymentAccountError` so a clear
+ * computed against a stale row snapshot can't erase an error recorded
+ * after that snapshot was read — see the convergence argument on the
+ * query.
+ *
+ * The underlying query only transitions status 'error' → 'connected' and
+ * never resurrects 'disabled' — see `clearPaymentAccountError`.
+ */
+export async function safeClearAccountError(
+  clubId: string,
+  provider: ProviderName,
+  seenUpdatedAt: Date,
+): Promise<void> {
+  try {
+    await clearPaymentAccountError(clubId, provider, seenUpdatedAt);
+  } catch (err) {
+    logger.error('clear_payment_account_error_failed', {
       clubId,
       provider,
       error: err instanceof Error ? err.message : 'unknown',

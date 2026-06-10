@@ -11,6 +11,7 @@ import { nGeniusAdapter } from '@/lib/payments/n-genius';
 import {
   applyPaymentWebhook,
   applyLiveryInvoiceWebhook,
+  safeClearAccountError,
   safeRecordAccountError,
 } from '@/lib/payments/webhook-helpers';
 import { PaymentProviderError } from '@/lib/payments/types';
@@ -289,6 +290,39 @@ async function handlePost(request: NextRequest) {
       clubId: account.clubId,
     });
     return new Response('OK', { status: 200 });
+  }
+
+  // First FRESH verified delivery after a recorded misconfig: the echoed
+  // header matching the stored value proves the secret pasted into
+  // Settings matches the N-Genius portal again — exactly the condition
+  // the recorded `lastError` claimed was broken — so clear it (and the
+  // 'error' status badge) instead of leaving the operator stuck until a
+  // full re-save. Gated on the outlet-resolved account row ALREADY loaded
+  // above (B-9 config includes `lastError` for this) so healthy
+  // deliveries never pay an extra DB write.
+  //
+  // Placed AFTER both the F-20 reference-recency gate AND
+  // `claimWebhookEvent` deliberately (Codex security review, 2026-06 —
+  // replay masking). N-Genius auth is a shared-secret header echo with
+  // NO body-binding, so "verified" proves even less here than for the
+  // HMAC providers: any captured (header, body) pair re-sent later
+  // passes the check. If the operator rotated the header value in the
+  // portal while the app still holds the stale one, every real delivery
+  // fails (recording the error badge) — yet a replayed old delivery
+  // carrying the stale header still verifies, and clearing on it would
+  // green-light a badge whose underlying misconfig is very much live.
+  // Freshness therefore has to come from the gates: the adapter's 90 s
+  // event-timestamp window, the F-20 "reference we recently minted"
+  // check, and the dedup claim. Only the 'claimed' fall-through
+  // (processing genuinely proceeds) reaches this point; the
+  // already_processed / in_flight / permanently_failed branches and the
+  // stale-reference 401 all returned above without clearing.
+  // `account.updatedAt` is the CAS token — a concurrent error recorded
+  // after our config read blocks this clear (see
+  // clearPaymentAccountError). Non-fatal by contract — a clear failure
+  // never changes the webhook response.
+  if (account.lastError != null || account.status === 'error') {
+    await safeClearAccountError(account.clubId, 'n_genius', account.updatedAt);
   }
 
   try {
