@@ -23,17 +23,17 @@
     "@equestrian/shared": "workspace:*",
     "@neondatabase/serverless": "0.10.4",
     "drizzle-orm": "0.45.2",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.4.6",
+    "@electric-sql/pglite": "0.5.4",
     "@equestrian/eslint-config": "workspace:*",
     "@equestrian/typescript-config": "workspace:*",
     "@types/ws": "^8.18.1",
     "dotenv": "^16.5.0",
     "drizzle-kit": "0.31.10",
-    "eslint": "^10.4.0",
+    "eslint": "^10.7.0",
     "typescript": "^5.8.2",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.10"
   }
 }
