@@ -85,10 +85,10 @@
   },
   "devDependencies": {
     "@neondatabase/serverless": "^0.10.4",
-    "prettier": "^3.8.3",
-    "sharp": "^0.34.5",
-    "turbo": "^2.9.14",
+    "prettier": "^3.9.6",
+    "sharp": "^0.35.3",
+    "turbo": "^2.10.8",
     "typescript": "^5.8.2",
-    "ws": "^8.21.0"
+    "ws": "^8.21.2"
   }
 }
